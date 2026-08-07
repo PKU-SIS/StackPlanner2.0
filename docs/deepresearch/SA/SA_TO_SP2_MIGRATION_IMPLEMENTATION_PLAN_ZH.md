@@ -116,6 +116,65 @@ StackPlanner2/skills/public/scaffold-reporting/SKILL.md
 StackPlanner2/skills/public/scaffold-quality-gate/SKILL.md
 ```
 
+V1 不新增 `central-agent` / `lead-agent` orchestration skill。
+
+原因：
+
+- 当前 CentralAgent 只看到 skill index，用它来决定 `metadata.skill_names`。
+- 完整 `SKILL.md` body 是由被 delegate 的子智能体加载，不是 CentralAgent 加载。
+- 因此，把 SA 调度顺序完全写进普通 skill 里不稳定；CentralAgent 可能根本不会读取完整 SOP。
+
+V1 采用的边界：
+
+```text
+CentralAgent prompt:
+  只写很窄的触发条件和调用顺序。
+  substantial research/report/document -> researcher -> outline -> reporter
+
+Subagent skills:
+  写每一步具体怎么做。
+  researcher -> scaffold-preresearch
+  outline    -> scaffold-outline
+  reporter   -> scaffold-reporting + scaffold-quality-gate
+```
+
+如果后续要做真正的 `scaffold-deepresearch-orchestration` skill，需要先改 runtime：让 CentralAgent 在命中特定场景时注入该 orchestration skill 的正文，而不只是看到 skill index。
+
+### 3.0 方法精华覆盖矩阵
+
+实现这些 skills 时，不只是参考概念，还要优先参考 `SA_METHOD_ABSTRACTION_AND_PROMPT_ESSENCE.md` 第 7-8 节列出的 SA prompt 入口。
+
+| SA 方法精华 | 参考 prompt / 入口 | SP2 V1 落点 | V1 处理 |
+| --- | --- | --- | --- |
+| 预检索 query 规划 | `pre_research.py::generate_queries()` | `scaffold-preresearch` | 迁移 |
+| 迭代式预检索规划 | `pre_research.py::plan_next_query()` | `scaffold-preresearch` | 首版不做完整迭代，但保留 gap-directed query 思路 |
+| Research Summary 生成 | `pre_research.py::generate_brief()` | `research_observation` artifact | 迁移 |
+| Initial ScopeTree 生成 | `pipeline.py::_generate_initial_outline()` | `scaffold-outline` | 迁移 |
+| 非回答型章节过滤 | `pipeline.py::_remove_non_answer_outline_sections()` | `scaffold-outline` | 迁移 |
+| node-evidence binding | Evidence Map / `doc_ids` | outline artifact metadata | 迁移 |
+| 轻量 AGM State | 从 ScopeTree + Evidence Map 派生 | outline artifact metadata | 迁移状态层，不迁完整 loop |
+| 报告前证据刷新 | `_refresh_report_evidence()` / `_build_report_refresh_queries()` | focused research 或 Research Summary refresh | V1 可选轻量做 |
+| 统一章节写作约束 | `reporter.py::_build_section_prompt()` | `scaffold-reporting` | 迁移为整篇报告约束 |
+| 两阶段 reporter | `_build_insight_prompt()` / `_build_two_stage_section_prompt()` | Phase 3 reporter 增强 | V1 暂缓 |
+| Expansion / Revision / Contraction | `actions.py::expand()` / `revise()` / `contract()` | Phase 4 outline revision | V1 暂缓，但保留约束思想 |
+| Utility / reward / citation verifier / NLI | evaluator / verifier 相关逻辑 | Phase 4+ verifier | V1 暂缓 |
+
+V1 写 `SKILL.md` 时，要把 prompt 精华转成可执行约束，而不是照搬 SA pipeline：
+
+```text
+scaffold-preresearch:
+  参考 generate_queries / plan_next_query / generate_brief
+
+scaffold-outline:
+  参考 _generate_initial_outline / _remove_non_answer_outline_sections
+
+scaffold-reporting:
+  参考 _build_section_prompt，把 section 约束提升为整篇报告约束
+
+scaffold-quality-gate:
+  参考 reporter prompt 里的 coverage / citation / evidence boundary 约束
+```
+
 ### 3.1 `scaffold-preresearch`
 
 给 `researcher` 用。
@@ -316,6 +375,8 @@ StackPlanner2/backend/packages/harness/deerflow/sp/central/prompt.py
 
 skills 只能告诉某个子智能体“被调用后怎么做”。
 
+当前 SP2 里，CentralAgent 只能看到 available skills 的索引，并在 `sp_delegate.metadata.skill_names` 里选择给哪个子智能体加载哪些 skills；它不会像子智能体一样自动加载完整 `SKILL.md` 正文。因此这里不能只靠一个普通 skill 承担流程编排。
+
 但 SA 的核心顺序：
 
 ```text
@@ -353,6 +414,8 @@ For substantial research/report/document tasks, use the SA-style scaffolded repo
    Do not finish from Research Summary or ScopeTree alone.
    Inspect reporter completion_status and evidence_gaps.
 ```
+
+这个 SOP 不放复杂方法细节，只负责触发和编排。复杂方法细节仍放在四个 `scaffold-*` skills 里。
 
 ### 4.3 V1 不改：新增 target agent
 
@@ -474,6 +537,12 @@ skills/public/scaffold-preresearch/SKILL.md
 skills/public/scaffold-outline/SKILL.md
 skills/public/scaffold-reporting/SKILL.md
 skills/public/scaffold-quality-gate/SKILL.md
+
+不新增：
+skills/public/scaffold-deepresearch-orchestration/SKILL.md
+
+原因：
+CentralAgent V1 只需要窄 SOP 做流程编排；普通 skill body 只会稳定注入给子智能体。
 
 修改：
 backend/packages/harness/deerflow/subagents/builtins/sp_specialists.py

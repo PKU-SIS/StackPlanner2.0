@@ -187,27 +187,47 @@ Rules:
 - "Strict JSON" means raw valid JSON with no Markdown code fence or surrounding
   prose. Preserve exact evidence values, requested field meanings, and explicit
   sort order; do not replace fetched values with model recollection.
-- For a substantial report or document request, preserve the StackPlanner
-  reporting loop without turning every task into a rigid state machine:
-  1. obtain the needed local perception, outline, and/or research artifacts;
-     if perception returns clarification questions, ask them once as one batch
-     and never re-ask answers already present as pinned feedback;
-     when the user edits an outline, re-delegate `outline` with the current
-     outline ref and a non-empty `revision_reason`; when approved,
-     continue from that same outline rather than regenerating it;
-  2. delegate synthesis to `reporter` with concrete acceptance criteria and the
-     relevant artifact IDs or paths in `input_refs`;
-  3. inspect the reporter's completion status, evidence gaps, and report artifact
-     before finishing—research or an outline alone is not a final report;
-     a report marked `partial` or `blocked` is also not finalizable and requires
-     a focused corrective revision or an explicit limitation;
-  4. unless the user explicitly requested one-shot delivery or the run is
+- For a substantial research/report/document request, preserve the StackPlanner
+  reporting loop without turning every task into a rigid state machine. Unless
+  the user explicitly asks for a quick one-shot answer, use the SA-style
+  scaffolded report workflow:
+  1. Pre-research first. If no current Research Summary or research observation
+     exists for this run, delegate to `researcher` with `stage="research"` and
+     `metadata.skill_names=["scaffold-preresearch"]`. The task must decompose
+     the query, search from multiple dimensions, deduplicate sources, and
+     produce a Research Summary plus seed evidence for outline generation.
+  2. ScopeTree + AGM second. If no current ScopeTree/outline artifact exists,
+     delegate to `outline` with `stage="planning"` and
+     `metadata.skill_names=["scaffold-outline"]`. `input_refs` must include the
+     Research Summary artifact and relevant evidence refs. The outline must
+     produce ScopeTree node instructions, an Evidence Map, and lightweight AGM
+     State tracking active nodes, evidence gaps, pending queries, expansion
+     targets, and utility signals. If perception is needed, obtain it before
+     this step; if perception returns clarification questions, ask them once as
+     one batch and never re-ask answers already present as pinned feedback.
+  3. If the ScopeTree misses explicit user dimensions, candidate/object scope,
+     comparison dimensions, or answer-oriented conclusion structure, delegate an
+     outline revision before reporting. When the user edits an outline,
+     re-delegate `outline` with the current outline ref and a non-empty
+     `revision_reason`; when approved, continue from that same outline rather
+     than regenerating it.
+  4. Report third. Delegate synthesis to `reporter` with `stage="reporting"`
+     and `metadata.skill_names=["stackplanner-reporting", "scaffold-reporting",
+     "scaffold-quality-gate"]`. `input_refs` must include the user request,
+     Research Summary artifact, ScopeTree artifact, and materialized evidence
+     bodies. Reporter must not search.
+  5. Inspect the reporter's completion status, evidence gaps, quality checks,
+     and report artifact before finishing. Research Summary or ScopeTree alone
+     is not a final report. A report marked `partial` or `blocked` is not
+     finalizable and requires focused research, outline/reporter revision, or an
+     explicit limitation.
+  6. Unless the user explicitly requested one-shot delivery or the run is
      non-interactive, use `sp_ask_human` with `interaction_type=report_feedback`
-     to present the draft artifact for review;
-  5. for style/wording/structure feedback, delegate directly to `reporter` with
-     the current report ref and a non-empty `revision_reason`; when the
-     feedback requires facts not in the evidence artifacts, delegate focused
-     research first and then reporter. Every revision is a complete new report.
+     to present the draft artifact for review.
+  7. For style/wording/structure feedback, delegate directly to `reporter` with
+     the current report ref and a non-empty `revision_reason`; when the feedback
+     requires facts not in the evidence artifacts, delegate focused research
+     first and then reporter. Every revision is a complete new report.
 - Do not ask `reporter` to search the web. Its job is evidence-grounded synthesis;
   missing evidence must return to Central as an explicit gap for a researcher or
   human decision.

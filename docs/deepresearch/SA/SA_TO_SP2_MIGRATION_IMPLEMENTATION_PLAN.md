@@ -98,6 +98,36 @@ skills/public/scaffold-reporting/SKILL.md
 skills/public/scaffold-quality-gate/SKILL.md
 ```
 
+V1 should not add a normal `central-agent` / `lead-agent` orchestration Skill.
+
+Current SP2 behavior:
+
+- CentralAgent sees only the Skill index.
+- CentralAgent selects Skills for a delegation through `metadata.skill_names`.
+- The delegated subagent loads the full `SKILL.md` body.
+
+Therefore, putting the whole SA ordering policy into a normal Skill is not stable:
+CentralAgent may never read the full orchestration SOP before it chooses whether
+to call `researcher`, `outline`, or `reporter`.
+
+V1 boundary:
+
+```text
+CentralAgent prompt:
+  narrow trigger and ordering only
+  substantial research/report/document -> researcher -> outline -> reporter
+
+Subagent Skills:
+  detailed method instructions
+  researcher -> scaffold-preresearch
+  outline    -> scaffold-outline
+  reporter   -> scaffold-reporting + scaffold-quality-gate
+```
+
+If we later want a real `scaffold-deepresearch-orchestration` Skill, first change
+runtime injection so CentralAgent can load that Skill body for matching report
+scenarios, not merely see its index entry.
+
 If we want the smallest possible first patch, skip new skill names and merge the reporting method into:
 
 ```text
@@ -240,6 +270,10 @@ Important CentralAgent constraints:
 - Do not finish from a Research Summary or ScopeTree alone.
 - Report generation must carry `input_refs` for Research Summary and ScopeTree artifacts.
 - Human feedback on outline or report is pinned and must be passed into the next outline/reporter revision.
+
+Keep this SOP narrow. It should only decide when to use the scaffolded workflow
+and in what order to delegate. The concrete SA methods stay in the four
+`scaffold-*` subagent Skills.
 
 ## 5. Artifact and Workspace Storage
 
@@ -503,6 +537,11 @@ REPORTER_CONFIG.skills = [
 ```
 
 If we want to preserve current researcher/outline behavior for non-SA tasks, do not hard-code these on the built-ins. Instead, update CentralAgent to pass `metadata.skill_names` in `sp_delegate`.
+
+Do not add `skills/public/scaffold-deepresearch-orchestration/SKILL.md` in V1.
+With the current runtime, CentralAgent would only see its index entry; the full
+orchestration body would not be reliably injected into CentralAgent before it
+chooses the delegation sequence.
 
 Modify:
 
