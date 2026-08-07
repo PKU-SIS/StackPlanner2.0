@@ -48,7 +48,7 @@ researcher
 
 应坚持三个原则：
 
-1. `section_draft` 是中间产物，不能被 FINISH。
+1. `section_draft` 是中间产物，SOP 不应把它当作最终报告交付。
 2. `report_merge` 是 section fallback 的必经终态。
 3. 只有合并后的 `report_revision` 才能作为最终报告 artifact。
 
@@ -96,44 +96,46 @@ s4 section draft
 sp_finish(final_artifact_ref=<merged_report_ref>, required_artifact_type="report")
 ```
 
-不要 FINISH s1 / s2 / s3 / s4 中任何一个章节草稿。
+SOP 上不要把 s1 / s2 / s3 / s4 中任何一个章节草稿作为最终交付；如果模型误走到章节草稿，应优先用 reporter merge 恢复，而不是增加全局 FINISH 门禁。
 
 ## 4. 代码层修复方案
 
-### 4.1 修复点一：FINISH 门禁识别 section draft
+### 4.1 修复点一：SOP 识别 section draft 并要求 report_merge
 
-目标：阻止 `metadata.kind="section_draft"` 的 artifact 被当成最终报告。
+目标：不改全局 FINISH 门禁，避免误伤其他报告/修订任务；只在 SA deep research 报告 SOP 中明确 section fallback 的终态必须是 `report_merge`。
 
 建议规则：
 
 ```text
-如果 final_artifact_ref 指向的 artifact metadata.kind == "section_draft"：
-  拒绝 FINISH
-  返回 error_recoverable
-  next_step 指向 report_merge
+如果 full-report reporter 失败并进入 section fallback：
+  section_draft 只作为中间上下文
+  所有 section_draft 完成后，下一步必须是 reporter report_merge
+  report_merge 生成完整 report_revision 后，才进入最终交付
 ```
 
-错误信息建议：
+SOP 文案建议：
 
 ```text
-FINISH rejected because the selected artifact is a section draft, not a merged final report. Delegate reporter with metadata.kind="report_merge" and include all section draft refs.
+Section drafts are not the final SA deep research deliverable. After all delegated section drafts complete, delegate reporter once with metadata.kind="report_merge" and include all section draft refs.
 ```
 
 推荐修改位置：
 
 ```text
-StackPlanner2/backend/packages/harness/deerflow/sp/actions/handlers/finish.py
+StackPlanner2/backend/packages/harness/deerflow/sp/central/prompt.py
+StackPlanner2/skills/public/scaffold-reporting/SKILL.md
 ```
 
 验收标准：
 
 ```text
-s4 是 report_revision 但 metadata.kind="section_draft" 时，FINISH 必须失败。
+SA deep research SOP 明确要求 section fallback 后执行 report_merge；
+scaffold-reporting skill 明确 report_merge 的输入、输出和 metadata。
 ```
 
 ### 4.2 修复点二：section fallback 完成后自动触发 report_merge
 
-目标：当所有章节草稿完成后，CentralAgent 不再自由选择 FINISH，而是必须发起 merge。
+目标：小改 SOP，让所有章节草稿完成后，CentralAgent 优先发起 reporter merge。第一版不做 router / FINISH handler 的全局硬拦截。
 
 触发条件：
 
@@ -158,15 +160,14 @@ input_refs=[outline, research_observation, all_section_draft_refs]
 
 ```text
 StackPlanner2/backend/packages/harness/deerflow/sp/central/prompt.py
-StackPlanner2/backend/packages/harness/deerflow/sp/actions/router.py
-StackPlanner2/backend/packages/harness/deerflow/sp/agent_tools.py
+StackPlanner2/skills/public/scaffold-reporting/SKILL.md
 ```
 
 优先级建议：
 
 ```text
-先在 prompt 中强化规则；
-如果仍不稳定，再在 router 或 tool availability 层做确定性拦截。
+V1 只改 SOP / skill；
+如果后续仍不稳定，再评估是否在 reporter 相关 contract 层增加更强约束。
 ```
 
 ### 4.3 修复点三：区分 section draft contract 与 report merge contract
@@ -204,7 +205,7 @@ completion_status in {"complete", "partial"}
 但它必须标记为：
 
 ```text
-finalizable=false
+artifact_metadata.kind="section_draft"
 ```
 
 #### Report Merge Contract
@@ -260,7 +261,7 @@ report_merge 产物建议包含：
 }
 ```
 
-这能让 FINISH 明确知道：
+这能让 reporter / CentralAgent 明确知道：
 
 ```text
 这是合并后的完整报告，不是单章草稿。
@@ -288,8 +289,8 @@ metadata.kind="section_draft"
 缺点：
 
 ```text
-必须在 FINISH / current artifact / report version 逻辑中持续识别 metadata.kind。
-否则 section draft 仍可能冒充最终报告。
+仍需要依赖 SA 报告 SOP 和 reporter contract 识别 metadata.kind。
+不在 V1 修改全局 FINISH handler，避免影响其他任务。
 ```
 
 ### 路线 B：更干净的长期方案
@@ -322,30 +323,38 @@ V2 再评估是否新增 artifact_type="section_draft"。
 
 ## 6. 测试计划
 
-### 6.1 单元测试：FINISH 拒绝 section draft
+### 6.1 单元测试：scaffold reporter contract 区分 section draft / report merge
 
 构造：
 
 ```text
-artifact_type="report_revision"
-metadata.kind="section_draft"
+case A:
+  artifact_type="report_revision"
+  metadata.kind="section_draft"
+  metadata.section_id 非空
+
+case B:
+  artifact_type="report_revision"
+  metadata.kind="report_merge"
+  metadata.merged_section_refs 非空
+  metadata.section_coverage.missing_section_ids=[]
 ```
 
 执行：
 
 ```text
-sp_finish(final_artifact_ref=<section_draft_ref>, required_artifact_type="report")
+调用 scaffold reporter artifact contract 检查
 ```
 
 期望：
 
 ```text
-FINISH 失败
-next_step="error_recoverable"
-错误信息要求 report_merge
+case A 被识别为章节草稿，可作为中间产物
+case B 被识别为完整合并报告
+contract 错误信息只影响 scaffold reporter delegate，不影响其他任务
 ```
 
-### 6.2 集成测试：section fallback 自动 merge
+### 6.2 集成测试：section fallback SOP 触发 merge
 
 构造：
 
@@ -359,7 +368,7 @@ s1 / s2 / s3 / s4 均成功
 
 ```text
 CentralAgent 下一步 delegate reporter metadata.kind="report_merge"
-不会调用 FINISH
+不会重复 full-report reporter
 ```
 
 ### 6.3 集成测试：merge 后 FINISH 成功
@@ -423,44 +432,9 @@ section fallback 已启动
 能生成一份完整合并报告 artifact。
 ```
 
-### Phase 2：FINISH 门禁
+### Phase 2：Reporter Contract 与 metadata 完整化
 
-目标：彻底阻止 section draft 假完成。
-
-动作：
-
-```text
-在 finish handler 检查 artifact_metadata.kind
-kind="section_draft" 时拒绝 FINISH
-错误信息指向 report_merge
-```
-
-验收：
-
-```text
-FINISH s4 必然失败。
-```
-
-### Phase 3：自动 merge
-
-目标：减少依赖 CentralAgent 自觉遵守 prompt。
-
-动作：
-
-```text
-在 router / agent_tools / recovery 逻辑中检测 section fallback 完成状态
-自动提示或强制下一步为 report_merge delegation
-```
-
-验收：
-
-```text
-s1-s4 完成后，下一步稳定进入 report_merge。
-```
-
-### Phase 4：Contract 与 metadata 完整化
-
-目标：让 artifact contract 能机器判断完整性。
+目标：让 scaffold reporter delegate 能机器判断章节草稿和合并报告。
 
 动作：
 
@@ -474,6 +448,43 @@ s1-s4 完成后，下一步稳定进入 report_merge。
 
 ```text
 日志、memory、artifact metadata 都能解释当前报告处于 section_draft 还是 final merged report。
+```
+
+### Phase 3：Reporter-only merge 稳定化
+
+目标：只通过 reporter SOP / skill 让 merge 更稳定，不改全局 FINISH handler。
+
+动作：
+
+```text
+强化 scaffold-reporting skill 的 Report Merge Mode
+要求 merge task 不新增事实，只合并章节草稿
+要求输出 metadata.kind="report_merge"
+```
+
+验收：
+
+```text
+s1-s4 完成后，SOP 指向 reporter report_merge；
+report_merge 输出完整 report_revision。
+```
+
+### Phase 4：后续可选强化
+
+目标：如果 SOP 仍不稳定，再评估更强的 runtime 约束。
+
+动作：
+
+```text
+评估是否新增 artifact_type="section_draft"
+评估是否在 reporter 相关 recovery 层提示 report_merge
+暂不默认修改全局 FINISH handler
+```
+
+验收：
+
+```text
+只有在证明 SOP/contract 不够稳定时，才扩大 runtime 改动面。
 ```
 
 ## 8. 本次保险公司报告的具体合并建议
@@ -522,11 +533,11 @@ completion_status="complete"
 完成修复后，系统必须满足：
 
 ```text
-1. section_draft 不可 FINISH
-2. section fallback 完成后必须 report_merge
+1. SA 报告 SOP 明确 section fallback 完成后必须 report_merge
+2. scaffold reporter contract 能区分 section_draft 与 report_merge
 3. report_merge 不新增事实，只合并已有章节
 4. final report_revision 覆盖全部 ScopeTree 一级章节
-5. FINISH 只能指向完整 merged report
+5. V1 不修改全局 FINISH handler，避免影响其他任务
 ```
 
 只要这五点成立，当前“每一块都生成了但最后没合并”的问题就能闭环。

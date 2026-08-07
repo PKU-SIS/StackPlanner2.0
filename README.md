@@ -17,7 +17,7 @@ ToDo：
 1. 实现人机交互的大纲确认流程。
 2. 处理字数控制、等待时间 trade-off，以及轻量 AGM 到完整 AGM 的演进。
 3. 升级报告生成引用机制，保证 stable numeric citations、Evidence Ledger、Numeric Claim Map 全链路一致。
-4. 修复 section fallback 后的 `report_merge` 终态：`section_draft` 不可 FINISH，必须合并为完整 `report_revision`。
+4. 修复 section fallback 后的 `report_merge` 终态：优先通过 SA 报告 SOP、reporter merge 和 scaffold reporter contract 合并为完整 `report_revision`，V1 不改全局 FINISH 门禁。
 5. 整理并持久化 SP2 trace，便于后续构造数据集和评估 deep research 效果。
 
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](./backend/pyproject.toml)
