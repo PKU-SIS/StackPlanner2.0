@@ -667,6 +667,19 @@ tools:
   #   max_results: 5                  # Capped at 20 by the Brave Search API
   #   # api_key: $BRAVE_SEARCH_API_KEY  # Optional if the env var is set
 
+  # Web search tool (uses Bocha / LangSearch, requires BOCHA_API_KEY or LANGSEARCH_API_KEY)
+  # Bocha can return long page summaries, which is useful for SP scaffold
+  # pre-research when web_fetch is unreliable. trust_env defaults to false so
+  # broken ambient HTTP proxies do not intercept LangSearch requests.
+  # - name: web_search
+  #   group: web
+  #   use: deerflow.community.bocha.tools:web_search_tool
+  #   max_results: 5                  # Capped at 10 by the Bocha provider
+  #   api_key: $BOCHA_API_KEY
+  #   timeout: 60.0
+  #   trust_env: false
+  #   freshness: noLimit
+
   # Web search tool (requires Tavily API key)
   # - name: web_search
   #   group: web

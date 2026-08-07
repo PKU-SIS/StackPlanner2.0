@@ -29,7 +29,7 @@ Each node must have:
 - `instruction`, explaining what the section must answer and how it serves the
   original user request;
 - `children`;
-- for leaves, `doc_ids` or evidence requirements.
+- for leaves, `doc_ids` / `[n]` source ids or evidence requirements.
 
 Default shape:
 
@@ -67,8 +67,9 @@ evidence globally. For each leaf, record either:
 - evidence refs/doc IDs that support the leaf; or
 - concrete evidence requirements if support is missing.
 
-Prefer stable `doc_ids` or artifact refs from the supplied evidence. If the
-source is partial, mark it as partial rather than treating it as complete.
+Prefer stable `[n]` source ids from the Evidence Ledger plus artifact refs from
+the supplied evidence. If the source is partial, mark it as partial rather than
+treating it as complete. Do not invent source ids and do not renumber sources.
 
 ## Lightweight AGM State
 
@@ -89,6 +90,22 @@ Track:
 ## Output Contract
 
 Return one JSON object only. Put the full ScopeTree JSON in `artifact_content`.
+Do not return a generic Markdown outline. Do not return `artifact_content=null`.
+If you cannot produce a valid ScopeTree JSON, set `completion_status` to
+`partial` or `blocked` and list the concrete gap.
+
+Your final response must be one raw JSON object only:
+
+- do not include prose before or after the JSON object;
+- do not wrap the JSON in a Markdown code fence;
+- do not place the output-contract JSON inside another string;
+- escape quotes inside JSON strings, including quoted report titles;
+- put `evidence_map` and `agm_state` as top-level keys of
+  `artifact_metadata`, not only inside `artifact_content` or a summary string.
+
+If you accidentally cannot satisfy this raw-JSON contract, return a valid JSON
+object with `completion_status="partial"` and a concrete `evidence_gaps` item
+instead of returning prose.
 
 Required metadata:
 
@@ -99,7 +116,9 @@ Required metadata:
   "leaf_count": 0,
   "explicit_dimensions_covered": [],
   "stable_candidate_set": [],
-  "evidence_map": {},
+  "evidence_map": {
+    "leaf_node_id": ["[1]", "[2]"]
+  },
   "evidence_gaps": [],
   "agm_state": {
     "active_nodes": [],

@@ -106,6 +106,26 @@ def test_action_schema_normalizes_common_stage_aliases(provided, expected):
     assert action.stage == expected
 
 
+def test_central_prompt_uses_scaffold_reporter_without_first_draft_quality_gate():
+    scaffold_block = CENTRAL_AGENT_ACTION_PROMPT[
+        CENTRAL_AGENT_ACTION_PROMPT.index(
+            "For a substantial research/report/document request"
+        ) :
+    ]
+
+    assert 'metadata.skill_names=["stackplanner-reporting", "scaffold-reporting"]' in scaffold_block
+    assert "Do not load `scaffold-quality-gate` for the first draft" in scaffold_block
+    assert "Do not delegate reporter until the current run has an" in scaffold_block
+    assert "call full-report reporter at most once" in scaffold_block
+    assert "Switch to section-by-section" in scaffold_block
+    assert 'metadata.kind="section_draft"' in scaffold_block
+    assert 'metadata.kind="report_merge"' in scaffold_block
+    assert (
+        'metadata.skill_names=["stackplanner-reporting", "scaffold-reporting",\n'
+        not in scaffold_block
+    )
+
+
 def test_recall_memory_schema_requires_query_or_task():
     with pytest.raises(ActionValidationError, match="memory_query"):
         SPAction.create(ActionType.RECALL_MEMORY, reason="Need prior context")
@@ -1717,6 +1737,451 @@ def test_delegate_handler_calls_executor_and_externalizes_large_result(tmp_path)
     current_event = next(event for event in result.run_events if event["event_type"] == "sp.artifact.current_changed")
     assert current_event["payload"]["previous_artifact_id"] is None
     assert current_event["payload"]["current_artifact_id"] == report_ref["artifact_id"]
+
+
+def test_scaffold_preresearch_requires_research_artifact(tmp_path):
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="No response generated",
+            task_id="task-empty-research",
+            artifact_metadata={
+                "completion_status": "blocked",
+                "output_diagnostics": {
+                    "empty_result_reason": "no_response_generated_sentinel"
+                },
+            },
+        )
+    )
+    action = _action(
+        ActionType.DELEGATE,
+        action_id="scaffold-preresearch-empty",
+        target_agent="researcher",
+        task="Run SA pre-research.",
+        expected_output="Research Summary artifact",
+        stage="research",
+        metadata={"skill_names": ["scaffold-preresearch"]},
+    )
+
+    result = build_default_action_router(delegate_executor=executor).execute(
+        action,
+        state=_thread_state_with_outputs(tmp_path),
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+
+    assert result.next_step == "error_recoverable"
+    assert "scaffold_research_observation_required" in result.error
+    assert "artifact_content" in result.error
+    assert "final_text" in result.error
+    assert "research_observation" not in result.state_update.get("sp_current_artifact_refs", {})
+    event = next(event for event in result.run_events if event["event_type"] == "sp.delegate.contract_failed")
+    assert event["payload"]["contract"] == "scaffold_research_observation_required"
+    assert event["payload"]["output_diagnostics"] == {
+        "empty_result_reason": "no_response_generated_sentinel"
+    }
+
+
+def test_scaffold_outline_requires_scope_tree_artifact_and_metadata(tmp_path):
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="No response generated",
+            task_id="task-empty-outline",
+            artifact_metadata={
+                "completion_status": "blocked",
+                "output_diagnostics": {
+                    "empty_result_reason": "no_response_generated_sentinel"
+                },
+            },
+        )
+    )
+    action = _action(
+        ActionType.DELEGATE,
+        action_id="scaffold-outline-empty",
+        target_agent="outline",
+        task="Build ScopeTree JSON.",
+        expected_output="Outline artifact",
+        stage="planning",
+        metadata={"skill_names": ["scaffold-outline"]},
+    )
+
+    result = build_default_action_router(delegate_executor=executor).execute(
+        action,
+        state=_thread_state_with_outputs(tmp_path),
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+
+    assert result.next_step == "error_recoverable"
+    assert "scaffold_outline_artifact_required" in result.error
+    assert "artifact_content" in result.error
+    assert "artifact_metadata.evidence_map" in result.error
+    assert "artifact_metadata.agm_state" in result.error
+    assert "outline" not in result.state_update.get("sp_current_artifact_refs", {})
+
+
+def test_scaffold_outline_requires_evidence_map_and_agm_state(tmp_path):
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Outline created.",
+            task_id="task-outline-missing-metadata",
+            artifact_content='{"scope_tree":{"title":"Report","children":[]}}',
+            artifact_type="outline",
+            artifact_metadata={"completion_status": "complete", "evidence_map": {"root": ["[1]"]}},
+        )
+    )
+    action = _action(
+        ActionType.DELEGATE,
+        action_id="scaffold-outline-missing-metadata",
+        target_agent="outline",
+        task="Build ScopeTree JSON.",
+        expected_output="Outline artifact",
+        stage="planning",
+        metadata={"skill_names": ["scaffold-outline"]},
+    )
+
+    result = build_default_action_router(delegate_executor=executor).execute(
+        action,
+        state=_thread_state_with_outputs(tmp_path),
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+
+    assert result.next_step == "error_recoverable"
+    assert "artifact_metadata.agm_state" in result.error
+    assert "outline" not in result.state_update.get("sp_current_artifact_refs", {})
+
+
+def test_scaffold_outline_valid_artifact_is_persisted(tmp_path):
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Outline created.",
+            task_id="task-outline-ok",
+            artifact_content='{"scope_tree":{"title":"Report","children":[]}}',
+            artifact_type="outline",
+            artifact_metadata={
+                "completion_status": "complete",
+                "evidence_map": {"root": ["[1]"]},
+                "agm_state": {"active_nodes": ["root"]},
+            },
+        )
+    )
+    action = _action(
+        ActionType.DELEGATE,
+        action_id="scaffold-outline-ok",
+        target_agent="outline",
+        task="Build ScopeTree JSON.",
+        expected_output="Outline artifact",
+        stage="planning",
+        metadata={"skill_names": ["scaffold-outline"]},
+    )
+
+    result = build_default_action_router(delegate_executor=executor).execute(
+        action,
+        state=_thread_state_with_outputs(tmp_path),
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+
+    assert result.next_step == "continue"
+    ref = result.state_update["sp_current_artifact_refs"]["outline"]
+    assert ref["type"] == "outline"
+    assert ref["metadata"]["evidence_map"] == {"root": ["[1]"]}
+    assert ref["metadata"]["agm_state"] == {"active_nodes": ["root"]}
+
+
+def test_scaffold_reporter_requires_report_artifact(tmp_path):
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="No response generated",
+            task_id="task-empty-report",
+            artifact_metadata={"completion_status": "blocked"},
+        )
+    )
+    state = {
+        **_thread_state_with_outputs(tmp_path),
+        "sp_current_artifact_refs": {
+            "outline": {
+                "artifact_id": "outline-1",
+                "type": "outline",
+                "version": 1,
+                "run_id": "run-1",
+                "is_current": True,
+                "metadata": {
+                    "evidence_map": {"leaf-1": ["[1]"]},
+                    "agm_state": {"active_nodes": ["leaf-1"]},
+                },
+            }
+        },
+    }
+    action = _action(
+        ActionType.DELEGATE,
+        action_id="scaffold-report-empty",
+        target_agent="reporter",
+        task="Write the SA scaffolded report",
+        expected_output="report artifact",
+        stage="reporting",
+        metadata={"skill_names": ["stackplanner-reporting", "scaffold-reporting"]},
+    )
+
+    result = build_default_action_router(delegate_executor=executor).execute(
+        action,
+        state=state,
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+
+    assert result.next_step == "error_recoverable"
+    assert "scaffold_report_artifact_required" in result.error
+    assert "artifact_content" in result.error
+    assert "final_text" in result.error
+
+
+def test_scaffold_reporter_requires_outline_artifact_before_first_draft(tmp_path):
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Report artifact created",
+            task_id="task-1",
+            artifact_content="# Report",
+            artifact_type="report_revision",
+        )
+    )
+    action = _action(
+        ActionType.DELEGATE,
+        action_id="scaffold-report",
+        target_agent="reporter",
+        task="Write the SA scaffolded report",
+        expected_output="report artifact",
+        stage="reporting",
+        metadata={"skill_names": ["stackplanner-reporting", "scaffold-reporting"]},
+    )
+
+    result = build_default_action_router(delegate_executor=executor).execute(
+        action,
+        state=_thread_state_with_outputs(tmp_path),
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+
+    assert result.next_step == "error_recoverable"
+    assert "requires a current outline artifact" in result.error
+    assert executor.tasks == []
+    assert any(event["event_type"] == "sp.delegate.blocked" for event in result.run_events)
+
+
+def test_scaffold_reporter_requires_outline_evidence_map_and_agm_state(tmp_path):
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Report artifact created",
+            task_id="task-1",
+            artifact_content="# Report",
+            artifact_type="report_revision",
+        )
+    )
+    state = {
+        **_thread_state_with_outputs(tmp_path),
+        "sp_current_artifact_refs": {
+            "outline": {
+                "artifact_id": "outline-1",
+                "type": "outline",
+                "version": 1,
+                "run_id": "run-1",
+                "is_current": True,
+                "metadata": {"evidence_map": {"leaf-1": ["[1]"]}},
+            }
+        },
+    }
+    action = _action(
+        ActionType.DELEGATE,
+        action_id="scaffold-report",
+        target_agent="reporter",
+        task="Write the SA scaffolded report",
+        expected_output="report artifact",
+        stage="reporting",
+        metadata={"skill_names": ["stackplanner-reporting", "scaffold-reporting"]},
+    )
+
+    result = build_default_action_router(delegate_executor=executor).execute(
+        action,
+        state=state,
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+
+    assert result.next_step == "error_recoverable"
+    assert "agm_state" in result.error
+    assert executor.tasks == []
+
+
+def test_scaffold_reporter_runs_when_outline_artifact_has_scaffold_metadata(tmp_path):
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Report artifact created",
+            task_id="task-1",
+            artifact_content="# Report\n\nClaim [1]",
+            artifact_type="report_revision",
+        )
+    )
+    state = {
+        **_thread_state_with_outputs(tmp_path),
+        "sp_current_artifact_refs": {
+            "outline": {
+                "artifact_id": "outline-1",
+                "type": "outline",
+                "version": 1,
+                "run_id": "run-1",
+                "is_current": True,
+                "metadata": {
+                    "evidence_map": {"leaf-1": ["[1]"]},
+                    "agm_state": {"active_nodes": ["leaf-1"]},
+                },
+            }
+        },
+    }
+    action = _action(
+        ActionType.DELEGATE,
+        action_id="scaffold-report",
+        target_agent="reporter",
+        task="Write the SA scaffolded report",
+        expected_output="report artifact",
+        stage="reporting",
+        metadata={"skill_names": ["stackplanner-reporting", "scaffold-reporting"]},
+    )
+
+    result = build_default_action_router(delegate_executor=executor).execute(
+        action,
+        state=state,
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+
+    assert result.next_step == "continue"
+    assert executor.tasks[0].metadata["skill_names"] == [
+        "stackplanner-reporting",
+        "scaffold-reporting",
+    ]
+
+
+def test_section_draft_reporter_metadata_is_preserved_on_artifact(tmp_path):
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Section draft completed.",
+            task_id="task-1",
+            artifact_content="## 一、产业总览\n\nClaim [1].",
+            artifact_type="report_revision",
+            artifact_metadata={"completion_status": "complete"},
+        )
+    )
+    state = {
+        **_thread_state_with_outputs(tmp_path),
+        "sp_current_artifact_refs": {
+            "outline": {
+                "artifact_id": "outline-1",
+                "type": "outline",
+                "version": 1,
+                "run_id": "run-1",
+                "is_current": True,
+                "metadata": {
+                    "evidence_map": {"s1n1": ["[1]"]},
+                    "agm_state": {"active_nodes": ["s1n1"]},
+                },
+            }
+        },
+    }
+    action = _action(
+        ActionType.DELEGATE,
+        action_id="section-draft",
+        target_agent="reporter",
+        task="Write section s1 only.",
+        expected_output="Markdown section draft",
+        stage="reporting",
+        metadata={
+            "skill_names": ["stackplanner-reporting", "scaffold-reporting"],
+            "kind": "section_draft",
+            "section_id": "s1",
+            "covered_leaf_ids": ["s1n1"],
+            "source_ids": [1],
+            "numeric_claim_ids": ["C1"],
+        },
+    )
+
+    result = build_default_action_router(delegate_executor=executor).execute(
+        action,
+        state=state,
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+
+    assert result.next_step == "continue"
+    ref = result.state_update["sp_current_artifact_refs"]["report_revision"]
+    assert ref["metadata"]["kind"] == "section_draft"
+    assert ref["metadata"]["section_id"] == "s1"
+    assert ref["metadata"]["covered_leaf_ids"] == ["s1n1"]
+    assert ref["metadata"]["source_ids"] == [1]
+    assert ref["metadata"]["numeric_claim_ids"] == ["C1"]
+
+
+def test_scaffold_reporter_accepts_explicit_outline_with_scaffold_state_in_body(tmp_path):
+    from deerflow.sp.artifacts import SPArtifactAdapter
+
+    adapter = SPArtifactAdapter()
+    state = _thread_state_with_outputs(tmp_path)
+    outline = adapter.write_text_artifact(
+        """```json
+{
+  "artifact_content": {"scope_tree": {"title": "Report"}},
+  "artifact_type": "outline",
+  "artifact_metadata": {
+    "completion_status": "complete",
+    "evidence_map": {"leaf-1": ["[1]"]},
+    "agm_state": {"active_nodes": ["leaf-1"]}
+  }
+}
+```""",
+        artifact_type="outline",
+        state=state,
+        thread_id="thread-1",
+        run_id="run-1",
+        metadata={},
+    )
+    state = {**state, **outline.state_update}
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Report artifact created",
+            task_id="task-1",
+            artifact_content="# Report\n\nClaim [1]",
+            artifact_type="report_revision",
+        )
+    )
+    action = _action(
+        ActionType.DELEGATE,
+        action_id="scaffold-report",
+        target_agent="reporter",
+        task="Write the SA scaffolded report",
+        input_refs=[outline.metadata.artifact_id],
+        expected_output="report artifact",
+        stage="reporting",
+        metadata={"skill_names": ["stackplanner-reporting", "scaffold-reporting"]},
+    )
+
+    result = build_default_action_router(delegate_executor=executor).execute(
+        action,
+        state=state,
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+
+    assert result.next_step == "continue"
+    assert executor.tasks[0].input_refs == [outline.metadata.artifact_id]
 
 
 def test_perception_acceptance_converts_decision_critical_gaps_to_questions(

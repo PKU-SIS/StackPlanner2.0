@@ -461,6 +461,46 @@ class DelegateHandler:
 
         if action.target_agent == "reporter":
             _prepare_partial_report_retry(action, context.state)
+            scaffold_gap = _scaffold_reporter_outline_guard_gap(
+                action,
+                context.state,
+                artifact_adapter=self._artifact_adapter,
+                thread_id=context.thread_id,
+                run_id=context.run_id,
+            )
+            if scaffold_gap:
+                entry = context.stack.append(
+                    StackMemoryEntry(
+                        thread_id=context.thread_id,
+                        run_id=context.run_id,
+                        actor="central",
+                        action="delegate_blocked",
+                        content=scaffold_gap,
+                        stage=action.stage,
+                        priority="high",
+                        metadata={
+                            "action_id": action.action_id,
+                            "target_agent": action.target_agent,
+                            "guard": "scaffold_outline_required",
+                        },
+                    )
+                )
+                return HandlerResult(
+                    next_step="error_recoverable",
+                    state_update={"sp_active_delegate_id": None},
+                    memory_entries=[entry],
+                    idempotency_key=action.idempotency_key,
+                    error=scaffold_gap,
+                    run_events=[
+                        make_sp_event(
+                            "sp.delegate.blocked",
+                            action_id=action.action_id,
+                            run_id=context.run_id,
+                            target_agent=action.target_agent,
+                            reason="scaffold_outline_required",
+                        )
+                    ],
+                )
 
         if _is_unrequested_report_revision(action, context.state, run_id=context.run_id):
             entry = context.stack.append(
@@ -694,6 +734,65 @@ class DelegateHandler:
         artifact_metadata = _delegated_artifact_metadata(action, result, task)
         if artifact_content is None and isinstance(result.result, str) and len(result.result) > LARGE_RESULT_ARTIFACT_THRESHOLD:
             artifact_content = result.result
+        contract_gap = _scaffold_delegate_artifact_contract_gap(
+            action,
+            artifact_content=artifact_content,
+            artifact_type=effective_artifact_type,
+            artifact_metadata=artifact_metadata,
+            created_paths=created_paths,
+            result=result,
+        )
+        if contract_gap is not None:
+            error_entry = context.stack.append(
+                StackMemoryEntry(
+                    thread_id=context.thread_id,
+                    run_id=context.run_id,
+                    actor=str(action.target_agent),
+                    action="delegate_contract_failed",
+                    content=contract_gap["message"],
+                    result_ref=result.task_id,
+                    priority="high",
+                    stage=action.stage,
+                    failure_note=contract_gap["message"],
+                    metadata={
+                        "action_id": action.action_id,
+                        "task_id": result.task_id,
+                        "target_agent": action.target_agent,
+                        "contract": contract_gap["contract"],
+                        "missing": contract_gap["missing"],
+                        "completion_status": artifact_metadata.get("completion_status"),
+                        "stop_reason": result.stop_reason,
+                        "output_diagnostics": artifact_metadata.get("output_diagnostics"),
+                    },
+                )
+            )
+            return HandlerResult(
+                next_step="error_recoverable",
+                state_update={"sp_active_delegate_id": None},
+                memory_entries=[delegate_entry, error_entry],
+                idempotency_key=action.idempotency_key,
+                error=contract_gap["message"],
+                run_events=[
+                    make_sp_event(
+                        "sp.delegate.started",
+                        action_id=action.action_id,
+                        run_id=context.run_id,
+                        target_agent=action.target_agent,
+                    ),
+                    make_sp_event(
+                        "sp.delegate.contract_failed",
+                        action_id=action.action_id,
+                        run_id=context.run_id,
+                        target_agent=action.target_agent,
+                        task_id=result.task_id,
+                        contract=contract_gap["contract"],
+                        missing=contract_gap["missing"],
+                        completion_status=artifact_metadata.get("completion_status"),
+                        stop_reason=result.stop_reason,
+                        output_diagnostics=artifact_metadata.get("output_diagnostics"),
+                    ),
+                ],
+            )
 
         # Files created by the subagent are authoritative. Register them before
         # considering textual artifact_content, and never write that text back
@@ -876,6 +975,7 @@ class DelegateHandler:
                 "stop_reason": result.stop_reason,
                 "completion_status": completion_status,
                 "evidence_gaps": normalized_gaps[:12],
+                "output_diagnostics": result.artifact_metadata.get("output_diagnostics"),
                 "target_agent": action.target_agent,
             },
         )
@@ -889,6 +989,7 @@ class DelegateHandler:
                 task_id=result.task_id,
                 completion_status=completion_status,
                 stop_reason=result.stop_reason,
+                output_diagnostics=result.artifact_metadata.get("output_diagnostics"),
             ),
         ]
         if ended_early:
@@ -902,6 +1003,7 @@ class DelegateHandler:
                     completion_status=completion_status,
                     stop_reason=result.stop_reason,
                     evidence_gaps=normalized_gaps[:12],
+                    output_diagnostics=result.artifact_metadata.get("output_diagnostics"),
                 )
             )
         return HandlerResult(
@@ -1474,6 +1576,241 @@ def _all_artifact_refs(value: Any) -> list[dict[str, Any]]:
     return deduplicated
 
 
+def _latest_current_artifact_ref(
+    value: Any,
+    artifact_type: str,
+    *,
+    run_id: str | None = None,
+) -> dict[str, Any] | None:
+    candidates = [
+        ref
+        for ref in _all_artifact_refs(value)
+        if str(ref.get("type") or "") == artifact_type
+        and ref.get("is_current", True)
+        and (not run_id or ref.get("run_id") in {None, run_id})
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda ref: int(ref.get("version") or 0))
+
+
+def _is_scaffold_reporter_delegate(action: SPAction) -> bool:
+    if action.target_agent != "reporter":
+        return False
+    revision_reason = action.metadata.get("revision_reason")
+    if isinstance(revision_reason, str) and revision_reason.strip():
+        return False
+    return _action_has_skill(action, "scaffold-reporting")
+
+
+def _action_has_skill(action: SPAction, skill_name: str) -> bool:
+    skill_names = action.metadata.get("skill_names")
+    if not isinstance(skill_names, list):
+        return False
+    return skill_name in {str(name).strip() for name in skill_names}
+
+
+def _is_scaffold_researcher_delegate(action: SPAction) -> bool:
+    return action.target_agent == "researcher" and _action_has_skill(
+        action,
+        "scaffold-preresearch",
+    )
+
+
+def _is_scaffold_outline_delegate(action: SPAction) -> bool:
+    return action.target_agent == "outline" and _action_has_skill(
+        action,
+        "scaffold-outline",
+    )
+
+
+def _scaffold_delegate_artifact_contract_gap(
+    action: SPAction,
+    *,
+    artifact_content: Any,
+    artifact_type: str,
+    artifact_metadata: Mapping[str, Any],
+    created_paths: Any,
+    result: SPSubagentResult,
+) -> dict[str, Any] | None:
+    missing: list[str] = []
+    contract = ""
+    if _is_scaffold_researcher_delegate(action):
+        contract = "scaffold_research_observation_required"
+        if artifact_content in (None, "") and not _non_empty_string_list(created_paths):
+            missing.append("artifact_content")
+        if artifact_type != "research_observation":
+            missing.append("artifact_type=research_observation")
+    elif _is_scaffold_outline_delegate(action):
+        contract = "scaffold_outline_artifact_required"
+        if artifact_content in (None, ""):
+            missing.append("artifact_content")
+        if artifact_type != "outline":
+            missing.append("artifact_type=outline")
+        if not _non_empty_mapping(artifact_metadata.get("evidence_map")):
+            missing.append("artifact_metadata.evidence_map")
+        if not _non_empty_mapping(artifact_metadata.get("agm_state")):
+            missing.append("artifact_metadata.agm_state")
+    elif _is_scaffold_reporter_delegate(action):
+        contract = "scaffold_report_artifact_required"
+        if artifact_content in (None, "") and not _non_empty_string_list(created_paths):
+            missing.append("artifact_content")
+        if artifact_type not in _REPORT_ARTIFACT_TYPES:
+            missing.append("artifact_type=report_revision")
+    else:
+        return None
+    if not missing:
+        return None
+    raw_result = str(result.result or "").strip()
+    if raw_result == "No response generated":
+        missing.append("final_text")
+    return {
+        "contract": contract,
+        "missing": list(dict.fromkeys(missing)),
+        "message": (
+            f"SA scaffolded {action.target_agent} delegation did not produce a valid "
+            f"artifact for contract {contract}; missing: {', '.join(dict.fromkeys(missing))}."
+        ),
+    }
+
+
+def _non_empty_mapping(value: Any) -> bool:
+    return isinstance(value, Mapping) and bool(value)
+
+
+def _non_empty_string_list(value: Any) -> bool:
+    return isinstance(value, list) and any(isinstance(item, str) and item.strip() for item in value)
+
+
+def _scaffold_reporter_outline_guard_gap(
+    action: SPAction,
+    state: Mapping[str, Any],
+    *,
+    artifact_adapter: SPArtifactAdapter | None = None,
+    thread_id: str | None = None,
+    run_id: str | None = None,
+) -> str | None:
+    if not _is_scaffold_reporter_delegate(action):
+        return None
+    outline_refs = _scaffold_outline_guard_candidates(
+        action,
+        state,
+        run_id=run_id,
+    )
+    if not outline_refs:
+        return (
+            "SA scaffolded reporter delegation requires a current outline "
+            "artifact before reporting. Delegate outline first and persist "
+            "ScopeTree, evidence_map, and agm_state."
+        )
+    for outline in outline_refs:
+        missing = _scaffold_outline_missing_fields(
+            outline,
+            state=state,
+            artifact_adapter=artifact_adapter,
+            thread_id=thread_id,
+        )
+        if not missing:
+            return None
+    missing_text = ", ".join(
+        _scaffold_outline_missing_fields(
+            outline_refs[0],
+            state=state,
+            artifact_adapter=artifact_adapter,
+            thread_id=thread_id,
+        )
+        or ["evidence_map", "agm_state"]
+    )
+    return (
+        "SA scaffolded reporter delegation requires outline metadata fields "
+        f"before reporting: {missing_text}."
+    )
+
+
+def _scaffold_outline_guard_candidates(
+    action: SPAction,
+    state: Mapping[str, Any],
+    *,
+    run_id: str | None = None,
+) -> list[dict[str, Any]]:
+    refs = state.get("sp_current_artifact_refs")
+    requested = {str(value) for value in action.input_refs if str(value).strip()}
+    candidates: list[dict[str, Any]] = []
+    for ref in _all_artifact_refs(refs):
+        if str(ref.get("type") or "") != "outline":
+            continue
+        explicit = bool(requested & _artifact_ref_identifiers(ref))
+        current = bool(ref.get("is_current", True))
+        ref_run_id = str(ref.get("run_id")) if ref.get("run_id") else None
+        if not explicit and not current:
+            continue
+        if not explicit and run_id and ref_run_id not in {None, run_id}:
+            continue
+        candidates.append(ref)
+    candidates.sort(
+        key=lambda ref: (
+            0 if requested & _artifact_ref_identifiers(ref) else 1,
+            0 if ref.get("is_current", True) else 1,
+            -int(ref.get("version") or 0),
+        )
+    )
+    return candidates
+
+
+def _scaffold_outline_missing_fields(
+    outline: Mapping[str, Any],
+    *,
+    state: Mapping[str, Any],
+    artifact_adapter: SPArtifactAdapter | None = None,
+    thread_id: str | None = None,
+) -> list[str]:
+    metadata = outline.get("metadata")
+    missing = _scaffold_mapping_missing_fields(metadata)
+    if not missing:
+        return []
+    body = _scaffold_outline_body(outline, state=state, artifact_adapter=artifact_adapter, thread_id=thread_id)
+    if body and all(_SCAFFOLD_FIELD_PATTERN[field].search(body) for field in missing):
+        return []
+    return missing
+
+
+def _scaffold_mapping_missing_fields(value: Any) -> list[str]:
+    if not isinstance(value, Mapping):
+        return ["evidence_map", "agm_state"]
+    missing: list[str] = []
+    for key in ("evidence_map", "agm_state"):
+        item = value.get(key)
+        if not isinstance(item, Mapping) or not item:
+            missing.append(key)
+    return missing
+
+
+_SCAFFOLD_FIELD_PATTERN = {
+    "evidence_map": re.compile(r'"evidence_map"\s*:'),
+    "agm_state": re.compile(r'"agm_state"\s*:'),
+}
+
+
+def _scaffold_outline_body(
+    outline: Mapping[str, Any],
+    *,
+    state: Mapping[str, Any],
+    artifact_adapter: SPArtifactAdapter | None,
+    thread_id: str | None,
+) -> str:
+    if artifact_adapter is None:
+        return ""
+    materialized = artifact_adapter.read_text_artifact(
+        outline,
+        state=state,
+        thread_id=thread_id,
+        max_chars=64_000,
+    )
+    if materialized is None:
+        return ""
+    return materialized[0]
+
+
 def _latest_report_ref(value: Any) -> dict[str, Any] | None:
     candidates = [ref for ref in _all_artifact_refs(value) if str(ref.get("type") or "") in _REPORT_ARTIFACT_TYPES and ref.get("is_current", True)]
     if not candidates:
@@ -1706,6 +2043,18 @@ def _delegated_artifact_metadata(
     task: SPSubagentTask,
 ) -> dict[str, Any]:
     metadata = dict(result.artifact_metadata)
+    for key in (
+        "kind",
+        "report_mode",
+        "section_id",
+        "covered_leaf_ids",
+        "source_ids",
+        "numeric_claim_ids",
+        "fallback_reason",
+    ):
+        value = task.metadata.get(key)
+        if key not in metadata and value not in (None, "", [], {}):
+            metadata[key] = value
     requested_sources = task.metadata.get("source_artifact_ids")
     if isinstance(requested_sources, list):
         existing_sources = metadata.get("source_artifact_ids")

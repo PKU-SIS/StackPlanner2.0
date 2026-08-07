@@ -1,6 +1,6 @@
 ---
 name: scaffold-preresearch
-description: Use inside the StackPlanner researcher specialist for substantial research/report/document tasks that need SA-style pre-research before outline generation. Produces a Research Summary, seed evidence, stable candidate set, explicit dimensions, source inventory, and evidence gaps for downstream ScopeTree planning.
+description: Use inside the StackPlanner researcher specialist for substantial research/report/document tasks that need SA-style pre-research before outline generation. Produces a compact Research Summary, Evidence Ledger, Numeric Claim Map, stable candidate set, explicit dimensions, and evidence gaps for downstream ScopeTree planning and report synthesis.
 ---
 
 # Scaffold Pre-Research
@@ -46,13 +46,22 @@ evidence provides them.
 - Fetch or preserve full source context when snippets are insufficient.
 - Deduplicate sources and identify materially conflicting evidence.
 - Track coverage against every explicit user dimension and expected output item.
+- Assign one stable numeric source id to every retained source, formatted as
+  `[1]`, `[2]`, `[3]`, and keep that numbering stable for all downstream stages.
+- Extract decision-critical numbers into a Numeric Claim Map with their source
+  ids, units, metric definitions, entity, time scope, region scope, and
+  methodology/scope notes when available.
 - Stop retrying equivalent failed queries after two failures; report the exact
   evidence gap and the smallest useful follow-up.
 
 ## Research Summary
 
-The Research Summary is global planning context for outline and report
-alignment. It is not a factual citation source for the final report.
+The Research Summary is a compact compressed fact layer plus planning context
+for outline and report alignment. It may be used by outline and reporter as
+fact context, but every key factual statement, number, ranking, financing
+amount, shipment figure, market size, policy fact, or order claim must carry a
+stable `[n]` citation that resolves to the Evidence Ledger. Do not include
+untraceable factual claims.
 
 Include:
 
@@ -60,11 +69,11 @@ Include:
 - explicit user dimensions and constraints;
 - stable candidate or object set when the task compares multiple objects;
 - time, region, industry, data, or methodology boundaries;
-- compact evidence inventory with source refs, titles, URLs, and dates when
-  available;
+- compact evidence inventory using stable `[n]` source ids;
+- key numeric claims with matching `[n]` citations and Numeric Claim Map ids;
 - known conflicts and evidence gaps;
 - conservative wording needed because of weak or missing evidence;
-- suggested seed evidence refs for ScopeTree leaves.
+- suggested seed `[n]` evidence refs for ScopeTree leaves.
 
 Avoid:
 
@@ -72,12 +81,63 @@ Avoid:
 - checklist-only output;
 - making evidence gaps the main story;
 - invented citations, rankings, metrics, or candidates;
+- uncited factual compression such as "multiple sources show..." without a
+  supporting `[n]` citation;
 - table fields that were not supported by evidence.
+
+## Evidence Ledger
+
+Create an Evidence Ledger for every retained source. Use numeric ids only. Do
+not use `E1`, `E2`, `N1`, `N2`, naked URLs, or per-stage renumbering as the
+downstream citation format.
+
+Each item should have this shape:
+
+```json
+{
+  "source_id": 1,
+  "citation": "[1]",
+  "title": "",
+  "url": "",
+  "publisher": "",
+  "published_at": "",
+  "retrieved_at": "",
+  "source_type": "official|research|media|database|company|other",
+  "reliability": "high|medium|low",
+  "claim_summary": "",
+  "used_for": []
+}
+```
+
+## Numeric Claim Map
+
+Create a Numeric Claim Map for important values. `claim_id` is internal only;
+the report citation format is still `[n]`.
+
+Each item should have this shape:
+
+```json
+{
+  "claim_id": "C1",
+  "claim_text": "",
+  "value": "",
+  "unit": "",
+  "metric": "",
+  "entity": "",
+  "time_scope": "",
+  "region_scope": "",
+  "methodology_or_scope": "",
+  "source_ids": [1],
+  "citation": "[1]",
+  "confidence": "high|medium|low",
+  "conflicts_with": []
+}
+```
 
 ## Output Contract
 
-Return one JSON object only. Put the full Research Summary and seed evidence
-inventory in `artifact_content`.
+Return one JSON object only. Put the compact Research Summary, Evidence Ledger,
+Numeric Claim Map, and seed evidence inventory in `artifact_content`.
 
 Required metadata:
 
@@ -87,7 +147,9 @@ Required metadata:
   "queries": [],
   "explicit_dimensions": [],
   "stable_candidate_set": [],
-  "source_refs": [],
+  "source_refs": ["[1]", "[2]"],
+  "evidence_ledger": [],
+  "numeric_claim_map": [],
   "evidence_gaps": []
 }
 ```

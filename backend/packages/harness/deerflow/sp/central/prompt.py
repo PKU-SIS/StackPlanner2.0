@@ -195,32 +195,57 @@ Rules:
      exists for this run, delegate to `researcher` with `stage="research"` and
      `metadata.skill_names=["scaffold-preresearch"]`. The task must decompose
      the query, search from multiple dimensions, deduplicate sources, and
-     produce a Research Summary plus seed evidence for outline generation.
+     produce a compact Research Summary, Evidence Ledger, Numeric Claim Map,
+     and seed evidence for outline generation. Use stable numeric citations
+     `[1]`, `[2]`, `[3]` from retrieval through final report.
   2. ScopeTree + AGM second. If no current ScopeTree/outline artifact exists,
      delegate to `outline` with `stage="planning"` and
      `metadata.skill_names=["scaffold-outline"]`. `input_refs` must include the
      Research Summary artifact and relevant evidence refs. The outline must
-     produce ScopeTree node instructions, an Evidence Map, and lightweight AGM
-     State tracking active nodes, evidence gaps, pending queries, expansion
-     targets, and utility signals. If perception is needed, obtain it before
-     this step; if perception returns clarification questions, ask them once as
-     one batch and never re-ask answers already present as pinned feedback.
+     persist `artifact_type="outline"` with ScopeTree JSON in artifact_content
+     and `evidence_map` plus `agm_state` in artifact_metadata. Evidence Map
+     should bind ScopeTree leaves to stable `[n]` source ids. If perception is
+     needed, obtain it before this step; if perception returns clarification
+     questions, ask them once as one batch and never re-ask answers already
+     present as pinned feedback.
   3. If the ScopeTree misses explicit user dimensions, candidate/object scope,
      comparison dimensions, or answer-oriented conclusion structure, delegate an
      outline revision before reporting. When the user edits an outline,
      re-delegate `outline` with the current outline ref and a non-empty
      `revision_reason`; when approved, continue from that same outline rather
      than regenerating it.
-  4. Report third. Delegate synthesis to `reporter` with `stage="reporting"`
-     and `metadata.skill_names=["stackplanner-reporting", "scaffold-reporting",
-     "scaffold-quality-gate"]`. `input_refs` must include the user request,
-     Research Summary artifact, ScopeTree artifact, and materialized evidence
-     bodies. Reporter must not search.
+  4. Report third. Do not delegate reporter until the current run has an
+     outline artifact whose metadata contains `evidence_map` and `agm_state`.
+     If the outline artifact is missing or incomplete, retry `outline` once
+     before reporting. Delegate synthesis to `reporter` with `stage="reporting"`
+     and `metadata.skill_names=["stackplanner-reporting", "scaffold-reporting"]`.
+     Do not load `scaffold-quality-gate` for the first draft. `input_refs` must
+     include the user request, Research Summary artifact, ScopeTree artifact,
+     Evidence Ledger, Numeric Claim Map, and materialized evidence bodies.
+     Reporter must not search. Without human revision or verifier failure,
+     call full-report reporter at most once and produce the final report
+     artifact directly.
   5. Inspect the reporter's completion status, evidence gaps, quality checks,
      and report artifact before finishing. Research Summary or ScopeTree alone
      is not a final report. A report marked `partial` or `blocked` is not
-     finalizable and requires focused research, outline/reporter revision, or an
-     explicit limitation.
+     finalizable. If the full-report reporter returns an empty response, no
+     report artifact, or a partial result caused by output failure, do not
+     repeat the same full-report delegation. Switch to section-by-section
+     reporting using the current ScopeTree:
+       a. Delegate one reporter task per first-level ScopeTree section or
+          coherent leaf group with `metadata.kind="section_draft"`,
+          `metadata.section_id`, `metadata.covered_leaf_ids`, and the relevant
+          `source_ids` / `numeric_claim_ids` when known.
+       b. Each section draft must use
+          `metadata.skill_names=["stackplanner-reporting", "scaffold-reporting"]`,
+          preserve stable `[n]` citations, and write only that section.
+       c. After all section drafts complete, delegate one reporter merge task
+          with `metadata.kind="report_merge"` and the section draft refs in
+          `input_refs`. The merge task must not introduce new facts; it merges
+          drafts, normalizes headings/citations, writes the final
+          `report_revision` artifact, and records section coverage metadata.
+     Use focused research only when the gap is missing evidence, not when the
+     failure is an empty reporter output.
   6. Unless the user explicitly requested one-shot delivery or the run is
      non-interactive, use `sp_ask_human` with `interaction_type=report_feedback`
      to present the draft artifact for review.

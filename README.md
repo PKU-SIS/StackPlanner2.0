@@ -1,5 +1,25 @@
 # StackPlanner 2.0 (SP2.0)
 
+## SP2 Deep Research 当前状态 / ToDo
+
+当前分支：`sp2DeepResearch`
+
+状态：
+
+- 已初步迁移 SA 式 deep research 链路：`researcher -> Research Summary -> outline / ScopeTree -> reporter`。
+- 已新增并迭代 `scaffold-preresearch`、`scaffold-outline`、`scaffold-reporting` 等 skills。
+- 已补充 Bocha / LangSearch 检索恢复方案，重点是通过 `trust_env=false` 绕过当前环境代理问题。
+- 已发现报告生成主断点：full report 失败后 section fallback 能生成 s1/s2/s3/s4，但缺少稳定 `report_merge`，可能导致最后一个 section draft 被误当最终报告。
+- 相关方案文档位于 `docs/deepresearch/SA/`，尤其是 `SA_REPORT_PIPELINE_FAILURE_AND_BOCHA_RECOVERY_PLAN_ZH.md` 和 `SA_SECTION_DRAFT_REPORT_MERGE_PLAN_ZH.md`。
+
+ToDo：
+
+1. 实现人机交互的大纲确认流程。
+2. 处理字数控制、等待时间 trade-off，以及轻量 AGM 到完整 AGM 的演进。
+3. 升级报告生成引用机制，保证 stable numeric citations、Evidence Ledger、Numeric Claim Map 全链路一致。
+4. 修复 section fallback 后的 `report_merge` 终态：`section_draft` 不可 FINISH，必须合并为完整 `report_revision`。
+5. 整理并持久化 SP2 trace，便于后续构造数据集和评估 deep research 效果。
+
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](./backend/pyproject.toml)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white)](./Makefile)
 [![Runtime](https://img.shields.io/badge/runtime-DeerFlow%202.0-5B5BD6)](https://github.com/bytedance/deer-flow)

@@ -519,6 +519,28 @@ CentralAgent 在 substantial report 场景下应形成这个流程：
    partial / blocked -> focused research 或 reporter revision
 ```
 
+### 6.1 需要补强的四个产品化重点
+
+除了 SA 核心结构迁移，V1 还要把下面四件事纳入实现范围，否则即使 prompt 链路跑通，后续也很难稳定评估和迭代。
+
+| 重点 | 要解决的问题 | V1 建议做法 | 验收标准 |
+| --- | --- | --- | --- |
+| 人机交互的大纲确认 | ScopeTree 直接进入 reporter，容易把错误结构放大成整篇报告问题 | 在 outline 生成后增加可选确认点：展示 ScopeTree、稳定候选集、核心维度、证据缺口；用户确认后再进入 reporter，用户修改意见必须作为 pinned feedback 传给 outline/reporter | 有需要时流程停在 outline review；用户反馈能进入下一版 ScopeTree 或 reporter 输入；不能从未确认的大纲直接生成长报告 |
+| 字数控制、等待时间与 AGM 的取舍 | 长报告质量、延迟、成本互相牵制；完整 AGM 还没实现，不能把它写成已完成能力 | V1 明确提供 report profile：quick / standard / deep。quick 跳过人工确认和复杂修订；standard 使用 Research Summary + ScopeTree + 一次 reporter；deep 才启用大纲确认、focused research、更多 revision。AGM 在 V1 只实现 lightweight AGM State，不实现完整 action loop | 每次 run 的 trace 里记录 profile、目标字数、实际字数、耗时、是否人工确认、是否触发 focused research；文档中明确完整 AGM 属于 Phase 4 |
+| 报告引用升级 | 报告引用如果只靠 Research Summary 或零散来源，后续很难查证，也容易引用错位 | reporter 只能引用 materialized evidence bodies；ScopeTree leaf 需要绑定 evidence refs；最终报告保留 source list / evidence mapping；禁止把 Research Summary 当事实来源引用 | 每个关键事实能追到 source artifact / URL / doc id；final report metadata 记录 source_artifact_ids、scope_tree_id、research_summary_id、citation_coverage |
+| SP2 trace 数据整理与保存 | 后续跑数据集、做 ablation、复盘失败样例，需要结构化 trace，而不是只看自然语言日志 | 为每次 scaffolded report run 保存结构化 trace：delegation 顺序、input_refs/output_artifacts、skill_names、completion_status、evidence_gaps、quality_checks、字数/耗时/token 或成本字段 | 能从 trace 批量抽取：是否按 researcher -> outline -> reporter 执行、每步产物 ID、报告质量检查结果、失败原因；可以直接用于后续数据集评测 |
+
+这四点的优先级建议是：
+
+```text
+P0: trace 整理保存 + 引用升级
+P1: 人工大纲确认
+P1: 字数/等待时间 profile
+P2: 完整 AGM action loop
+```
+
+原因是 trace 和引用是后续评测的基础设施；没有它们，即使主观感觉报告变好，也很难跑数据集证明效果。人工大纲确认和字数/等待时间 profile 是产品体验层的关键控制点，但可以在核心 artifact 链路稳定后接入。完整 AGM 不放进 V1，V1 只保存 lightweight AGM State，避免把高成本循环提前塞进主路径。
+
 ## 7. 分阶段迁移
 
 ### Phase 1：SA 核心结构迁移
@@ -548,6 +570,13 @@ CentralAgent V1 只需要窄 SOP 做流程编排；普通 skill body 只会稳�
 backend/packages/harness/deerflow/subagents/builtins/sp_specialists.py
 backend/packages/harness/deerflow/sp/central/prompt.py
 ```
+
+同时把下面两项作为 Phase 1 的硬性验收：
+
+- 引用链路升级：reporter 只基于 materialized evidence 写事实，最终报告 metadata 保留 source refs 和 evidence mapping。
+- trace 可评测：每次 scaffolded report run 能导出 delegation 顺序、artifact refs、skill_names、质量检查和失败原因。
+
+人工大纲确认和字数/等待时间 profile 可以先用最小实现接入，但不能阻塞无交互的批量评测路径。
 
 ### Phase 2：更低影响的动态 skill routing
 
@@ -596,7 +625,312 @@ quality gate -> revision
 
 这些对效果可能有帮助，但不是把 SA 核心迁入 SP2 的第一优先级。
 
-## 8. 最终推荐
+注意：Phase 4 才是完整 AGM action loop。Phase 1 只要求 outline artifact 中保存 lightweight AGM State，用于 trace、focused research 和后续 revision，不要求实现 expansion/revision/contraction 的闭环优化。
+
+## 8. 首轮 case 暴露问题与 V1.1 优化计划
+
+首轮测试 case：
+
+```text
+请写一份关于 2025-2026 年中国具身智能机器人产业链的深度研究报告...
+```
+
+实际结果说明 skill routing 已经生效：
+
+```text
+researcher -> loaded scaffold-preresearch
+outline    -> loaded scaffold-outline
+reporter   -> loaded stackplanner-reporting + scaffold-reporting + scaffold-quality-gate
+```
+
+但还没有证明 artifact gating 生效。主要问题：
+
+1. `outline` 被调用了，但没有看到持久化的 `outline` artifact。
+2. 最终报告主要依赖 `Research Summary v1/v2`，`ScopeTree / Evidence Map / AGM State` 没有稳定传到最终 reporter。
+3. reporter 被调用多次，最后一次只加载了 `stackplanner-reporting`，说明补救 / finalization 路径没有稳定继承 SA skills。
+4. `scaffold-quality-gate` 放进首轮 reporter 会增加复杂度，可能诱发 partial/retry。
+5. 当前 Research Summary 太像“带很多引用的长证据汇总”，和 SA 里更紧凑的 planning summary 还有差距。
+6. 引用、数字、口径冲突没有单独形成机器可检查的 evidence ledger / numeric claim map。
+
+### 8.1 V1.1 流程调整
+
+V1.1 推荐先收敛为更硬、更短的主链路：
+
+```text
+1. researcher
+   输出：
+   - Research Summary artifact
+   - Evidence Ledger / Numeric Claim Map
+   - evidence_gaps
+
+2. outline
+   输入：
+   - user query
+   - Research Summary
+   - Evidence Ledger / Numeric Claim Map
+   输出：
+   - outline artifact
+   - ScopeTree
+   - Evidence Map
+   - lightweight AGM State
+
+3. reporter first draft
+   输入：
+   - user query
+   - Research Summary
+   - ScopeTree
+   - Evidence Map
+   - materialized evidence bodies
+   - Numeric Claim Map
+   使用：
+   - stackplanner-reporting
+   - scaffold-reporting
+   输出：
+   - final Markdown report
+
+4. quality gate
+   V1.1 暂不放进首轮主路径。
+   后续只在 verifier / revision / offline eval 中使用 scaffold-quality-gate。
+```
+
+### 8.2 `stackplanner-reporting` 和 `scaffold-reporting` 的边界
+
+`scaffold-reporting` 应该能写报告，但它目前只承载 SA 方法约束；`stackplanner-reporting` 仍承担 SP2 的交付协议：
+
+```text
+stackplanner-reporting:
+  - artifact_content / created_paths
+  - write_file 规则
+  - report_revision artifact 类型
+  - revision 版本语义
+  - source_artifact_ids / quality_checks / evidence_gaps metadata
+
+scaffold-reporting:
+  - 按 ScopeTree 写
+  - 不把 Research Summary 当事实来源
+  - 稳定候选集合
+  - 横向比较
+  - 缺证不删除对象
+  - 结论直接回答问题
+```
+
+所以 V1.1 首轮 reporter 先保留两者：
+
+```python
+metadata={"skill_names": ["stackplanner-reporting", "scaffold-reporting"]}
+```
+
+但这确实有设计味道不清的问题。后续可以二选一：
+
+```text
+方案 A：保留 stackplanner-reporting 作为 SP2 delivery contract，scaffold-reporting 只管 SA 方法。
+方案 B：把 stackplanner-reporting 的交付协议合并进 scaffold-reporting，然后首轮 reporter 只加载 scaffold-reporting。
+```
+
+推荐 V1.1 先用方案 A，等链路稳定后再做方案 B。否则现在直接去掉 `stackplanner-reporting`，风险是报告可能写出来，但 artifact / 文件 / revision contract 不稳定。
+
+### 8.3 `scaffold-quality-gate` 暂缓
+
+V1.1 首轮 reporter 不加载 `scaffold-quality-gate`。
+
+原因：
+
+- 当前最大问题是 artifact 链路不稳定，不是质量检查不足。
+- quality gate 会增加 prompt 长度和约束数量，容易让 reporter 返回 partial 或触发多次 retry。
+- 没有稳定 `ScopeTree / Evidence Map` artifact 时，quality gate 很难可靠判断 coverage。
+
+暂时定位：
+
+```text
+scaffold-quality-gate:
+  - 不进入 first draft
+  - 用于 report 生成后的 revision / verifier / offline eval
+  - 等 outline artifact gating 稳定后再接入主路径
+```
+
+### 8.4 Research Summary 应该更像 SA
+
+当前 researcher 输出的问题：
+
+```text
+Research Summary 太长
+引用直接塞进正文
+证据、数字、冲突口径和规划判断混在一起
+reporter 很容易把 Summary 当事实来源
+```
+
+V1.1 应把 researcher 输出拆成两个层次：
+
+```text
+Research Summary:
+  给 outline/reporter 的紧凑任务理解。
+  只保留对象范围、维度、边界、稳定候选集合、关键判断方向、证据缺口。
+
+Evidence Ledger / Numeric Claim Map:
+  给 reporter 的事实边界。
+  记录每条证据、每个数字、每个口径冲突来自哪里。
+```
+
+推荐 researcher artifact 结构：
+
+```json
+{
+  "artifact_type": "research_observation",
+  "artifact_content": {
+    "research_summary": "compact markdown summary",
+    "evidence_ledger": [
+      {
+        "evidence_id": "E1",
+        "source_title": "",
+        "url": "",
+        "publisher": "",
+        "published_at": "",
+        "retrieved_at": "",
+        "claim_summary": "",
+        "reliability": "high|medium|low",
+        "used_for_nodes": []
+      }
+    ],
+    "numeric_claim_map": [
+      {
+        "claim_id": "N1",
+        "value": "",
+        "unit": "",
+        "metric": "",
+        "entity": "",
+        "time_scope": "",
+        "source_evidence_id": "E1",
+        "quote_or_context": "",
+        "confidence": "high|medium|low",
+        "conflicts_with": []
+      }
+    ]
+  },
+  "artifact_metadata": {
+    "completion_status": "complete|partial|blocked",
+    "stable_candidate_set": [],
+    "explicit_dimensions": [],
+    "evidence_gaps": [],
+    "source_refs": ["E1", "E2"],
+    "numeric_claim_ids": ["N1", "N2"]
+  }
+}
+```
+
+如果 SP2 artifact adapter 不适合 `artifact_content` 放 JSON object，可以退一步：`artifact_content` 用 Markdown，`artifact_metadata` 放 `evidence_ledger` 和 `numeric_claim_map` 的结构化 JSON。
+
+### 8.5 引用格式约束
+
+V1.1 统一使用证据 ID，不让正文里到处混杂裸 URL：
+
+```text
+Research Summary:
+  使用 [E1], [E2], [N1] 这类内部证据 ID。
+
+Evidence Ledger:
+  保存 E1/E2 对应的 title/url/publisher/date/reliability。
+
+Numeric Claim Map:
+  保存 N1/N2 对应的数字、单位、口径、实体、时间范围和来源 evidence_id。
+
+Final Report:
+  可以用可读引用格式，但每个关键数字必须能回溯到 Numeric Claim Map。
+```
+
+报告写作约束：
+
+- 不引用 `Research Summary` 作为事实来源。
+- 不引用 `ScopeTree` 或 logic skeleton。
+- 所有数字、排名、订单金额、出货量、融资金额必须来自 `numeric_claim_map`。
+- 如果同一指标多口径冲突，报告必须并列说明，不能选一个方便口径。
+- 来源列表按 Evidence Ledger 输出，不在正文里反复塞长 URL。
+
+### 8.6 outline artifact gating
+
+V1.1 必须把 outline artifact 作为 reporter 前置条件。
+
+CentralAgent prompt 要明确：
+
+```text
+Do not delegate reporter until a current outline artifact exists.
+The outline artifact must contain ScopeTree in artifact_content and
+evidence_map + agm_state in artifact_metadata.
+If outline returns partial/blocked or no outline artifact is persisted,
+retry outline once with a narrower expected_output before reporting.
+```
+
+runtime / handler 层后续可加硬保护：
+
+```text
+如果 target_agent="reporter" 且是 substantial report 场景：
+  - input_refs 必须包含 research_observation
+  - input_refs 必须包含 outline
+  - outline artifact metadata 必须包含 evidence_map / agm_state
+否则 block reporter delegation，并让 CentralAgent 先补 outline。
+```
+
+V1.1 可以先只改 CentralAgent prompt 和 skills；如果仍出现 reporter 绕过 outline，再改 delegate handler 做硬拦截。
+
+### 8.7 reporter 多次调用的收敛策略
+
+目标是首版主路径只调用一次 reporter：
+
+```text
+researcher -> outline -> reporter -> finish
+```
+
+允许额外 reporter 调用的情况只保留三种：
+
+1. 用户明确要求 revision。
+2. reporter 返回 `completion_status=partial|blocked` 且已有 report artifact 可以修。
+3. offline/verifier 明确指出具体失败项。
+
+不允许：
+
+```text
+因为 outline artifact 缺失而直接反复 reporter。
+因为 quality gate 过重而反复 reporter。
+最后一次 reporter 丢失 scaffold-reporting。
+```
+
+### 8.8 V1.1 具体改动清单
+
+优先级从高到低：
+
+```text
+P0:
+1. 修改 CentralAgent prompt：
+   - reporter 前必须有 outline artifact
+   - first draft reporter skill_names = ["stackplanner-reporting", "scaffold-reporting"]
+   - scaffold-quality-gate 不进入 first draft
+
+2. 修改 scaffold-outline：
+   - artifact_content 必须是 ScopeTree JSON
+   - artifact_metadata 必须包含 evidence_map / agm_state
+   - 无法生成则 partial/blocked，不允许伪 complete
+
+3. 修改 scaffold-preresearch：
+   - Research Summary 压缩为 planning summary
+   - 增加 Evidence Ledger / Numeric Claim Map
+   - 引用统一用 E*/N* ID
+
+P1:
+4. 修改 scaffold-reporting：
+   - 明确只用 Evidence Ledger / Numeric Claim Map 写事实和数字
+   - 最终来源列表从 Evidence Ledger 生成
+
+5. 加一个轻量测试用例：
+   - 输入深度报告 query
+   - 断言 delegation 顺序包含 researcher -> outline -> reporter
+   - 断言 artifacts 包含 research_observation / outline / report_revision
+   - 断言 outline metadata 包含 evidence_map / agm_state
+   - 断言 first draft reporter 没有加载 scaffold-quality-gate
+
+P2:
+6. 如果 prompt 约束仍不稳定，再在 delegate handler 加 reporter 前置 artifact guard。
+```
+
+## 9. 最终推荐
 
 这份迁移不应该理解成“只给 reporter 加一个 skill”。
 

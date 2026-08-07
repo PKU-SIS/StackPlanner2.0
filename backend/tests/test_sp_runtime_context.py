@@ -120,6 +120,37 @@ def test_delegate_skill_policy_loads_only_validated_requested_skills():
     assert config.skills == []
 
 
+def test_delegate_skill_policy_loads_scaffold_reporter_pair_without_quality_gate():
+    config = SubagentConfig(
+        name="sp-reporter",
+        description="report",
+        skills=["stackplanner-reporting"],
+    )
+    task = SPSubagentTask(
+        action_id="delegate-report",
+        subagent_type="reporter",
+        task="Write the SA scaffolded report",
+        description="Use the ScopeTree and evidence ledger",
+        metadata={"skill_names": ["stackplanner-reporting", "scaffold-reporting"]},
+    )
+
+    selected = _apply_task_skill_policy(
+        config,
+        task,
+        available_skill_names=frozenset(
+            {
+                "stackplanner-reporting",
+                "scaffold-reporting",
+                "scaffold-quality-gate",
+            }
+        ),
+    )
+
+    assert selected.skills == ["stackplanner-reporting", "scaffold-reporting"]
+    assert "scaffold-quality-gate" not in selected.skills
+    assert config.skills == ["stackplanner-reporting"]
+
+
 def test_delegate_skill_policy_rejects_disabled_or_invented_skill():
     config = SubagentConfig(name="sp-researcher", description="research", skills=[])
     task = SPSubagentTask(

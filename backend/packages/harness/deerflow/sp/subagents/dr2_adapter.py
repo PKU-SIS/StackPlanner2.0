@@ -430,7 +430,10 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         artifact_metadata["created_paths"] = list(dict.fromkeys([*declared_created_paths, *recovered_created_paths]))
     if not is_memory_recaller:
         raw_completion_status = str(artifact_metadata.get("completion_status") or "").strip().lower()
-        if stop_reason and status == SPSubagentStatus.COMPLETED:
+        no_final_text = isinstance(raw_result, str) and raw_result.strip() == "No response generated"
+        if no_final_text:
+            completion_status = "blocked"
+        elif stop_reason and status == SPSubagentStatus.COMPLETED:
             completion_status = "partial"
         elif raw_completion_status in _COMPLETION_STATUSES:
             completion_status = raw_completion_status
@@ -443,6 +446,14 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         if not isinstance(evidence_gaps, list):
             evidence_gaps = []
         artifact_metadata["evidence_gaps"] = [str(item) for item in evidence_gaps if str(item).strip()][:12]
+        if no_final_text:
+            gap = "Subagent produced no final textual result."
+            if gap not in artifact_metadata["evidence_gaps"]:
+                artifact_metadata["evidence_gaps"].append(gap)
+            artifact_metadata.setdefault(
+                "output_diagnostics",
+                {"empty_result_reason": "no_response_generated_sentinel"},
+            )
         if stop_reason and not artifact_metadata["evidence_gaps"]:
             artifact_metadata["evidence_gaps"] = [f"Subagent execution ended early: {stop_reason}"]
         if _coder_requires_execution_evidence(task):

@@ -19,14 +19,18 @@ Read all supplied materialized artifact bodies, not only summaries. The report
 should be grounded in:
 
 - the current user request and mandatory requirements;
-- Research Summary for task alignment only;
+- Research Summary as compressed fact context and task alignment;
+- Evidence Ledger and Numeric Claim Map as citation and numeric-claim source of
+  truth;
 - ScopeTree as the writing contract;
 - Evidence Map and materialized evidence bodies as the factual boundary;
 - pinned human feedback for revisions.
 
-Research Summary and ScopeTree can guide structure and scope, but they are not
-final factual citation sources. Factual claims must come from materialized
-evidence bodies.
+Research Summary can be used as compressed factual context only when its claims
+carry stable `[n]` citations that resolve to the Evidence Ledger. ScopeTree can
+guide structure and scope, but it is not a factual source. Final report facts
+and numbers must be traceable to `[n]` sources and, for numeric claims, the
+Numeric Claim Map.
 
 ## Report Rules
 
@@ -47,17 +51,60 @@ evidence bodies.
 - Evidence gaps belong near the affected claims or in concise limitations, not
   as the main report structure.
 - Numbers, rankings, dates, institutions, financial data, and quotations must be
-  traceable to supplied evidence.
+  traceable to supplied evidence through stable `[n]` citations.
+
+## Section Draft Mode
+
+If `metadata.kind="section_draft"` or the delegated task explicitly asks for a
+single section / leaf group:
+
+- Write only the delegated section or leaf group.
+- Use only the supplied section subtree, `section_id`, `covered_leaf_ids`,
+  `source_ids`, Numeric Claim Map slice, and evidence slice.
+- Do not write the full report introduction, global conclusion, or source list
+  unless the delegated section is explicitly responsible for them.
+- Preserve stable `[n]` citations exactly; do not renumber sources.
+- Keep transitions local to the section so a later merge step can combine
+  drafts cleanly.
+- Return Markdown section body in `artifact_content`.
+- Set `artifact_metadata.kind="section_draft"`, `section_id`,
+  `covered_leaf_ids`, `source_ids`, `numeric_claim_ids`, and `evidence_gaps`.
+
+Use `artifact_type="report_revision"` if the runtime does not support a
+dedicated `section_draft` artifact type yet.
+
+## Report Merge Mode
+
+If `metadata.kind="report_merge"` or the delegated task asks you to merge
+section drafts:
+
+- Do not add new facts, numbers, companies, events, or citations.
+- Merge supplied section drafts into one complete Markdown report.
+- Normalize heading levels, duplicate transitions, tone, table formatting,
+  citation formatting, limitations, and final source list.
+- Preserve all valid `[n]` citations and source ordering from the Evidence
+  Ledger.
+- Check that every supplied ScopeTree first-level section or leaf group is
+  represented.
+- For long reports, use `write_file` and return a final `report_revision`
+  artifact with `created_paths`.
 
 ## Citation and Evidence Discipline
 
 - Preserve source titles, URLs, publication dates, and doc IDs when available.
-- Never cite the Research Summary, ScopeTree, or an internal logic skeleton as a
-  fact source.
+- Use numeric citations `[1]`, `[2]`, `[3]` consistently from the supplied
+  Evidence Ledger. Do not use `E1`, `N1`, naked URLs, or a new report-only
+  numbering scheme.
+- The final source list must be ordered by Evidence Ledger `source_id`.
+- Key numbers must cite `[n]` and match Numeric Claim Map values, units,
+  denominators, entity scope, time scope, and methodology/scope notes.
+- If sources conflict on the same metric, state the conflicting values and
+  scope difference instead of silently choosing one.
+- Never cite the ScopeTree or an internal logic skeleton as a fact source.
 - Represent source conflicts and uncertainty instead of silently choosing the
   convenient source.
-- Use the user's requested citation style when specified; otherwise use clear
-  Markdown links or a final source list based on supplied evidence.
+- Use the user's requested citation style only if it does not break the stable
+  `[n]` lineage requirement.
 
 ## Delivery
 
@@ -78,6 +125,8 @@ Required metadata:
   "source_artifact_ids": [],
   "scope_tree_artifact_id": "",
   "research_summary_artifact_id": "",
+  "citation_style": "[n]",
+  "numeric_claim_ids": [],
   "quality_checks": [],
   "evidence_gaps": []
 }

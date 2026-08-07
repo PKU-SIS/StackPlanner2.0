@@ -111,6 +111,26 @@ def test_adapter_parses_structured_artifact_contract_and_usage():
     assert result.token_usage_records == [{"input_tokens": 10, "output_tokens": 5}]
 
 
+def test_adapter_marks_no_response_generated_as_blocked():
+    executor = FakeDR2Executor(
+        FakeDR2Result(
+            status="completed",
+            result="No response generated",
+            task_id="task-empty",
+        )
+    )
+
+    result = DR2SubagentExecutorAdapter(lambda task: executor).execute(_sp_task())
+
+    assert result.status == SPSubagentStatus.COMPLETED
+    assert result.result == "No response generated"
+    assert result.artifact_metadata["completion_status"] == "blocked"
+    assert "Subagent produced no final textual result." in result.artifact_metadata["evidence_gaps"]
+    assert result.artifact_metadata["output_diagnostics"] == {
+        "empty_result_reason": "no_response_generated_sentinel"
+    }
+
+
 def test_adapter_parses_structured_artifact_after_natural_language_preamble():
     executor = FakeDR2Executor(
         FakeDR2Result(
