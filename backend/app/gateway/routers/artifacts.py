@@ -1,14 +1,18 @@
 import asyncio
+import json
 import logging
 import mimetypes
+import os
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from urllib.parse import quote
+from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse, Response
 
 from app.gateway.authz import require_permission
+from app.gateway.deps import get_run_event_store
 from app.gateway.path_utils import resolve_thread_virtual_path
 
 logger = logging.getLogger(__name__)
@@ -22,6 +26,8 @@ ACTIVE_CONTENT_MIME_TYPES = {
 }
 
 MAX_SKILL_ARCHIVE_MEMBER_BYTES = 16 * 1024 * 1024
+MAX_RECOVERABLE_TEXT_ARTIFACT_BYTES = 16 * 1024 * 1024
+ARTIFACT_RECOVERY_MESSAGE_LIMIT = 500
 _SKILL_ARCHIVE_READ_CHUNK_SIZE = 64 * 1024
 
 
@@ -142,6 +148,104 @@ def _read_artifact_payload(actual_path: Path, path: str, download: bool) -> tupl
     return ("bytes", mime_type, actual_path.read_bytes())
 
 
+def _normalize_output_virtual_path(value: object) -> str | None:
+    """Return a canonical output path accepted by artifact recovery.
+
+    Historical tool calls used both ``mnt/user-data/...`` and
+    ``/mnt/user-data/...``. Recovery is deliberately restricted to exact paths
+    beneath the outputs directory; uploaded inputs and arbitrary filesystem
+    paths are never reconstructed from message history.
+    """
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip().replace("\\", "/")
+    if not candidate.startswith("/"):
+        candidate = f"/{candidate}"
+    parsed = PurePosixPath(candidate)
+    if ".." in parsed.parts:
+        return None
+    normalized = str(parsed)
+    if not normalized.startswith("/mnt/user-data/outputs/"):
+        return None
+    if normalized == "/mnt/user-data/outputs/":
+        return None
+    return normalized
+
+
+def _extract_recoverable_write_content(event: dict, requested_path: str) -> str | None:
+    """Extract the newest exact-path ``write_file`` payload from one event."""
+    content = event.get("content")
+    if isinstance(content, str):
+        try:
+            content = json.loads(content)
+        except (TypeError, ValueError):
+            return None
+    if not isinstance(content, dict):
+        return None
+
+    tool_calls = content.get("tool_calls")
+    if not isinstance(tool_calls, list):
+        return None
+    for tool_call in reversed(tool_calls):
+        if not isinstance(tool_call, dict) or tool_call.get("name") != "write_file":
+            continue
+        args = tool_call.get("args")
+        if not isinstance(args, dict) or _normalize_output_virtual_path(args.get("path")) != requested_path:
+            continue
+        recovered_content = args.get("content")
+        if not isinstance(recovered_content, str):
+            continue
+        if len(recovered_content.encode("utf-8")) > MAX_RECOVERABLE_TEXT_ARTIFACT_BYTES:
+            logger.warning("Refusing to recover oversized text artifact: path=%s", requested_path)
+            return None
+        return recovered_content
+    return None
+
+
+def _materialize_recovered_text(actual_path: Path, content: str) -> bool:
+    """Atomically create a recovered artifact without replacing a live file."""
+    actual_path.parent.mkdir(parents=True, exist_ok=True)
+    if actual_path.exists():
+        return True
+
+    temp_path = actual_path.with_name(f".{actual_path.name}.recover-{uuid4().hex}.tmp")
+    try:
+        temp_path.write_text(content, encoding="utf-8")
+        try:
+            # Hard-linking publishes the complete temp file atomically and,
+            # unlike replace(), never overwrites a file created by a live run.
+            os.link(temp_path, actual_path)
+        except FileExistsError:
+            pass
+        return actual_path.exists()
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
+async def _recover_text_artifact_from_history(thread_id: str, path: str, actual_path: Path, request: Request) -> bool:
+    """Recover a missing text output from persisted ``write_file`` messages."""
+    requested_path = _normalize_output_virtual_path(path)
+    if requested_path is None or await asyncio.to_thread(actual_path.exists):
+        return False
+
+    try:
+        event_store = get_run_event_store(request)
+        messages = await event_store.list_messages(thread_id, limit=ARTIFACT_RECOVERY_MESSAGE_LIMIT)
+    except Exception:  # noqa: BLE001 - recovery is best-effort; preserve the normal 404
+        logger.warning("Failed to inspect message history for artifact recovery: thread_id=%s", thread_id, exc_info=True)
+        return False
+
+    for event in reversed(messages):
+        recovered_content = _extract_recoverable_write_content(event, requested_path)
+        if recovered_content is None:
+            continue
+        recovered = await asyncio.to_thread(_materialize_recovered_text, actual_path, recovered_content)
+        if recovered:
+            logger.info("Recovered missing text artifact from run history: thread_id=%s, path=%s", thread_id, requested_path)
+        return recovered
+    return False
+
+
 @router.get(
     "/threads/{thread_id}/artifacts/{path:path}",
     summary="Get Artifact File",
@@ -212,6 +316,11 @@ async def get_artifact(thread_id: str, path: str, request: Request, download: bo
     actual_path = await asyncio.to_thread(resolve_thread_virtual_path, thread_id, path)
 
     logger.info(f"Resolving artifact path: thread_id={thread_id}, requested_path={path}, actual_path={actual_path}")
+
+    # Older deployments could retain message/run history while their local
+    # artifact directory was moved or cleaned. ``write_file`` tool calls retain
+    # the original text payload, so reconstruct an exact-path output on demand.
+    await _recover_text_artifact_from_history(thread_id, path, actual_path, request)
 
     # Offload path stat + MIME sniff + file reads (all blocking filesystem IO).
     # Active content and explicit downloads are streamed by FileResponse, so the

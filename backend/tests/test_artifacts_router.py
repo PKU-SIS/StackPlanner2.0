@@ -1,6 +1,7 @@
 import asyncio
 import zipfile
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from _router_auth_helpers import call_unwrapped, make_authed_test_app
@@ -41,6 +42,76 @@ def test_get_artifact_reads_utf8_text_file_on_windows_locale(tmp_path, monkeypat
 
     assert bytes(response.body).decode("utf-8") == text
     assert response.media_type == "text/plain"
+
+
+def test_get_artifact_recovers_missing_text_from_write_file_history(tmp_path, monkeypatch) -> None:
+    artifact_path = tmp_path / "outputs" / "报告.md"
+    event_store = AsyncMock()
+    event_store.list_messages.return_value = [
+        {
+            "content": {
+                "type": "ai",
+                "tool_calls": [
+                    {
+                        "name": "write_file",
+                        "args": {
+                            "path": "/mnt/user-data/outputs/报告.md",
+                            "content": "# 已恢复\n\n报告正文",
+                        },
+                    }
+                ],
+            }
+        }
+    ]
+    monkeypatch.setattr(artifacts_router, "resolve_thread_virtual_path", lambda _thread_id, _path: artifact_path)
+    monkeypatch.setattr(artifacts_router, "get_run_event_store", lambda _request: event_store)
+
+    response = asyncio.run(call_unwrapped(artifacts_router.get_artifact, "thread-1", "mnt/user-data/outputs/报告.md", _make_request()))
+
+    assert bytes(response.body).decode("utf-8") == "# 已恢复\n\n报告正文"
+    assert artifact_path.read_text(encoding="utf-8") == "# 已恢复\n\n报告正文"
+    event_store.list_messages.assert_awaited_once_with("thread-1", limit=artifacts_router.ARTIFACT_RECOVERY_MESSAGE_LIMIT)
+
+
+def test_get_artifact_recovery_requires_exact_output_path(tmp_path, monkeypatch) -> None:
+    artifact_path = tmp_path / "outputs" / "requested.md"
+    event_store = AsyncMock()
+    event_store.list_messages.return_value = [
+        {
+            "content": {
+                "tool_calls": [
+                    {
+                        "name": "write_file",
+                        "args": {
+                            "path": "/mnt/user-data/outputs/different.md",
+                            "content": "wrong file",
+                        },
+                    }
+                ]
+            }
+        }
+    ]
+    monkeypatch.setattr(artifacts_router, "resolve_thread_virtual_path", lambda _thread_id, _path: artifact_path)
+    monkeypatch.setattr(artifacts_router, "get_run_event_store", lambda _request: event_store)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(call_unwrapped(artifacts_router.get_artifact, "thread-1", "mnt/user-data/outputs/requested.md", _make_request()))
+
+    assert exc_info.value.status_code == 404
+    assert not artifact_path.exists()
+
+
+def test_get_artifact_existing_file_skips_history_recovery(tmp_path, monkeypatch) -> None:
+    artifact_path = tmp_path / "note.txt"
+    artifact_path.write_text("live content", encoding="utf-8")
+    get_event_store = AsyncMock()
+    monkeypatch.setattr(artifacts_router, "resolve_thread_virtual_path", lambda _thread_id, _path: artifact_path)
+    monkeypatch.setattr(artifacts_router, "get_run_event_store", get_event_store)
+
+    response = asyncio.run(call_unwrapped(artifacts_router.get_artifact, "thread-1", "mnt/user-data/outputs/note.txt", _make_request()))
+
+    assert bytes(response.body).decode("utf-8") == "live content"
+    get_event_store.assert_not_called()
 
 
 @pytest.mark.parametrize(("filename", "content"), ACTIVE_ARTIFACT_CASES)
