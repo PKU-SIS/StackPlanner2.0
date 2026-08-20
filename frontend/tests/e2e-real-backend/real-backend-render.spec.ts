@@ -66,6 +66,22 @@ test.describe("real backend render (replay, no API key)", () => {
   test("renders the local auto-title + replayed answer from a real backend", async ({
     page,
   }) => {
+    // This committed fixture was recorded against lead_agent. The regular E2E
+    // suite separately pins the product default to stackplanner; this replay
+    // test pins the generic frontend/gateway wire contract, so keep its model
+    // input hash stable by selecting the assistant the fixture belongs to.
+    await page.route("**/runs/stream", async (route) => {
+      const request = route.request();
+      const body = request.postDataJSON() as Record<string, unknown>;
+      await route.continue({
+        headers: {
+          ...request.headers(),
+          "content-type": "application/json",
+        },
+        postData: JSON.stringify({ ...body, assistant_id: "lead_agent" }),
+      });
+    });
+
     // ultra mode so the context the frontend sends (is_plan_mode + subagent_enabled)
     // matches the recorded fixture; otherwise the replay input hash would miss.
     await page.addInitScript(() => {
