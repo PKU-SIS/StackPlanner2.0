@@ -16,7 +16,9 @@ from langgraph.runtime import Runtime
 
 from deerflow.config.app_config import AppConfig, get_app_config
 from deerflow.sp.agent_tools import (
+    DEFAULT_SP_ACTION_LIMIT,
     SPAcknowledgementMiddleware,
+    SPActionBudgetMiddleware,
     SPControlActionMiddleware,
     SPFinishAvailabilityMiddleware,
     SPTerminalActionMiddleware,
@@ -24,9 +26,11 @@ from deerflow.sp.agent_tools import (
     build_sp_control_tools,
 )
 from deerflow.sp.central import CENTRAL_AGENT_ACTION_PROMPT
+from deerflow.sp.central_resilience import SPCentralResilienceMiddleware
 from deerflow.sp.central.runtime_context import SPCentralRuntimeContext, build_sp_central_runtime_context
 from deerflow.sp.memory.entry import utc_now_iso
 from deerflow.sp.subagents import (
+    A2A_PROGRESS_MESSAGE,
     DR2SubagentExecutorAdapter,
     SPSubagentExecutorProtocol,
     SPSubagentResult,
@@ -48,15 +52,23 @@ _NON_TOOL_OUTPUT_FORMAT_HINTS = frozenset(
     }
 )
 _TOOL_NAME_ALIASES = {
+    "find": "glob",
     "node": "bash",
     "nodejs": "bash",
+    "pip": "bash",
+    "pip3": "bash",
     "python": "bash",
     "python3": "bash",
+    "pytest": "bash",
+    "rg": "grep",
+    "ripgrep": "grep",
+    "git": "bash",
     "sh": "bash",
     "shell": "bash",
     "terminal": "bash",
     "zsh": "bash",
 }
+_CODER_READ_ONLY_STAGE_TOOLS = frozenset({"read_file", "ls", "grep", "glob"})
 _NO_SKILL_SENTINELS = frozenset(
     {
         "none",
@@ -233,6 +245,23 @@ def _apply_task_skill_policy(
         raise ValueError("SP Skill catalog is unavailable; cannot validate metadata.skill_names")
     unavailable = sorted(set(requested) - set(available_skill_names))
     if unavailable:
+        # Central may describe ordinary repository work with generic labels
+        # such as ``code-inspection`` or ``unit-testing`` even when those are
+        # not installed Skills. Coder already has the repository tools and its
+        # role prompt; dropping only unknown optional labels keeps the task
+        # executable while recording the mismatch for debug/event consumers.
+        if task.subagent_type == "coder":
+            requested = [name for name in requested if name in available_skill_names]
+            task.metadata["skill_names"] = requested
+            task.metadata["ignored_skill_names"] = unavailable
+            logger.warning(
+                "Ignoring unavailable optional coder Skills %s for task %s",
+                unavailable,
+                task.action_id,
+            )
+            if not requested:
+                task.metadata.pop("skill_names", None)
+            return replace(subagent_config, skills=requested)
         raise ValueError(f"SP action requested unavailable or disabled Skills: {unavailable}")
     return replace(subagent_config, skills=requested)
 
@@ -277,6 +306,37 @@ def _apply_task_tool_policy(
     return replace(subagent_config, tools=requested)
 
 
+def _apply_sp_stage_tool_policy(subagent_config: Any, task: SPSubagentTask):
+    """Keep read-only Coder stages from accidentally implementing the fix.
+
+    Prompt-only stage boundaries are too weak for tool-using models.  A Coder
+    perception task that edits source steals the mutation from the later
+    implementation stage, whose per-delegation verification then correctly
+    reports that it observed no source write.  Remove every mutation-capable
+    tool (including shell) from read-only perception/planning/research stages;
+    verification-only work retains bash because it must execute tests.
+    """
+
+    if task.subagent_type != "coder":
+        return subagent_config
+    if task.metadata.get("verification_only") is True:
+        return subagent_config
+    stage = str(task.metadata.get("stage") or "").strip().lower()
+    read_only_stage = stage in {"perception", "planning", "research"}
+    if task.metadata.get("requires_implementation") is not False and not read_only_stage:
+        return subagent_config
+    configured = subagent_config.tools
+    if configured is None:
+        return replace(
+            subagent_config,
+            tools=sorted(_CODER_READ_ONLY_STAGE_TOOLS),
+        )
+    return replace(
+        subagent_config,
+        tools=[name for name in configured if name in _CODER_READ_ONLY_STAGE_TOOLS],
+    )
+
+
 @dataclass(slots=True)
 class DR2SPExecutorProvider:
     """Create DR2 SubagentExecutor instances bound to the active graph state."""
@@ -318,11 +378,57 @@ class DR2SPExecutorProvider:
             subagent_config = get_subagent_config(registry_name, app_config=self.app_config) if registry_name else None
             if subagent_config is None or not subagent_config.internal:
                 raise ValueError(f"Unknown StackPlanner subagent type: {task.subagent_type}")
+            configurable = _mapping(self.runnable_config.get("configurable"))
+            raw_timeout = configurable.get("sp_subagent_timeout_seconds")
+            try:
+                timeout_override = int(raw_timeout) if raw_timeout is not None else 0
+            except (TypeError, ValueError):
+                timeout_override = 0
+            if timeout_override > 0:
+                subagent_config = replace(subagent_config, timeout_seconds=timeout_override)
+            raw_thinking = context.get("sp_subagent_thinking_enabled", configurable.get("sp_subagent_thinking_enabled"))
+            subagent_thinking_enabled: bool | None = None
+            if raw_thinking is not None:
+                if isinstance(raw_thinking, str):
+                    subagent_thinking_enabled = raw_thinking.strip().lower() in {"1", "true", "yes", "on"}
+                else:
+                    subagent_thinking_enabled = bool(raw_thinking)
+            raw_max_tokens = context.get("sp_subagent_max_tokens", configurable.get("sp_subagent_max_tokens"))
+            try:
+                subagent_max_tokens = int(raw_max_tokens) if raw_max_tokens is not None else 0
+            except (TypeError, ValueError):
+                subagent_max_tokens = 0
+            raw_role_max_tokens = context.get(
+                "sp_subagent_max_tokens_by_role",
+                configurable.get("sp_subagent_max_tokens_by_role"),
+            )
+            if isinstance(raw_role_max_tokens, Mapping):
+                raw_role_value = raw_role_max_tokens.get(task.subagent_type)
+                try:
+                    role_max_tokens = int(raw_role_value) if raw_role_value is not None else 0
+                except (TypeError, ValueError):
+                    role_max_tokens = 0
+                if role_max_tokens > 0:
+                    subagent_max_tokens = role_max_tokens
+            raw_protect_tests = context.get(
+                "sp_protect_test_files",
+                configurable.get("sp_protect_test_files"),
+            )
+            protect_test_files = (
+                raw_protect_tests.strip().lower() in {"1", "true", "yes", "on"}
+                if isinstance(raw_protect_tests, str)
+                else bool(raw_protect_tests)
+            )
             _infer_task_skill_selection(
                 task,
                 available_skill_names=self.available_skill_names,
             )
             available_tools = self._available_tools()
+            # The A2A request allowlist is authoritative for this delegation.
+            # It can only narrow the role defaults; it never grants Central a
+            # tool and never bypasses the role/disallowed-tool checks below.
+            if task.allowed_tools:
+                task.metadata["tool_names"] = list(task.allowed_tools)
             subagent_config = _apply_task_skill_policy(
                 subagent_config,
                 task,
@@ -333,6 +439,7 @@ class DR2SPExecutorProvider:
                 task,
                 available_tools=available_tools,
             )
+            subagent_config = _apply_sp_stage_tool_policy(subagent_config, task)
             thread_id = str(context.get("thread_id") or task.thread_id or "") or None
             run_id = str(context.get("run_id") or task.run_id or "") or None
             stream_task_id = _task_stream_id(task)
@@ -343,6 +450,7 @@ class DR2SPExecutorProvider:
                 if callable(writer):
                     writer(
                         {
+                            **_a2a_task_event(task, message_type=A2A_PROGRESS_MESSAGE),
                             "type": "task_running",
                             "task_id": stream_task_id,
                             "message": message,
@@ -375,6 +483,9 @@ class DR2SPExecutorProvider:
                 force_isolated_loop=True,
                 platform_skill_secrets=_platform_skill_secrets_for_task(task),
                 parent_abort_event=parent_abort_event,
+                thinking_enabled=subagent_thinking_enabled,
+                max_tokens_per_step=subagent_max_tokens if subagent_max_tokens > 0 else None,
+                protect_test_files=protect_test_files,
             )
 
         def observe_raw_result(raw_result: Any) -> None:
@@ -405,10 +516,12 @@ class _ProgressReportingExecutor:
     def execute(self, task: SPSubagentTask) -> SPSubagentResult:
         if callable(self.task_preparer):
             self.task_preparer(task)
+        task.validate_protocol()
         task_id = _task_stream_id(task)
         if callable(self.writer):
             self.writer(
                 {
+                    **_a2a_task_event(task, message_type=A2A_PROGRESS_MESSAGE),
                     "type": "task_started",
                     "task_id": task_id,
                     "description": task.task,
@@ -427,6 +540,7 @@ class _ProgressReportingExecutor:
                     # credential is included.
                     self.writer(
                         {
+                            **_a2a_task_event(task, message_type=A2A_PROGRESS_MESSAGE),
                             "type": "task_running",
                             "task_id": task_id,
                             "message": {
@@ -445,6 +559,7 @@ class _ProgressReportingExecutor:
             if callable(self.writer):
                 self.writer(
                     {
+                        **_a2a_task_event(task, message_type="task_result"),
                         "type": "task_failed",
                         "task_id": task_id,
                         "error": str(exc),
@@ -462,6 +577,7 @@ class _ProgressReportingExecutor:
                 event_type = "task_completed" if result.is_success else "task_failed"
             self.writer(
                 {
+                    **_a2a_task_event(task, message_type="task_result"),
                     "type": event_type,
                     "task_id": task_id,
                     "result": result.result,
@@ -469,10 +585,25 @@ class _ProgressReportingExecutor:
                     "stop_reason": result.stop_reason,
                     "subagent_type": task.subagent_type,
                     "usage": _summarize_sp_usage(result.token_usage_records),
+                    "result_envelope": result.protocol_payload(task=task),
                     "occurred_at": utc_now_iso(),
                 }
             )
         return result
+
+
+def _a2a_task_event(task: SPSubagentTask, *, message_type: str) -> dict[str, Any]:
+    """Common observable A2A fields for the child-agent timeline."""
+
+    payload = task.protocol_payload()
+    return {
+        "protocol_version": task.protocol_version,
+        "message_type": message_type,
+        "a2a_task_id": task.action_id,
+        "a2a_sender": task.sender,
+        "a2a_receiver": task.receiver or task.subagent_type,
+        "a2a_stage": payload.get("stage"),
+    }
 
 
 def _summarize_sp_usage(records: list[dict[str, Any]] | None) -> dict[str, int] | None:
@@ -523,6 +654,11 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
         max_parallel_delegates = int(runtime.get("max_concurrent_subagents") or 3)
     except (TypeError, ValueError):
         max_parallel_delegates = 3
+    try:
+        max_central_actions = int(runtime.get("sp_max_actions") or DEFAULT_SP_ACTION_LIMIT)
+    except (TypeError, ValueError):
+        max_central_actions = DEFAULT_SP_ACTION_LIMIT
+    max_central_actions = max(2, min(max_central_actions, DEFAULT_SP_ACTION_LIMIT))
     metadata = dict(config.get("metadata") or {})
     metadata.update(
         {
@@ -568,7 +704,9 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
         prompt_sections.append(FRESH_USER_TURN_PROMPT)
     if central_context.system_prompt_section:
         prompt_sections.append(central_context.system_prompt_section)
+
     from deerflow.agents.lead_agent.agent import _make_lead_agent
+    from deerflow.agents.middlewares.memory_middleware import MemoryMiddleware
     from deerflow.agents.middlewares.subagent_limit_middleware import SubagentLimitMiddleware
     from deerflow.sp.middlewares import TaskMemoryMiddleware
     from deerflow.sp.prompt import PromptContextBuilder
@@ -579,9 +717,24 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
         extra_tools=build_sp_control_tools(),
         extra_middlewares=[
             TaskMemoryMiddleware(context_builder=PromptContextBuilder(), inject_context=True),
+            # SP keeps long-term memory out of CentralAgent's prompt, but it
+            # must still persist stable user context after a completed run.
+            # This explicit write-only middleware reuses DeerFlow's scoped,
+            # debounced updater without exposing any ordinary memory tool to
+            # CentralAgent.
+            MemoryMiddleware(
+                agent_name=central_context.agent_name,
+                memory_config=getattr(resolved_app_config, "memory", None),
+            ),
+            SPCentralResilienceMiddleware(
+                initial_timeout_seconds=float(runtime.get("sp_central_timeout_seconds") or 90),
+                retry_timeout_seconds=float(runtime.get("sp_central_retry_timeout_seconds") or 60),
+                retry_max_tokens=int(runtime.get("sp_central_retry_max_tokens") or 2048),
+            ),
             SPTerminalActionMiddleware(),
             SPAcknowledgementMiddleware(),
             SPFinishAvailabilityMiddleware(),
+            SPActionBudgetMiddleware(max_actions=max_central_actions),
             SPControlActionMiddleware(executor_provider=executor_provider),
             SPThinkLabelMiddleware(),
             SubagentLimitMiddleware(

@@ -563,5 +563,6 @@ class ThreadState(AgentState):
     sp_last_handler_result: Annotated[NotRequired[dict[str, Any] | None], merge_sp_handler_result]
     sp_loop_iteration: Annotated[NotRequired[int | None], merge_sp_counter]
     sp_loop_run_id: Annotated[NotRequired[str | None], merge_sp_last_value]
+    sp_new_conversation: Annotated[NotRequired[bool | None], merge_sp_last_value]
     sp_decision_attempts: Annotated[NotRequired[int | None], merge_sp_counter]
     sp_max_loop_iterations: NotRequired[int | None]

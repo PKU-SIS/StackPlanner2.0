@@ -64,6 +64,28 @@ def _json_ref(value: Any, *, max_chars: int) -> str:
     return _compact(value, max_chars=max_chars)
 
 
+def _task_contract_ref(value: Any) -> dict[str, Any] | None:
+    """Return only caller-owned acceptance fields for Central's context."""
+    if not isinstance(value, Mapping):
+        return None
+    result: dict[str, Any] = {
+        "version": value.get("version", 1),
+        "authoritative": bool(value.get("authoritative", True)),
+        "immutable": bool(value.get("immutable", True)),
+    }
+    for key in ("mode", "instance_id", "source_edit_only"):
+        if key in value:
+            result[key] = value[key]
+    for key in ("original_issue", "acceptance_policy"):
+        if key in value:
+            result[key] = str(value[key])[:4000]
+    for key in ("fail_to_pass", "pass_to_pass", "acceptance_criteria"):
+        raw = value.get(key)
+        if isinstance(raw, list):
+            result[key] = [str(item)[:500] for item in raw[:50] if str(item).strip()]
+    return result
+
+
 def _entry_priority_rank(entry: StackMemoryEntry) -> int:
     priority_rank = {"critical": 0, "high": 1, "normal": 2, "low": 3}.get(entry.priority, 2)
     return priority_rank
@@ -116,8 +138,10 @@ class PromptContextBuilder:
         active_delegate_id: str | None = None,
         pending_human_interaction: Mapping[str, Any] | None = None,
         artifact_refs: Mapping[str, Any] | None = None,
+        task_contract: Mapping[str, Any] | None = None,
         report_version: str | None = None,
         current_run_id: str | None = None,
+        new_conversation: bool = False,
     ) -> str:
         """Build the bounded SP context used by CentralAgent decisions."""
         pending_ref_chars = max(120, min(900, self.max_chars // 6))
@@ -129,6 +153,14 @@ class PromptContextBuilder:
             f"current_run_id: {current_run_id or 'unknown'}",
             f"pending_human_interaction: {_json_ref(pending_human_interaction, max_chars=pending_ref_chars)}",
         ]
+        if new_conversation:
+            compact_header.insert(4, "conversation_status: new_conversation")
+        bounded_task_contract = _task_contract_ref(task_contract)
+        if bounded_task_contract is not None:
+            compact_header.append(
+                "task_contract (authoritative/immutable): "
+                + _json_ref(bounded_task_contract, max_chars=1800)
+            )
         full_header = [
             *compact_header,
             "",
@@ -136,8 +168,16 @@ class PromptContextBuilder:
             "- Critical or pinned human feedback outranks summaries, observations, and model plans.",
             "- Artifact refs point to Workspace/Artifact content; do not infer large artifact bodies from this block.",
             "- Memory order: critical_feedback and recent_task_memory first; long-term recall is only a fallback for historical reusable facts.",
-            "- Do not call sp_recall_memory when this context already contains the answer to the current task.",
         ]
+        if new_conversation:
+            full_header.extend(
+                [
+                    "- On new_conversation, the first CentralAgent decision is the one-time long-term-memory preflight; existing task context does not suppress that preflight.",
+                    "- After a recall_memory entry exists in this run, do not repeat the preflight.",
+                ]
+            )
+        else:
+            full_header.append("- Do not call sp_recall_memory when this context already contains the answer to the current task.")
         header = full_header if self.max_chars >= FULL_HEADER_MIN_CHARS else compact_header
 
         pinned = self._select_pinned(stack)
@@ -180,6 +220,7 @@ class PromptContextBuilder:
             [
                 "memory_control:",
                 "memory_scope: short_term_task_memory",
+                *( ["new_conversation: true"] if new_conversation else [] ),
                 f"summarization_pressure: {str(bool(pressure_ids)).lower()}",
                 f"summarization_needed: {str(bool(summarize_entries)).lower()}",
                 f"summarization_cooldown: {cooldown}",

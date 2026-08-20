@@ -21,6 +21,7 @@ _INTERMEDIATE_ARTIFACT_TYPES = frozenset(
         "data_collection",
         "evidence_bundle",
         "perception_observation",
+        "verification_observation",
     }
 )
 _PARALLEL_NONTERMINAL_SIBLING_KEY = "__sp_parallel_nonterminal_sibling"

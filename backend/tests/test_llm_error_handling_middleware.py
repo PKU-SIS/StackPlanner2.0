@@ -80,6 +80,26 @@ def test_async_model_call_retries_busy_provider_then_succeeds(
     assert [event["type"] for event in events] == ["llm_retry", "llm_retry"]
 
 
+def test_async_model_call_times_out_a_stalled_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEER_FLOW_LLM_REQUEST_TIMEOUT_SECONDS", "0.01")
+    middleware = _build_middleware(
+        retry_max_attempts=1,
+        retry_base_delay_ms=1,
+        retry_cap_delay_ms=1,
+    )
+
+    async def handler(_request) -> AIMessage:
+        await asyncio.Event().wait()
+        return AIMessage(content="unreachable")
+
+    result = asyncio.run(middleware.awrap_model_call(SimpleNamespace(), handler))
+
+    assert isinstance(result, AIMessage)
+    assert "temporarily unavailable" in str(result.content).lower()
+
+
 def test_async_model_call_returns_user_message_for_quota_errors() -> None:
     middleware = _build_middleware(retry_max_attempts=3)
 
@@ -147,6 +167,47 @@ def test_sync_model_call_uses_retry_after_header(monkeypatch: pytest.MonkeyPatch
     assert isinstance(result, AIMessage)
     assert result.content == "ok"
     assert waits == [2.0]
+
+
+def test_async_model_call_retries_nonstandard_400_rpm_quota_using_body_wait(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    middleware = _build_middleware(retry_max_attempts=2, retry_base_delay_ms=10, retry_cap_delay_ms=10)
+    waits: list[float] = []
+    attempts = 0
+
+    async def fake_sleep(delay: float) -> None:
+        waits.append(delay)
+
+    async def handler(_request) -> AIMessage:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise FakeError(
+                "Rate limit exceeded. Please wait 28 seconds before retrying. "
+                "(User Quota (actual_rpm=10) limit: 10 RPM, Current: 10 requests)",
+                status_code=400,
+            )
+        return AIMessage(content="ok")
+
+    monkeypatch.setattr("asyncio.sleep", fake_sleep)
+
+    result = asyncio.run(middleware.awrap_model_call(SimpleNamespace(), handler))
+
+    assert result.content == "ok"
+    assert attempts == 2
+    assert waits == [29.0]
+
+
+def test_billing_quota_without_rate_limit_remains_non_retriable() -> None:
+    middleware = _build_middleware()
+
+    retriable, reason = middleware._classify_error(
+        FakeError("insufficient_quota: billing credit exhausted", status_code=400)
+    )
+
+    assert retriable is False
+    assert reason == "quota"
 
 
 def test_sync_model_call_propagates_graph_bubble_up() -> None:

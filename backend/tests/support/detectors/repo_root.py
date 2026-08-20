@@ -14,6 +14,17 @@ from pathlib import Path
 REPO_ROOT_MARKER = ".git"
 
 
+def _is_git_marker(marker: Path) -> bool:
+    """Reject empty placeholder directories while preserving worktree files."""
+
+    if marker.is_file():
+        try:
+            return marker.read_text(encoding="utf-8", errors="replace").lstrip().startswith("gitdir:")
+        except OSError:
+            return False
+    return marker.is_dir() and (marker / "HEAD").is_file()
+
+
 def resolve_repo_root(start: Path) -> Path:
     """Return the repository root above `start` (the directory containing `.git`).
 
@@ -26,6 +37,6 @@ def resolve_repo_root(start: Path) -> Path:
     """
     resolved = start.resolve()
     for candidate in (resolved, *resolved.parents):
-        if (candidate / REPO_ROOT_MARKER).exists():
+        if _is_git_marker(candidate / REPO_ROOT_MARKER):
             return candidate
     raise RuntimeError(f"could not resolve the repository root: no '{REPO_ROOT_MARKER}' marker found above {resolved}; refusing to guess scan paths")

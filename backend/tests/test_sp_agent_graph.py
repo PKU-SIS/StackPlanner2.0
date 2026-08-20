@@ -11,7 +11,9 @@ from langgraph.checkpoint.memory import InMemorySaver
 from deerflow.sp import ActionRouter, ActionType, HandlerResult, SPAction, create_sp_agent_graph
 from deerflow.sp.central.runtime_context import SPCentralRuntimeContext
 from deerflow.sp.memory import TaskMemoryStack
-from deerflow.sp.runtime import make_sp_agent
+from deerflow.sp.runtime import _apply_sp_stage_tool_policy, make_sp_agent
+from deerflow.sp.subagents import SPSubagentTask
+from deerflow.subagents.config import SubagentConfig
 
 
 class ScriptedDecider:
@@ -325,6 +327,48 @@ def test_runtime_factory_builds_single_sp_agent_with_control_tools(monkeypatch):
         "sp_ask_human",
         "sp_finish",
     }
+
+
+def test_coder_perception_stage_is_deterministically_read_only():
+    config = SubagentConfig(
+        name="sp-coder",
+        description="test",
+        tools=None,
+    )
+    task = SPSubagentTask(
+        action_id="perception-1",
+        subagent_type="coder",
+        task="Inspect the repository",
+        description="Read-only repository inspection",
+        metadata={"stage": "perception", "requires_implementation": False},
+    )
+
+    restricted = _apply_sp_stage_tool_policy(config, task)
+
+    assert set(restricted.tools or []) == {"read_file", "ls", "grep", "glob"}
+    assert "bash" not in (restricted.tools or [])
+    assert "write_file" not in (restricted.tools or [])
+
+
+def test_coder_verification_stage_retains_execution_tools():
+    config = SubagentConfig(
+        name="sp-coder",
+        description="test",
+        tools=["read_file", "bash"],
+    )
+    task = SPSubagentTask(
+        action_id="verification-1",
+        subagent_type="coder",
+        task="Run focused tests",
+        description="Independent verification",
+        metadata={
+            "stage": "verification",
+            "requires_implementation": False,
+            "verification_only": True,
+        },
+    )
+
+    assert _apply_sp_stage_tool_policy(config, task).tools == ["read_file", "bash"]
 
 
 def test_runtime_factory_disables_automatic_long_term_memory_injection(monkeypatch):

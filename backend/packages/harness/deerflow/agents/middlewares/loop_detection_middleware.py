@@ -179,9 +179,17 @@ _TOOL_FREQ_WARNING_MSG = (
     "[LOOP DETECTED] You have called {tool_name} {count} times without producing a final answer. Stop calling tools and produce your final answer now. If you cannot complete the task, summarize what you accomplished so far."
 )
 
+_TOOL_TOTAL_WARNING_MSG = (
+    "[LOOP DETECTED] You have made {count} total tool calls without producing a final answer. Stop exploring, use the evidence already collected, and produce your final answer now."
+)
+
 _HARD_STOP_MSG = "[FORCED STOP] Repeated tool calls exceeded the safety limit. Producing final answer with results collected so far."
 
 _TOOL_FREQ_HARD_STOP_MSG = "[FORCED STOP] Tool {tool_name} called {count} times — exceeded the per-tool safety limit. Producing final answer with results collected so far."
+
+_TOOL_TOTAL_HARD_STOP_MSG = (
+    "[FORCED STOP] Total tool calls reached {count} — exceeded the run safety limit. Producing final answer with results collected so far."
+)
 
 
 class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
@@ -213,6 +221,11 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
             high-frequency tools (e.g. ``bash`` in batch pipelines) without
             weakening protection on all other tools. Default: ``None``
             (no overrides).
+        tool_total_warn: Optional number of total tool calls in one run before
+            injecting a warning. Counts all tool types, so alternating tools
+            cannot bypass the guard. Default: ``None`` (disabled).
+        tool_total_hard_limit: Optional number of total tool calls in one run
+            before forcing a stop. Default: ``None`` (disabled).
     """
 
     def __init__(
@@ -224,6 +237,8 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         tool_freq_warn: int = _DEFAULT_TOOL_FREQ_WARN,
         tool_freq_hard_limit: int = _DEFAULT_TOOL_FREQ_HARD_LIMIT,
         tool_freq_overrides: dict[str, tuple[int, int]] | None = None,
+        tool_total_warn: int | None = None,
+        tool_total_hard_limit: int | None = None,
     ):
         super().__init__()
         self.warn_threshold = warn_threshold
@@ -233,11 +248,15 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         self.tool_freq_warn = tool_freq_warn
         self.tool_freq_hard_limit = tool_freq_hard_limit
         self._tool_freq_overrides: dict[str, tuple[int, int]] = tool_freq_overrides or {}
+        self.tool_total_warn = tool_total_warn
+        self.tool_total_hard_limit = tool_total_hard_limit
         self._lock = threading.Lock()
         self._history: OrderedDict[str, list[str]] = OrderedDict()
         self._warned: dict[str, set[str]] = defaultdict(set)
         self._tool_freq: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
         self._tool_freq_warned: dict[str, set[str]] = defaultdict(set)
+        self._tool_total: dict[tuple[str, str], int] = defaultdict(int)
+        self._tool_total_warned: set[tuple[str, str]] = set()
         # Per-thread/run queue of warnings to inject at the next model call.
         # Populated by ``after_model`` (detection) and drained by
         # ``wrap_model_call`` (injection); see module docstring.
@@ -308,6 +327,10 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
             self._warned.pop(evicted_id, None)
             self._tool_freq.pop(evicted_id, None)
             self._tool_freq_warned.pop(evicted_id, None)
+            for key in list(self._tool_total):
+                if key[0] == evicted_id:
+                    self._tool_total.pop(key, None)
+                    self._tool_total_warned.discard(key)
             for key in list(self._pending_warnings):
                 if key[0] == evicted_id:
                     self._drop_pending_warning_key_locked(key)
@@ -357,11 +380,13 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
     def _track_and_check(self, state: AgentState, runtime: Runtime) -> tuple[str | None, bool]:
         """Track tool calls and check for loops.
 
-        Two detection layers:
+        Three detection layers:
           1. **Hash-based** (existing): catches identical tool call sets.
           2. **Frequency-based** (new): catches the same *tool type* being
              called many times with varying arguments (e.g. ``read_file``
              on 40 different files).
+          3. **Run-total** (opt-in): catches agents that rotate among different
+             tools to evade per-tool thresholds.
 
         Returns:
             (warning_message_or_none, should_hard_stop)
@@ -402,6 +427,42 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
 
             count = history.count(call_hash)
             tool_names = [tc.get("name", "?") for tc in tool_calls]
+
+            # --- Layer 3: total tool calls in this run (opt-in) ---
+            # Subagents enable this based on their recursion budget. Lead agents
+            # retain the historical behavior because both limits default to
+            # None. Keying by run avoids carrying one task's tool use into a
+            # later invocation on the same thread.
+            if self.tool_total_warn is not None or self.tool_total_hard_limit is not None:
+                run_key = (thread_id, self._get_run_id(runtime))
+                self._tool_total[run_key] += len(tool_calls)
+                total_count = self._tool_total[run_key]
+
+                if self.tool_total_hard_limit is not None and total_count >= self.tool_total_hard_limit:
+                    logger.error(
+                        "Total tool-call hard limit reached — forcing stop",
+                        extra={
+                            "thread_id": thread_id,
+                            "run_id": run_key[1],
+                            "count": total_count,
+                            "tools": tool_names,
+                        },
+                    )
+                    return _TOOL_TOTAL_HARD_STOP_MSG.format(count=total_count), True
+
+                if self.tool_total_warn is not None and total_count >= self.tool_total_warn:
+                    if run_key not in self._tool_total_warned:
+                        self._tool_total_warned.add(run_key)
+                        logger.warning(
+                            "Total tool-call warning — too many calls in one run",
+                            extra={
+                                "thread_id": thread_id,
+                                "run_id": run_key[1],
+                                "count": total_count,
+                                "tools": tool_names,
+                            },
+                        )
+                        return _TOOL_TOTAL_WARNING_MSG.format(count=total_count), False
 
             # --- Layer 1: hash-based (identical call sets) ---
             if count >= self.hard_limit:
@@ -556,10 +617,12 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
                     self._drop_pending_warning_key_locked(key)
 
     def _clear_current_run_pending_warnings(self, runtime: Runtime) -> None:
-        """Drop pending warnings owned by the current thread/run."""
+        """Drop transient loop state owned by the current thread/run."""
         pending_key = self._pending_key(runtime)
         with self._lock:
             self._drop_pending_warning_key_locked(pending_key)
+            self._tool_total.pop(pending_key, None)
+            self._tool_total_warned.discard(pending_key)
 
     @staticmethod
     def _format_warning_message(warnings: list[str]) -> str:
@@ -646,6 +709,10 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
                 self._warned.pop(thread_id, None)
                 self._tool_freq.pop(thread_id, None)
                 self._tool_freq_warned.pop(thread_id, None)
+                for key in list(self._tool_total):
+                    if key[0] == thread_id:
+                        self._tool_total.pop(key, None)
+                        self._tool_total_warned.discard(key)
                 for key in list(self._pending_warnings):
                     if key[0] == thread_id:
                         self._drop_pending_warning_key_locked(key)
@@ -654,6 +721,8 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
                 self._warned.clear()
                 self._tool_freq.clear()
                 self._tool_freq_warned.clear()
+                self._tool_total.clear()
+                self._tool_total_warned.clear()
                 self._pending_warnings.clear()
                 self._pending_warning_touch_order.clear()
                 self._stop_reason.clear()

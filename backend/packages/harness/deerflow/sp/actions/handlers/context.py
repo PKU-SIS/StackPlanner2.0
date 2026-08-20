@@ -18,6 +18,7 @@ MAX_HANDLER_FAILURE_NOTE_CHARS = 240
 MAX_HANDLER_REQUIREMENT_ENTRIES = 8
 MAX_HANDLER_REQUIREMENT_CHARS = 4000
 MAX_HANDLER_REQUIREMENT_TOTAL_CHARS = 12_000
+MAX_HANDLER_TASK_CONTRACT_CHARS = 12_000
 
 
 def _bounded_text(value: Any, *, max_chars: int) -> str | None:
@@ -150,9 +151,40 @@ def _mandatory_requirements(context: HandlerContext) -> dict[str, Any] | None:
     }
 
 
+def _bounded_task_contract(value: Any) -> dict[str, Any] | None:
+    """Preserve caller-owned acceptance criteria across delegation.
+
+    The contract is deliberately allow-listed: it is an execution boundary,
+    not a second memory stream.  In particular, arbitrary runtime metadata is
+    never copied into a child prompt.
+    """
+    if not isinstance(value, Mapping):
+        return None
+    contract: dict[str, Any] = {
+        "version": value.get("version", 1),
+        "authoritative": bool(value.get("authoritative", True)),
+        "immutable": bool(value.get("immutable", True)),
+    }
+    for key in ("mode", "instance_id", "source_edit_only"):
+        if key in value:
+            contract[key] = value[key]
+    for key in ("original_issue", "acceptance_policy"):
+        if key in value:
+            text = str(value[key])
+            contract[key] = text[:MAX_HANDLER_TASK_CONTRACT_CHARS]
+    for key in ("fail_to_pass", "pass_to_pass", "acceptance_criteria"):
+        raw = value.get(key)
+        if isinstance(raw, list):
+            contract[key] = [str(item)[:500] for item in raw[:50] if str(item).strip()]
+    return contract
+
+
 def build_handler_context_refs(context: HandlerContext) -> dict[str, Any]:
     """Build the precise, bounded context passed to DR2 subagents."""
     refs: dict[str, Any] = {"task_memory": _bounded_task_memory(context)}
+    task_contract = _bounded_task_contract(context.state.get("sp_task_contract"))
+    if task_contract is not None:
+        refs["task_contract"] = task_contract
     artifact_refs = _bounded_artifact_refs(
         context.state.get("sp_current_artifact_refs"),
         current_run_id=context.run_id,

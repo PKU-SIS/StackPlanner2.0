@@ -20,6 +20,7 @@ import copy
 import inspect
 import logging
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any, Literal, cast
@@ -169,10 +170,21 @@ class _SubagentEventBuffer:
     #: a single deep subagent without paying a per-step lock.
     FLUSH_THRESHOLD = 25
 
-    def __init__(self, event_store: Any | None, thread_id: str, run_id: str) -> None:
+    def __init__(
+        self,
+        event_store: Any | None,
+        thread_id: str,
+        run_id: str,
+        *,
+        flush_threshold: int | None = None,
+    ) -> None:
         self._event_store = event_store
         self._thread_id = thread_id
         self._run_id = run_id
+        self._flush_threshold = max(
+            1,
+            int(flush_threshold or self.FLUSH_THRESHOLD),
+        )
         self._pending: list[dict[str, Any]] = []
 
     async def add(self, chunk: Any) -> None:
@@ -189,7 +201,7 @@ class _SubagentEventBuffer:
         if record is None:
             return
         self._pending.append({"thread_id": self._thread_id, "run_id": self._run_id, **record})
-        if record["event_type"] == "subagent.end" or len(self._pending) >= self.FLUSH_THRESHOLD:
+        if record["event_type"] == "subagent.end" or len(self._pending) >= self._flush_threshold:
             await self.flush()
 
     async def flush(self) -> None:
@@ -236,6 +248,8 @@ async def run_agent(
     workspace_changes_user_id: str | None = None
     snapshot_capture_failed = False
     llm_error_fallback_message: str | None = None
+    run_metadata = record.metadata if isinstance(record.metadata, Mapping) else {}
+    debug_trace_enabled = bool(run_metadata.get("debug_trace_enabled"))
     # Message ids checkpointed *before* this run started. The stream loop uses
     # this set to mask out ``deerflow_error_fallback`` markers that belong to
     # earlier runs on the same thread — without it, one stale fallback in
@@ -272,7 +286,12 @@ async def run_agent(
                 thread_id=thread_id,
                 event_store=event_store,
                 track_token_usage=getattr(run_events_config, "track_token_usage", True),
+                # Enhanced tracing is explicitly opt-in. Persist each event as
+                # it occurs so the polling debug page can show the currently
+                # running LLM/action instead of receiving a batch at run end.
+                flush_threshold=1 if debug_trace_enabled else 20,
                 progress_reporter=lambda snapshot: run_manager.update_run_progress(run_id, **snapshot),
+                progress_flush_interval=1.0 if debug_trace_enabled else 5.0,
             )
 
         # 1. Mark running
@@ -435,7 +454,12 @@ async def run_agent(
         # Buffer subagent step events and persist them in batches (#3779) instead
         # of one low-frequency put() per step on the hot stream loop. Flushed in
         # the finally block so buffered steps survive abort/exception paths too.
-        subagent_events = _SubagentEventBuffer(event_store, thread_id, run_id)
+        subagent_events = _SubagentEventBuffer(
+            event_store,
+            thread_id,
+            run_id,
+            flush_threshold=1 if debug_trace_enabled else None,
+        )
 
         goal_evaluator_model: Any | None = None
 

@@ -14,6 +14,7 @@ from deerflow.sp.actions.schema import HandlerResult, SPAction
 from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.memory import StackMemoryEntry
 from deerflow.sp.subagents import SPSubagentExecutorProtocol, SPSubagentResult, SPSubagentTask
+from deerflow.sp.subagents.dr2_adapter import coder_task_requires_implementation
 
 OBSERVE_SUMMARY_MAX_CHARS = 700
 LARGE_RESULT_ARTIFACT_THRESHOLD = 1200
@@ -493,7 +494,10 @@ class DelegateHandler:
             metadata={"action_id": action.action_id, "target_agent": action.target_agent, **action.metadata},
         )
         context_refs = build_handler_context_refs(context)
-        task_metadata = dict(action.metadata)
+        # Stage is part of the execution contract, not prompt decoration. It
+        # must cross the Delegate -> runtime -> adapter boundary so tool policy
+        # and completion validation can enforce read-only vs mutation stages.
+        task_metadata = {**dict(action.metadata), "stage": action.stage}
         if action.target_agent == "reporter":
             requested_tools = task_metadata.get("tool_names")
             requested_reporter_tools = requested_tools if isinstance(requested_tools, list) else []
@@ -506,9 +510,50 @@ class DelegateHandler:
                     ]
                 )
             )
-        if action.target_agent == "coder" and action.stage != "perception":
-            requested_tools = task_metadata.get("tool_names")
-            if isinstance(requested_tools, list):
+        if action.target_agent == "coder" and action.stage in {
+            "perception",
+            "planning",
+            "research",
+        }:
+            task_metadata["requires_implementation"] = False
+        if action.target_agent == "coder" and action.stage not in {
+            "perception",
+            "planning",
+            "research",
+        }:
+            # Preserve the implementation contract across recovery turns. A
+            # later Central action may only say "locate the implementation";
+            # without this inherited flag that read-only step could be marked
+            # complete and FINISH would become available despite no source edit.
+            verification_only = action.stage == "verification" and action.metadata.get("verification_only") is True and action.metadata.get("requires_implementation") is False
+            prior_requires_implementation = any(
+                entry.action == "delegate"
+                and entry.metadata.get("target_agent") == "coder"
+                and entry.metadata.get("requires_implementation") is True
+                for entry in context.stack.entries
+            )
+            task_metadata["requires_implementation"] = False if verification_only else bool(
+                prior_requires_implementation
+                or coder_task_requires_implementation(
+                    SPSubagentTask(
+                        action_id=action.action_id,
+                        subagent_type="coder",
+                        task=str(action.task),
+                        description=action.reason,
+                        expected_output=action.expected_output,
+                        metadata={"stage": action.stage},
+                    )
+                )
+            )
+            if verification_only:
+                # Verification is a distinct read-only protocol stage. Do not
+                # inherit mutation tools merely because the same specialist
+                # role also performs implementation on earlier turns.
+                task_metadata["tool_names"] = ["read_file", "bash"]
+                requested_tools = None
+            else:
+                requested_tools = task_metadata.get("tool_names")
+            if not verification_only and isinstance(requested_tools, list):
                 task_metadata["tool_names"] = list(
                     dict.fromkeys(
                         [
@@ -520,7 +565,7 @@ class DelegateHandler:
                         ]
                     )
                 )
-            else:
+            elif not verification_only:
                 # Coder work is local and self-contained by default. Central
                 # must explicitly request network/search tools when external
                 # evidence is genuinely part of the delegated task.
@@ -561,6 +606,27 @@ class DelegateHandler:
                 latest_uploaded_refs,
             )
 
+        requested_acceptance = task_metadata.get("acceptance_criteria")
+        acceptance_criteria = [str(action.expected_output)] if action.expected_output else []
+        if isinstance(requested_acceptance, list):
+            acceptance_criteria.extend(
+                str(value).strip()
+                for value in requested_acceptance
+                if isinstance(value, str) and value.strip()
+            )
+        raw_budgets = task_metadata.get("budgets")
+        budgets = {
+            str(name): value
+            for name, value in raw_budgets.items()
+            if isinstance(name, str) and name.strip() and isinstance(value, int) and not isinstance(value, bool) and value > 0
+        } if isinstance(raw_budgets, Mapping) else {}
+        allowed_tools = task_metadata.get("tool_names")
+        allowed_tools = (
+            list(dict.fromkeys(str(value).strip() for value in allowed_tools if isinstance(value, str) and value.strip()))
+            if isinstance(allowed_tools, list)
+            else []
+        )
+
         task = SPSubagentTask(
             action_id=action.action_id,
             subagent_type=str(action.target_agent),
@@ -572,7 +638,13 @@ class DelegateHandler:
             thread_id=context.thread_id,
             run_id=context.run_id,
             metadata=task_metadata,
+            receiver=str(action.target_agent),
+            stage=action.stage,
+            allowed_tools=allowed_tools,
+            acceptance_criteria=list(dict.fromkeys(acceptance_criteria)),
+            budgets=budgets,
         )
+        task.validate_protocol()
 
         result = self._executor.execute(task)
         if result.is_success:
@@ -829,6 +901,17 @@ class DelegateHandler:
             fallback="Subagent completed without textual result",
         )
         failure_note = "; ".join(normalized_gaps[:3]) if ended_early and normalized_gaps else None
+        acceptance_metadata = {
+            key: result.artifact_metadata[key]
+            for key in (
+                "implementation_verification",
+                "test_verification",
+                "execution_verification",
+                "verification_only",
+                "requires_implementation",
+            )
+            if key in result.artifact_metadata
+        }
         observe_entry = context.stack.append_observe(
             observe_content,
             actor=str(action.target_agent),
@@ -845,6 +928,7 @@ class DelegateHandler:
                 "completion_status": completion_status,
                 "evidence_gaps": normalized_gaps[:12],
                 "target_agent": action.target_agent,
+                **acceptance_metadata,
             },
         )
         delegate_events = [
@@ -945,6 +1029,7 @@ def _effective_artifact_type(
             "perception": "perception_observation",
             "research": "research_observation",
             "planning": "outline",
+            "verification": "verification_observation",
         }.get(str(action.stage), declared)
     return declared
 
@@ -1621,6 +1706,11 @@ def _delegated_artifact_metadata(
         source_ids = [str(value) for values in (existing_sources, requested_sources) if isinstance(values, list) for value in values if str(value).strip()]
         metadata["source_artifact_ids"] = list(dict.fromkeys(source_ids))
     metadata["delegate_action_id"] = action.action_id
+    metadata["delegate_stage"] = action.stage
+    metadata["target_agent"] = action.target_agent
+    metadata["requires_implementation"] = task.metadata.get("requires_implementation")
+    if task.metadata.get("verification_only") is True:
+        metadata["verification_only"] = True
     return metadata
 
 

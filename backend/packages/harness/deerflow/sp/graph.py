@@ -131,8 +131,10 @@ def _context_request(
         active_delegate_id=state.get("sp_active_delegate_id"),
         pending_human_interaction=pending if isinstance(pending, Mapping) else None,
         artifact_refs=artifact_refs if isinstance(artifact_refs, Mapping) else None,
+        task_contract=state.get("sp_task_contract") if isinstance(state.get("sp_task_contract"), Mapping) else None,
         report_version=state.get("sp_current_report_version"),
         current_run_id=run_id,
+        new_conversation=bool(state.get("sp_new_conversation")),
     )
     if decision_context:
         task_context = f"{decision_context}\n\n{task_context}"
@@ -276,6 +278,7 @@ def create_sp_agent_graph(
     def prepare_context(state: ThreadState, runtime: Runtime) -> dict[str, Any]:
         thread_id = _runtime_id(runtime, "thread_id")
         run_id = _runtime_id(runtime, "run_id")
+        runtime_context = _runtime_context(runtime)
         before_stack = TaskMemoryStack.from_dict(
             state.get("sp_task_memory"),
             thread_id=thread_id,
@@ -296,10 +299,19 @@ def create_sp_agent_graph(
             )
         update: dict[str, Any] = {
             "sp_task_memory": stack.to_dict(),
+            "sp_new_conversation": bool(normalized_memory.get("sp_new_conversation", state.get("sp_new_conversation"))),
             "sp_current_action": None,
             "sp_current_action_id": None,
             "sp_max_loop_iterations": max_iterations,
         }
+        # An execution contract is supplied by the caller (for example, the
+        # SWE runner) and must survive the Central -> Delegate -> subagent
+        # boundary.  Keeping it in graph state makes it available to every
+        # later delegation, including recovery turns, instead of relying on
+        # the latest model-generated wording to preserve the original task.
+        task_contract = runtime_context.get("sp_task_contract")
+        if isinstance(task_contract, Mapping):
+            update["sp_task_contract"] = dict(task_contract)
         if fresh_user_turn:
             update.update(
                 {

@@ -128,6 +128,23 @@ async def test_size_threshold_triggers_flush():
 
 
 @pytest.mark.asyncio
+async def test_debug_trace_threshold_persists_each_running_step_immediately():
+    store = _FakeStore()
+    buffer = _SubagentEventBuffer(
+        store,
+        "thread_1",
+        "run_1",
+        flush_threshold=1,
+    )
+
+    await buffer.add(_running_step(message_index=1))
+
+    assert len(store.batches) == 1
+    assert store.batches[0][0]["event_type"] == "subagent.step"
+    assert store.batches[0][0]["metadata"]["message_index"] == 1
+
+
+@pytest.mark.asyncio
 async def test_skips_non_task_chunk():
     store = _FakeStore()
     buffer = _SubagentEventBuffer(store, "t", "r")

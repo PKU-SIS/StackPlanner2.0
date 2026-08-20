@@ -18,7 +18,13 @@ from deerflow.agents.middlewares.sandbox_audit_middleware import (
 # ---------------------------------------------------------------------------
 
 
-def _make_request(command: str, workspace_path: str | None = "/tmp/workspace", thread_id: str = "thread-1") -> MagicMock:
+def _make_request(
+    command: str,
+    workspace_path: str | None = "/tmp/workspace",
+    thread_id: str = "thread-1",
+    *,
+    runtime_context: dict | None = None,
+) -> MagicMock:
     """Build a minimal ToolCallRequest mock for the bash tool."""
     args = {"command": command}
     request = MagicMock()
@@ -29,7 +35,7 @@ def _make_request(command: str, workspace_path: str | None = "/tmp/workspace", t
     }
     # runtime carries context info (ToolRuntime)
     request.runtime = SimpleNamespace(
-        context={"thread_id": thread_id},
+        context={"thread_id": thread_id, **(runtime_context or {})},
         config={"configurable": {"thread_id": thread_id}},
         state={"thread_data": {"workspace_path": workspace_path}},
     )
@@ -421,6 +427,64 @@ class TestSandboxAuditMiddlewareWrapToolCall:
         assert called, f"handler SHOULD be called for medium-risk cmd: {cmd!r}"
         assert isinstance(result, ToolMessage)
         assert "warning" in result.content.lower()
+
+    def test_subagent_dependency_install_is_blocked_without_explicit_runtime_authority(self):
+        request = _make_request("python -m pip install setuptools_scm", runtime_context={"is_subagent": True})
+        handler = _make_handler()
+
+        with patch.object(self.mw, "_write_audit"):
+            result = self.mw.wrap_tool_call(request, handler)
+
+        assert not handler.called
+        assert result.status == "error"
+        assert "dependency installation is not authorized" in result.content
+
+    def test_subagent_dependency_install_can_be_explicitly_authorized_by_runtime(self):
+        request = _make_request(
+            "python -m pip install setuptools_scm",
+            runtime_context={"is_subagent": True, "allow_dependency_install": True},
+        )
+        handler = _make_handler()
+
+        with patch.object(self.mw, "_write_audit"):
+            result = self.mw.wrap_tool_call(request, handler)
+
+        assert handler.called
+        assert "warning" in result.content.lower()
+
+    @pytest.mark.parametrize(
+        ("tool_name", "path"),
+        [
+            ("str_replace", "/mnt/user-data/workspace/project/tests/test_api.py"),
+            ("write_file", "/mnt/user-data/workspace/project/pkg/parser_test.py"),
+        ],
+    )
+    def test_external_benchmark_blocks_test_file_mutation(self, tool_name, path):
+        request = _make_non_bash_request(tool_name)
+        request.tool_call["args"] = {"path": path, "content": "replacement"}
+        request.runtime.context = {"protect_test_files": True}
+        handler = _make_handler()
+
+        result = self.mw.wrap_tool_call(request, handler)
+
+        assert not handler.called
+        assert result.status == "error"
+        assert "test-file mutation is disabled" in result.content
+
+    def test_external_benchmark_allows_source_file_mutation(self):
+        request = _make_non_bash_request("str_replace")
+        request.tool_call["args"] = {
+            "path": "/mnt/user-data/workspace/project/pkg/parser.py",
+            "old_str": "old",
+            "new_str": "new",
+        }
+        request.runtime.context = {"protect_test_files": True}
+        handler = _make_handler()
+
+        result = self.mw.wrap_tool_call(request, handler)
+
+        assert handler.called
+        assert result == handler.return_value
 
     # --- Safe: handler MUST be called ---
 

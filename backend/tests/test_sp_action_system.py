@@ -290,6 +290,74 @@ def test_same_target_policy_block_is_a_checkpoint_not_a_permanent_deadlock():
     assert [task.task for task in executor.tasks] == ["Retry the failed test with a different repair."]
 
 
+def test_partial_same_target_delegation_is_allowed_as_explicit_recovery():
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="recovered",
+            task_id="recovered-coder",
+        )
+    )
+    stack = TaskMemoryStack()
+    stack.append_observe(
+        "Coder inspected the source but did not edit it.",
+        actor="coder",
+        run_id="run-1",
+        stage="implementation",
+        priority="high",
+        metadata={
+            "target_agent": "coder",
+            "completion_status": "partial",
+            "evidence_gaps": ["no source file changed"],
+        },
+    )
+    result = build_default_action_router(delegate_executor=executor).execute(
+        _action(
+            ActionType.DELEGATE,
+            action_id="recover-coder",
+            target_agent="coder",
+            task="Edit the source and run the focused test.",
+            stage="implementation",
+        ),
+        state={
+            "sp_task_memory": stack.to_dict(),
+            "sp_last_handler_result": {
+                "next_step": "continue",
+                "action_type": "DELEGATE",
+                "target_agent": "coder",
+                "stage": "implementation",
+            },
+        },
+        run_id="run-1",
+    )
+
+    assert result.next_step == "continue"
+    assert [task.task for task in executor.tasks] == ["Edit the source and run the focused test."]
+
+
+def test_reflect_records_missing_targets_without_retry_deadlock():
+    result = build_default_action_router().execute(
+        _action(
+            ActionType.REFLECT,
+            action_id="reflect-missing-target",
+            task="Replan after the failed verification.",
+            stage="revision",
+            metadata={"target_entry_ids": ["spmem_stale_target"]},
+        ),
+        state={"sp_task_memory": TaskMemoryStack().to_dict()},
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+
+    assert result.next_step == "continue"
+    assert result.error is None
+    assert any(event["event_type"] == "sp.reflect.targets_missing" for event in result.run_events)
+    stack = TaskMemoryStack.from_dict(result.state_update["sp_task_memory"])
+    assert stack.entries[-1].action == "reflect"
+    assert stack.entries[-1].metadata["missing_target_entry_ids"] == ["spmem_stale_target"]
+    assert stack.entries[-1].metadata["backtrack_applied"] is False
+
+
 def test_router_allows_delegation_to_new_target_after_previous_delegation():
     executor = FakeSubagentExecutor(
         SPSubagentResult(
@@ -318,6 +386,218 @@ def test_router_allows_delegation_to_new_target_after_previous_delegation():
 
     assert result.next_step == "continue"
     assert [task.subagent_type for task in executor.tasks] == ["coder"]
+
+
+@pytest.mark.parametrize(
+    ("previous_stage", "current_stage"),
+    [("perception", "implementation"), ("implementation", "verification")],
+)
+def test_router_allows_same_specialist_to_advance_to_next_stage(previous_stage, current_stage):
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="stage completed",
+            task_id="stage-advance",
+        )
+    )
+    action = _action(
+        ActionType.DELEGATE,
+        action_id=f"advance-{current_stage}",
+        target_agent="coder",
+        task=f"Continue in {current_stage}",
+        stage=current_stage,
+    )
+
+    result = build_default_action_router(delegate_executor=executor).execute(
+        action,
+        state={
+            "sp_last_handler_result": {
+                "next_step": "continue",
+                "action_type": "DELEGATE",
+                "target_agent": "coder",
+                "stage": previous_stage,
+            }
+        },
+    )
+
+    assert result.next_step == "continue"
+    assert [task.subagent_type for task in executor.tasks] == ["coder"]
+
+
+def test_router_normalizes_recovery_to_coder_when_source_implementation_is_missing():
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="should not run",
+            task_id="unexpected",
+        )
+    )
+    stack = TaskMemoryStack()
+    stack.append_observe(
+        "Coder changed tests only.",
+        actor="coder",
+        thread_id="thread-1",
+        run_id="run-1",
+        stage="verification",
+        priority="high",
+        metadata={
+            "target_agent": "coder",
+            "completion_status": "partial",
+            "evidence_gaps": ["Coder claimed the implementation was complete, but no non-test source file was changed."],
+        },
+    )
+    action = _action(
+        ActionType.DELEGATE,
+        action_id="research-after-source-gap",
+        target_agent="researcher",
+        task="Research the issue further",
+        stage="research",
+    )
+
+    result = build_default_action_router(delegate_executor=executor).execute(
+        action,
+        state={
+            "sp_task_memory": stack.to_dict(),
+            "sp_last_handler_result": {
+                "next_step": "continue",
+                "action_type": "DELEGATE",
+                "target_agent": "coder",
+            },
+        },
+        run_id="run-1",
+    )
+
+    assert result.next_step == "continue"
+    assert [task.subagent_type for task in executor.tasks] == ["coder"]
+    assert executor.tasks[0].metadata["stage"] == "implementation"
+    assert executor.tasks[0].metadata["requires_implementation"] is True
+    assert "Do not stop at another read-only inspection" in executor.tasks[0].task
+    assert result.state_update["sp_last_handler_result"]["target_agent"] == "coder"
+    assert executor.tasks[0].metadata["target_agent_normalization"]["reason"] == "coder_source_recovery_required"
+
+
+def test_router_keeps_partial_implemented_patch_with_coder_for_verification():
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="verification evidence",
+            task_id="verify-existing-patch",
+        )
+    )
+    stack = TaskMemoryStack()
+    observation = stack.append_observe(
+        "Coder changed the source; native tests are blocked by the host dependency.",
+        actor="coder",
+        run_id="run-verify",
+        stage="implementation",
+        metadata={
+            "target_agent": "coder",
+            "completion_status": "partial",
+            "evidence_gaps": ["Native focused tests are blocked by an incompatible host dependency."],
+            "implementation_verification": {"passed": True, "changed_source_paths": ["pkg/core.py"]},
+        },
+    )
+    action = _action(
+        ActionType.DELEGATE,
+        action_id="wrong-report-revision",
+        target_agent="reporter",
+        task="Write a report about the partial result",
+        stage="revision",
+    )
+
+    result = build_default_action_router(delegate_executor=executor).execute(
+        action,
+        state={"sp_task_memory": stack.to_dict()},
+        run_id="run-verify",
+    )
+
+    assert result.next_step == "continue"
+    assert [task.subagent_type for task in executor.tasks] == ["coder"]
+    task = executor.tasks[0]
+    assert task.metadata["stage"] == "verification"
+    assert task.metadata["verification_only"] is True
+    assert task.metadata["requires_implementation"] is False
+    assert task.metadata["target_agent_normalization"]["reason"] == "coder_verification_required"
+    assert observation.result_ref is None or observation.result_ref in task.input_refs
+
+
+def test_router_infers_missing_revision_target_from_latest_partial_specialist():
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="verified",
+            task_id="inferred-coder",
+        )
+    )
+    stack = TaskMemoryStack()
+    stack.append_observe(
+        "Source patch exists but needs verification.",
+        actor="coder",
+        run_id="run-infer",
+        stage="implementation",
+        metadata={
+            "completion_status": "partial",
+            "evidence_gaps": ["Native tests are blocked by the host environment."],
+            "implementation_verification": {"passed": True},
+        },
+    )
+    payload = {
+        "action_id": "missing-target",
+        "action_type": "DELEGATE",
+        "reason": "Continue recovery",
+        "task": "Continue the previous specialist task",
+        "stage": "revision",
+    }
+
+    result = build_default_action_router(delegate_executor=executor).execute(
+        payload,
+        state={"sp_task_memory": stack.to_dict()},
+        run_id="run-infer",
+    )
+
+    assert result.next_step == "continue"
+    assert payload["target_agent"] == "coder"
+    assert executor.tasks[0].subagent_type == "coder"
+    assert executor.tasks[0].metadata["target_agent_inference"]["reason"] == "latest_incomplete_specialist"
+
+
+def test_router_keeps_partial_verification_with_coder_without_implementation_metadata():
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="verification follow-up",
+            task_id="verification-follow-up",
+        )
+    )
+    stack = TaskMemoryStack()
+    stack.append_observe(
+        "Native tests are unavailable because of an env blocker.",
+        actor="coder",
+        run_id="run-verification-gap",
+        stage="verification",
+        metadata={
+            "completion_status": "partial",
+            "evidence_gaps": ["Verification tests remain unavailable."],
+        },
+    )
+
+    result = build_default_action_router(delegate_executor=executor).execute(
+        _action(
+            ActionType.DELEGATE,
+            action_id="wrong-reporter-after-verification",
+            target_agent="reporter",
+            task="Verify the patch with bash",
+            stage="reporting",
+            metadata={"tool_names": ["bash"]},
+        ),
+        state={"sp_task_memory": stack.to_dict()},
+        run_id="run-verification-gap",
+    )
+
+    assert result.next_step == "continue"
+    assert executor.tasks[0].subagent_type == "coder"
+    assert executor.tasks[0].metadata["stage"] == "verification"
+    assert executor.tasks[0].metadata["tool_names"] == ["read_file", "bash"]
 
 
 def test_router_forces_reflection_before_a_new_action_after_failure():
@@ -1698,6 +1978,91 @@ def test_delegate_handler_calls_executor_and_externalizes_large_result(tmp_path)
     current_event = next(event for event in result.run_events if event["event_type"] == "sp.artifact.current_changed")
     assert current_event["payload"]["previous_artifact_id"] is None
     assert current_event["payload"]["current_artifact_id"] == report_ref["artifact_id"]
+
+
+def test_verification_only_coder_does_not_inherit_prior_implementation_requirement():
+    stack = TaskMemoryStack()
+    stack.append_delegate(
+        "Implement the source fix",
+        actor="central",
+        run_id="run-1",
+        stage="implementation",
+        metadata={"target_agent": "coder", "requires_implementation": True},
+    )
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Independent verification passed.",
+            task_id="verify-task-1",
+            artifact_metadata={"completion_status": "complete"},
+        )
+    )
+    action = _action(
+        ActionType.DELEGATE,
+        action_id="verify-code-1",
+        target_agent="coder",
+        task="Inspect the current diff and run focused regression tests without editing files.",
+        expected_output="Read-only verification evidence and exact test outcomes.",
+        input_refs=["code-artifact-1"],
+        stage="verification",
+        metadata={
+            "verification_only": True,
+            "requires_implementation": False,
+            "tool_names": ["read_file", "bash"],
+        },
+    )
+
+    result = build_default_action_router(delegate_executor=executor).execute(
+        action,
+        state={"sp_task_memory": stack.to_dict()},
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+
+    assert result.next_step == "continue"
+    assert executor.tasks[0].metadata["verification_only"] is True
+    assert executor.tasks[0].metadata["requires_implementation"] is False
+
+
+def test_coder_acceptance_evidence_is_preserved_in_memory_observation():
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Source changed, but tests are unavailable.",
+            task_id="implementation-partial",
+            artifact_metadata={
+                "completion_status": "partial",
+                "evidence_gaps": ["Focused tests did not run."],
+                "implementation_verification": {
+                    "passed": True,
+                    "source_paths": ["/mnt/user-data/workspace/pkg/core.py"],
+                },
+                "test_verification": {
+                    "passed": False,
+                    "successful_test_count": 0,
+                },
+            },
+        )
+    )
+    action = _action(
+        ActionType.DELEGATE,
+        action_id="implementation-partial",
+        target_agent="coder",
+        task="Implement the source fix and run tests.",
+        stage="implementation",
+    )
+
+    result = build_default_action_router(delegate_executor=executor).execute(
+        action,
+        state={},
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+
+    observation = TaskMemoryStack.from_dict(result.state_update["sp_task_memory"]).entries[-1]
+    assert observation.action == "observe"
+    assert observation.metadata["implementation_verification"]["passed"] is True
+    assert observation.metadata["test_verification"]["passed"] is False
 
 
 def test_perception_acceptance_converts_decision_critical_gaps_to_questions(
@@ -3539,10 +3904,55 @@ def test_coder_text_from_perception_stage_is_an_observation_not_deliverable(
     )
 
     refs = result.state_update["sp_current_artifact_refs"]
+    assert executor.tasks[0].metadata["stage"] == "perception"
+    assert executor.tasks[0].metadata["requires_implementation"] is False
     assert "generated_file" not in refs
     assert refs["perception_observation"]["type"] == "perception_observation"
     assert result.state_update["artifacts"][0].endswith(".md")
     assert any(event["event_type"] == "sp.artifact.type_normalized" for event in result.run_events)
+
+
+def test_completed_perception_cannot_relaunch_same_specialist_in_same_run():
+    stack = TaskMemoryStack()
+    stack.append_observe(
+        "Repository layout and relevant source locations identified.",
+        actor="coder",
+        run_id="run-1",
+        stage="perception",
+        metadata={"completion_status": "complete", "target_agent": "coder"},
+    )
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="This must not execute.",
+        )
+    )
+    action = _action(
+        ActionType.DELEGATE,
+        action_id="repeat-perception",
+        target_agent="coder",
+        task="Inspect the same repository again.",
+        stage="perception",
+    )
+
+    result = build_default_action_router(delegate_executor=executor).execute(
+        action,
+        state={
+            "sp_task_memory": stack.to_dict(),
+            "sp_last_handler_result": {
+                "action_type": "THINK",
+                "next_step": "continue",
+            },
+        },
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+
+    assert executor.tasks == []
+    assert result.next_step == "continue"
+    assert result.error is not None and "repeated completed perception" in result.error
+    restored = TaskMemoryStack.from_dict(result.state_update["sp_task_memory"])
+    assert restored.entries[-1].metadata["reason"] == "perception_already_complete"
 
 
 @pytest.mark.parametrize(
@@ -3804,6 +4214,8 @@ def test_central_prompt_exposes_sp_controls_without_forcing_json_actions():
     assert "Direct:" in prompt
     assert "Bounded execution:" in prompt
     assert "Deliberate:" in prompt
+    assert "conversation_status: new_conversation" in prompt
+    assert "first CentralAgent decision must be exactly one `sp_recall_memory` preflight" in prompt
     assert "audit-ready decision note" in prompt
     assert "observable result or stop condition" in prompt
     assert "Current-data" in prompt

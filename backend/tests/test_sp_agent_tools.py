@@ -10,6 +10,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from deerflow.sp.agent_tools import (
     SP_ARTIFACT_PATHS_KEY,
     SPAcknowledgementMiddleware,
+    SPActionBudgetMiddleware,
     SPControlActionMiddleware,
     SPFinishAvailabilityMiddleware,
     SPTerminalActionMiddleware,
@@ -82,6 +83,61 @@ class _ModelRequestStub:
         )
 
 
+def test_action_budget_sets_independent_central_action_limit():
+    middleware = SPActionBudgetMiddleware(max_actions=7)
+
+    assert middleware.before_agent({}, SimpleNamespace(context={})) == {
+        "sp_max_loop_iterations": 7
+    }
+
+
+def test_action_budget_reserves_last_slot_for_finish():
+    middleware = SPActionBudgetMiddleware(max_actions=4)
+    finish = next(tool for tool in build_sp_control_tools() if tool.name == "sp_finish")
+    request = _ModelRequestStub(
+        tools=[finish],
+        state={"sp_loop_iteration": 3},
+        messages=[HumanMessage(content="Create the file")],
+    )
+
+    filtered = middleware._filter_request(request)
+
+    assert [tool.name for tool in filtered.tools] == ["sp_finish"]
+    assert filtered.messages == request.messages
+
+
+def test_action_budget_converts_nonterminal_last_slot_to_incomplete_answer():
+    middleware = SPActionBudgetMiddleware(max_actions=4)
+    request = _ModelRequestStub(
+        tools=build_sp_control_tools(),
+        state={"sp_loop_iteration": 3},
+        messages=[HumanMessage(content="Fix and verify the code")],
+    )
+
+    filtered = middleware._filter_request(request)
+
+    assert filtered.tools == []
+    assert filtered.messages[-1].name == "sp_action_budget_terminal"
+    assert "Never claim that an unverified artifact is ready" in filtered.messages[-1].content
+
+
+def test_action_budget_hard_stop_ends_without_another_model_call():
+    middleware = SPActionBudgetMiddleware(max_actions=4)
+
+    result = middleware.before_model(
+        {
+            "sp_loop_iteration": 4,
+            "messages": [HumanMessage(content="修复并验证代码")],
+        },
+        SimpleNamespace(context={}),
+    )
+
+    assert result["jump_to"] == "end"
+    assert result["sp_last_handler_result"]["next_step"] == "error_fatal"
+    assert result["messages"][0].additional_kwargs["stackplanner"]["status"] == "action_capped"
+    assert "中枢动作上限" in result["messages"][0].content
+
+
 def test_finish_schema_is_hidden_until_finalizable_artifact_exists():
     middleware = SPFinishAvailabilityMiddleware()
     tools = build_sp_control_tools()
@@ -91,6 +147,128 @@ def test_finish_schema_is_hidden_until_finalizable_artifact_exists():
 
     assert "sp_finish" not in {tool.name for tool in filtered.tools}
     assert "sp_delegate" in {tool.name for tool in filtered.tools}
+
+
+def test_delegate_recovery_attempts_are_counted_per_stage():
+    stack = TaskMemoryStack()
+    stack.append_delegate(
+        "Inspect source",
+        run_id="run-1",
+        stage="perception",
+        metadata={"target_agent": "coder"},
+    )
+    for index in range(2):
+        stack.append_delegate(
+            f"Implementation attempt {index + 1}",
+            run_id="run-1",
+            stage="implementation",
+            metadata={"target_agent": "coder"},
+        )
+    state = {"sp_loop_run_id": "run-1", "sp_task_memory": stack.to_dict()}
+
+    assert SPFinishAvailabilityMiddleware._delegate_attempt_count(state, "coder") == 3
+    assert SPFinishAvailabilityMiddleware._delegate_attempt_count(state, "coder", stage="perception") == 1
+    assert SPFinishAvailabilityMiddleware._delegate_attempt_count(state, "coder", stage="implementation") == 2
+
+
+def test_verification_environment_blocker_allows_no_duplicate_verifier():
+    stack = TaskMemoryStack()
+    observation = stack.append_observe(
+        "The source diff is clean, but canonical tests cannot run because the host environment "
+        "extension modules are not built.",
+        actor="coder",
+        stage="verification",
+        metadata={
+            "completion_status": "partial",
+            "evidence_gaps": ["Verification tests are blocked by missing host extension modules."],
+        },
+    )
+
+    assert SPFinishAvailabilityMiddleware._delegate_recovery_limit(observation) == 1
+
+
+def test_verification_env_blocker_shorthand_allows_no_duplicate_verifier():
+    stack = TaskMemoryStack()
+    observation = stack.append_observe(
+        "Importing the package fails because C extensions are not built; this is an env blocker.",
+        actor="coder",
+        stage="verification",
+        metadata={"completion_status": "partial", "evidence_gaps": ["No successful test command."]},
+    )
+
+    assert SPFinishAvailabilityMiddleware._delegate_recovery_limit(observation) == 1
+
+
+def test_guard_capped_delegate_gets_only_one_recovery_attempt():
+    stack = TaskMemoryStack()
+    for index in range(2):
+        stack.append_delegate(
+            f"Read the uploaded paper, attempt {index + 1}",
+            run_id="run-capped",
+            stage="perception",
+            metadata={"target_agent": "perception"},
+        )
+    observation = stack.append_observe(
+        "[PARTIAL result: loop_capped] Relevant sections were extracted.",
+        actor="perception",
+        run_id="run-capped",
+        stage="perception",
+        metadata={
+            "target_agent": "perception",
+            "completion_status": "partial",
+            "stop_reason": "loop_capped",
+            "evidence_gaps": ["The appendix was not inspected."],
+        },
+    )
+
+    assert SPFinishAvailabilityMiddleware._delegate_recovery_limit(observation) == 2
+
+    request = _ModelRequestStub(
+        tools=build_sp_control_tools(),
+        state={
+            "sp_loop_run_id": "run-capped",
+            "sp_task_memory": stack.to_dict(),
+            "sp_last_handler_result": {
+                "action_type": "DELEGATE",
+                "target_agent": "perception",
+                "next_step": "continue",
+            },
+        },
+        messages=[HumanMessage(content="请继续分析这篇论文。")],
+    )
+
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
+
+    assert not {
+        tool.name for tool in filtered.tools
+    } & {tool.name for tool in build_sp_control_tools()}
+    assert filtered.messages[-1].name == "sp_delegate_recovery_exhausted"
+    assert "2 perception attempts" in filtered.messages[-1].content
+
+
+def test_duplicate_delegate_policy_checkpoint_removes_delegate_from_next_schema():
+    middleware = SPFinishAvailabilityMiddleware()
+    request = _ModelRequestStub(
+        tools=build_sp_control_tools(),
+        state={
+            "sp_last_handler_result": {
+                "action_type": "THINK",
+                "policy_checkpoint": "same_target_requires_intermediate_control_action",
+            }
+        },
+    )
+
+    filtered = middleware._filter_request(request)
+
+    assert {tool.name for tool in filtered.tools} == {
+        "sp_think",
+        "sp_reflect",
+        "sp_revise",
+        "sp_backtrack",
+        "sp_replan",
+        "sp_summarize",
+    }
+    assert filtered.messages[-1].name == "sp_delegate_policy_checkpoint"
 
 
 def test_perception_gaps_force_ask_human_before_delegation_or_search():
@@ -242,6 +420,183 @@ def test_completed_coder_artifact_from_previous_delegate_forces_exact_finish():
     assert "do not delegate more work" in instruction.content
     assert "A酒店总费用: 5250.48" in instruction.content
     assert "ignore stale prior conclusions" in instruction.content
+
+
+def test_completed_source_implementation_forces_independent_verification_before_finish():
+    middleware = SPFinishAvailabilityMiddleware()
+    request = _ModelRequestStub(
+        tools=build_sp_control_tools(),
+        state={
+            "sp_loop_run_id": "run-1",
+            "sp_last_handler_result": {
+                "action_type": "DELEGATE",
+                "action_id": "delegate-code-1",
+                "target_agent": "coder",
+                "next_step": "continue",
+            },
+            "sp_current_artifact_refs": {
+                "generated_file": {
+                    "artifact_id": "code-final-1",
+                    "type": "generated_file",
+                    "run_id": "run-1",
+                    "metadata": {
+                        "completion_status": "complete",
+                        "delegate_action_id": "delegate-code-1",
+                        "delegate_stage": "implementation",
+                        "implementation_verification": {
+                            "passed": True,
+                            "source_paths": ["/mnt/user-data/workspace/pkg/core.py"],
+                        },
+                    },
+                }
+            },
+        },
+        messages=[HumanMessage(content="Fix the source bug, run tests, and deliver a downloadable code file.")],
+    )
+
+    filtered = middleware._filter_request(request)
+
+    assert {tool.name for tool in filtered.tools} == {"sp_delegate"}
+    instruction = filtered.messages[-1]
+    assert instruction.name == "sp_code_verification_required"
+    assert 'stage="verification"' in instruction.content
+    assert '"requires_implementation": false' in instruction.content
+    assert "must not edit source or tests" in instruction.content
+    assert "Do not call FINISH" in instruction.content
+
+
+def test_completed_verification_reopens_finish_for_implementation_artifact():
+    middleware = SPFinishAvailabilityMiddleware()
+    tools = build_sp_control_tools()
+    request = _ModelRequestStub(
+        tools=tools,
+        state={
+            "sp_loop_run_id": "run-1",
+            "sp_last_handler_result": {
+                "action_type": "DELEGATE",
+                "action_id": "verify-code-1",
+                "target_agent": "coder",
+                "next_step": "continue",
+            },
+            "sp_current_artifact_refs": {
+                "generated_file": {
+                    "artifact_id": "code-final-1",
+                    "type": "generated_file",
+                    "run_id": "run-1",
+                    "metadata": {
+                        "completion_status": "complete",
+                        "delegate_action_id": "delegate-code-1",
+                        "delegate_stage": "implementation",
+                        "implementation_verification": {"passed": True},
+                    },
+                },
+                "verification_observation": {
+                    "artifact_id": "verify-observation-1",
+                    "type": "verification_observation",
+                    "run_id": "run-1",
+                    "metadata": {
+                        "completion_status": "complete",
+                        "delegate_action_id": "verify-code-1",
+                        "delegate_stage": "verification",
+                    },
+                },
+            },
+        },
+    )
+
+    filtered = middleware._filter_request(request)
+
+    assert {tool.name for tool in filtered.tools} == {tool.name for tool in tools}
+    assert "sp_finish" in {tool.name for tool in filtered.tools}
+
+
+def test_partial_implementation_with_source_write_recovers_as_read_only_verification():
+    middleware = SPFinishAvailabilityMiddleware()
+    stack = TaskMemoryStack()
+    stack.append_delegate(
+        "Implement the source fix",
+        run_id="run-1",
+        stage="implementation",
+        metadata={"target_agent": "coder"},
+    )
+    stack.append_observe(
+        "Source patch exists, but focused tests could not run.",
+        actor="coder",
+        run_id="run-1",
+        stage="implementation",
+        metadata={
+            "target_agent": "coder",
+            "completion_status": "partial",
+            "implementation_verification": {
+                "passed": True,
+                "source_paths": ["/mnt/user-data/workspace/pkg/core.py"],
+            },
+            "evidence_gaps": ["Focused tests did not run."],
+        },
+    )
+    request = _ModelRequestStub(
+        tools=build_sp_control_tools(),
+        state={
+            "sp_loop_run_id": "run-1",
+            "sp_task_memory": stack.to_dict(),
+            "messages": [HumanMessage(content="Fix the source bug and run tests.")],
+            "sp_last_handler_result": {
+                # A continuous-space checkpoint must not clear the durable
+                # partial-observation recovery requirement.
+                "action_type": "THINK",
+                "next_step": "continue",
+            },
+        },
+        messages=[HumanMessage(content="Fix the source bug and run tests.")],
+    )
+
+    filtered = middleware._filter_request(request)
+
+    assert {tool.name for tool in filtered.tools} == {"sp_delegate"}
+    instruction = filtered.messages[-1].content
+    assert 'stage="verification"' in instruction
+    assert '"verification_only": true' in instruction
+    assert "without editing source or tests" in instruction
+    assert "actual named tests" in instruction
+    assert "self-chosen examples" in instruction
+
+
+def test_verification_behavior_regression_recovers_to_writable_implementation():
+    stack = TaskMemoryStack()
+    stack.append_delegate(
+        "Verify the source fix",
+        run_id="run-regression",
+        stage="verification",
+        metadata={"target_agent": "coder"},
+    )
+    stack.append_observe(
+        "The existing regression test fails: expected lowercase exponent but the patch produces uppercase output.",
+        actor="coder",
+        run_id="run-regression",
+        stage="verification",
+        metadata={
+            "target_agent": "coder",
+            "completion_status": "partial",
+            "evidence_gaps": ["Existing regression test behavior is incompatible with the patch."],
+        },
+    )
+    request = _ModelRequestStub(
+        tools=build_sp_control_tools(),
+        state={
+            "sp_loop_run_id": "run-regression",
+            "sp_task_memory": stack.to_dict(),
+            "messages": [HumanMessage(content="Fix the bug and preserve regressions.")],
+        },
+        messages=[HumanMessage(content="Fix the bug and preserve regressions.")],
+    )
+
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
+
+    instruction = filtered.messages[-1].content
+    assert 'stage="implementation"' in instruction
+    assert "write_file" in instruction
+    assert "source implementation recovery" in instruction
+    assert '"verification_only": true' not in instruction
 
 
 def test_finish_schema_is_available_for_current_report_artifact():
@@ -593,6 +948,82 @@ def test_partial_coder_recovery_stops_after_three_attempts_even_after_reflection
     assert "do not claim that a verified file is ready" in instruction.content
 
 
+def test_partial_coder_recovery_preserves_generated_draft_during_retry():
+    stack = TaskMemoryStack()
+    stack.append_delegate(
+        "Implement the requested source change",
+        run_id="run-draft",
+        stage="implementation",
+        metadata={"target_agent": "coder"},
+    )
+    stack.append_observe(
+        "[PARTIAL result] Tests did not complete.",
+        actor="coder",
+        run_id="run-draft",
+        stage="implementation",
+        metadata={
+            "target_agent": "coder",
+            "completion_status": "partial",
+            "evidence_gaps": ["The focused test has no successful result."],
+        },
+    )
+    draft = "这是已经生成的详细分析，不应从界面消失。"
+    state = {
+        "sp_loop_run_id": "run-draft",
+        "sp_task_memory": stack.to_dict(),
+        "messages": [HumanMessage(content="修复代码并验证"), AIMessage(content=draft)],
+    }
+
+    update = SPFinishAvailabilityMiddleware().after_model(
+        state,
+        SimpleNamespace(context={}),
+    )
+
+    guarded = update["messages"][0]
+    assert draft in guarded.content
+    assert "恢复验证" in guarded.content
+    assert guarded.tool_calls[0]["name"] == "sp_delegate"
+
+
+def test_exhausted_coder_recovery_preserves_generated_draft_with_warning():
+    stack = TaskMemoryStack()
+    for index in range(3):
+        stack.append_delegate(
+            f"Implementation attempt {index + 1}",
+            run_id="run-draft",
+            stage="implementation",
+            metadata={"target_agent": "coder"},
+        )
+    stack.append_observe(
+        "[PARTIAL result] Tests still fail.",
+        actor="coder",
+        run_id="run-draft",
+        stage="implementation",
+        metadata={
+            "target_agent": "coder",
+            "completion_status": "partial",
+            "evidence_gaps": ["No successful test result after the latest edit."],
+        },
+    )
+    draft = "这是已经生成的长回答，需要保留。"
+    state = {
+        "sp_loop_run_id": "run-draft",
+        "sp_task_memory": stack.to_dict(),
+        "messages": [HumanMessage(content="修复代码并验证"), AIMessage(content=draft)],
+    }
+
+    update = SPFinishAvailabilityMiddleware().after_model(
+        state,
+        SimpleNamespace(context={}),
+    )
+
+    guarded = update["messages"][0]
+    assert draft in guarded.content
+    assert "未验证草稿" in guarded.content
+    assert "3 次恢复上限" in guarded.content
+    assert guarded.tool_calls == []
+
+
 def test_plain_success_claim_for_partial_coder_artifact_becomes_recovery_delegate():
     stack = TaskMemoryStack()
     stack.append_delegate(
@@ -629,7 +1060,8 @@ def test_plain_success_claim_for_partial_coder_artifact_becomes_recovery_delegat
     assert update is not None
     guarded = update["messages"][0]
     assert isinstance(guarded, AIMessage)
-    assert guarded.content == ""
+    assert "脚本已经修好并通过全部测试" in guarded.content
+    assert "验证完成前请勿视为最终结果" in guarded.content
     assert len(guarded.tool_calls) == 1
     recovery = guarded.tool_calls[0]
     assert recovery["name"] == "sp_delegate"
@@ -641,6 +1073,43 @@ def test_plain_success_claim_for_partial_coder_artifact_becomes_recovery_delegat
         "bash",
     ]
     assert "'-3--1,2' test still fails" in recovery["args"]["task"]
+
+
+def test_partial_coder_recovery_is_required_even_without_download_request():
+    stack = TaskMemoryStack()
+    stack.append_delegate(
+        "Implement the bug fix and run tests.",
+        run_id="run-2",
+        metadata={"target_agent": "coder"},
+    )
+    stack.append_observe(
+        "The source edit was made, but tests could not be run.",
+        actor="coder",
+        run_id="run-2",
+        metadata={
+            "completion_status": "partial",
+            "evidence_gaps": ["Coder claimed test verification without a successful test-command result after the latest source change."],
+            "target_agent": "coder",
+        },
+    )
+    middleware = SPFinishAvailabilityMiddleware()
+    state = {
+        "sp_loop_run_id": "run-2",
+        "sp_task_memory": stack.to_dict(),
+        "messages": [
+            HumanMessage(content="修复这个代码问题并运行测试。"),
+            AIMessage(content="代码已经修复。"),
+        ],
+    }
+
+    update = middleware.after_model(state, SimpleNamespace(context={"run_id": "run-2"}))
+
+    assert update is not None
+    guarded = update["messages"][0]
+    assert isinstance(guarded, AIMessage)
+    assert len(guarded.tool_calls) == 1
+    assert guarded.tool_calls[0]["name"] == "sp_delegate"
+    assert guarded.tool_calls[0]["args"]["target_agent"] == "coder"
 
 
 def test_plain_success_claim_after_coder_recovery_limit_becomes_honest_failure():
@@ -680,10 +1149,10 @@ def test_plain_success_claim_after_coder_recovery_limit_becomes_honest_failure()
     guarded = update["messages"][0]
     assert isinstance(guarded, AIMessage)
     assert guarded.tool_calls == []
-    assert "尚未通过验证" in guarded.content
+    assert "不代表产物已通过验证" in guarded.content
     assert "3 次恢复上限" in guarded.content
     assert "'-3--1,2' test still fails" in guarded.content
-    assert "全部测试" not in guarded.content
+    assert "脚本已经修好并通过全部测试" in guarded.content
 
 
 def test_report_recovery_limit_is_scoped_to_current_run_not_global_version():
@@ -782,6 +1251,79 @@ def test_action_payload_routes_pure_markdown_report_from_coder_to_reporter():
     assert payload["metadata"]["routing_reason"] == "pure_report_synthesis"
 
 
+def test_action_payload_infers_missing_delegate_target_from_decisive_stage():
+    research = _action_payload(
+        "sp_delegate",
+        {
+            "task": "Inspect the repository and report the relevant implementation details",
+            "stage": "research",
+        },
+        tool_call_id="tool-infer-researcher",
+    )
+    verification = _action_payload(
+        "sp_delegate",
+        {
+            "task": "Run the focused tests and fix any failures",
+            "stage": "verification",
+        },
+        tool_call_id="tool-infer-coder",
+    )
+
+    assert research["target_agent"] == "researcher"
+    assert research["metadata"]["target_agent_inferred"] is True
+    assert research["metadata"]["target_agent_inference_reason"] == "unambiguous_stage:research"
+    assert verification["target_agent"] == "coder"
+    assert verification["stage"] == "verification"
+
+
+def test_action_payload_infers_missing_verification_task_from_decisive_stage():
+    payload = _action_payload(
+        "sp_delegate",
+        {
+            "target_agent": "coder",
+            "stage": "verification",
+            "input_refs": ["spart_previous_patch"],
+            "metadata": {"verification_only": True, "requires_implementation": False},
+        },
+        tool_call_id="tool-infer-verification-task",
+    )
+
+    assert payload["target_agent"] == "coder"
+    assert payload["stage"] == "verification"
+    assert "read-only verification" in payload["task"]
+    assert payload["metadata"]["task_inferred"] is True
+    assert payload["metadata"]["task_inference_reason"] == "unambiguous_target_stage:coder:verification"
+
+
+def test_action_payload_does_not_guess_missing_delegate_target_for_revision():
+    payload = _action_payload(
+        "sp_delegate",
+        {
+            "task": "Revise the previous artifact",
+            "stage": "revision",
+        },
+        tool_call_id="tool-ambiguous-revision",
+    )
+
+    assert "target_agent" not in payload
+    assert "target_agent_inferred" not in payload["metadata"]
+
+
+def test_action_payload_does_not_rewrite_explicit_invalid_delegate_target():
+    payload = _action_payload(
+        "sp_delegate",
+        {
+            "target_agent": "unknown-specialist",
+            "task": "Inspect the implementation",
+            "stage": "research",
+        },
+        tool_call_id="tool-invalid-explicit-target",
+    )
+
+    assert payload["target_agent"] == "unknown-specialist"
+    assert "target_agent_inferred" not in payload["metadata"]
+
+
 def test_action_payload_does_not_treat_report_source_precedence_as_source_code():
     payload = _action_payload(
         "sp_delegate",
@@ -816,7 +1358,7 @@ def test_action_payload_keeps_code_generation_with_coder():
     assert "routed_from_agent" not in payload["metadata"]
 
 
-def test_action_payload_infers_perception_for_read_only_coder_delegation():
+def test_action_payload_reroutes_uploaded_document_inspection_to_perception():
     payload = _action_payload(
         "sp_delegate",
         {
@@ -827,8 +1369,95 @@ def test_action_payload_infers_perception_for_read_only_coder_delegation():
         tool_call_id="tool-read-stage",
     )
 
-    assert payload["target_agent"] == "coder"
+    assert payload["target_agent"] == "perception"
     assert payload["stage"] == "perception"
+    assert payload["metadata"]["routing_reason"] == "local_document_inspection"
+    assert payload["metadata"]["requires_implementation"] is False
+
+
+def test_action_payload_decodes_string_metadata_refs_and_repairs_upload_path():
+    payload = _action_payload(
+        "sp_delegate",
+        {
+            "target_agent": "coder",
+            "task": "Verify the uploaded paper at /mnt-user-data/uploads/paper.md against the explanation.",
+            "input_refs": '["/mnt-user-data/uploads/paper.md", "/mnt-user-data/outputs/explanation.md"]',
+            "stage": "verification",
+            "metadata": '{"verification_only": true, "requires_implementation": false, "tool_names": ["read_file", "bash"]}',
+        },
+        tool_call_id="tool-paper-verify",
+    )
+
+    assert payload["target_agent"] == "perception"
+    assert payload["stage"] == "perception"
+    assert payload["task"].startswith("Verify the uploaded paper at /mnt/user-data/uploads/")
+    assert payload["input_refs"] == [
+        "/mnt/user-data/uploads/paper.md",
+        "/mnt/user-data/outputs/explanation.md",
+    ]
+    assert payload["metadata"]["requires_implementation"] is False
+    assert "verification_only" not in payload["metadata"]
+    assert payload["metadata"]["tool_names"] == ["read_file"]
+
+
+def test_action_payload_promotes_mutating_coder_task_out_of_perception():
+    payload = _action_payload(
+        "sp_delegate",
+        {
+            "target_agent": "coder",
+            "task": "Implement the missing validation and add regression tests.",
+            "expected_output": "Modified source files and passing tests.",
+            "reason": "Code modification is required.",
+            "stage": "perception",
+        },
+        tool_call_id="tool-mutation-stage",
+    )
+
+    assert payload["target_agent"] == "coder"
+    assert payload["stage"] == "implementation"
+    assert payload["metadata"]["stage_routed_from"] == "perception"
+    assert payload["metadata"]["stage_routing_reason"] == "coder_mutation_requires_implementation"
+
+
+def test_action_payload_normalizes_scalar_delegate_input_ref():
+    payload = _action_payload(
+        "sp_delegate",
+        {
+            "target_agent": "coder",
+            "task": "Verify the current implementation.",
+            "stage": "verification",
+            "input_refs": "artifact-1",
+        },
+        tool_call_id="tool-scalar-input-ref",
+    )
+
+    assert payload["input_refs"] == ["artifact-1"]
+
+
+def test_action_payload_omits_empty_scalar_reflect_targets():
+    payload = _action_payload(
+        "sp_reflect",
+        {
+            "task": "Review the current result.",
+            "target_entry_ids": "",
+        },
+        tool_call_id="tool-empty-reflect-targets",
+    )
+
+    assert "target_entry_ids" not in payload.get("metadata", {})
+
+
+def test_action_payload_normalizes_scalar_summary_source_id():
+    payload = _action_payload(
+        "sp_summarize",
+        {
+            "summary": "Keep the verified implementation decision.",
+            "source_entry_ids": "spmem_1234567890abcdef",
+        },
+        tool_call_id="tool-scalar-summary-source",
+    )
+
+    assert payload["metadata"]["source_entry_ids"] == ["spmem_1234567890abcdef"]
 
 
 def test_acknowledgement_middleware_short_circuits_explicit_record_only_turn():

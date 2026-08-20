@@ -244,6 +244,19 @@ class RunJournal(BaseCallbackHandler):
 
         # Capture the first user message sent to the lead agent in this run.
         caller = self._identify_caller(tags)
+        self._put(
+            event_type="llm.request",
+            category="trace",
+            content={
+                "message_count": sum(len(batch) for batch in messages),
+                "model": (serialized or {}).get("name") or (serialized or {}).get("id"),
+            },
+            metadata={
+                "caller": caller,
+                "llm_call_index": self._llm_call_index,
+                "provider_run_id": rid,
+            },
+        )
         if caller == "lead_agent" and not self._first_human_msg and messages:
             for batch in reversed(messages):
                 for m in reversed(batch):
@@ -492,7 +505,11 @@ class RunJournal(BaseCallbackHandler):
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
-            # No event loop — keep events in buffer for later async flush.
+            # Subagents can emit callbacks from their isolated worker thread.
+            # Marshal the flush back to the run's owner loop so enhanced debug
+            # events remain live instead of waiting for the run-finally flush.
+            if self._owner_loop is not None and not self._owner_loop.is_closed():
+                self._owner_loop.call_soon_threadsafe(self._flush_sync)
             return
         with self._state_lock:
             if not self._buffer:
@@ -524,11 +541,17 @@ class RunJournal(BaseCallbackHandler):
     def _on_flush_done(self, task: asyncio.Task) -> None:
         with self._state_lock:
             self._pending_flush_tasks.discard(task)
+            should_flush = len(self._buffer) >= self._flush_threshold
         if task.cancelled():
             return
         exc = task.exception()
         if exc:
             logger.warning("Journal flush task failed: %s", exc)
+        if should_flush:
+            # Events may have arrived while the SQLite batch was in flight.
+            # Drain that trailing batch immediately; otherwise a stalled model
+            # call could leave its latest start/action event invisible.
+            self._flush_sync()
 
     def _identify_caller(self, tags: list[str] | None) -> str:
         _tags = tags or []

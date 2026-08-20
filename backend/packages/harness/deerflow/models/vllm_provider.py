@@ -239,7 +239,13 @@ def _convert_delta_to_message_chunk_with_reasoning(_dict: Mapping[str, Any], def
             function_call["name"] = ""
         additional_kwargs["function_call"] = function_call
 
+    # vLLM/Qwen deployments are not consistent about the response field:
+    # some emit ``reasoning`` while others (including the current Qwen3
+    # endpoint) emit ``reasoning_content``.  Both carry the same non-visible
+    # reasoning stream and must be normalized before tool-call recovery.
     reasoning = _dict.get("reasoning")
+    if reasoning is None:
+        reasoning = _dict.get("reasoning_content")
     if reasoning is not None:
         additional_kwargs["reasoning"] = reasoning
         reasoning_text = _reasoning_to_text(reasoning)
@@ -336,7 +342,10 @@ class VllmChatModel(ChatOpenAI):
             message = generation.message
             if not isinstance(message, AIMessage):
                 continue
-            reasoning = choice.get("message", {}).get("reasoning")
+            choice_message = choice.get("message", {})
+            reasoning = choice_message.get("reasoning")
+            if reasoning is None:
+                reasoning = choice_message.get("reasoning_content")
             if reasoning is not None:
                 message.additional_kwargs["reasoning"] = reasoning
                 reasoning_text = _reasoning_to_text(reasoning)

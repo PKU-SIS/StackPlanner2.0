@@ -62,6 +62,20 @@ _EXTERNAL_EVIDENCE_PATTERN = re.compile(
     r")",
     re.IGNORECASE,
 )
+_CODER_SOURCE_GAP_PATTERN = re.compile(
+    r"(?:no\s+(?:non[- ]test\s+)?source\s+(?:file\s+)?changed"
+    r"|no\s+non[- ]test\s+source\s+file"
+    r"|implementation\s+(?:change|edit)\s+(?:is\s+)?missing"
+    r"|未(?:修改|变更|产生)[^。；;\n]{0,24}(?:源代码|源码|非测试文件)"
+    r"|没有[^。；;\n]{0,24}(?:源代码|源码|非测试文件)"
+    r")",
+    re.IGNORECASE,
+)
+_CODER_BEHAVIOR_GAP_PATTERN = re.compile(
+    r"(?:observable behavioral check failures|behavior(?:al)? regression|"
+    r"\bAssertionError\b|\bregression\b|行为.{0,16}(?:失败|回归)|测试.{0,16}回归)",
+    re.IGNORECASE,
+)
 _READ_ONLY_REMOTE_API_PATTERN = re.compile(
     r"(?:"
     r"(?:查询|获取|检索|读取|调用|请求).{0,48}(?:官方)?(?:API|接口|端点|网址|URL)"
@@ -132,6 +146,8 @@ class ActionRouter:
         run_id: str | None = None,
     ) -> HandlerResult:
         state = state or {}
+        if isinstance(action_input, dict):
+            self._repair_missing_delegate_target_payload(action_input, state, run_id=run_id)
         try:
             action = action_input if isinstance(action_input, SPAction) else SPAction.from_dict(action_input)
         except ActionValidationError as exc:
@@ -141,6 +157,7 @@ class ActionRouter:
                 run_events=[make_sp_event("sp.action.validation_failed", run_id=run_id, error=str(exc))],
             )
 
+        self._normalize_coder_source_recovery_target(action, state, run_id=run_id)
         self._normalize_delegate_target(action)
         self._normalize_memory_target_ids(action, state)
 
@@ -211,6 +228,10 @@ class ActionRouter:
             )
             delegation_policy.state_update["sp_last_handler_result"] = last_handler
             return delegation_policy
+
+        coder_recovery_policy = self._coder_source_recovery_policy_result(action, state, run_id=run_id)
+        if coder_recovery_policy is not None:
+            return coder_recovery_policy
 
         correction_reflection = self._forced_correction_reflection(
             action,
@@ -312,6 +333,61 @@ class ActionRouter:
         return result
 
     @staticmethod
+    def _latest_incomplete_specialist(
+        state: Mapping[str, Any],
+        *,
+        run_id: str | None,
+    ) -> StackMemoryEntry | None:
+        stack = TaskMemoryStack.from_dict(state.get("sp_task_memory"), run_id=run_id)
+        return next(
+            (
+                entry
+                for entry in reversed(stack.entries)
+                if entry.action == "observe"
+                and entry.actor in {"researcher", "coder", "reporter", "outline", "perception"}
+                and (not run_id or entry.run_id in {None, run_id})
+                and str(entry.metadata.get("completion_status") or "").strip().lower() in {"partial", "blocked"}
+            ),
+            None,
+        )
+
+    @classmethod
+    def _repair_missing_delegate_target_payload(
+        cls,
+        payload: dict[str, Any],
+        state: Mapping[str, Any],
+        *,
+        run_id: str | None,
+    ) -> None:
+        """Repair only unambiguous missing DELEGATE targets before validation."""
+
+        action_type = str(payload.get("action_type") or payload.get("type") or payload.get("action") or "").strip().upper()
+        if action_type != ActionType.DELEGATE.value or str(payload.get("target_agent") or "").strip():
+            return
+        observation = cls._latest_incomplete_specialist(state, run_id=run_id)
+        inferred = observation.actor if observation is not None else None
+        if inferred is None:
+            stage = str(payload.get("stage") or "").strip().lower().replace("_", "-")
+            inferred = {
+                "perception": "perception",
+                "planning": "outline",
+                "research": "researcher",
+                "implementation": "coder",
+                "verification": "coder",
+                "reporting": "reporter",
+                "report": "reporter",
+            }.get(stage)
+        if inferred is None:
+            return
+        payload["target_agent"] = inferred
+        metadata = dict(payload.get("metadata") or {})
+        metadata["target_agent_inference"] = {
+            "to_target": inferred,
+            "reason": "latest_incomplete_specialist" if observation is not None else "unambiguous_stage",
+        }
+        payload["metadata"] = metadata
+
+    @staticmethod
     def _normalize_delegate_target(action: SPAction) -> None:
         """Repair clear researcher/coder role inversions at the action boundary."""
         if action.action_type is not ActionType.DELEGATE:
@@ -352,6 +428,105 @@ class ActionRouter:
         action.target_agent = "coder"
         if action.stage == "research":
             action.stage = "implementation"
+
+    @staticmethod
+    def _normalize_coder_source_recovery_target(
+        action: SPAction,
+        state: Mapping[str, Any],
+        *,
+        run_id: str | None,
+    ) -> None:
+        """Keep an incomplete coder task with coder until it is gradeable.
+
+        A Central model can otherwise switch to reporter/researcher after a
+        partial implementation even though the repository still needs either
+        source recovery or verification. Normalize this protocol boundary
+        while preserving the declared request for auditability.
+        """
+        if action.action_type is not ActionType.DELEGATE:
+            return
+        stack = TaskMemoryStack.from_dict(state.get("sp_task_memory"), run_id=run_id)
+        observation = next(
+            (
+                entry
+                for entry in reversed(stack.entries)
+                if entry.action == "observe"
+                and entry.actor == "coder"
+                and (not run_id or entry.run_id in {None, run_id})
+            ),
+            None,
+        )
+        if observation is None:
+            return
+        completion_status = str(observation.metadata.get("completion_status") or "").strip().lower()
+        gaps = observation.metadata.get("evidence_gaps")
+        gap_values = [str(value).strip() for value in gaps or [] if str(value).strip()] if isinstance(gaps, list) else []
+        gap_text = " ".join(gap_values)
+        if completion_status not in {"partial", "blocked"}:
+            return
+
+        source_recovery = bool(_CODER_SOURCE_GAP_PATTERN.search(gap_text))
+        behavior_recovery = bool(_CODER_BEHAVIOR_GAP_PATTERN.search(gap_text))
+        implementation_verification = observation.metadata.get("implementation_verification")
+        implementation_exists = bool(
+            isinstance(implementation_verification, Mapping)
+            and implementation_verification.get("passed") is True
+        )
+        verification_observation = str(observation.stage or "") == "verification"
+        if not (source_recovery or behavior_recovery or implementation_exists or verification_observation):
+            return
+        if action.target_agent == "coder":
+            if (source_recovery or behavior_recovery) and action.stage == "implementation":
+                return
+            if (implementation_exists or verification_observation) and not (source_recovery or behavior_recovery) and action.stage == "verification":
+                return
+
+        declared_target = action.target_agent
+        declared_stage = action.stage
+        declared_task = action.task
+        action.metadata.setdefault("declared_target_agent", declared_target)
+        action.metadata["target_agent_normalization"] = {
+            "from_target": declared_target,
+            "to_target": "coder",
+            "reason": "coder_source_recovery_required" if source_recovery or behavior_recovery else "coder_verification_required",
+        }
+        action.metadata["declared_stage"] = declared_stage
+        action.target_agent = "coder"
+        if observation.result_ref and observation.result_ref not in action.input_refs:
+            action.input_refs.append(observation.result_ref)
+        concise_gap = "; ".join(gap_values[:3]) or "no non-test source implementation was produced"
+        if source_recovery or behavior_recovery:
+            action.stage = "implementation"
+            action.metadata["requires_implementation"] = True
+            action.metadata["verification_only"] = False
+            action.metadata["tool_names"] = ["read_file", "write_file", "str_replace", "bash"]
+            action.task = (
+                "Recover the previous incomplete coder deliverable. Inspect the current repository, "
+                "implement the smallest correct non-test source change required by the user's task, "
+                "then run focused tests and git diff --check after the edit. Do not stop at another "
+                f"read-only inspection. Remaining evidence gap: {concise_gap}. "
+                f"The CentralAgent's superseded delegation request was: {declared_task}"
+            )
+            action.expected_output = (
+                "A non-test source patch plus observable focused-test and git diff --check evidence; "
+                "report exact environment blockers without claiming they passed."
+            )
+            return
+
+        action.stage = "verification"
+        action.metadata["requires_implementation"] = False
+        action.metadata["verification_only"] = True
+        action.metadata["tool_names"] = ["read_file", "bash"]
+        action.task = (
+            "Verify the existing coder patch without replacing it or writing a report. Inspect the current diff, "
+            "run the narrowest available behavioral checks and git diff --check, and preserve real command exit "
+            f"statuses. If the host environment blocks native tests, report the exact blocker. Remaining evidence "
+            f"gap: {concise_gap}. The CentralAgent's superseded delegation request was: {declared_task}"
+        )
+        action.expected_output = (
+            "Observable verification evidence for the existing patch, or the exact external environment blocker "
+            "that requires canonical grader handoff; do not claim blocked checks passed."
+        )
 
     @staticmethod
     def _normalize_memory_target_ids(
@@ -446,6 +621,57 @@ class ActionRouter:
         """Require a new control decision before repeating the same delegation target."""
         if action.action_type != ActionType.DELEGATE:
             return None
+        if action.stage == "perception":
+            stack = TaskMemoryStack.from_dict(state.get("sp_task_memory"), run_id=run_id)
+            completed_perception = next(
+                (
+                    entry
+                    for entry in reversed(stack.entries)
+                    if entry.action == "observe"
+                    and entry.actor == action.target_agent
+                    and entry.stage == "perception"
+                    and str(entry.metadata.get("completion_status") or "").strip().lower()
+                    == "complete"
+                    and (not run_id or entry.run_id in {None, run_id})
+                ),
+                None,
+            )
+            if completed_perception is not None:
+                content = (
+                    f"Blocked repeated completed perception by {action.target_agent}. "
+                    "Advance to planning, research, implementation, or verification; "
+                    "a new user turn/run is required to reopen perception."
+                )
+                entry = StackMemoryEntry(
+                    run_id=run_id,
+                    actor="policy",
+                    action="delegate_skipped",
+                    content=content,
+                    stage="perception",
+                    priority="high",
+                    metadata={
+                        "action_id": action.action_id,
+                        "target_agent": action.target_agent,
+                        "completed_observation_id": completed_perception.id,
+                        "reason": "perception_already_complete",
+                    },
+                )
+                return HandlerResult(
+                    next_step="continue",
+                    memory_entries=[entry],
+                    idempotency_key=action.idempotency_key,
+                    error=content,
+                    run_events=[
+                        make_sp_event(
+                            "sp.delegate.policy_blocked",
+                            action_id=action.action_id,
+                            run_id=run_id,
+                            target_agent=action.target_agent,
+                            reason="perception_already_complete",
+                            completed_observation_id=completed_perception.id,
+                        )
+                    ],
+                )
         previous = state.get("sp_last_handler_result")
         if not isinstance(previous, Mapping):
             return None
@@ -456,6 +682,34 @@ class ActionRouter:
             # FINISH when no explicit revision intent exists.
             return None
         if previous.get("target_agent") != action.target_agent:
+            return None
+        # A specialist may legitimately be revisited at the next lifecycle
+        # stage (for example perception -> implementation or implementation
+        # -> verification). The checkpoint is intended to stop duplicate work
+        # within one stage, not to prevent the normal staged workflow.
+        previous_stage = previous.get("stage")
+        current_stage = action.stage
+        if previous_stage is not None or current_stage is not None:
+            if previous_stage != current_stage:
+                return None
+
+        # A partial/blocked result is an explicit recovery request, not a
+        # duplicate successful delegation.  The recovery prompt deliberately
+        # asks CentralAgent to call the same specialist again with a different
+        # method.  Blocking that call here forced an unnecessary THINK turn
+        # and, under a slow provider, often consumed the whole run watchdog.
+        stack = TaskMemoryStack.from_dict(state.get("sp_task_memory"), run_id=run_id)
+        latest_observation = next(
+            (
+                entry
+                for entry in reversed(stack.entries)
+                if entry.action == "observe"
+                and str(entry.metadata.get("target_agent") or entry.actor) == action.target_agent
+                and (not run_id or entry.run_id in {None, run_id})
+            ),
+            None,
+        )
+        if latest_observation is not None and str(latest_observation.metadata.get("completion_status") or "").strip().lower() in {"partial", "blocked"}:
             return None
 
         content = f"Blocked a consecutive delegation to {action.target_agent}. CentralAgent must inspect the previous result with THINK, REFLECT, REPLAN, or SUMMARIZE before delegating to the same specialist again."
@@ -483,6 +737,81 @@ class ActionRouter:
                 )
             ],
         )
+
+    def _coder_source_recovery_policy_result(
+        self,
+        action: SPAction,
+        state: Mapping[str, Any],
+        *,
+        run_id: str | None,
+    ) -> HandlerResult | None:
+        """Keep an incomplete coder recovery on the implementation path."""
+        if action.action_type != ActionType.DELEGATE or action.target_agent == "coder":
+            return None
+        stack = TaskMemoryStack.from_dict(state.get("sp_task_memory"), run_id=run_id)
+        observation = next(
+            (entry for entry in reversed(stack.entries) if entry.action == "observe" and entry.actor == "coder"),
+            None,
+        )
+        if observation is None:
+            return None
+        completion_status = str(observation.metadata.get("completion_status") or "").strip().lower()
+        if completion_status not in {"partial", "blocked"}:
+            return None
+        gaps = observation.metadata.get("evidence_gaps")
+        gap_text = " ".join(str(value) for value in gaps) if isinstance(gaps, list) else ""
+        if not _CODER_SOURCE_GAP_PATTERN.search(gap_text):
+            return None
+
+        content = (
+            "Blocked a non-coder delegation while the previous coder recovery "
+            "still lacks a source implementation. CentralAgent must delegate "
+            "coder in implementation stage, inspect the source diff, and "
+            "complete the requested source change before researching or reporting."
+        )
+        entry = StackMemoryEntry(
+            thread_id=None,
+            run_id=run_id,
+            actor="policy",
+            action="delegate_skipped",
+            content=content,
+            stage=action.stage,
+            priority="high",
+            metadata={
+                "action_id": action.action_id,
+                "target_agent": action.target_agent,
+                "required_target_agent": "coder",
+                "reason": "coder_source_recovery_required",
+            },
+        )
+        result = HandlerResult(
+            next_step="continue",
+            memory_entries=[entry],
+            idempotency_key=action.idempotency_key,
+            run_events=[
+                make_sp_event(
+                    "sp.delegate.policy_blocked",
+                    action_id=action.action_id,
+                    run_id=run_id,
+                    target_agent=action.target_agent,
+                    required_target_agent="coder",
+                    reason="coder_source_recovery_required",
+                )
+            ],
+        )
+        result.state_update = self._build_state_update(action, state, stack, result, run_id=run_id)
+        last_handler = dict(result.state_update.get("sp_last_handler_result") or {})
+        last_handler.update(
+            {
+                "action_type": ActionType.THINK.value,
+                "target_agent": None,
+                "requested_action_type": ActionType.DELEGATE.value,
+                "requested_target_agent": action.target_agent,
+                "policy_checkpoint": "coder_source_recovery_required",
+            }
+        )
+        result.state_update["sp_last_handler_result"] = last_handler
+        return result
 
     @staticmethod
     def _delegation_identifier_grounding_result(
@@ -822,6 +1151,7 @@ class ActionRouter:
                 "action_type": action.action_type.value,
                 "idempotency_key": action.idempotency_key,
                 "target_agent": action.target_agent,
+                "stage": action.stage,
                 "loop_iteration": loop_iteration,
                 "run_id": run_id,
             },

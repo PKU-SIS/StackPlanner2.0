@@ -16,7 +16,7 @@ from deerflow.sandbox import tools as tools_module
 from deerflow.sandbox.tools import write_file_tool
 
 
-def _call_write_file(*, content: str, append: bool = False) -> str:
+def _call_write_file(*, content: str, append: bool = False, existing: str | None = None, path: str = "/tmp/test.txt") -> str:
     """Invoke write_file_tool via its underlying callable.
 
     We patch the sandbox initialisation chain to a no-op MagicMock so the test
@@ -36,6 +36,7 @@ def _call_write_file(*, content: str, append: bool = False) -> str:
     ):
         sandbox = MagicMock()
         sandbox.write_file = MagicMock()
+        sandbox.read_file = MagicMock(return_value=existing if existing is not None else MagicMock())
         mock_ensure.return_value = sandbox
         mock_lock.return_value.__enter__ = MagicMock(return_value=None)
         mock_lock.return_value.__exit__ = MagicMock(return_value=False)
@@ -43,7 +44,7 @@ def _call_write_file(*, content: str, append: bool = False) -> str:
         return fn(
             runtime=runtime,
             description="test write",
-            path="/tmp/test.txt",
+            path=path,
             content=content,
             append=append,
         )
@@ -55,6 +56,52 @@ def test_below_cap_succeeds():
     """
     payload = "a" * (79 * 1024)
     result = _call_write_file(content=payload)
+    assert result == "OK"
+
+
+def test_refuses_accidental_destructive_shrink_of_existing_file():
+    existing = "original source\n" * 2000
+    result = _call_write_file(content="only one replacement line\n", existing=existing)
+
+    assert result.startswith("Error: write_file refused a destructive shrink")
+    assert "str_replace" in result
+
+
+def test_refuses_whole_overwrite_of_sizeable_workspace_source_file():
+    existing = "x = 1\n" * 2000
+    result = _call_write_file(
+        content=existing + "x = 2\n",
+        existing=existing,
+        path="/mnt/user-data/workspace/src/module.py",
+    )
+
+    assert result.startswith("Error: write_file refused to overwrite a sizeable source-workspace file")
+    assert "str_replace" in result
+
+
+def test_allows_small_workspace_source_file_overwrite():
+    result = _call_write_file(
+        content="def f():\n    return 1\n",
+        existing="def f():\n    return 0\n",
+        path="/mnt/user-data/workspace/src/module.py",
+    )
+
+    assert result == "OK"
+
+
+def test_rejects_invalid_python_before_workspace_write():
+    result = _call_write_file(
+        content="def broken(:\n    pass\n",
+        path="/mnt/user-data/workspace/src/module.py",
+    )
+
+    assert result.startswith("Error: Python syntax validation rejected the edit")
+    assert "file was not modified" in result
+
+
+def test_allows_intentional_small_file_overwrite():
+    result = _call_write_file(content="new\n", existing="old\n")
+
     assert result == "OK"
 
 

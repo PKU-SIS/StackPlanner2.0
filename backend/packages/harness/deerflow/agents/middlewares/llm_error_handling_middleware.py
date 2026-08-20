@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import re
 import threading
 import time
 from collections.abc import Awaitable, Callable
@@ -38,6 +40,13 @@ _BUSY_PATTERNS = (
     "服务繁忙",
     "稍后重试",
     "请稍后重试",
+)
+_RATE_LIMIT_PATTERNS = (
+    "rate limit",
+    "rate_limit",
+    "too many requests",
+    "actual_rpm",
+    "rpm=",
 )
 _QUOTA_PATTERNS = (
     "insufficient_quota",
@@ -80,6 +89,7 @@ _AUTH_PATTERNS = (
 # "keep one retry" behavior).
 _RETRY_BUDGET_OVERRIDES: dict[str, int] = {
     "StreamChunkTimeoutError": 2,
+    "TimeoutError": 2,
 }
 
 # Exception class names that indicate the upstream stream-chunk watchdog
@@ -97,6 +107,22 @@ _STREAM_DROP_EXCEPTIONS: frozenset[str] = frozenset(
     }
 )
 
+_REQUEST_PACE_LOCK = threading.Lock()
+_REQUEST_PACE_NEXT_AT = 0.0
+
+
+def _reserve_request_slot(min_interval_seconds: float) -> float:
+    """Reserve one process-wide provider slot and return required wait time."""
+
+    global _REQUEST_PACE_NEXT_AT
+    if min_interval_seconds <= 0:
+        return 0.0
+    with _REQUEST_PACE_LOCK:
+        now = time.monotonic()
+        slot = max(now, _REQUEST_PACE_NEXT_AT)
+        _REQUEST_PACE_NEXT_AT = slot + min_interval_seconds
+    return max(0.0, slot - now)
+
 
 class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
     """Retry transient LLM errors and surface graceful assistant messages."""
@@ -110,6 +136,20 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
 
         self.circuit_failure_threshold = app_config.circuit_breaker.failure_threshold
         self.circuit_recovery_timeout_sec = app_config.circuit_breaker.recovery_timeout_sec
+        try:
+            self.min_request_interval_seconds = max(
+                0.0,
+                float(os.environ.get("DEER_FLOW_LLM_MIN_INTERVAL_SECONDS", "0") or 0),
+            )
+        except ValueError:
+            self.min_request_interval_seconds = 0.0
+        try:
+            self.request_timeout_seconds = max(
+                0.0,
+                float(os.environ.get("DEER_FLOW_LLM_REQUEST_TIMEOUT_SECONDS", "0") or 0),
+            )
+        except ValueError:
+            self.request_timeout_seconds = 0.0
 
         # Circuit Breaker state
         self._circuit_lock = threading.Lock()
@@ -188,6 +228,13 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         error_code = _extract_error_code(exc)
         status_code = _extract_status_code(exc)
 
+        # Some OpenAI-compatible gateways report request-rate throttling as
+        # HTTP 400 with text such as ``User Quota (actual_rpm=10)``.  This is
+        # a temporary rate window, not exhausted billing quota.  Detect it
+        # before the intentionally broad quota matcher so the request follows
+        # the retry path and honors the provider's body-level wait hint.
+        if _matches_any(lowered, _RATE_LIMIT_PATTERNS):
+            return True, "busy"
         if _matches_any(lowered, _QUOTA_PATTERNS) or _matches_any(str(error_code).lower(), _QUOTA_PATTERNS):
             return False, "quota"
         if _matches_any(lowered, _AUTH_PATTERNS):
@@ -195,6 +242,7 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
 
         exc_name = exc.__class__.__name__
         if exc_name in {
+            "TimeoutError",
             "APITimeoutError",
             "APIConnectionError",
             "InternalServerError",
@@ -321,6 +369,9 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         attempt = 1
         while True:
             try:
+                wait_seconds = _reserve_request_slot(self.min_request_interval_seconds)
+                if wait_seconds > 0:
+                    time.sleep(wait_seconds)
                 response = handler(request)
                 self._record_success()
                 return response
@@ -373,7 +424,16 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         attempt = 1
         while True:
             try:
-                response = await handler(request)
+                wait_seconds = _reserve_request_slot(self.min_request_interval_seconds)
+                if wait_seconds > 0:
+                    await asyncio.sleep(wait_seconds)
+                if self.request_timeout_seconds > 0:
+                    response = await asyncio.wait_for(
+                        handler(request),
+                        timeout=self.request_timeout_seconds,
+                    )
+                else:
+                    response = await handler(request)
                 self._record_success()
                 return response
             except GraphBubbleUp:
@@ -443,30 +503,41 @@ def _extract_status_code(exc: BaseException) -> int | None:
 def _extract_retry_after_ms(exc: BaseException) -> int | None:
     response = getattr(exc, "response", None)
     headers = getattr(response, "headers", None)
-    if headers is None:
-        return None
-
     raw = None
     header_name = ""
-    for key in ("retry-after-ms", "Retry-After-Ms", "retry-after", "Retry-After"):
-        header_name = key
-        if hasattr(headers, "get"):
-            raw = headers.get(key)
-        if raw:
-            break
-    if not raw:
-        return None
+    if headers is not None:
+        for key in ("retry-after-ms", "Retry-After-Ms", "retry-after", "Retry-After"):
+            header_name = key
+            if hasattr(headers, "get"):
+                raw = headers.get(key)
+            if raw:
+                break
 
-    try:
-        multiplier = 1 if "ms" in header_name.lower() else 1000
-        return max(0, int(float(raw) * multiplier))
-    except (TypeError, ValueError):
+    if raw:
         try:
-            target = parsedate_to_datetime(str(raw))
-            delta = target.timestamp() - time.time()
-            return max(0, int(delta * 1000))
-        except (TypeError, ValueError, OverflowError):
-            return None
+            multiplier = 1 if "ms" in header_name.lower() else 1000
+            return max(0, int(float(raw) * multiplier))
+        except (TypeError, ValueError):
+            try:
+                target = parsedate_to_datetime(str(raw))
+                delta = target.timestamp() - time.time()
+                return max(0, int(delta * 1000))
+            except (TypeError, ValueError, OverflowError):
+                pass
+
+    # Older and custom gateways frequently omit Retry-After and put the
+    # cooldown only in the response body. Match the same forms accepted by
+    # the successful mini-SWE scaffold and add a small safety margin so the
+    # retry does not land on the quota-window boundary.
+    detail = _extract_error_detail(exc)
+    match = re.search(
+        r"(?:try again in|retry after|wait)\s+(\d+(?:\.\d+)?)\s*seconds?(?:\s+before retrying)?",
+        detail,
+        flags=re.IGNORECASE,
+    )
+    if match:
+        return max(0, int(float(match.group(1)) * 1000) + 1000)
+    return None
 
 
 def _extract_error_detail(exc: BaseException) -> str:

@@ -20,6 +20,33 @@ def test_context_prioritizes_pinned_human_feedback_before_recent_memory():
     assert "Do not call sp_recall_memory" in context
 
 
+def test_context_marks_new_conversation_for_one_time_memory_preflight():
+    context = PromptContextBuilder().build(
+        TaskMemoryStack(),
+        current_run_id="run-new",
+        new_conversation=True,
+    )
+
+    assert "conversation_status: new_conversation" in context
+    assert "new_conversation: true" in context
+    assert "first CentralAgent decision is the one-time long-term-memory preflight" in context
+
+
+def test_context_keeps_authoritative_task_contract_visible_to_central():
+    context = PromptContextBuilder().build(
+        TaskMemoryStack(),
+        task_contract={
+            "authoritative": True,
+            "immutable": True,
+            "original_issue": "Remove the automatic transform.",
+            "fail_to_pass": ["tests/test_core.py::test_exact_behavior"],
+        },
+    )
+
+    assert "task_contract (authoritative/immutable)" in context
+    assert "tests/test_core.py::test_exact_behavior" in context
+
+
 def test_context_is_bounded_and_clips_entry_content():
     stack = TaskMemoryStack()
     stack.append_observe("x" * 1000, actor="researcher", result_ref="artifact://research-1")

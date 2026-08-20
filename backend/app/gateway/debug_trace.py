@@ -3,8 +3,9 @@
 The trace is intentionally an *execution audit*, not a chain-of-thought dump.
 It exposes observable model output, explicit SP action reasons, the exact
 task-memory context captured for debug runs, subagent/tool activity, latency,
-errors, and token usage. Provider-private reasoning fields are discarded and
-credential-shaped values are redacted before anything reaches the browser.
+errors, and token usage. When enhanced Debug capture is explicitly enabled,
+provider-returned visible reasoning may be shown in a separately labelled,
+bounded field. Credential-shaped values are always redacted.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from typing import Any
 TRACE_SUMMARY_MAX_CHARS = 1200
 TRACE_DETAIL_MAX_CHARS = 12000
 TRACE_TOTAL_DETAIL_MAX_CHARS = 2_000_000
+TRACE_PROVIDER_REASONING_MAX_CHARS = 12_000
 
 _HIDDEN_REASONING_KEYS = frozenset(
     {
@@ -39,6 +41,93 @@ _API_KEY_PATTERN = re.compile(r"\bsk-[A-Za-z0-9_-]{8,}\b")
 _QUERY_SECRET_PATTERN = re.compile(r"(?i)([?&](?:api[_-]?key|access[_-]?token|token|secret|password)=)[^&#\s]+")
 _TERMINAL_RUN_STATUSES = frozenset({"success", "error", "interrupted", "cancelled"})
 _TERMINAL_SUBAGENT_STATUSES = frozenset({"completed", "failed", "cancelled", "timed_out"})
+
+
+def _stop_diagnostics(record: Any, events: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Derive a safe, explicit reason for the end (or current stall) of a run.
+
+    The run table deliberately keeps a backwards-compatible free-form ``error``
+    field.  StackPlanner events are more specific, so prefer their structured
+    stop/error events and fall back to the persisted lifecycle status.  This is
+    an execution diagnosis, not provider-private reasoning.
+    """
+
+    ordered = sorted(events, key=lambda event: int(event.get("seq") or 0))
+    last_stage: str | None = None
+    last_action: str | None = None
+    last_event_type: str | None = None
+    explicit_reason: str | None = None
+    detail: str | None = None
+
+    for event in ordered:
+        event_type = str(event.get("event_type") or "")
+        payload = _payload(event)
+        content = _content(event)
+        last_event_type = event_type or last_event_type
+        stage = payload.get("stage") or payload.get("current_stage") or content.get("stage") or content.get("current_stage")
+        if stage:
+            last_stage = str(stage)
+        action_id = _action_id(event)
+        if action_id:
+            last_action = action_id
+        candidate = payload.get("stop_reason") or content.get("stop_reason")
+        if isinstance(candidate, str) and candidate.strip():
+            explicit_reason = candidate.strip()
+        candidate_detail = payload.get("stop_detail") or payload.get("error") or content.get("error")
+        if candidate_detail:
+            detail = str(candidate_detail)
+
+        if event_type == "sp.loop.completed":
+            next_step = str(payload.get("next_step") or "")
+            if next_step == "finish":
+                explicit_reason = explicit_reason or "finished"
+            elif next_step == "interrupt":
+                explicit_reason = explicit_reason or "human_input_required"
+            elif next_step == "error_fatal":
+                explicit_reason = explicit_reason or "execution_error"
+        elif event_type == "sp.loop.max_iterations_exceeded":
+            explicit_reason = "max_iterations"
+        elif event_type == "sp.action.validation_failed":
+            explicit_reason = "action_validation_failed"
+        elif event_type == "sp.central.failed":
+            explicit_reason = "central_error"
+        elif event_type in {"llm.error", "run.error"}:
+            explicit_reason = explicit_reason or "provider_error"
+        elif event_type == "sp.handler.failed":
+            explicit_reason = explicit_reason or "handler_error"
+
+    status = _status_value(record)
+    persisted_error = str(getattr(record, "error", None) or "")
+    error_text = f"{detail or ''} {persisted_error}".lower()
+    if status == "timeout" or "timeouterror" in error_text or "timed out" in error_text or "timeout" in error_text:
+        reason = "timeout"
+    elif status == "interrupted":
+        reason = "cancelled"
+    elif "recursion limit" in error_text or "graphrecursionerror" in error_text:
+        reason = "recursion_limit"
+    elif explicit_reason:
+        reason = explicit_reason
+    elif status == "success":
+        reason = "completed"
+    elif status in {"error", "timeout"}:
+        reason = "execution_error"
+    elif status in {"pending", "running"}:
+        reason = "running"
+    else:
+        reason = "unknown"
+
+    if reason == "timeout" and last_stage in {"perception", "planning"} and not last_action:
+        reason = "no_progress_timeout"
+    if reason == "execution_error" and "no progress" in error_text:
+        reason = "no_progress"
+
+    return {
+        "stop_reason": reason,
+        "stop_detail": detail or persisted_error or None,
+        "last_stage": last_stage,
+        "last_action_id": last_action,
+        "last_event_type": last_event_type,
+    }
 
 
 def _clip(value: Any, max_chars: int) -> str:
@@ -141,6 +230,31 @@ def _message_text(content: Any) -> str:
     return "" if content is None else str(content)
 
 
+def _provider_reasoning_text(content: Mapping[str, Any]) -> str | None:
+    """Extract only reasoning text explicitly returned in the API message."""
+
+    additional = content.get("additional_kwargs")
+    sources = [additional, content]
+    for source in sources:
+        if not isinstance(source, Mapping):
+            continue
+        for key in (
+            "reasoning_content",
+            "reasoning",
+            "thinking_content",
+            "thinking",
+        ):
+            if key not in source:
+                continue
+            text = _message_text(source.get(key)).strip()
+            if text:
+                return _clip(
+                    _redact_text(text),
+                    TRACE_PROVIDER_REASONING_MAX_CHARS,
+                )
+    return None
+
+
 def _usage(value: Any) -> dict[str, int] | None:
     if not isinstance(value, Mapping):
         return None
@@ -213,6 +327,7 @@ def _step(
     detail: Any = None,
     tokens: dict[str, int] | None = None,
     error: str | None = None,
+    provider_reasoning: str | None = None,
 ) -> dict[str, Any]:
     if duration_ms is None and started_at is not None and ended_at is not None:
         duration_ms = max(int((ended_at - started_at).total_seconds() * 1000), 0)
@@ -232,11 +347,23 @@ def _step(
         "summary": _clip(_redact_text(summary), TRACE_SUMMARY_MAX_CHARS) if summary else None,
         "detail": sanitize_trace_value(detail) if detail is not None else None,
         "error": _clip(_redact_text(error), TRACE_SUMMARY_MAX_CHARS) if error else None,
+        "provider_reasoning": provider_reasoning,
     }
 
 
-def _llm_steps(events: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
+def _llm_steps(
+    events: list[Mapping[str, Any]],
+    *,
+    run_status: str,
+    expose_provider_reasoning: bool,
+) -> list[dict[str, Any]]:
+    request_events = [event for event in events if event.get("event_type") == "llm.request"]
     response_events = [event for event in events if event.get("event_type") == "llm.ai.response"]
+    response_indexes = {
+        int(index)
+        for event in response_events
+        if (index := _metadata(event).get("llm_call_index")) is not None
+    }
     last_lead_text_seq: int | None = None
     for event in response_events:
         metadata = _metadata(event)
@@ -246,6 +373,37 @@ def _llm_steps(events: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
             last_lead_text_seq = int(event.get("seq") or 0)
 
     steps: list[dict[str, Any]] = []
+    for event in request_events:
+        metadata = _metadata(event)
+        try:
+            call_index = int(metadata.get("llm_call_index"))
+        except (TypeError, ValueError):
+            call_index = int(event.get("seq") or 0)
+        if call_index in response_indexes:
+            continue
+        caller = str(metadata.get("caller") or "lead_agent")
+        actor = (
+            "central"
+            if caller == "lead_agent"
+            else caller.split(":", 1)[1]
+            if ":" in caller
+            else caller
+        )
+        content = _content(event)
+        seq = int(event.get("seq") or 0)
+        steps.append(
+            _step(
+                step_id=f"llm-running-{seq}",
+                seq=seq,
+                kind="model_call",
+                label="中枢模型调用" if caller == "lead_agent" else "子智能体模型调用",
+                actor=actor,
+                status="running" if run_status in {"pending", "running"} else "unknown",
+                started_at=_event_time(event),
+                summary=f"模型正在生成；输入消息 {int(content.get('message_count') or 0)} 条",
+                detail={"model": content.get("model"), "llm_call_index": call_index},
+            )
+        )
     for event in response_events:
         content = _content(event)
         metadata = _metadata(event)
@@ -261,6 +419,11 @@ def _llm_steps(events: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
         raw_tool_calls = content.get("tool_calls")
         tool_calls = [dict(item) for item in raw_tool_calls if isinstance(item, Mapping)] if isinstance(raw_tool_calls, list) else []
         token_usage = _usage(metadata.get("usage") or content.get("usage_metadata"))
+        provider_reasoning = (
+            _provider_reasoning_text(content)
+            if expose_provider_reasoning
+            else None
+        )
 
         if caller == "lead_agent" and tool_calls:
             action_calls = [call for call in tool_calls if str(call.get("name") or "").startswith("sp_")]
@@ -290,6 +453,7 @@ def _llm_steps(events: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
                     summary="；".join(reasons) or text or None,
                     detail={"actions": action_calls or tool_calls},
                     tokens=token_usage,
+                    provider_reasoning=provider_reasoning,
                 )
             )
             continue
@@ -310,6 +474,7 @@ def _llm_steps(events: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
                     summary=text or "模型返回了空文本",
                     detail={"tool_calls": tool_calls} if tool_calls else None,
                     tokens=token_usage,
+                    provider_reasoning=provider_reasoning,
                 )
             )
             continue
@@ -329,6 +494,7 @@ def _llm_steps(events: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
                 summary=text or _tool_request_summary(tool_calls),
                 detail={"tool_calls": tool_calls} if tool_calls else None,
                 tokens=token_usage,
+                provider_reasoning=provider_reasoning,
             )
         )
     return steps
@@ -561,6 +727,17 @@ def _bound_total_detail_size(steps: list[dict[str, Any]]) -> None:
 
     remaining = TRACE_TOTAL_DETAIL_MAX_CHARS
     for step in steps:
+        reasoning = step.get("provider_reasoning")
+        if isinstance(reasoning, str):
+            if len(reasoning) <= remaining:
+                remaining -= len(reasoning)
+            else:
+                step["provider_reasoning"] = (
+                    _clip(reasoning, max(min(remaining, TRACE_PROVIDER_REASONING_MAX_CHARS), 0))
+                    if remaining
+                    else "<trace budget exhausted>"
+                )
+                remaining = 0
         detail = step.get("detail")
         if detail is None:
             continue
@@ -582,6 +759,8 @@ def build_debug_trace(record: Any, events: Sequence[Mapping[str, Any]]) -> dict[
 
     ordered_events = sorted(events, key=lambda event: int(event.get("seq") or 0))
     run_status = _status_value(record)
+    metadata = getattr(record, "metadata", {})
+    enabled = bool(metadata.get("debug_trace_enabled")) if isinstance(metadata, Mapping) else False
     started_at = _parse_datetime(getattr(record, "created_at", None))
     updated_at = _parse_datetime(getattr(record, "updated_at", None))
     event_times = [value for event in ordered_events if (value := _event_time(event)) is not None]
@@ -591,7 +770,11 @@ def build_debug_trace(record: Any, events: Sequence[Mapping[str, Any]]) -> dict[
 
     steps = [
         *_auxiliary_steps(ordered_events),
-        *_llm_steps(ordered_events),
+        *_llm_steps(
+            ordered_events,
+            run_status=run_status,
+            expose_provider_reasoning=enabled,
+        ),
         *_action_steps(ordered_events, run_status),
         *_subagent_steps(ordered_events, run_status),
     ]
@@ -608,8 +791,10 @@ def build_debug_trace(record: Any, events: Sequence[Mapping[str, Any]]) -> dict[
     )
     _bound_total_detail_size(steps)
 
-    metadata = getattr(record, "metadata", {})
-    enabled = bool(metadata.get("debug_trace_enabled")) if isinstance(metadata, Mapping) else False
+    has_provider_reasoning = any(
+        bool(step.get("provider_reasoning")) for step in steps
+    )
+    diagnostics = _stop_diagnostics(record, ordered_events)
     return {
         "thread_id": str(getattr(record, "thread_id", "")),
         "run_id": str(getattr(record, "run_id", "")),
@@ -620,6 +805,7 @@ def build_debug_trace(record: Any, events: Sequence[Mapping[str, Any]]) -> dict[
         "ended_at": _iso(ended_at),
         "duration_ms": duration_ms,
         "event_count": len(ordered_events),
+        **diagnostics,
         "tokens": {
             "input": int(getattr(record, "total_input_tokens", 0) or 0),
             "output": int(getattr(record, "total_output_tokens", 0) or 0),
@@ -632,12 +818,19 @@ def build_debug_trace(record: Any, events: Sequence[Mapping[str, Any]]) -> dict[
         "steps": steps,
         "disclosure": {
             "hidden_chain_of_thought": False,
+            "provider_returned_reasoning": has_provider_reasoning,
+            "reasoning_notice": (
+                "This is reasoning text returned by the configured model API; it may be incomplete and is not guaranteed to be the model's full internal chain of thought."
+                if has_provider_reasoning
+                else None
+            ),
             "shows": [
                 "observable_model_output",
                 "explicit_action_reasons",
                 "captured_task_context",
                 "tool_and_subagent_io",
                 "latency_and_token_usage",
+                *( ["provider_returned_reasoning"] if has_provider_reasoning else [] ),
             ],
         },
     }

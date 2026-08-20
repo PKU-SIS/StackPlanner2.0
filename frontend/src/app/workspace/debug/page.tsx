@@ -93,7 +93,10 @@ function StepIcon({ step }: { step: DebugTraceStep }) {
 }
 
 function TraceStepRow({ step }: { step: DebugTraceStep }) {
-  const hasDetails = step.detail !== null || Boolean(step.error);
+  const hasDetails =
+    step.detail !== null ||
+    Boolean(step.error) ||
+    Boolean(step.provider_reasoning);
   return (
     <details
       className={cn(
@@ -143,6 +146,19 @@ function TraceStepRow({ step }: { step: DebugTraceStep }) {
               {step.error}
             </p>
           )}
+          {step.provider_reasoning && (
+            <div className="mb-3 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">API 返回的 Reasoning</Badge>
+                <span className="text-muted-foreground text-xs">
+                  可能不完整，不代表模型全部内部思维链
+                </span>
+              </div>
+              <pre className="max-h-96 overflow-auto rounded-md border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
+                {step.provider_reasoning}
+              </pre>
+            </div>
+          )}
           {step.detail !== null && (
             <pre className="bg-muted max-h-96 overflow-auto rounded-md p-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
               {JSON.stringify(step.detail, null, 2)}
@@ -176,7 +192,12 @@ export default function DebugTracePage() {
   const threads = useMemo(() => threadPages?.pages.flat() ?? [], [threadPages]);
   const { data: runs = [], isLoading: runsLoading } = useThreadRuns(
     selectedThreadId,
-    { enabled: Boolean(selectedThreadId) },
+    {
+      enabled: Boolean(selectedThreadId),
+      // A run is created by the chat page, not this page. Keep discovering
+      // newly-created/running runs while the trace view is open.
+      refetchInterval: 1500,
+    },
   );
   const {
     data: trace,
@@ -400,6 +421,33 @@ export default function DebugTracePage() {
                           {trace.enabled ? "增强追踪" : "基础追踪"}
                         </Badge>
                       </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="gap-2 py-4 sm:col-span-2 lg:col-span-4">
+                    <CardContent className="px-4">
+                      <div className="text-muted-foreground text-xs">
+                        停止原因
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <Badge variant={statusVariant(trace.stop_reason)}>
+                          {trace.stop_reason}
+                        </Badge>
+                        {trace.last_stage && (
+                          <span className="text-muted-foreground text-sm">
+                            最后阶段：{trace.last_stage}
+                          </span>
+                        )}
+                        {trace.last_action_id && (
+                          <span className="text-muted-foreground max-w-full truncate text-sm">
+                            最后动作：{trace.last_action_id}
+                          </span>
+                        )}
+                      </div>
+                      {trace.stop_detail && (
+                        <p className="text-muted-foreground mt-2 break-words text-sm">
+                          {trace.stop_detail}
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
                 </div>

@@ -67,6 +67,41 @@ _DEFAULT_WRITE_FILE_ERROR_MAX_CHARS = 2000
 # 0 (or negative) to disable the guard entirely.
 _WRITE_FILE_CONTENT_MAX_BYTES = 80 * 1024
 _WRITE_FILE_MAX_BYTES_ENV = "DEERFLOW_WRITE_FILE_MAX_BYTES"
+# A full-file overwrite that drops almost all of a sizeable source file is
+# overwhelmingly likely to be an LLM truncation, not an intentional edit.
+# Surgical edits use str_replace; this guard protects source/test files from
+# silent destructive rewrites while leaving small files and append mode alone.
+_WRITE_FILE_SHRINK_GUARD_MIN_BYTES = 16 * 1024
+_WRITE_FILE_SHRINK_GUARD_RATIO = 0.25
+# Whole-file overwrites inside a source workspace are especially risky: a
+# coder can produce a plausible-looking file while silently dropping methods,
+# imports, or indentation. Large source files must be edited with str_replace
+# (or an explicit shell operation) so the tool boundary fails closed before the
+# model can destroy the repository state. Output/report files keep the normal
+# write_file behavior.
+_WRITE_FILE_WORKSPACE_OVERWRITE_GUARD_MIN_BYTES = 8 * 1024
+# Bash redirections bypass the write_file/str_replace edit guards. Refuse to
+# truncate an already sizeable workspace file through ``>``/``&>``; source
+# edits must go through a file tool so the surrounding content can be checked.
+_BASH_REDIRECT_OVERWRITE_GUARD_MIN_BYTES = 4 * 1024
+_BASH_TRUNCATING_REDIRECTS = frozenset({">", ">|", "&>"})
+
+
+def _python_workspace_syntax_error(path: str, content: str) -> str | None:
+    """Return an actionable error before an edit can leave invalid Python."""
+    if not path.startswith(f"{VIRTUAL_PATH_PREFIX}/workspace/") or not path.lower().endswith(".py"):
+        return None
+    try:
+        compile(content, path, "exec")
+    except SyntaxError as exc:
+        location = f"line {exc.lineno}" if exc.lineno else "an unknown line"
+        detail = str(exc.msg or "invalid syntax")
+        return (
+            f"Error: Python syntax validation rejected the edit at {location}: {detail}. "
+            "Re-read the complete surrounding block, make a surgical correction, "
+            "and try again. The file was not modified."
+        )
+    return None
 _LOCAL_BASH_CWD_COMMANDS = {"cd", "pushd"}
 _LOCAL_BASH_COMMAND_WRAPPERS = {"command", "builtin"}
 _LOCAL_BASH_COMMAND_PREFIX_KEYWORDS = {"!", "{", "case", "do", "elif", "else", "for", "if", "select", "then", "time", "until", "while"}
@@ -993,6 +1028,47 @@ def _is_shell_assignment(token: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name))
 
 
+def _validate_bash_redirect_overwrites(command: str, thread_data: ThreadDataState) -> None:
+    """Reject shell truncation of sizeable existing workspace files.
+
+    ``bash`` is intentionally available to coders for tests and bounded
+    scripts, but a command such as ``python generate.py > docs/index.txt`` can
+    silently destroy a source/documentation file without passing through the
+    write guards. This is a conservative edit-safety check, not a sandbox
+    boundary: new files, append redirects, and small files remain allowed.
+    """
+
+    workspace_value = thread_data.get("workspace_path")
+    if not isinstance(workspace_value, str) or not workspace_value:
+        return
+    workspace = Path(workspace_value).resolve()
+    tokens = _split_shell_tokens(command)
+    for index, token in enumerate(tokens):
+        if token not in _BASH_TRUNCATING_REDIRECTS:
+            continue
+        target_index = index + 1
+        if target_index >= len(tokens):
+            continue
+        target = tokens[target_index]
+        if not target or target in _SHELL_COMMAND_SEPARATORS or target.startswith(("$", "`")):
+            continue
+        candidate = Path(target)
+        if not candidate.is_absolute():
+            candidate = workspace / candidate
+        try:
+            resolved = candidate.resolve(strict=False)
+            if not resolved.is_relative_to(workspace):
+                continue
+            if resolved.is_file() and resolved.stat().st_size >= _BASH_REDIRECT_OVERWRITE_GUARD_MIN_BYTES:
+                raise PermissionError(
+                    "Refusing shell redirection that would truncate an existing sizeable workspace file: "
+                    f"{target}. Re-read the file and use str_replace for a surgical edit, "
+                    "or write a new output path."
+                )
+        except FileNotFoundError:
+            continue
+
+
 def _is_allowed_local_bash_absolute_path(path: str, allowed_paths: list[str], *, allow_system_paths: bool) -> bool:
     # Check for MCP filesystem server allowed paths
     if any(path.startswith(allowed_path) or path == allowed_path.rstrip("/") for allowed_path in allowed_paths):
@@ -1199,8 +1275,9 @@ def validate_local_bash_command_paths(command: str, thread_data: ThreadDataState
     In local mode, commands must use virtual paths under /mnt/user-data for
     user data access. Skills paths under /mnt/skills, ACP workspace paths
     under /mnt/acp-workspace, and custom mount container paths (configured in
-    config.yaml) are allowed (path-traversal checks only; write prevention
-    for bash commands is not enforced here).
+    config.yaml) are allowed. A separate edit-safety check rejects truncating
+    sizeable existing workspace files through shell redirection; this does not
+    replace the sandbox's filesystem boundary.
     A small allowlist of common system path prefixes is kept for executable
     and device references (e.g. /bin/sh, /dev/null).
     """
@@ -1215,6 +1292,7 @@ def validate_local_bash_command_paths(command: str, thread_data: ThreadDataState
     unsafe_paths: list[str] = []
     allowed_paths = _get_mcp_allowed_paths()
     _validate_local_bash_shell_tokens(command, allowed_paths)
+    _validate_bash_redirect_overwrites(command, thread_data)
     url_spans = _non_file_url_spans(command)
 
     for match in _ABSOLUTE_PATH_PATTERN.finditer(command):
@@ -1705,8 +1783,12 @@ def bash_tool(runtime: Runtime, description: str, command: str) -> str:
 
 
     - Use `python` to run Python code.
-    - Prefer a thread-local virtual environment in `/mnt/user-data/workspace/.venv`.
-    - Use `python -m pip` (inside the virtual environment) to install Python packages.
+    - Prefer the already configured environment and a thread-local virtual
+      environment in `/mnt/user-data/workspace/.venv` when one already exists.
+    - Do not create a virtualenv or install packages just to make a verification
+      command run. Only use `python -m pip` when the delegated task explicitly
+      requests environment setup; otherwise report missing dependencies and
+      continue with the available source-level checks.
     - Run calculations, scripts, tests, and verification in the foreground. Never append `&`
       to evade a timeout; fix or bound the computation so its exit status and output are observed.
     - To start a long-lived process such as a web server, ALWAYS run it in the background with its
@@ -2162,6 +2244,9 @@ def write_file_tool(
         append: Whether to append content to the end of the file instead of overwriting it. Defaults to False.
     """
     if not append:
+        syntax_error = _python_workspace_syntax_error(path, content)
+        if syntax_error:
+            return syntax_error
         max_bytes = _effective_write_file_max_bytes()
         if max_bytes > 0:
             content_bytes = len(content.encode("utf-8"))
@@ -2185,6 +2270,41 @@ def write_file_tool(
                 path = _resolve_and_validate_user_data_path(path, thread_data)
             # Custom mount paths are resolved by LocalSandbox._resolve_path()
         with get_file_operation_lock(sandbox, path):
+            if not append:
+                try:
+                    existing_content = sandbox.read_file(path)
+                except (FileNotFoundError, SandboxNotFoundError, OSError):
+                    existing_content = None
+                except Exception:
+                    # The sandbox may not expose a readable snapshot (for
+                    # example while a remote mount is initializing). The
+                    # existing read-before-write middleware remains the
+                    # primary safety gate; do not turn a snapshot failure into
+                    # a write outage.
+                    existing_content = None
+                if isinstance(existing_content, str):
+                    existing_bytes = len(existing_content.encode("utf-8"))
+                    new_bytes = len(content.encode("utf-8"))
+                    if (
+                        requested_path.startswith(f"{VIRTUAL_PATH_PREFIX}/workspace/")
+                        and existing_bytes >= _WRITE_FILE_WORKSPACE_OVERWRITE_GUARD_MIN_BYTES
+                    ):
+                        return (
+                            "Error: write_file refused to overwrite a sizeable source-workspace file "
+                            f"({existing_bytes} bytes). Re-read the current file and use str_replace "
+                            "for a surgical edit; use write_file only for a new/small file or an explicit "
+                            "shell operation when replacing the entire source file is intentional."
+                        )
+                    if (
+                        existing_bytes >= _WRITE_FILE_SHRINK_GUARD_MIN_BYTES
+                        and new_bytes < existing_bytes * _WRITE_FILE_SHRINK_GUARD_RATIO
+                    ):
+                        return (
+                            "Error: write_file refused a destructive shrink of an existing file "
+                            f"from {existing_bytes} to {new_bytes} bytes. Re-read the current file "
+                            "and use str_replace for a surgical edit, or use an explicit shell "
+                            "operation when replacing the entire file is intentional."
+                        )
             sandbox.write_file(path, content, append)
         return "OK"
     except SandboxError as e:
@@ -2260,6 +2380,9 @@ def str_replace_tool(
                 content = content.replace(old_str, new_str)
             else:
                 content = content.replace(old_str, new_str, 1)
+            syntax_error = _python_workspace_syntax_error(requested_path, content)
+            if syntax_error:
+                return syntax_error
             sandbox.write_file(path, content)
         return "OK"
     except SandboxError as e:

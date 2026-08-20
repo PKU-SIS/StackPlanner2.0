@@ -1075,6 +1075,98 @@ class TestToolFrequencyDetection:
         assert _HARD_STOP_MSG in msg.content
 
 
+class TestTotalToolCallDetection:
+    """Tests for the optional per-run total tool-call guard (Layer 3)."""
+
+    @staticmethod
+    def _alternating_call(index: int):
+        if index % 2:
+            return {"name": "read_file", "id": f"read_{index}", "args": {"path": f"/file_{index}.py"}}
+        return _bash_call(f"cmd_{index}")
+
+    def test_disabled_by_default(self):
+        mw = LoopDetectionMiddleware(tool_freq_warn=100, tool_freq_hard_limit=200)
+        runtime = _make_runtime()
+
+        for i in range(12):
+            result = mw._apply(_make_state(tool_calls=[self._alternating_call(i)]), runtime)
+            assert result is None
+        assert not mw._tool_total
+
+    def test_warns_once_across_alternating_tool_types(self):
+        mw = LoopDetectionMiddleware(
+            tool_freq_warn=100,
+            tool_freq_hard_limit=200,
+            tool_total_warn=4,
+            tool_total_hard_limit=7,
+        )
+        runtime = _make_runtime()
+
+        for i in range(3):
+            assert mw._apply(_make_state(tool_calls=[self._alternating_call(i)]), runtime) is None
+
+        assert mw._apply(_make_state(tool_calls=[self._alternating_call(3)]), runtime) is None
+        queued = mw._pending_warnings[_pending_key()]
+        assert len(queued) == 1
+        assert "4 total tool calls" in queued[0]
+
+        assert mw._apply(_make_state(tool_calls=[self._alternating_call(4)]), runtime) is None
+        assert len(mw._pending_warnings[_pending_key()]) == 1
+
+    def test_hard_stops_on_total_across_alternating_tool_types(self):
+        mw = LoopDetectionMiddleware(
+            tool_freq_warn=100,
+            tool_freq_hard_limit=200,
+            tool_total_warn=3,
+            tool_total_hard_limit=5,
+        )
+        runtime = _make_runtime()
+
+        for i in range(4):
+            mw._apply(_make_state(tool_calls=[self._alternating_call(i)]), runtime)
+
+        result = mw._apply(_make_state(tool_calls=[self._alternating_call(4)]), runtime)
+        assert result is not None
+        msg = result["messages"][0]
+        assert msg.tool_calls == []
+        assert "Total tool calls reached 5" in msg.content
+        assert mw.consume_stop_reason("test-run") == "loop_capped"
+
+    def test_counts_parallel_tool_calls(self):
+        mw = LoopDetectionMiddleware(
+            tool_freq_warn=100,
+            tool_freq_hard_limit=200,
+            tool_total_warn=3,
+            tool_total_hard_limit=4,
+        )
+        runtime = _make_runtime()
+
+        first = [self._alternating_call(0), self._alternating_call(1)]
+        second = [self._alternating_call(2), self._alternating_call(3)]
+        assert mw._apply(_make_state(tool_calls=first), runtime) is None
+        result = mw._apply(_make_state(tool_calls=second), runtime)
+
+        assert result is not None
+        assert "Total tool calls reached 4" in result["messages"][0].content
+
+    def test_after_agent_clears_only_current_run_total(self):
+        mw = LoopDetectionMiddleware(
+            tool_freq_warn=100,
+            tool_freq_hard_limit=200,
+            tool_total_warn=3,
+            tool_total_hard_limit=5,
+        )
+        runtime_a = _make_runtime("thread-A", "run-A")
+        runtime_b = _make_runtime("thread-A", "run-B")
+
+        mw._apply(_make_state(tool_calls=[self._alternating_call(0)]), runtime_a)
+        mw._apply(_make_state(tool_calls=[self._alternating_call(1)]), runtime_b)
+        mw.after_agent({}, runtime_a)
+
+        assert ("thread-A", "run-A") not in mw._tool_total
+        assert mw._tool_total[("thread-A", "run-B")] == 1
+
+
 class TestFromConfig:
     """Tests for LoopDetectionMiddleware.from_config — the sole validated construction path."""
 

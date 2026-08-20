@@ -28,7 +28,7 @@ def _record(**overrides):
     return SimpleNamespace(**values)
 
 
-def test_build_debug_trace_groups_actions_subagents_and_redacts_secrets():
+def test_build_debug_trace_groups_actions_and_exposes_bounded_api_reasoning_in_debug_mode():
     from app.gateway.debug_trace import build_debug_trace
 
     events = [
@@ -46,7 +46,9 @@ def test_build_debug_trace_groups_actions_subagents_and_redacts_secrets():
             "content": {
                 "type": "ai",
                 "content": "",
-                "additional_kwargs": {"reasoning_content": "private hidden reasoning"},
+                "additional_kwargs": {
+                    "reasoning_content": "API-visible reasoning with sk-secret-reasoning"
+                },
                 "tool_calls": [
                     {
                         "name": "sp_delegate",
@@ -192,8 +194,61 @@ def test_build_debug_trace_groups_actions_subagents_and_redacts_secrets():
     serialized = json.dumps(trace, ensure_ascii=False)
     assert "sk-secret-value" not in serialized
     assert "Bearer secret" not in serialized
-    assert "private hidden reasoning" not in serialized
+    decision = next(step for step in trace["steps"] if step["kind"] == "decision")
+    assert "API-visible reasoning" in decision["provider_reasoning"]
+    assert "sk-secret-reasoning" not in decision["provider_reasoning"]
+    assert trace["disclosure"]["provider_returned_reasoning"] is True
+    assert "full internal chain of thought" in trace["disclosure"]["reasoning_notice"]
     assert "[REDACTED]" in serialized
+
+
+def test_build_debug_trace_hides_provider_reasoning_without_enhanced_debug():
+    from app.gateway.debug_trace import build_debug_trace
+
+    trace = build_debug_trace(
+        _record(metadata={"debug_trace_enabled": False}),
+        [
+            {
+                "seq": 1,
+                "event_type": "llm.ai.response",
+                "created_at": "2026-08-09T10:00:01+00:00",
+                "content": {
+                    "type": "ai",
+                    "content": "answer",
+                    "additional_kwargs": {
+                        "reasoning_content": "provider-only reasoning"
+                    },
+                },
+                "metadata": {"caller": "lead_agent", "llm_call_index": 1},
+            }
+        ],
+    )
+
+    assert trace["steps"][0]["provider_reasoning"] is None
+    assert trace["disclosure"]["provider_returned_reasoning"] is False
+    assert "provider-only reasoning" not in json.dumps(trace)
+
+
+def test_build_debug_trace_shows_unfinished_llm_request_as_running():
+    from app.gateway.debug_trace import build_debug_trace
+
+    trace = build_debug_trace(
+        _record(status=SimpleNamespace(value="running"), updated_at=None),
+        [
+            {
+                "seq": 1,
+                "event_type": "llm.request",
+                "created_at": "2026-08-09T10:00:01+00:00",
+                "content": {"message_count": 7, "model": "Qwen3-32B"},
+                "metadata": {"caller": "lead_agent", "llm_call_index": 1},
+            }
+        ],
+    )
+
+    step = trace["steps"][0]
+    assert step["status"] == "running"
+    assert step["label"] == "中枢模型调用"
+    assert "输入消息 7 条" in step["summary"]
 
 
 def test_build_debug_trace_exposes_exact_prompt_context_but_not_hidden_reasoning():
@@ -222,6 +277,32 @@ def test_build_debug_trace_exposes_exact_prompt_context_but_not_hidden_reasoning
     decision = next(step for step in trace["steps"] if step["kind"] == "decision_context")
     assert "先研究后写报告" in decision["detail"]["prompt_context"]
     assert trace["disclosure"]["hidden_chain_of_thought"] is False
+
+
+def test_build_debug_trace_exposes_explicit_stop_diagnostics_for_stalled_timeout():
+    from app.gateway.debug_trace import build_debug_trace
+
+    trace = build_debug_trace(
+        _record(
+            status=SimpleNamespace(value="timeout"),
+            error="TimeoutError",
+            updated_at="2026-08-09T10:15:00+00:00",
+        ),
+        [
+            {
+                "seq": 1,
+                "event_type": "sp.loop.context_prepared",
+                "created_at": "2026-08-09T10:00:01+00:00",
+                "content": {"payload": {"stage": "perception"}},
+                "metadata": {"source": "stackplanner"},
+            },
+        ],
+    )
+
+    assert trace["stop_reason"] == "no_progress_timeout"
+    assert trace["last_stage"] == "perception"
+    assert trace["last_action_id"] is None
+    assert trace["stop_detail"] == "TimeoutError"
 
 
 def test_build_debug_trace_gives_repeated_subagent_message_indexes_unique_step_ids():

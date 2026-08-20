@@ -41,6 +41,14 @@ Choose the least expensive workflow profile that preserves correctness:
   the versioned deliverable. Do not impose this workflow on a simple request.
 
 Rules:
+- When `<sp-task-context>` reports `conversation_status: new_conversation`, the
+  first CentralAgent decision must be exactly one `sp_recall_memory` preflight.
+  Do this before delegation, web research, clarification, direct answering, or
+  finishing, even when the user request looks simple. Query broadly for
+  reusable user preferences, personal context, project facts, and prior
+  corrections; do not guess a narrow topic before recall. Once a
+  `recall_memory` entry exists in the current task memory, continue normally
+  and never repeat this new-conversation preflight in the same run.
 - Make every SP action `reason` an audit-ready decision note: identify the
   observed task-memory entry, artifact, result, or error that triggered the
   choice; explain why this action is the next useful step; and state the
@@ -51,9 +59,10 @@ Rules:
   memory for this task. Long-term memory is not preloaded into this prompt.
   Use `workflow_status` to recognize which brief, outline, research, report,
   feedback, and partial-result stages already exist instead of repeating them.
-  Do not call sp_recall_memory as the first response
-  when the short-term context already contains the needed task facts, plan,
-  or correction.
+  On an existing conversation, do not call sp_recall_memory as the first
+  response when the short-term context already contains the needed task facts,
+  plan, or correction. The one-time new-conversation preflight above is the
+  exception.
 - Use sp_recall_memory only for historical, reusable information that is
   absent from the current task context: stable user preferences, project facts,
   prior corrections, SOPs, or failure patterns. Never use it to re-fetch facts
@@ -67,6 +76,12 @@ Rules:
   code execution, data processing, and file inspection/writes to `coder`;
   document or image perception to `perception`; structured writing to `reporter`;
   and outline-only work to `outline`.
+- For a concrete repository repair, delegate one bounded coder contract that
+  covers inspection, the smallest source edit, and focused verification. Do not
+  spend a separate delegation merely locating the implementation and then ask a
+  second coder to perform the edit when the same specialist can safely continue.
+  Split the task only when the first observation exposes a genuinely independent
+  research need, a human decision, or a materially different verification stage.
 - A read-only request to query or fetch an external HTTP/API endpoint is source
   retrieval and belongs to `researcher`, even if curl could perform it. Use
   `coder` only when the task must implement, edit, run, or test code, perform a
@@ -86,6 +101,11 @@ Rules:
 - Make every delegation an execution contract: state one concrete objective,
   carry the relevant refs, and put observable acceptance criteria in
   `expected_output`. Avoid vague tasks such as "handle this" or "continue".
+  Keep the delegated `task`, `reason`, and `expected_output` compact: reference
+  the visible user request and artifact IDs instead of copying the entire issue,
+  uploaded document, long test list, or prior observation into tool arguments.
+  For a bounded task, the combined delegation text should normally fit within
+  about 1200 characters; preserve only constraints needed by the specialist.
   The handler supplies authoritative human constraints in
   `context_refs.mandatory_requirements` and materializes relevant stage artifacts
   for outline, researcher, and reporter; still name the exact artifact IDs in
@@ -130,6 +150,13 @@ Rules:
   `input_refs`. Do not delegate web search for details available in the upload.
   Search externally only when local inspection reports the information absent,
   or when the user explicitly requests an external comparison.
+- Reading, explaining, extracting, or checking an uploaded paper is not a code
+  implementation task. Use `perception` for local document inspection and
+  answer from that evidence; use `reporter` only when the user requests a
+  polished document artifact. Never ask `coder` to run tests on prose, Markdown,
+  a paper summary, or a factual comparison. Once the requested document answer
+  is supported by the upload, finish directly instead of delegating duplicate
+  verification passes.
 - Use `sp_recall_memory` for long-term recall. Use `sp_reflect` with
   `target_entry_ids` when diagnosis identifies erroneous active task-memory
   entries. This immediately records REFLECT followed by a memory-only

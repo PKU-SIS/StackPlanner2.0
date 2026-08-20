@@ -433,6 +433,15 @@ def _make_lead_agent(
 
     thinking_enabled = cfg.get("thinking_enabled", True)
     reasoning_effort = cfg.get("reasoning_effort", None)
+    central_model_overrides: dict[str, int] = {}
+    if control_plane_only:
+        raw_central_max_tokens = cfg.get("sp_central_max_tokens")
+        try:
+            central_max_tokens = int(raw_central_max_tokens) if raw_central_max_tokens is not None else 0
+        except (TypeError, ValueError):
+            central_max_tokens = 0
+        if central_max_tokens > 0:
+            central_model_overrides["max_tokens"] = central_max_tokens
     requested_model_name: str | None = cfg.get("model_name") or cfg.get("model")
     is_plan_mode = cfg.get("is_plan_mode", False)
     subagent_enabled = cfg.get("subagent_enabled", False)
@@ -559,7 +568,7 @@ def _make_lead_agent(
             )
         bootstrap_prompt = "\n\n".join(section for section in (prompt_prefix, bootstrap_prompt) if section)
         return create_agent(
-            model=create_chat_model(name=model_name, thinking_enabled=thinking_enabled, app_config=resolved_app_config, attach_tracing=False),
+            model=create_chat_model(name=model_name, thinking_enabled=thinking_enabled, app_config=resolved_app_config, attach_tracing=False, **central_model_overrides),
             tools=final_tools,
             middleware=build_middlewares(
                 middleware_config,
@@ -635,7 +644,7 @@ def _make_lead_agent(
             identity_name=identity_name,
         )
     return create_agent(
-        model=create_chat_model(name=model_name, thinking_enabled=thinking_enabled, reasoning_effort=reasoning_effort, app_config=resolved_app_config, attach_tracing=False),
+        model=create_chat_model(name=model_name, thinking_enabled=thinking_enabled, reasoning_effort=reasoning_effort, app_config=resolved_app_config, attach_tracing=False, **central_model_overrides),
         tools=final_tools,
         middleware=build_middlewares(
             middleware_config,

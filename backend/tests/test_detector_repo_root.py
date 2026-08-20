@@ -35,6 +35,14 @@ def test_unmarked_location_raises_instead_of_scanning_nothing(tmp_path: Path):
         resolve_repo_root(start)
 
 
+def test_empty_git_placeholder_is_not_a_repository(tmp_path: Path):
+    (tmp_path / ".git").mkdir()
+    start = tmp_path / "moved" / "detector.py"
+
+    with pytest.raises(RuntimeError, match=r"\.git"):
+        resolve_repo_root(start)
+
+
 def test_cli_shims_delegate_to_their_detectors(capsys: pytest.CaptureFixture[str]):
     # conftest puts scripts/ on sys.path; --help proves the shim resolves and
     # invokes the right detector main without running a scan.

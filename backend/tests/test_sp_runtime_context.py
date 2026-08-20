@@ -138,6 +138,27 @@ def test_delegate_skill_policy_rejects_disabled_or_invented_skill():
         )
 
 
+def test_delegate_coder_skill_policy_ignores_unknown_optional_labels():
+    config = SubagentConfig(name="sp-coder", description="code", skills=[])
+    task = SPSubagentTask(
+        action_id="delegate-coder-skill-labels",
+        subagent_type="coder",
+        task="Implement the fix and run tests",
+        description="Repository change",
+        metadata={"skill_names": ["code-inspection", "unit-testing"]},
+    )
+
+    selected = _apply_task_skill_policy(
+        config,
+        task,
+        available_skill_names=frozenset({"deep-research"}),
+    )
+
+    assert selected.skills == []
+    assert "skill_names" not in task.metadata
+    assert task.metadata["ignored_skill_names"] == ["code-inspection", "unit-testing"]
+
+
 def test_delegate_skill_policy_treats_none_sentinel_as_omitted_selection():
     config = SubagentConfig(name="sp-coder", description="code", skills=[])
     task = SPSubagentTask(
@@ -264,6 +285,7 @@ def test_delegate_tool_policy_maps_interpreter_aliases_to_bash():
                 "python",
                 "read_file",
                 "python3",
+                "git",
                 "write_file",
             ]
         },
@@ -486,6 +508,11 @@ def test_progress_executor_streams_skill_and_internal_steps_with_parent_id():
     assert {event["task_id"] for event in events} == {"tool-delegate"}
     assert events[1]["message"]["name"] == "Skill: deep-research"
     assert events[2]["message"]["name"] == "web_search"
+    assert events[0]["protocol_version"] == "1.0"
+    assert events[0]["message_type"] == "progress"
+    assert events[0]["a2a_task_id"] == task.action_id
+    assert events[-1]["message_type"] == "task_result"
+    assert events[-1]["result_envelope"]["receiver"] == "central"
 
 
 @pytest.mark.parametrize(
@@ -602,6 +629,120 @@ def test_sp_executor_provider_falls_back_to_factory_user_and_memory_scope(monkey
             }
         ]
     ]
+
+
+def test_sp_executor_provider_applies_runtime_subagent_execution_overrides(monkeypatch):
+    captured = {}
+    config = SubagentConfig(
+        name="sp-coder",
+        description="coder",
+        skills=[],
+        internal=True,
+        timeout_seconds=900,
+    )
+
+    class FakeExecutor:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def execute(self, prompt):
+            return SimpleNamespace(
+                status="completed",
+                result="done",
+                error=None,
+                stop_reason=None,
+                task_id="coder-task",
+                token_usage_records=[],
+            )
+
+    monkeypatch.setattr("deerflow.subagents.get_subagent_config", lambda name, app_config=None: config)
+    monkeypatch.setattr("deerflow.subagents.SubagentExecutor", FakeExecutor)
+    provider = DR2SPExecutorProvider(
+        app_config=SimpleNamespace(),
+        parent_model="test-model",
+        runnable_config={
+            "configurable": {
+                "sp_subagent_timeout_seconds": 45,
+                "sp_subagent_max_tokens": 512,
+                "sp_subagent_max_tokens_by_role": {"coder": 1024},
+                "sp_protect_test_files": True,
+            }
+        },
+    )
+    provider._tools = []
+    executor = provider(
+        {},
+        SimpleNamespace(context={"thread_id": "thread-1", "run_id": "run-1"}, stream_writer=None),
+    )
+
+    executor.execute(
+        SPSubagentTask(
+            action_id="coder-1",
+            subagent_type="coder",
+            task="Implement the fix",
+            description="Fix the source",
+        )
+    )
+
+    assert captured["config"].timeout_seconds == 45
+    assert captured["max_tokens_per_step"] == 1024
+    assert captured["protect_test_files"] is True
+
+
+def test_sp_executor_provider_normalizes_command_names_in_tool_allowlist(monkeypatch):
+    captured = {}
+    config = SubagentConfig(
+        name="sp-coder",
+        description="coder",
+        skills=[],
+        internal=True,
+    )
+
+    class FakeExecutor:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def execute(self, prompt):
+            return SimpleNamespace(
+                status="completed",
+                result="done",
+                error=None,
+                stop_reason=None,
+                task_id="coder-task",
+                token_usage_records=[],
+            )
+
+    monkeypatch.setattr("deerflow.subagents.get_subagent_config", lambda name, app_config=None: config)
+    monkeypatch.setattr("deerflow.subagents.SubagentExecutor", FakeExecutor)
+    provider = DR2SPExecutorProvider(
+        app_config=SimpleNamespace(),
+        parent_model="test-model",
+        runnable_config={},
+    )
+    provider._tools = [
+        SimpleNamespace(name="bash"),
+        SimpleNamespace(name="glob"),
+        SimpleNamespace(name="grep"),
+    ]
+    executor = provider(
+        {},
+        SimpleNamespace(context={"thread_id": "thread-1", "run_id": "run-1"}, stream_writer=None),
+    )
+
+    executor.execute(
+        SPSubagentTask(
+            action_id="coder-aliases",
+            subagent_type="coder",
+            task="Locate, edit, and test the implementation",
+            description="Use repository command-line utilities",
+            metadata={
+                "stage": "implementation",
+                "tool_names": ["find", "rg", "pytest"],
+            },
+        )
+    )
+
+    assert captured["config"].tools == ["glob", "grep", "bash"]
 
 
 def test_sp_executor_provider_initializes_shared_tools_once_under_parallel_load(monkeypatch):

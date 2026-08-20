@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 from langchain.agents import create_agent
 from langchain.tools import BaseTool
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.errors import GraphRecursionError
 
@@ -44,6 +44,60 @@ if TYPE_CHECKING:
     from deerflow.tools.builtins.tool_search import DeferredToolSetup
 
 logger = logging.getLogger(__name__)
+
+_SUBAGENT_TOOL_LOOP_HARD_CAP = 20
+_SUBAGENT_LOOP_SHUTDOWN_RESERVED_STEPS = 6
+_SUBAGENT_GRAPH_STEPS_PER_TOOL_LOOP = 6
+_SUBAGENT_RECOVERED_EVIDENCE_MAX_CHARS = 12_000
+_SUBAGENT_RECOVERED_EVIDENCE_MAX_ITEMS = 6
+
+
+def _subagent_tool_loop_limits(max_turns: int) -> tuple[int, int]:
+    """Return warning/hard tool-call limits that fit the graph-step budget."""
+
+    safe_hard_limit = max(
+        2,
+        min(
+            _SUBAGENT_TOOL_LOOP_HARD_CAP,
+            (max(1, int(max_turns)) - _SUBAGENT_LOOP_SHUTDOWN_RESERVED_STEPS)
+            // _SUBAGENT_GRAPH_STEPS_PER_TOOL_LOOP,
+        ),
+    )
+    safe_warn_limit = max(1, min(safe_hard_limit - 1, (safe_hard_limit * 3) // 5))
+    return safe_warn_limit, safe_hard_limit
+
+
+def _reserve_subagent_loop_guard_budget(middlewares: list[Any], *, max_turns: int) -> None:
+    """Ensure loop detection can stop a tool loop before graph recursion wins.
+
+    The current subagent middleware graph consumes up to six graph steps for a
+    model/tool cycle. If a tool-frequency limit is derived as if each cycle used
+    only two steps, LangGraph can raise ``GraphRecursionError`` before the guard
+    gets a chance to strip the next tool call. A per-tool limit alone is also
+    insufficient because an agent can rotate among tool types. Clamp per-tool
+    limits and enable a run-total limit only on subagent middleware instances,
+    preserving lead-agent policy and explicit per-tool overrides.
+    """
+
+    safe_warn_limit, safe_hard_limit = _subagent_tool_loop_limits(max_turns)
+    for middleware in middlewares:
+        if not hasattr(middleware, "tool_freq_hard_limit") or not hasattr(middleware, "tool_freq_warn"):
+            continue
+        original_hard_limit = int(middleware.tool_freq_hard_limit)
+        original_warn_limit = int(middleware.tool_freq_warn)
+        middleware.tool_freq_hard_limit = min(original_hard_limit, safe_hard_limit)
+        middleware.tool_freq_warn = min(original_warn_limit, safe_warn_limit)
+        middleware.tool_total_hard_limit = safe_hard_limit
+        middleware.tool_total_warn = safe_warn_limit
+        if (middleware.tool_freq_warn, middleware.tool_freq_hard_limit) != (original_warn_limit, original_hard_limit):
+            logger.debug(
+                "Subagent loop guard thresholds clamped for shutdown budget: warn=%s->%s hard=%s->%s max_turns=%s",
+                original_warn_limit,
+                middleware.tool_freq_warn,
+                original_hard_limit,
+                middleware.tool_freq_hard_limit,
+                max_turns,
+            )
 
 
 _previous_shutdown_isolated_subagent_loop = globals().get("_shutdown_isolated_subagent_loop")
@@ -151,6 +205,53 @@ class SubagentResult:
             return True
 
 
+def _extract_recent_tool_evidence(messages: list[Any]) -> str | None:
+    """Recover bounded, deduplicated evidence when a tool loop is capped.
+
+    A loop hard-stop replaces the last tool-calling assistant turn with a plain
+    forced-stop message. Returning only that marker hides useful file contents,
+    command output, and search results already present in preceding ToolMessages.
+    Walk newest-first, retain a small set of distinct outputs, then present them
+    chronologically within a strict character budget.
+    """
+
+    remaining = _SUBAGENT_RECOVERED_EVIDENCE_MAX_CHARS
+    recovered_newest_first: list[tuple[str, str]] = []
+    seen: set[str] = set()
+
+    for message in reversed(messages):
+        if not isinstance(message, ToolMessage):
+            continue
+        text = message_content_to_text(message.content).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+
+        label = str(getattr(message, "name", None) or "tool")
+        prefix = f"[{label} output]\n"
+        available = remaining - len(prefix)
+        if available <= 0:
+            break
+        if len(text) <= available:
+            clipped = text
+        else:
+            marker = "\n...<recovered output truncated>...\n"
+            payload_budget = max(0, available - len(marker))
+            head_chars = payload_budget // 2
+            tail_chars = payload_budget - head_chars
+            clipped = text[:head_chars] + marker + (text[-tail_chars:] if tail_chars else "")
+        recovered_newest_first.append((prefix, clipped))
+        remaining -= len(prefix) + len(clipped)
+        if remaining <= 0 or len(recovered_newest_first) >= _SUBAGENT_RECOVERED_EVIDENCE_MAX_ITEMS:
+            break
+
+    if not recovered_newest_first:
+        return None
+
+    chunks = [prefix + text for prefix, text in reversed(recovered_newest_first)]
+    return "[Recovered tool evidence before safety stop]\n\n" + "\n\n".join(chunks)
+
+
 def _extract_final_result(final_state: Any, *, trace_id: str, name: str) -> str:
     """Extract a human-readable result string from the streamed subagent state.
 
@@ -180,8 +281,18 @@ def _extract_final_result(final_state: Any, *, trace_id: str, name: str) -> str:
             break
 
     if last_ai_message is not None:
-        text = message_content_to_text(last_ai_message.content)
-        return text if text else "No response generated"
+        text = message_content_to_text(last_ai_message.content).strip()
+        interrupted_tool_turn = bool(getattr(last_ai_message, "tool_calls", None))
+        forced_stop = "[FORCED STOP]" in text
+        if text and not interrupted_tool_turn and not forced_stop:
+            return text
+
+        recovered = _extract_recent_tool_evidence(messages)
+        if recovered:
+            if text:
+                return f"{text}\n\n{recovered}"
+            return recovered
+        return text or "No response generated"
 
     if messages:
         last_message = messages[-1]
@@ -361,6 +472,9 @@ class SubagentExecutor:
         force_isolated_loop: bool = False,
         platform_skill_secrets: Mapping[str, str] | None = None,
         parent_abort_event: Any | None = None,
+        thinking_enabled: bool | None = None,
+        max_tokens_per_step: int | None = None,
+        protect_test_files: bool = False,
     ):
         """Initialize the executor.
 
@@ -406,6 +520,14 @@ class SubagentExecutor:
                 set, synchronous isolated-loop execution polls it and cancels
                 this subagent promptly instead of continuing after the parent
                 run or client request has stopped.
+            thinking_enabled: Optional per-run override for the subagent model's
+                extended-thinking mode. ``None`` preserves the provider default
+                (Qwen/vLLM tool-capable subagents normally enable thinking).
+            max_tokens_per_step: Optional per-run completion cap for each
+                subagent model call. This bounds one action without reducing
+                the subagent's multi-step turn budget.
+            protect_test_files: Prevent benchmark subagents from mutating test
+                files that are owned by an external grader.
         """
         self.config = config
         self.app_config = app_config
@@ -440,6 +562,9 @@ class SubagentExecutor:
         self.force_isolated_loop = force_isolated_loop
         self.platform_skill_secrets = dict(platform_skill_secrets or {})
         self.parent_abort_event = parent_abort_event
+        self.thinking_enabled = thinking_enabled
+        self.max_tokens_per_step = max_tokens_per_step
+        self.protect_test_files = bool(protect_test_files)
         self._active_platform_skill_secrets: dict[str, str] = {}
 
         self._base_tools = _filter_tools(
@@ -469,7 +594,16 @@ class SubagentExecutor:
         app_config = self.app_config or get_app_config()
         if self.model_name is None:
             self.model_name = resolve_subagent_model_name(self.config, self.parent_model, app_config=app_config)
-        model = create_chat_model(name=self.model_name, thinking_enabled=False, app_config=app_config, attach_tracing=False)
+        model_kwargs: dict[str, Any] = {}
+        if self.max_tokens_per_step is not None:
+            model_kwargs["max_tokens"] = self.max_tokens_per_step
+        model = create_chat_model(
+            name=self.model_name,
+            thinking_enabled=self._should_enable_tool_thinking(app_config, tools),
+            app_config=app_config,
+            attach_tracing=False,
+            **model_kwargs,
+        )
 
         from deerflow.agents.middlewares.tool_error_handling_middleware import build_subagent_runtime_middlewares
 
@@ -486,6 +620,10 @@ class SubagentExecutor:
             middleware_kwargs["memory_agent_name"] = self.memory_agent_name
         middlewares = build_subagent_runtime_middlewares(
             **middleware_kwargs,
+        )
+        _reserve_subagent_loop_guard_budget(
+            middlewares,
+            max_turns=self.config.max_turns,
         )
         # Collect every guard middleware that exposes ``consume_stop_reason``
         # (TokenBudgetMiddleware, LoopDetectionMiddleware) so _aexecute can read
@@ -505,6 +643,26 @@ class SubagentExecutor:
             state_schema=ThreadState,
             checkpointer=False,
         )
+
+    def _should_enable_tool_thinking(self, app_config: Any, tools: list[BaseTool] | None) -> bool:
+        """Enable Qwen/vLLM reasoning when a subagent must call tools.
+
+        Qwen3 served by vLLM currently returns an empty assistant message when
+        ``enable_thinking=false`` and tools are bound.  That is not a normal
+        no-thinking response: LangGraph receives neither text nor a tool call,
+        so the delegation becomes ``No response generated``.  Keep the cheap
+        no-thinking path for tool-free specialists, but use the model's
+        supported reasoning path for tool-capable vLLM specialists.
+        """
+        if not tools:
+            return False
+        if self.thinking_enabled is not None:
+            return bool(self.thinking_enabled)
+        model_config = getattr(app_config, "get_model_config", lambda _name: None)(self.model_name)
+        if model_config is None or not bool(getattr(model_config, "supports_thinking", False)):
+            return False
+        provider = str(getattr(model_config, "use", "")).lower()
+        return "vllm_provider" in provider
 
     def _consume_guard_stop_reason(self) -> str | None:
         """Pop and return the guard-cap stop reason set during the last run.
@@ -666,6 +824,15 @@ class SubagentExecutor:
             system_parts.append(self.config.system_prompt)
         for skill_msg in skill_messages:
             system_parts.append(skill_msg.content)
+        if final_tools:
+            warn_limit, hard_limit = _subagent_tool_loop_limits(self.config.max_turns)
+            system_parts.append(
+                "<execution_budget>\n"
+                f"This run has a hard budget of {hard_limit} total tool calls and will warn after {warn_limit}. "
+                "Batch related read-only inspection into a small number of calls. For implementation work, reserve calls for the source edit, focused tests after the latest edit, and git diff --check. "
+                "As soon as the delegated acceptance evidence is available, stop calling tools and return the required JSON result.\n"
+                "</execution_budget>"
+            )
         # Name the deferred MCP tools in the prompt; their schemas stay withheld
         # until tool_search promotes them. Empty set -> "" -> appends nothing.
         deferred_section = get_deferred_tools_prompt_section(deferred_names=deferred_setup.deferred_names)
@@ -796,6 +963,8 @@ class SubagentExecutor:
             if self.deerflow_trace_id:
                 context[DEERFLOW_TRACE_METADATA_KEY] = self.deerflow_trace_id
             context["is_subagent"] = True
+            if self.protect_test_files:
+                context["protect_test_files"] = True
             if self._active_platform_skill_secrets:
                 # The bash tool reads this reserved field and passes it as a
                 # per-command environment. Values never enter prompts, tool
@@ -888,14 +1057,9 @@ class SubagentExecutor:
             # consistent and pops the reason so it is not orphaned in the dict.
             max_turns = self.config.max_turns
             logger.warning(f"[trace={self.trace_id}] Subagent {self.config.name} reached max_turns={max_turns} (GraphRecursionError); recovering partial result")
-            messages = (final_state or {}).get("messages", [])
-            usable_partial: str | None = None
-            for m in reversed(messages):
-                if isinstance(m, AIMessage):
-                    text = message_content_to_text(m.content).strip()
-                    if text:
-                        usable_partial = text
-                    break
+            usable_partial = _extract_final_result(final_state, trace_id=self.trace_id, name=self.config.name)
+            if usable_partial == "No response generated":
+                usable_partial = None
             records = collector.snapshot_records() if collector is not None else None
             stop_reason = self._consume_guard_stop_reason() or "turn_capped"
             if usable_partial is not None:

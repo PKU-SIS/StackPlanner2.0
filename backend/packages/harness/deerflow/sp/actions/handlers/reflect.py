@@ -13,19 +13,35 @@ class ReflectHandler:
         target_entry_ids = [str(entry_id) for entry_id in action.metadata.get("target_entry_ids", [])]
         active_target_entry_ids = target_entry_ids
         inactive_target_entry_ids: list[str] = []
+        missing_target_entry_ids: list[str] = []
         if target_entry_ids:
             by_id = {entry.id: entry for entry in context.stack.entries}
-            missing = [entry_id for entry_id in target_entry_ids if entry_id not in by_id]
-            if missing:
-                raise ValueError(f"REFLECT target memory entry not found: {', '.join(missing)}")
-            protected = [entry_id for entry_id in target_entry_ids if by_id[entry_id].status == "pinned" or by_id[entry_id].priority == "critical"]
+            missing_target_entry_ids = [entry_id for entry_id in target_entry_ids if entry_id not in by_id]
+            # A model can occasionally reproduce a stale opaque ID after the
+            # stack has been compacted or after a prior action rewrote the
+            # context. Treat that as a failed target resolution, not as a
+            # recoverable exception that can trap CentralAgent in a retry loop.
+            # The reflection is still recorded, but no memory entry is
+            # backtracked unless every requested target resolves safely.
+            if missing_target_entry_ids:
+                active_target_entry_ids = []
+            protected = [
+                entry_id
+                for entry_id in target_entry_ids
+                if entry_id in by_id and (by_id[entry_id].status == "pinned" or by_id[entry_id].priority == "critical")
+            ]
             if protected:
                 raise ValueError(f"REFLECT cannot backtrack pinned or critical memory: {', '.join(protected)}")
-            human_authored = [entry_id for entry_id in target_entry_ids if by_id[entry_id].actor == "human" or by_id[entry_id].action in {"user_request", "feedback"}]
+            human_authored = [
+                entry_id
+                for entry_id in target_entry_ids
+                if entry_id in by_id and (by_id[entry_id].actor == "human" or by_id[entry_id].action in {"user_request", "feedback"})
+            ]
             if human_authored:
                 raise ValueError("REFLECT cannot backtrack human-authored task memory: " + ", ".join(human_authored))
-            inactive_target_entry_ids = [entry_id for entry_id in target_entry_ids if by_id[entry_id].status != "active"]
-            active_target_entry_ids = [entry_id for entry_id in target_entry_ids if by_id[entry_id].status == "active"]
+            inactive_target_entry_ids = [entry_id for entry_id in target_entry_ids if entry_id in by_id and by_id[entry_id].status != "active"]
+            if not missing_target_entry_ids:
+                active_target_entry_ids = [entry_id for entry_id in target_entry_ids if by_id[entry_id].status == "active"]
 
         reflection = context.stack.append_reflect(
             action.task or action.reason,
@@ -38,6 +54,14 @@ class ReflectHandler:
             metadata={
                 "action_id": action.action_id,
                 **action.metadata,
+                **(
+                    {
+                        "missing_target_entry_ids": missing_target_entry_ids,
+                        "backtrack_applied": False,
+                    }
+                    if missing_target_entry_ids
+                    else {}
+                ),
                 **({"skipped_inactive_target_ids": inactive_target_entry_ids} if inactive_target_entry_ids else {}),
             },
         )
@@ -56,7 +80,21 @@ class ReflectHandler:
                 ]
                 if inactive_target_entry_ids
                 else []
-            )
+            ),
+            *(
+                [
+                    make_sp_event(
+                        "sp.reflect.targets_missing",
+                        action_id=action.action_id,
+                        run_id=context.run_id,
+                        target_type="entry",
+                        source_entry_ids=missing_target_entry_ids,
+                        backtrack_applied=False,
+                    )
+                ]
+                if missing_target_entry_ids
+                else []
+            ),
         ]
         if active_target_entry_ids:
             backtrack = context.stack.mark_backtracked(

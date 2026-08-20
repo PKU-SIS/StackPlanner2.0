@@ -28,6 +28,15 @@ SP2.0 separates **decision making** from **tool execution**:
   search the web, run shell commands, or manipulate files.
 - Researcher, Coder, Reporter, Outline, Perception, and Memory Recaller
   specialists receive bounded contexts and role-specific tools.
+- Central-to-specialist delegation uses an additive internal A2A envelope for
+  task context, tool boundaries, acceptance criteria, observable results, and
+  artifact references. Progress and terminal events share one task ID for
+  tracing; ordinary tools remain available only to scoped specialists, and
+  provider-private chain-of-thought is not part of the protocol.
+- The Central control plane also has a bounded model-call recovery layer: a
+  stalled first perception/planning request gets one lower-budget retry and,
+  once per run, a synthetic `sp_think` checkpoint. This is separate from the
+  outer graph watchdog and does not change the Central/tool boundary.
 - Short-term task memory stores high-value control information; large research,
   reports, code, charts, and generated files live as versioned Artifacts.
 - Human feedback is pinned at critical priority and survives ordinary context
@@ -97,6 +106,10 @@ are retained as run Artifacts with preview/download metadata. Coder specialists
 can use scoped execution tools, while host bash remains disabled by default for
 untrusted local runs. PDF/image perception and generated media depend on the
 configured model/provider capabilities.
+
+The optional `/workspace/debug` page also reports the observable stop reason and
+last stage/action for interrupted or stalled runs. It does not expose provider-
+private hidden chain-of-thought.
 
 ### Qwen and vLLM support
 

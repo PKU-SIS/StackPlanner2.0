@@ -72,6 +72,16 @@ def test_before_agent_leaves_empty_state_untouched():
     assert result is None
 
 
+def test_before_agent_marks_the_first_user_message_as_new_conversation():
+    result = TaskMemoryMiddleware().before_agent(
+        {"messages": [HumanMessage(content="帮我安排周末行程", id="user-1")]},
+        Runtime(context={"thread_id": "thread-1", "run_id": "run-1"}),
+    )
+
+    assert result is not None
+    assert result["sp_new_conversation"] is True
+
+
 def test_before_agent_initializes_native_sp_run_and_anchors_current_user_request():
     stack = TaskMemoryStack()
     stack.append_summary("Previous task summary", run_id="run-old", stage="finished")

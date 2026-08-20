@@ -473,6 +473,29 @@ def test_validate_local_bash_command_paths_allows_workspace_relative_paths() -> 
     )
 
 
+def test_validate_local_bash_command_paths_blocks_truncating_existing_workspace_file(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    existing = workspace / "docs" / "guide.txt"
+    existing.parent.mkdir()
+    existing.write_text("x" * 8192)
+    thread_data = {**_THREAD_DATA, "workspace_path": str(workspace)}
+
+    with pytest.raises(PermissionError, match="truncate an existing sizeable workspace file"):
+        validate_local_bash_command_paths("generate-report > docs/guide.txt", thread_data)
+
+
+def test_validate_local_bash_command_paths_allows_new_or_append_redirect(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    existing = workspace / "out.txt"
+    existing.write_text("x" * 8192)
+    thread_data = {**_THREAD_DATA, "workspace_path": str(workspace)}
+
+    validate_local_bash_command_paths("generate-report > new.txt", thread_data)
+    validate_local_bash_command_paths("generate-report >> out.txt", thread_data)
+
+
 def test_validate_local_bash_command_paths_allows_cd_virtual_workspace_with_relative_paths() -> None:
     validate_local_bash_command_paths(
         "cd /mnt/user-data/workspace && cat data/input.csv > reports/out.txt",

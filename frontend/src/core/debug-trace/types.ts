@@ -28,6 +28,7 @@ export interface DebugTraceStep {
   summary: string | null;
   detail: unknown;
   error: string | null;
+  provider_reasoning?: string | null;
 }
 
 export interface DebugTraceResponse {
@@ -40,6 +41,11 @@ export interface DebugTraceResponse {
   ended_at: string | null;
   duration_ms: number | null;
   event_count: number;
+  stop_reason: string;
+  stop_detail: string | null;
+  last_stage: string | null;
+  last_action_id: string | null;
+  last_event_type: string | null;
   truncated: boolean;
   tokens: {
     input: number;
@@ -53,6 +59,8 @@ export interface DebugTraceResponse {
   steps: DebugTraceStep[];
   disclosure: {
     hidden_chain_of_thought: false;
+    provider_returned_reasoning?: boolean;
+    reasoning_notice?: string | null;
     shows: string[];
   };
 }

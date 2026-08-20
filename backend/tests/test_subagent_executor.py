@@ -86,6 +86,7 @@ def _setup_executor_classes():
         SubagentExecutor,
         SubagentResult,
         SubagentStatus,
+        _reserve_subagent_loop_guard_budget,
     )
 
     executor_module = sys.modules["deerflow.subagents.executor"]
@@ -105,6 +106,7 @@ def _setup_executor_classes():
         "SubagentExecutor": SubagentExecutor,
         "SubagentResult": SubagentResult,
         "SubagentStatus": SubagentStatus,
+        "reserve_subagent_loop_guard_budget": _reserve_subagent_loop_guard_budget,
     }
 
     yield classes
@@ -224,8 +226,8 @@ class _MsgHelper:
     def human(self, content):
         return self.classes["HumanMessage"](content=content)
 
-    def ai(self, content, msg_id=None):
-        msg = self.classes["AIMessage"](content=content)
+    def ai(self, content, msg_id=None, tool_calls=None):
+        msg = self.classes["AIMessage"](content=content, tool_calls=tool_calls or [])
         if msg_id:
             msg.id = msg_id
         return msg
@@ -250,6 +252,98 @@ def msg(classes):
 
 class TestAgentConstruction:
     """Test _create_agent() wiring before execution starts."""
+
+    def test_subagent_loop_guard_stops_before_graph_recursion_boundary(self, classes):
+        guard = SimpleNamespace(
+            tool_freq_warn=30,
+            tool_freq_hard_limit=50,
+            _tool_freq_overrides={},
+        )
+
+        classes["reserve_subagent_loop_guard_budget"]([guard], max_turns=100)
+
+        assert guard.tool_freq_warn == 9
+        assert guard.tool_freq_hard_limit == 15
+        assert guard.tool_total_warn == 9
+        assert guard.tool_total_hard_limit == 15
+
+    def test_subagent_loop_guard_scales_for_small_turn_budgets(self, classes):
+        guard = SimpleNamespace(
+            tool_freq_warn=30,
+            tool_freq_hard_limit=50,
+            _tool_freq_overrides={},
+        )
+
+        classes["reserve_subagent_loop_guard_budget"]([guard], max_turns=10)
+
+        assert guard.tool_freq_warn == 1
+        assert guard.tool_freq_hard_limit == 2
+        assert guard.tool_total_warn == 1
+        assert guard.tool_total_hard_limit == 2
+
+    def test_subagent_loop_guard_accounts_for_middleware_graph_steps(self, classes):
+        guard = SimpleNamespace(
+            tool_freq_warn=30,
+            tool_freq_hard_limit=50,
+            _tool_freq_overrides={},
+        )
+
+        classes["reserve_subagent_loop_guard_budget"]([guard], max_turns=40)
+
+        assert guard.tool_freq_warn == 3
+        assert guard.tool_freq_hard_limit == 5
+        assert guard.tool_total_warn == 3
+        assert guard.tool_total_hard_limit == 5
+
+    def test_subagent_loop_guard_allows_bounded_long_coder_run(self, classes):
+        guard = SimpleNamespace(
+            tool_freq_warn=30,
+            tool_freq_hard_limit=50,
+            _tool_freq_overrides={},
+        )
+
+        classes["reserve_subagent_loop_guard_budget"]([guard], max_turns=140)
+
+        assert guard.tool_freq_warn == 12
+        assert guard.tool_freq_hard_limit == 20
+        assert guard.tool_total_warn == 12
+        assert guard.tool_total_hard_limit == 20
+
+    def test_qwen_vllm_subagent_enables_thinking_when_tools_are_bound(self, classes, base_config):
+        SubagentExecutor = classes["SubagentExecutor"]
+        app_config = SimpleNamespace(
+            get_model_config=lambda _name: SimpleNamespace(
+                supports_thinking=True,
+                use="deerflow.models.vllm_provider:VllmChatModel",
+            )
+        )
+        executor = SubagentExecutor(
+            config=base_config,
+            tools=[NamedTool("read_file")],
+            app_config=app_config,
+            parent_model="qwen3-32b",
+        )
+
+        assert executor._should_enable_tool_thinking(app_config, [NamedTool("read_file")]) is True
+        assert executor._should_enable_tool_thinking(app_config, []) is False
+
+    def test_qwen_vllm_subagent_honors_explicit_thinking_override(self, classes, base_config):
+        SubagentExecutor = classes["SubagentExecutor"]
+        app_config = SimpleNamespace(
+            get_model_config=lambda _name: SimpleNamespace(
+                supports_thinking=True,
+                use="deerflow.models.vllm_provider:VllmChatModel",
+            )
+        )
+        executor = SubagentExecutor(
+            config=base_config,
+            tools=[NamedTool("bash")],
+            app_config=app_config,
+            parent_model="qwen3-32b",
+            thinking_enabled=False,
+        )
+
+        assert executor._should_enable_tool_thinking(app_config, [NamedTool("bash")]) is False
 
     def test_create_agent_threads_explicit_app_config_to_model_and_middlewares(
         self,
@@ -510,6 +604,32 @@ class TestAgentConstruction:
         assert isinstance(messages[0], SystemMessage)
         assert base_config.system_prompt in messages[0].content
         assert isinstance(messages[1], HumanMessage)
+
+    @pytest.mark.anyio
+    async def test_build_initial_state_tells_tool_subagent_its_execution_budget(
+        self,
+        classes,
+        base_config,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        SubagentExecutor = classes["SubagentExecutor"]
+        monkeypatch.setattr(
+            sys.modules["deerflow.skills.storage"],
+            "get_or_new_skill_storage",
+            lambda *, app_config=None: SimpleNamespace(load_skills=lambda *, enabled_only: []),
+        )
+        executor = SubagentExecutor(
+            config=base_config,
+            tools=[NamedTool("read_file")],
+            thread_id="test-thread",
+        )
+
+        state, _final_tools, _deferred_setup = await executor._build_initial_state("Do the task")
+
+        system_content = state["messages"][0].content
+        assert "<execution_budget>" in system_content
+        assert "hard budget of 2 total tool calls" in system_content
+        assert "reserve calls for the source edit" in system_content
 
     @pytest.mark.anyio
     async def test_build_initial_state_no_system_prompt_with_skills(
@@ -1186,6 +1306,73 @@ class TestAsyncExecutionPath:
         assert result.status == SubagentStatus.COMPLETED
         assert result.result == "partial final answer"
         assert result.stop_reason == "loop_capped"
+
+    @pytest.mark.anyio
+    async def test_aexecute_loop_capped_recovers_prior_tool_output(self, classes, base_config, mock_agent, msg):
+        """A forced-stop marker must not hide useful evidence already collected."""
+        SubagentExecutor = classes["SubagentExecutor"]
+        SubagentStatus = classes["SubagentStatus"]
+
+        final_state = {
+            "messages": [
+                msg.human("Inspect the file"),
+                msg.ai("", "ai-tool", tool_calls=[{"name": "bash", "args": {"command": "rg routes"}, "id": "call-1"}]),
+                msg.tool("src/flask/cli.py:973:def routes_command", "call-1", name="bash", msg_id="tool-1"),
+                msg.ai("[FORCED STOP] Total tool calls reached 5", "ai-stop"),
+            ]
+        }
+        mock_agent.astream = lambda *args, **kwargs: async_iterator([final_state])
+
+        executor = SubagentExecutor(config=base_config, tools=[], thread_id="test-thread")
+        executor._stop_reason_middlewares = [
+            SimpleNamespace(consume_stop_reason=lambda _run_id: "loop_capped")
+        ]
+
+        with patch.object(executor, "_create_agent", return_value=mock_agent):
+            result = await executor._aexecute("Task")
+
+        assert result.status == SubagentStatus.COMPLETED
+        assert result.stop_reason == "loop_capped"
+        assert "FORCED STOP" in result.result
+        assert "Recovered tool evidence" in result.result
+        assert "src/flask/cli.py:973:def routes_command" in result.result
+
+    @pytest.mark.anyio
+    async def test_aexecute_recursion_error_prefers_tool_evidence_over_interrupted_intent(
+        self, classes, base_config, mock_agent, msg
+    ):
+        """An interrupted tool-calling turn is intent, not the tool's result."""
+        from langgraph.errors import GraphRecursionError
+
+        SubagentExecutor = classes["SubagentExecutor"]
+        SubagentStatus = classes["SubagentStatus"]
+        partial_state = {
+            "messages": [
+                msg.human("Inspect the file"),
+                msg.ai("", "ai-tool-1", tool_calls=[{"name": "bash", "args": {"command": "rg routes"}, "id": "call-1"}]),
+                msg.tool("src/flask/cli.py:973:def routes_command", "call-1", name="bash", msg_id="tool-1"),
+                msg.ai(
+                    "Now let me keep exploring",
+                    "ai-tool-2",
+                    tool_calls=[{"name": "bash", "args": {"command": "find ."}, "id": "call-2"}],
+                ),
+            ]
+        }
+
+        async def mock_astream(*args, **kwargs):
+            yield partial_state
+            raise GraphRecursionError("Recursion limit reached")
+
+        mock_agent.astream = mock_astream
+        executor = SubagentExecutor(config=base_config, tools=[], thread_id="test-thread")
+
+        with patch.object(executor, "_create_agent", return_value=mock_agent):
+            result = await executor._aexecute("Task")
+
+        assert result.status == SubagentStatus.COMPLETED
+        assert result.stop_reason == "turn_capped"
+        assert "src/flask/cli.py:973:def routes_command" in result.result
+        assert "Now let me keep exploring" in result.result
 
     @pytest.mark.anyio
     async def test_aexecute_no_final_state(self, classes, base_config, mock_agent):

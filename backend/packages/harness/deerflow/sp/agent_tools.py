@@ -34,7 +34,7 @@ from deerflow.agents.thread_state import (
     MAX_CONSUMED_TOOL_OBSERVATION_IDS,
     SP_CONCURRENT_MERGE_MODE_KEY,
 )
-from deerflow.sp.actions import ActionType, SPAction, build_default_action_router
+from deerflow.sp.actions import ActionType, ActionValidationError, SPAction, build_default_action_router
 from deerflow.sp.actions.router import SP_SUMMARY_TURN_RESERVED_KEY
 from deerflow.sp.hitl import record_human_feedback
 from deerflow.sp.memory import StackMemoryEntry, TaskMemoryStack
@@ -71,6 +71,7 @@ _INTERMEDIATE_ARTIFACT_TYPES = frozenset(
         "data_collection",
         "evidence_bundle",
         "perception_observation",
+        "verification_observation",
     }
 )
 _PARALLEL_NONTERMINAL_SIBLING_KEY = "__sp_parallel_nonterminal_sibling"
@@ -142,6 +143,15 @@ _CODER_MUTATION_PATTERN = re.compile(
     r")",
     re.IGNORECASE,
 )
+_LOCAL_DOCUMENT_INSPECTION_PATTERN = re.compile(
+    r"(?:"
+    r"(?:读取|阅读|检查|查看|提取|解析|梳理|汇总|搜索|检索|核对|验证|比较).{0,96}(?:上传|论文|文档|文件|PDF|Markdown)"
+    r"|(?:上传|论文|文档|文件|PDF|Markdown).{0,96}(?:读取|阅读|检查|查看|提取|解析|梳理|汇总|搜索|检索|核对|验证|比较)"
+    r"|\b(?:read|inspect|examine|extract|parse|summarize|search|verify|compare)\b.{0,96}\b(?:uploaded|paper|document|file|pdf|markdown)\b"
+    r"|\b(?:uploaded|paper|document|file|pdf|markdown)\b.{0,96}\b(?:read|inspect|examine|extract|parse|summarize|search|verify|compare)\b"
+    r")",
+    re.IGNORECASE | re.DOTALL,
+)
 _ARTIFACT_DELIVERABLE_REQUEST_PATTERN = re.compile(
     r"(?:"
     r"可下载|下载文件|文件交付|作为.{0,16}文件|生成.{0,32}(?:报告|文档|代码|网页|图表|文件)"
@@ -166,12 +176,84 @@ _SP_ARTIFACT_RECOVERY_MESSAGE_NAME = "sp_artifact_recovery_required"
 _SP_CLARIFICATION_REQUIRED_MESSAGE_NAME = "sp_clarification_required"
 _SP_REPORT_FINALIZATION_MESSAGE_NAME = "sp_report_finalization_required"
 _SP_ARTIFACT_FINALIZATION_MESSAGE_NAME = "sp_artifact_finalization_required"
+_SP_CODE_VERIFICATION_MESSAGE_NAME = "sp_code_verification_required"
 _SP_REPORT_RECOVERY_EXHAUSTED_MESSAGE_NAME = "sp_report_recovery_exhausted"
 _SP_DELEGATE_RECOVERY_EXHAUSTED_MESSAGE_NAME = "sp_delegate_recovery_exhausted"
+_SP_DELEGATE_POLICY_CHECKPOINT_MESSAGE_NAME = "sp_delegate_policy_checkpoint"
 _CJK_TEXT_PATTERN = re.compile(r"[\u3400-\u9fff]")
 SP_REPORT_RECOVERY_MAX_ATTEMPTS = 3
 SP_DELEGATE_RECOVERY_MAX_ATTEMPTS = 3
+SP_CAPPED_DELEGATE_RECOVERY_MAX_ATTEMPTS = 2
+DEFAULT_SP_ACTION_LIMIT = 20
 _SP_SPECIALIST_ROLES = frozenset({"researcher", "coder", "reporter", "outline", "perception"})
+_UNAMBIGUOUS_STAGE_SPECIALISTS = {
+    "perception": "perception",
+    "planning": "outline",
+    "research": "researcher",
+    "implementation": "coder",
+    "verification": "coder",
+    "reporting": "reporter",
+}
+_SP_ACTION_BUDGET_MESSAGE_NAME = "sp_action_budget_terminal"
+_CODE_BEHAVIOR_FAILURE_PATTERN = re.compile(
+    r"(?:"
+    r"\bAssertionError\b|\bassertion\s+failed\b|"
+    r"\bFAILED\s+[^\n]*(?:::{1,2}|test_)|"
+    r"\b(?:behavioral|behavioural)?\s*regression\b|"
+    r"\bexisting\s+(?:test|behavior|behaviour|contract)\b.{0,96}\b(?:fail|break|incompatib)|"
+    r"\bexpected\b.{0,96}\b(?:but\s+got|actual|produces?)\b|"
+    r"^\s*[^\n:]{0,80}\b(?:PASS(?:ED)?|CHECK|ASSERT(?:ION)?|OK)\s*[:=]\s*(?:false|fail(?:ed)?)\b|"
+    r"^\s*CHECK\b[^\n]{0,120}\bFAIL(?:ED)?\b|"
+    r"回归(?:测试)?(?:失败|不通过)|断言失败|预期.{0,64}(?:实际|却得到|但得到)"
+    r")",
+    re.IGNORECASE | re.DOTALL | re.MULTILINE,
+)
+_CODE_ENVIRONMENT_BLOCKER_PATTERN = re.compile(
+    r"(?:"
+    r"\b(?:env(?:ironment)?|host|dependency|dependencies|extension modules?|toolchain|test runner)\b"
+    r".{0,120}\b(?:block(?:ed|er)?|incompatib(?:le|ility)|missing|unavailable|not built|cannot|can't|unable)\b|"
+    r"\b(?:ImportError|ModuleNotFoundError)\b.{0,160}\b(?:environment|dependency|extension|not built)\b|"
+    r"(?:环境|宿主|依赖|扩展模块|测试运行器).{0,96}(?:阻塞|不兼容|缺失|未构建|不可用|无法)"
+    r")",
+    re.IGNORECASE | re.DOTALL,
+)
+_NEGATED_CODE_BEHAVIOR_FAILURE_PATTERN = re.compile(
+    r"\b(?:no|without|did\s+not\s+(?:find|observe|report)|not)\b.{0,48}"
+    r"(?:behavioral|behavioural)?\s*(?:regression|assertion failure|failed check)",
+    re.IGNORECASE,
+)
+
+
+def _has_observable_code_behavior_failure(text: str) -> bool:
+    return bool(_CODE_BEHAVIOR_FAILURE_PATTERN.search(_NEGATED_CODE_BEHAVIOR_FAILURE_PATTERN.sub("", text)))
+
+
+def _verification_found_behavior_failure(observation: StackMemoryEntry | None) -> bool:
+    """Distinguish a discovered code regression from an environment-only gap."""
+
+    if observation is None or str(observation.stage or "") != "verification":
+        return False
+    raw_gaps = observation.metadata.get("evidence_gaps")
+    parts = [observation.content, observation.failure_note or ""]
+    if isinstance(raw_gaps, list):
+        parts.extend(str(value) for value in raw_gaps)
+    return _has_observable_code_behavior_failure("\n".join(parts))
+
+
+def _verification_found_environment_blocker(observation: StackMemoryEntry | None) -> bool:
+    """Return true for an explicit external verification blocker only."""
+
+    if observation is None or str(observation.stage or "") != "verification":
+        return False
+    raw_gaps = observation.metadata.get("evidence_gaps")
+    parts = [observation.content, observation.failure_note or ""]
+    if isinstance(raw_gaps, list):
+        parts.extend(str(value) for value in raw_gaps)
+    text = "\n".join(parts)
+    return bool(
+        _CODE_ENVIRONMENT_BLOCKER_PATTERN.search(text)
+        and not _has_observable_code_behavior_failure(text)
+    )
 
 
 def _artifact_is_complete(ref: Mapping[str, Any]) -> bool:
@@ -542,10 +624,19 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
     def _delegate_attempt_count(
         state: Mapping[str, Any],
         target_agent: str,
+        *,
+        stage: str | None = None,
     ) -> int:
         stack = TaskMemoryStack.from_dict(state.get("sp_task_memory"))
         current_run_id = str(state.get("sp_loop_run_id") or "").strip()
-        return sum(1 for entry in stack.entries if entry.action == "delegate" and entry.metadata.get("target_agent") == target_agent and (not current_run_id or str(entry.run_id or "") == current_run_id))
+        return sum(
+            1
+            for entry in stack.entries
+            if entry.action == "delegate"
+            and entry.metadata.get("target_agent") == target_agent
+            and (stage is None or str(entry.stage or "") == stage)
+            and (not current_run_id or str(entry.run_id or "") == current_run_id)
+        )
 
     @staticmethod
     def _latest_delegate_observation(
@@ -562,6 +653,35 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 continue
             return entry
         return None
+
+    @staticmethod
+    def _delegate_recovery_limit(observation: StackMemoryEntry | None) -> int:
+        """Use only one retry after a specialist already hit a hard guard.
+
+        Token/turn/loop caps indicate that repeating the same stage is likely
+        to amplify cost rather than add evidence. Ordinary validation gaps
+        retain the wider three-attempt recovery budget.
+        """
+
+        if observation is None:
+            return SP_DELEGATE_RECOVERY_MAX_ATTEMPTS
+        # Once a read-only verifier has established that canonical tests are
+        # unavailable because of the host environment (and found no behavior
+        # regression), repeating the same verifier cannot add authoritative
+        # evidence. End delegation after that first attempt so an outer
+        # canonical grader or the user can perform the environment-dependent
+        # check. Real assertion/regression failures retain the normal recovery
+        # budget and route back to implementation.
+        if _verification_found_environment_blocker(observation):
+            return 1
+        stop_reason = str(
+            observation.metadata.get("stop_reason")
+            or observation.metadata.get("subagent_stop_reason")
+            or ""
+        ).strip().lower()
+        if stop_reason in {"token_capped", "turn_capped", "loop_capped"}:
+            return SP_CAPPED_DELEGATE_RECOVERY_MAX_ATTEMPTS
+        return SP_DELEGATE_RECOVERY_MAX_ATTEMPTS
 
     @classmethod
     def _latest_partial_report_observation(
@@ -648,6 +768,18 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 return ref
         return None
 
+    @staticmethod
+    def _requires_independent_code_verification(ref: Mapping[str, Any]) -> bool:
+        """Return whether a completed coder artifact still needs a fresh check."""
+
+        metadata = ref.get("metadata")
+        if not isinstance(metadata, Mapping):
+            return False
+        if str(metadata.get("delegate_stage") or "") not in {"implementation", "revision"}:
+            return False
+        implementation = metadata.get("implementation_verification")
+        return isinstance(implementation, Mapping) and implementation.get("passed") is True
+
     @classmethod
     def _artifact_recovery_instruction(cls, state: Mapping[str, Any]) -> str:
         partial_observation = cls._latest_partial_report_observation(state)
@@ -694,19 +826,52 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 if not gaps and latest_observation.failure_note:
                     gaps = [latest_observation.failure_note]
                 gap_text = "; ".join(gaps[:5]) or ("the delegated acceptance criteria remain incomplete")
+                verification_only = (
+                    target == "coder"
+                    and str(latest_observation.stage or "") == "verification"
+                    and not _verification_found_behavior_failure(latest_observation)
+                )
+                implementation_evidence = latest_observation.metadata.get("implementation_verification")
+                if (
+                    target == "coder"
+                    and isinstance(implementation_evidence, Mapping)
+                    and implementation_evidence.get("passed") is True
+                    and not _verification_found_behavior_failure(latest_observation)
+                ):
+                    # The source mutation already exists. A retry whose only
+                    # missing evidence is execution belongs to the read-only
+                    # verification stage; requiring another source write here
+                    # caused models to churn or make cosmetic edits solely to
+                    # satisfy the per-delegation write gate.
+                    verification_only = True
                 stage = {
                     "coder": "implementation",
                     "researcher": "research",
                     "outline": "planning",
                     "perception": "perception",
                 }.get(target, "implementation")
+                if verification_only:
+                    stage = "verification"
                 coder_instruction = (
-                    " For coder recovery, include read_file, write_file, "
-                    "str_replace, and bash in metadata.tool_names; inspect the "
-                    "current file, edit source with a file tool, and run tests "
-                    "in a separate bash call. Never redirect program stdout "
-                    "into the source file or merely rerun the same failing "
-                    "command."
+                    (
+                        ' For read-only verification recovery, set metadata={"verification_only": true, "requires_implementation": false, "tool_names": ["read_file", "bash"]}; '
+                        "inspect the existing diff and run the missing checks without editing source or tests. If the test runner is unavailable, read the actual named tests and reproduce their exact literal/parameterized cases; self-chosen examples are not substitutes."
+                    )
+                    if verification_only
+                    else (
+                        " For coder recovery, include read_file, write_file, "
+                        "str_replace, and bash in metadata.tool_names; inspect the "
+                        "current file, edit source with a file tool, and run tests "
+                        "in a separate bash call. Never redirect program stdout "
+                        "into the source file or merely rerun the same failing "
+                        "command. This is a source implementation recovery: do "
+                        "not delegate a researcher, do not modify tests as a "
+                        "substitute for the source fix, and do not claim success "
+                        "until the requested behavior is implemented in a "
+                        "non-test source file. If the previous gap says no source "
+                        "file changed, reopen the original implementation path "
+                        "and complete that change first."
+                    )
                     if target == "coder"
                     else ""
                 )
@@ -739,6 +904,38 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
     def _filter_request(self, request: ModelRequest) -> ModelRequest:
         state = request.state if isinstance(request.state, Mapping) else {}
         previous = state.get("sp_last_handler_result")
+        if isinstance(previous, Mapping) and previous.get("policy_checkpoint") == "same_target_requires_intermediate_control_action":
+            # The router records a rejected duplicate as an effective THINK
+            # checkpoint, but leaving DELEGATE in the next model schema lets a
+            # tool-following model repeat the same invalid call indefinitely.
+            # Enforce the action-space transition at the schema boundary and
+            # require an explicit inspection/replanning step first.
+            allowed_actions = {
+                "sp_think",
+                "sp_reflect",
+                "sp_revise",
+                "sp_backtrack",
+                "sp_replan",
+                "sp_summarize",
+            }
+            active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) in allowed_actions]
+            messages = list(request.messages)
+            if not any(getattr(message, "name", None) == _SP_DELEGATE_POLICY_CHECKPOINT_MESSAGE_NAME for message in messages):
+                messages.append(
+                    HumanMessage(
+                        name=_SP_DELEGATE_POLICY_CHECKPOINT_MESSAGE_NAME,
+                        content=(
+                            "<sp-delegate-policy-checkpoint>\n"
+                            "The previous delegation was rejected because it repeated the same specialist "
+                            "without an intermediate control action. DELEGATE is temporarily unavailable. "
+                            "Inspect the previous observation and call exactly one of THINK, REFLECT, REPLAN, "
+                            "BACKTRACK, REVISE, or SUMMARIZE before delegating again.\n"
+                            "</sp-delegate-policy-checkpoint>"
+                        ),
+                        additional_kwargs={"hide_from_ui": True},
+                    )
+                )
+            return request.override(tools=active_tools, messages=messages)
         clarification_questions = self._pending_perception_questions(state)
         if clarification_questions:
             active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) == "sp_ask_human"]
@@ -801,6 +998,35 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             return request.override(tools=active_tools, messages=messages)
         completed_deliverable = self._completed_deliverable_from_previous_delegate(state)
         if completed_deliverable is not None:
+            if self._requires_independent_code_verification(completed_deliverable):
+                active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) == "sp_delegate"]
+                messages = list(request.messages)
+                if not any(getattr(message, "name", None) == _SP_CODE_VERIFICATION_MESSAGE_NAME for message in messages):
+                    artifact_id = str(
+                        completed_deliverable.get("artifact_id")
+                        or completed_deliverable.get("virtual_path")
+                        or completed_deliverable.get("artifact_url")
+                        or ""
+                    )
+                    messages.append(
+                        HumanMessage(
+                            name=_SP_CODE_VERIFICATION_MESSAGE_NAME,
+                            content=(
+                                "<sp-code-verification-required>\n"
+                                "The implementation specialist produced a source change, but implementation and verification must be separate control stages. "
+                                "Call sp_delegate exactly once with target_agent=\"coder\", stage=\"verification\", "
+                                f"input_refs=[\"{artifact_id}\"], and metadata={{\"verification_only\": true, \"requires_implementation\": false, \"tool_names\": [\"read_file\", \"bash\"]}}. "
+                                "Ask the verifier to inspect the current diff, test backward compatibility and boundary cases, run the named focused tests plus relevant existing regressions, "
+                                "and execute git diff --check. It must not edit source or tests. If a supplied test is absent or cannot run, it must report that exact gap instead of treating "
+                                "syntax-only checks as sufficient. When the test runner is unavailable, it must locate and read the actual named tests, extract their literal/parameterized inputs "
+                                "and expected invariants, and reproduce those exact repository cases through an independent executable path; self-chosen examples are not substitutes. "
+                                "If any such case contradicts the patch, report the concrete behavioral regression so control returns to implementation. Do not call FINISH in this turn.\n"
+                                "</sp-code-verification-required>"
+                            ),
+                            additional_kwargs={"hide_from_ui": True},
+                        )
+                    )
+                return request.override(tools=active_tools, messages=messages)
             active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) == "sp_finish"]
             messages = list(request.messages)
             if not any(getattr(message, "name", None) == _SP_ARTIFACT_FINALIZATION_MESSAGE_NAME for message in messages):
@@ -839,7 +1065,21 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         incomplete_current_report = self._incomplete_current_report(state)
         latest_delegate_observation = self._latest_delegate_observation(state)
         latest_delegate_status = str(latest_delegate_observation.metadata.get("completion_status") or "").strip().lower() if latest_delegate_observation is not None else ""
-        delegate_incomplete = isinstance(previous, Mapping) and previous.get("action_type") == ActionType.DELEGATE.value and latest_delegate_status in {"partial", "blocked"}
+        # Incompleteness is durable run state, not a property of only the
+        # immediately preceding action.  A THINK/REFLECT after a partial
+        # delegation must not make the recovery gate disappear and reopen
+        # arbitrary actions; only a newer complete observation clears it.
+        delegate_incomplete = latest_delegate_status in {"partial", "blocked"}
+        code_recovery = bool(
+            delegate_incomplete
+            and latest_delegate_observation is not None
+            and str(
+                latest_delegate_observation.metadata.get("target_agent")
+                or latest_delegate_observation.actor
+                or ""
+            )
+            == "coder"
+        )
         reporter_attempts = self._reporter_attempt_count(state)
         if incomplete_current_report is not None and reporter_attempts >= SP_REPORT_RECOVERY_MAX_ATTEMPTS:
             active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) == "sp_ask_human"]
@@ -875,8 +1115,12 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             delegate_attempts = self._delegate_attempt_count(
                 state,
                 target_agent,
+                stage=str(latest_delegate_observation.stage or "") or None,
             )
-            if delegate_attempts >= SP_DELEGATE_RECOVERY_MAX_ATTEMPTS:
+            delegate_recovery_limit = self._delegate_recovery_limit(
+                latest_delegate_observation
+            )
+            if delegate_attempts >= delegate_recovery_limit:
                 active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) not in SP_CONTROL_TOOL_NAMES]
                 messages = list(request.messages)
                 if not any(getattr(message, "name", None) == _SP_DELEGATE_RECOVERY_EXHAUSTED_MESSAGE_NAME for message in messages):
@@ -928,7 +1172,11 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                     )
                 )
             return request.override(tools=active_tools, messages=messages)
-        artifact_recovery = incomplete_current_report is not None or ((finish_rejected or delegate_incomplete) and not has_finalizable_artifact and requires_artifact)
+        artifact_recovery = incomplete_current_report is not None or (
+            (finish_rejected or delegate_incomplete)
+            and not has_finalizable_artifact
+            and (requires_artifact or code_recovery)
+        )
         if artifact_recovery:
             active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) == "sp_delegate"]
             messages = list(request.messages)
@@ -976,9 +1224,23 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         runtime: Any,
     ) -> dict[str, Any] | None:
         del runtime
-        if not isinstance(state, Mapping) or not cls._requires_artifact_delivery(state):
+        if not isinstance(state, Mapping):
             return None
-        if cls._has_finalizable_artifact(state):
+
+        requires_artifact = cls._requires_artifact_delivery(state)
+        observation = cls._latest_delegate_observation(state)
+        if observation is None or observation.actor == "reporter":
+            return None
+        completion_status = str(observation.metadata.get("completion_status") or "").strip().lower()
+        if completion_status not in {"partial", "blocked"}:
+            return None
+        target_agent = str(observation.metadata.get("target_agent") or observation.actor).strip()
+        # Code tasks need the same completion gate even when the user did not
+        # ask for a downloadable file. Otherwise a coder that failed to run
+        # tests can still be followed by a natural-language final answer.
+        if not requires_artifact and target_agent != "coder":
+            return None
+        if requires_artifact and cls._has_finalizable_artifact(state):
             return None
 
         messages = state.get("messages")
@@ -986,17 +1248,14 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         if not isinstance(latest, AIMessage) or latest.tool_calls or not message_to_text(latest).strip():
             return None
 
-        observation = cls._latest_delegate_observation(state)
-        if observation is None or observation.actor == "reporter":
-            return None
-        completion_status = str(observation.metadata.get("completion_status") or "").strip().lower()
-        if completion_status not in {"partial", "blocked"}:
-            return None
-
-        target_agent = str(observation.metadata.get("target_agent") or observation.actor).strip()
         if target_agent not in _SP_SPECIALIST_ROLES:
             return None
-        attempts = cls._delegate_attempt_count(state, target_agent)
+        attempts = cls._delegate_attempt_count(
+            state,
+            target_agent,
+            stage=str(observation.stage or "") or None,
+        )
+        recovery_limit = cls._delegate_recovery_limit(observation)
         raw_gaps = observation.metadata.get("evidence_gaps")
         gaps = [str(value).strip() for value in raw_gaps or [] if str(value).strip()]
         if not gaps and observation.failure_note:
@@ -1005,12 +1264,25 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         latest_human = cls._latest_visible_human_message(state)
         use_chinese = latest_human is not None and bool(_CJK_TEXT_PATTERN.search(message_to_text(latest_human)))
         message_id = str(latest.id or _implicit_think_message_id(latest))
+        draft_text = message_to_text(latest).strip()
 
-        if attempts >= SP_DELEGATE_RECOVERY_MAX_ATTEMPTS:
+        if attempts >= recovery_limit:
             if use_chinese:
-                content = f"当前产物尚未通过验证，本轮已达到 {attempts} 次恢复上限。未解决问题：{gap_text}。我不会把当前文件标记为可用；请稍后重试或缩小修复范围。"
+                content = (
+                    "以下是已保留的未验证草稿，仅供参考，不代表产物已通过验证：\n\n"
+                    f"{draft_text}\n\n---\n"
+                    f"验证状态：本轮已达到 {attempts} 次恢复上限。"
+                    f"未解决问题：{gap_text}。请稍后重试或缩小修复范围。"
+                )
             else:
-                content = f"The current artifact is still unverified after {attempts} recovery attempts. Unresolved issue: {gap_text}. I will not present the current file as usable; please retry later or narrow the repair scope."
+                content = (
+                    "The following unverified draft has been preserved for reference; "
+                    "it does not mean the artifact passed verification:\n\n"
+                    f"{draft_text}\n\n---\n"
+                    f"Verification status: the run reached its limit of {attempts} "
+                    f"recovery attempts. Unresolved issue: {gap_text}. Please retry "
+                    "later or narrow the repair scope."
+                )
             guarded = latest.model_copy(
                 update={
                     "id": message_id,
@@ -1026,12 +1298,19 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             )
             return {"messages": [guarded]}
 
+        verification_only = (
+            target_agent == "coder"
+            and str(observation.stage or "") == "verification"
+            and not _verification_found_behavior_failure(observation)
+        )
         stage = {
             "coder": "implementation",
             "researcher": "research",
             "outline": "planning",
             "perception": "perception",
         }.get(target_agent, "implementation")
+        if verification_only:
+            stage = "verification"
         input_refs = [observation.result_ref] if observation.result_ref else []
         task = (
             f"Recover the incomplete {target_agent} deliverable using a materially "
@@ -1044,19 +1323,47 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             "recovery_attempt": attempts + 1,
         }
         if target_agent == "coder":
-            metadata["tool_names"] = [
-                "read_file",
-                "write_file",
-                "str_replace",
-                "bash",
-            ]
-            task += " For code, inspect the current source, edit it with a file tool, then run every old and new test in a separate bash call after the latest source change. Never redirect program output into source."
+            if verification_only:
+                metadata.update(
+                    {
+                        "verification_only": True,
+                        "requires_implementation": False,
+                        "tool_names": ["read_file", "bash"],
+                    }
+                )
+                task += (
+                    " This is read-only verification: inspect the existing diff and run the missing checks without editing source or tests. "
+                    "If the repository test runner is unavailable, read the actual named tests and reproduce their exact literal/parameterized cases; self-chosen examples are not substitutes."
+                )
+            else:
+                metadata["tool_names"] = [
+                    "read_file",
+                    "write_file",
+                    "str_replace",
+                    "bash",
+                ]
+                task += (
+                    " For code, inspect the current source and the concrete regression evidence, edit it with a file tool, then run every old and new test in a separate bash call after the latest source change. "
+                    "Never redirect program output into source."
+                )
         call_seed = f"{message_id}:{target_agent}:{attempts + 1}"
         call_id = f"sp-recovery-{hashlib.sha256(call_seed.encode('utf-8')).hexdigest()[:16]}"
+        if use_chinese:
+            recovery_content = (
+                f"正在执行第 {attempts + 1} 次有界恢复验证。"
+                "为避免已生成内容从界面消失，下面保留临时草稿；"
+                f"验证完成前请勿视为最终结果：\n\n{draft_text}"
+            )
+        else:
+            recovery_content = (
+                f"Bounded recovery attempt {attempts + 1} is running. The draft below "
+                "is preserved so generated content does not disappear; do not treat "
+                f"it as final until verification completes:\n\n{draft_text}"
+            )
         guarded = latest.model_copy(
             update={
                 "id": message_id,
-                "content": "",
+                "content": recovery_content,
                 "tool_calls": [
                     {
                         "name": "sp_delegate",
@@ -1089,6 +1396,127 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
 
     async def aafter_model(self, state: AgentState, runtime: Any) -> dict[str, Any] | None:
         return self._after_model_update(state, runtime)
+
+    def wrap_model_call(
+        self,
+        request: ModelRequest,
+        handler: Callable[[ModelRequest], ModelResponse],
+    ) -> ModelCallResult:
+        return handler(self._filter_request(request))
+
+    async def awrap_model_call(
+        self,
+        request: ModelRequest,
+        handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
+    ) -> ModelCallResult:
+        return await handler(self._filter_request(request))
+
+
+class SPActionBudgetMiddleware(AgentMiddleware[AgentState]):
+    """Bound Central actions independently from LangGraph super-steps.
+
+    A native-agent action traverses several middleware/model/tool graph nodes,
+    so ``recursion_limit`` is an emergency execution ceiling rather than a
+    meaningful CentralAgent action budget.  This middleware reserves the last
+    action for a terminal FINISH/ASK_HUMAN call, or asks the model for one
+    honest incomplete response when no valid terminal action is available.
+    """
+
+    state_schema = AgentState
+
+    def __init__(self, *, max_actions: int = DEFAULT_SP_ACTION_LIMIT) -> None:
+        super().__init__()
+        if max_actions < 2:
+            raise ValueError("SP max_actions must be at least 2")
+        self._max_actions = int(max_actions)
+
+    def before_agent(self, state: AgentState, runtime: Any) -> dict[str, Any] | None:
+        del state, runtime
+        return {"sp_max_loop_iterations": self._max_actions}
+
+    async def abefore_agent(self, state: AgentState, runtime: Any) -> dict[str, Any] | None:
+        return self.before_agent(state, runtime)
+
+    @hook_config(can_jump_to=["end"])
+    def before_model(self, state: AgentState, runtime: Any) -> dict[str, Any] | None:
+        del runtime
+        iteration = int(state.get("sp_loop_iteration") or 0) if isinstance(state, Mapping) else 0
+        if iteration < self._max_actions:
+            return None
+        latest = SPFinishAvailabilityMiddleware._latest_visible_human_message(state)
+        use_chinese = latest is not None and bool(_CJK_TEXT_PATTERN.search(message_to_text(latest)))
+        content = (
+            f"本轮已达到 {self._max_actions} 次中枢动作上限，任务尚未形成可安全交付的已验证结果。"
+            "我已停止继续循环；请重试，或缩小任务范围后继续。"
+            if use_chinese
+            else (
+                f"This run reached its {self._max_actions}-action CentralAgent limit without a safely deliverable verified result. "
+                "I stopped the loop; please retry or narrow the task scope."
+            )
+        )
+        return {
+            "jump_to": "end",
+            "messages": [
+                AIMessage(
+                    content=content,
+                    additional_kwargs={
+                        "stackplanner": {
+                            "status": "action_capped",
+                            "max_actions": self._max_actions,
+                        }
+                    },
+                )
+            ],
+            "sp_last_handler_result": {
+                "next_step": "error_fatal",
+                "error": f"SP action budget exhausted: {iteration}/{self._max_actions}",
+                "loop_iteration": iteration,
+            },
+        }
+
+    @hook_config(can_jump_to=["end"])
+    async def abefore_model(self, state: AgentState, runtime: Any) -> dict[str, Any] | None:
+        return self.before_model(state, runtime)
+
+    def _filter_request(self, request: ModelRequest) -> ModelRequest:
+        state = request.state if isinstance(request.state, Mapping) else {}
+        iteration = int(state.get("sp_loop_iteration") or 0)
+        if iteration < self._max_actions - 1:
+            return request
+
+        # The preceding finish/recovery policy has already narrowed the schema.
+        # Only truly terminal actions may consume the reserved final slot.
+        terminal_names = {"sp_finish", "sp_ask_human"}
+        exposed_sp_names = {
+            str(getattr(candidate, "name", ""))
+            for candidate in request.tools
+            if str(getattr(candidate, "name", "")) in SP_CONTROL_TOOL_NAMES
+        }
+        if exposed_sp_names and exposed_sp_names <= terminal_names:
+            return request
+
+        active_tools = [
+            candidate
+            for candidate in request.tools
+            if str(getattr(candidate, "name", "")) not in SP_CONTROL_TOOL_NAMES
+        ]
+        messages = list(request.messages)
+        if not any(getattr(message, "name", None) == _SP_ACTION_BUDGET_MESSAGE_NAME for message in messages):
+            messages.append(
+                HumanMessage(
+                    name=_SP_ACTION_BUDGET_MESSAGE_NAME,
+                    content=(
+                        "<sp-action-budget-terminal>\n"
+                        f"This run has used {iteration} of {self._max_actions} CentralAgent actions. "
+                        "No validated terminal action is currently available. Do not call another action or tool. "
+                        "Answer the user once now with an honest concise incomplete-status summary: state what was accomplished, "
+                        "what remains unverified, and the smallest useful next step. Never claim that an unverified artifact is ready.\n"
+                        "</sp-action-budget-terminal>"
+                    ),
+                    additional_kwargs={"hide_from_ui": True},
+                )
+            )
+        return request.override(tools=active_tools, messages=messages)
 
     def wrap_model_call(
         self,
@@ -1208,12 +1636,83 @@ def _normalize_delegate_target(payload: dict[str, Any]) -> tuple[str, str | None
     if target_agent != "coder":
         return target_agent, None
     text = "\n".join(str(value) for key in ("task", "expected_output", "reason") if (value := payload.get(key)) not in (None, ""))
-    if not _PURE_REPORT_DELEGATION_PATTERN.search(text):
-        return target_agent, None
     if _CODE_OR_APP_DELIVERABLE_PATTERN.search(text):
         return target_agent, None
-    payload["target_agent"] = "reporter"
-    return "reporter", "pure_report_synthesis"
+    if _PURE_REPORT_DELEGATION_PATTERN.search(text):
+        payload["target_agent"] = "reporter"
+        return "reporter", "pure_report_synthesis"
+    if _LOCAL_DOCUMENT_INSPECTION_PATTERN.search(text):
+        payload["target_agent"] = "perception"
+        return "perception", "local_document_inspection"
+    return target_agent, None
+
+
+def _infer_missing_delegate_target(payload: dict[str, Any]) -> tuple[str, str | None]:
+    """Recover a missing specialist only when the declared stage is decisive.
+
+    Some OpenAI-compatible models occasionally omit one required tool argument
+    near their per-step token limit.  Rejecting the whole delegation can strand
+    an otherwise valid run.  Stages such as ``research`` and ``implementation``
+    already determine the specialist under the SP protocol, so they are safe to
+    repair.  Ambiguous stages (notably ``revision``) remain validation errors.
+    Explicit invalid targets are never rewritten here.
+    """
+
+    raw_target = payload.get("target_agent")
+    if raw_target is not None and str(raw_target).strip():
+        return str(raw_target).strip(), None
+    stage = str(payload.get("stage") or "").strip().lower()
+    inferred = _UNAMBIGUOUS_STAGE_SPECIALISTS.get(stage)
+    if inferred is None:
+        return "", None
+    payload["target_agent"] = inferred
+    return inferred, f"unambiguous_stage:{stage}"
+
+
+def _infer_missing_delegate_task(payload: dict[str, Any]) -> str | None:
+    """Recover an omitted task only for an unambiguous specialist stage.
+
+    Small OpenAI-compatible completion limits can truncate the required
+    ``task`` argument while preserving target/stage/input refs.  Rejecting a
+    structurally obvious verification or implementation continuation wastes a
+    full Central turn and can strand the run.  The fallback deliberately says
+    *what contract to execute*, not how to solve a repository-specific case.
+    """
+    if isinstance(payload.get("task"), str) and str(payload["task"]).strip():
+        return None
+    target = str(payload.get("target_agent") or "").strip()
+    stage = str(payload.get("stage") or "").strip().lower()
+    fallbacks = {
+        ("coder", "verification"): (
+            "Perform read-only verification of the latest implementation referenced by input_refs. "
+            "Inspect the current diff, run the focused tests and relevant existing regressions, "
+            "then run git diff --check. Do not edit source or tests; report every non-zero exit "
+            "status or environment blocker as an evidence gap."
+        ),
+        ("coder", "implementation"): (
+            "Continue the current implementation task from the shared workspace and input_refs. "
+            "Inspect the existing work, make the smallest required non-test source change, and "
+            "run focused checks plus git diff --check after the final edit."
+        ),
+        ("researcher", "research"): (
+            "Continue the current research task using the supplied input_refs and return concise, "
+            "source-backed evidence with explicit gaps."
+        ),
+        ("perception", "perception"): (
+            "Inspect the supplied local inputs and return the decision-relevant facts without editing them."
+        ),
+        ("outline", "planning"): (
+            "Create the requested outline from the current task context and supplied input_refs."
+        ),
+        ("reporter", "reporting"): (
+            "Synthesize the requested final report from the supplied input_refs without inventing evidence."
+        ),
+    }
+    inferred = fallbacks.get((target, stage))
+    if inferred is None:
+        return None
+    payload["task"] = inferred
+    return f"unambiguous_target_stage:{target}:{stage}"
 
 
 def _infer_coder_stage(payload: Mapping[str, Any]) -> str | None:
@@ -1228,6 +1727,86 @@ def _infer_coder_stage(payload: Mapping[str, Any]) -> str | None:
     if _CODER_READ_ONLY_PATTERN.search(text) and not _CODER_MUTATION_PATTERN.search(text):
         return "perception"
     return None
+
+
+def _canonical_coder_stage(
+    payload: Mapping[str, Any],
+    requested_stage: Any,
+) -> tuple[str | None, str | None]:
+    """Keep an explicit coder stage from suppressing required write tools.
+
+    Qwen occasionally emits ``stage=perception`` as a generic first-step
+    label even when the delegation task explicitly asks to implement code or
+    add tests.  Passing that label through is harmful: the coder prompt then
+    enters its read-only branch and the task can end with no patch.  A clear
+    mutation request is therefore authoritative at this transport boundary.
+    Read-only coder requests remain perception, including requests that omit
+    the stage entirely.
+    """
+    normalized = str(requested_stage or "").strip().lower() or None
+    if normalized == "perception":
+        text = "\n".join(
+            str(value)
+            for key in ("task", "expected_output", "reason")
+            if (value := payload.get(key)) not in (None, "")
+        )
+        if _CODER_MUTATION_PATTERN.search(text):
+            return "implementation", "coder_mutation_requires_implementation"
+        return "perception", None
+    if normalized is None:
+        return _infer_coder_stage(payload), None
+    return normalized, None
+
+
+def _normalize_model_string_list(value: Any) -> list[str] | None:
+    """Normalize model-emitted scalar/list variants at the tool boundary."""
+
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.startswith("["):
+            try:
+                decoded = json.loads(stripped)
+            except json.JSONDecodeError:
+                decoded = None
+            if isinstance(decoded, list):
+                value = decoded
+    if isinstance(value, Mapping):
+        identifier = next(
+            (
+                value.get(key)
+                for key in ("artifact_id", "entry_id", "id", "ref", "virtual_path")
+                if isinstance(value.get(key), str) and str(value.get(key)).strip()
+            ),
+            None,
+        )
+        values = [identifier] if identifier is not None else []
+    elif isinstance(value, list | tuple | set):
+        values = list(value)
+    else:
+        values = [value]
+    return list(
+        dict.fromkeys(
+            text.replace("/mnt-user-data/", "/mnt/user-data/")
+            for item in values
+            if (text := str(item).strip())
+        )
+    )
+
+
+def _normalize_model_mapping(value: Any) -> dict[str, Any]:
+    """Decode the JSON-object strings emitted by some OpenAI-compatible APIs."""
+    if isinstance(value, Mapping):
+        return dict(value)
+    if isinstance(value, str) and value.strip().startswith("{"):
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        if isinstance(decoded, Mapping):
+            return dict(decoded)
+    return {}
 
 
 def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: str) -> dict[str, Any]:
@@ -1250,7 +1829,18 @@ def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: st
     payload["idempotency_key"] = str(payload.get("idempotency_key") or f"spidem_{tool_call_id}")
     payload["reason"] = str(payload.get("reason") or f"CentralAgent selected {action_type.value}")
     if tool_name == "sp_delegate":
+        for field in ("task", "expected_output", "reason"):
+            if isinstance(payload.get(field), str):
+                payload[field] = payload[field].replace(
+                    "/mnt-user-data/",
+                    "/mnt/user-data/",
+                )
+        raw_input_refs = payload.get("input_refs")
+        payload["input_refs"] = _normalize_model_string_list(raw_input_refs) or []
+        raw_metadata = payload.get("metadata")
+        payload["metadata"] = _normalize_model_mapping(raw_metadata)
         revision_reason = payload.pop("revision_reason", None)
+        target_agent, inference_reason = _infer_missing_delegate_target(payload)
         target_agent, routing_reason = _normalize_delegate_target(payload)
         requested_stage = payload.get("stage")
         canonical_stage = {
@@ -1261,10 +1851,25 @@ def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: st
             canonical_stage = "revision" if revision_reason or requested_stage == "revision" else "planning"
         if target_agent == "reporter":
             canonical_stage = "revision" if revision_reason or requested_stage == "revision" else "reporting"
-        if target_agent == "coder" and requested_stage is None:
-            canonical_stage = _infer_coder_stage(payload)
+        coder_stage_reason = None
+        if target_agent == "coder":
+            canonical_stage, coder_stage_reason = _canonical_coder_stage(payload, requested_stage)
         if canonical_stage is not None:
             payload["stage"] = canonical_stage
+        task_inference_reason = _infer_missing_delegate_task(payload)
+        if target_agent == "perception":
+            payload["metadata"] = {
+                **dict(payload.get("metadata") or {}),
+                "requires_implementation": False,
+            }
+            payload["metadata"].pop("verification_only", None)
+            requested_tools = payload["metadata"].get("tool_names")
+            if isinstance(requested_tools, list):
+                payload["metadata"]["tool_names"] = [
+                    name
+                    for name in requested_tools
+                    if name in {"read_file", "grep", "glob", "ls"}
+                ]
         if not revision_reason and target_agent in {"reporter", "outline"} and payload.get("stage") == "revision":
             # Models reliably express the revision rationale in `reason` even
             # when they omit the optional dedicated field. Keep the explicit
@@ -1285,13 +1890,34 @@ def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: st
                 if routing_reason
                 else {}
             ),
+            **(
+                {
+                    "target_agent_inferred": True,
+                    "target_agent_inference_reason": inference_reason,
+                }
+                if inference_reason
+                else {}
+            ),
+            **(
+                {
+                    "task_inferred": True,
+                    "task_inference_reason": task_inference_reason,
+                }
+                if task_inference_reason
+                else {}
+            ),
+            **(
+                {"stage_routed_from": requested_stage, "stage_routing_reason": coder_stage_reason}
+                if coder_stage_reason
+                else {}
+            ),
             "__sp_parent_tool_call_id": tool_call_id,
         }
     elif tool_name == "sp_recall_memory":
         payload["metadata"] = {**dict(payload.get("metadata") or {}), "memory_query": payload.pop("query")}
     elif tool_name == "sp_reflect":
-        target_entry_ids = payload.pop("target_entry_ids", None)
-        if target_entry_ids is not None:
+        target_entry_ids = _normalize_model_string_list(payload.pop("target_entry_ids", None))
+        if target_entry_ids:
             payload["metadata"] = {
                 **dict(payload.get("metadata") or {}),
                 "target_entry_ids": target_entry_ids,
@@ -1300,7 +1926,7 @@ def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: st
         payload["task"] = payload.pop("correction")
         payload["metadata"] = {
             **dict(payload.get("metadata") or {}),
-            "target_entry_ids": payload.pop("target_entry_ids"),
+            "target_entry_ids": _normalize_model_string_list(payload.pop("target_entry_ids", None)) or [],
             "revision_reason": payload.get("reason"),
         }
     elif tool_name == "sp_backtrack":
@@ -1315,7 +1941,7 @@ def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: st
             **dict(payload.get("metadata") or {}),
             "question": payload.pop("question"),
             "interaction_type": payload.pop("interaction_type", "clarification"),
-            "options": payload.pop("options", None),
+            "options": _normalize_model_string_list(payload.pop("options", None)),
         }
     elif tool_name == "sp_finish":
         summary = payload.pop("summary", None) or payload.pop("task", None)
@@ -1329,8 +1955,8 @@ def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: st
         }
     elif tool_name == "sp_summarize":
         payload["task"] = payload.pop("summary")
-        source_entry_ids = payload.pop("source_entry_ids", None)
-        if source_entry_ids is not None:
+        source_entry_ids = _normalize_model_string_list(payload.pop("source_entry_ids", None))
+        if source_entry_ids:
             payload["metadata"] = {
                 **dict(payload.get("metadata") or {}),
                 "source_entry_ids": source_entry_ids,
@@ -1419,10 +2045,20 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
         if reserved_summary and result.next_step.startswith("error"):
             with self._summary_run_lock:
                 self._summary_committed_runs.pop(summary_key, None)
-        action = SPAction.from_dict(payload)
+        try:
+            action = SPAction.from_dict(payload)
+        except ActionValidationError:
+            # The router deliberately returns a recoverable ToolMessage for a
+            # malformed model action. Do not re-raise the same validation
+            # error while formatting that result, otherwise Central sees a
+            # tool exception and can repeat the call indefinitely.
+            action = None
         handler_summary = result.state_update.get("sp_last_handler_result")
-        effective_action_type = action.action_type
-        effective_action_id = action.action_id
+        try:
+            effective_action_type = action.action_type if action is not None else ActionType(str(payload.get("action_type")))
+        except ValueError:
+            effective_action_type = ActionType.THINK
+        effective_action_id = action.action_id if action is not None else str(payload.get("action_id") or tool_call_id)
         if isinstance(handler_summary, Mapping):
             try:
                 effective_action_type = ActionType(str(handler_summary.get("action_type")))
@@ -1519,11 +2155,11 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
             messages.append(
                 AIMessage(
                     id=f"sp-final:{tool_call_id}",
-                    content=(str(result.state_update.get("sp_last_run_summary") or "").strip() or action.task or "Task completed."),
+                    content=(str(result.state_update.get("sp_last_run_summary") or "").strip() or (action.task if action is not None else None) or "Task completed."),
                     additional_kwargs={
                         "stackplanner": {
                             "action_type": ActionType.FINISH.value,
-                            "action_id": action.action_id,
+                            "action_id": action.action_id if action is not None else effective_action_id,
                             "status": "finished",
                         }
                     },
@@ -1545,6 +2181,8 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
         update = {**state_update, "messages": messages}
         if result.next_step == "interrupt":
             pending = update.get("sp_pending_human_interaction") or {}
+            if action is None:  # defensive: interrupt actions must validate
+                return Command(update=update)
             human_input = _human_input_payload(pending, action=action, tool_call_id=tool_message.tool_call_id)
             tool_message.content = human_input["question"]
             tool_message.artifact = {"human_input": human_input}

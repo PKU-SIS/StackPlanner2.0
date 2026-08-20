@@ -160,7 +160,7 @@ def build_sp_central_runtime_context(
     system_parts = [
         "<sp-runtime-policy>",
         "Precedence: current user instructions and pinned task feedback override SOUL, long-term memory, and Skills.",
-        "Long-term memory is not injected here. Use RECALL_MEMORY only when historical reusable context is absent from TaskMemoryStack.",
+        "Long-term memory is not injected here. On a new conversation, the first CentralAgent decision must be RECALL_MEMORY; on later decisions, use it only when historical reusable context is absent from TaskMemoryStack.",
     ]
     if soul:
         system_parts.extend(["<soul>", soul, "</soul>"])

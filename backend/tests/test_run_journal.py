@@ -945,6 +945,28 @@ class TestProgressSnapshots:
         assert snapshots[-1]["subagent_tokens"] == 30
 
     @pytest.mark.anyio
+    async def test_debug_event_from_foreign_thread_flushes_on_owner_loop(self):
+        store = MemoryRunEventStore()
+        j = RunJournal("r1", "t1", store, flush_threshold=1)
+
+        await asyncio.to_thread(
+            lambda: j.record_custom_event(
+                "sp.action.selected",
+                content={"action": "DELEGATE"},
+            )
+        )
+
+        for _ in range(20):
+            events = await store.list_events("t1", "r1")
+            if events:
+                break
+            await asyncio.sleep(0.01)
+
+        assert len(events) == 1
+        assert events[0]["event_type"] == "sp.action.selected"
+        await j.flush()
+
+    @pytest.mark.anyio
     async def test_throttled_progress_flush_emits_trailing_snapshot(self):
         snapshots: list[dict] = []
         trailing_seen = asyncio.Event()

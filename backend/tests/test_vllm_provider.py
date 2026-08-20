@@ -171,6 +171,35 @@ def test_vllm_provider_recovers_qwen_json_tool_call_from_reasoning():
     assert message.additional_kwargs["reasoning_content"] == "Need current evidence."
 
 
+def test_vllm_provider_recovers_qwen_json_tool_call_from_reasoning_content():
+    """Qwen vLLM may put text-protocol tool calls in reasoning_content."""
+    model = _make_model()
+    result = model._create_chat_result(
+        {
+            "model": "Qwen3-32B",
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "reasoning_content": (
+                            '<tool_call>{"name":"sp_delegate","arguments":'
+                            '{"target_agent":"coder","task":"inspect files"}}</tool_call>'
+                        ),
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        }
+    )
+
+    message = result.generations[0].message
+    assert message.tool_calls[0]["name"] == "sp_delegate"
+    assert message.tool_calls[0]["args"] == {"target_agent": "coder", "task": "inspect files"}
+    assert message.additional_kwargs["reasoning_content"] == ""
+
+
 def test_vllm_provider_recovers_multiple_qwen_tool_calls_from_content():
     model = _make_model()
     result = model._create_chat_result(

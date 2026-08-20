@@ -139,6 +139,10 @@ class TaskMemoryMiddleware(AgentMiddleware[ThreadState]):
     def before_agent(self, state: ThreadState, runtime: Runtime) -> dict[str, Any] | None:
         stack = self._restore_stack(state, runtime)
         update: dict[str, Any] = {}
+        # Make the conversation boundary explicit for CentralAgent. This is
+        # intentionally state-based, not inferred from task keywords.
+        if state.get("messages"):
+            update["sp_new_conversation"] = not bool(state.get("sp_loop_run_id")) and not bool(state.get("sp_task_memory"))
         fresh_user_turn = _is_fresh_runtime(runtime)
         if fresh_user_turn:
             # A user explicitly started over after an abnormal run. Keep only
@@ -257,6 +261,7 @@ class TaskMemoryMiddleware(AgentMiddleware[ThreadState]):
             artifact_refs=_mapping_or_none(state.get("sp_current_artifact_refs")),
             report_version=state.get("sp_current_report_version"),
             current_run_id=_run_id(runtime),
+            new_conversation=bool(state.get("sp_new_conversation")),
         )
         _record_debug_task_context(
             runtime,

@@ -1992,7 +1992,10 @@ export function useInfiniteThreads(
 
 export function useThreadRuns(
   threadId?: string,
-  { enabled = true }: { enabled?: boolean } = {},
+  {
+    enabled = true,
+    refetchInterval = false,
+  }: { enabled?: boolean; refetchInterval?: number | false } = {},
 ) {
   const apiClient = getAPIClient();
   return useQuery<Run[]>({
@@ -2006,6 +2009,7 @@ export function useThreadRuns(
     },
     enabled: enabled && Boolean(threadId),
     refetchOnWindowFocus: false,
+    refetchInterval,
   });
 }
 

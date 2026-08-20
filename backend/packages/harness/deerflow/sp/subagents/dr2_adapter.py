@@ -40,8 +40,86 @@ _CODER_EXECUTION_REQUIRED_PATTERN = re.compile(
     r")",
     re.IGNORECASE,
 )
-_NONZERO_EXIT_PATTERN = re.compile(r"\bExit Code:\s*(-?\d+)\b", re.IGNORECASE)
+_CODER_IMPLEMENTATION_ACTION_PATTERN = re.compile(
+    r"(?:"
+    r"\b(?:implement|fix|add|change|modify|edit|update|patch|refactor|correct)\b"
+    r"|实现|修复|添加|增加|修改|编辑|更新|补丁|重构|纠正"
+    r")",
+    re.IGNORECASE,
+)
+_TEST_PATH_PATTERN = re.compile(
+    r"(?:^|/)(?:tests?|testdata)(?:/|$)"
+    r"|(?:^|/)(?:test_[^/]*|[^/]*_test\.[^/]*)$",
+    re.IGNORECASE,
+)
+_EXIT_STATUS_PATTERNS = (
+    re.compile(r"\bExit Code:\s*(-?\d+)\b", re.IGNORECASE),
+    # Agents commonly preserve a failing command's status in a diagnostic
+    # wrapper such as ``PYTEST_REAL_EXIT=4``.  The shell wrapper itself may
+    # return zero, but the embedded status is still authoritative evidence.
+    re.compile(
+        r"\b(?:[A-Z][A-Z0-9_]*_)?(?:REAL_)?EXIT(?:_STATUS|_CODE)?\s*=\s*(-?\d+)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(?:returncode|return_code)\s*[=:]\s*(-?\d+)\b", re.IGNORECASE),
+    re.compile(r"<returncode>\s*(-?\d+)\s*</returncode>", re.IGNORECASE),
+)
 _UNVERIFIED_EXECUTION_GAP = "Coder claimed execution or test verification without a successful execution-tool result after the latest source change."
+_UNVERIFIED_IMPLEMENTATION_GAP = "Coder claimed the implementation was complete, but no non-test source file was changed."
+_TEST_COMMAND_PATTERN = re.compile(
+    r"(?:pytest|py\.test|unittest|tox|nox|jest|vitest|npm\s+(?:run\s+)?test|cargo\s+test|go\s+test|mvn\s+test|gradle\s+test|make\s+test)",
+    re.IGNORECASE,
+)
+_UNVERIFIED_TEST_GAP = "Coder claimed test verification without a successful test-command result after the latest source change."
+_NO_RESPONSE_GAP = "Subagent returned no usable response or artifact."
+_MASKED_TEST_EXIT_GAP = "Coder test command masked or discarded the test runner exit status."
+_OBSERVABLE_FALSE_CHECK_PATTERN = re.compile(
+    r"(?im)^\s*[^\n:]{0,80}\b(?:PASS(?:ED)?|CHECK|ASSERT(?:ION)?|OK)\s*[:=]\s*(?:false|fail(?:ed)?)\b"
+    r"|^\s*CHECK\b[^\n]{0,120}\bFAIL(?:ED)?\b"
+)
+_BEHAVIOR_FAILURE_REPORT_PATTERN = re.compile(
+    r"(?:"
+    r"\bAssertionError\b|\bassertion\b.{0,80}\bfailed\b|"
+    r"\bfound\s+(?:an?\s+)?(?:issue|bug|regression)\b|"
+    r"\b(?:breaks?|breaking|broke)\b.{0,80}\b(?:test|behavior|behaviour|compatibility|contract)\b|"
+    r"\b(?:test|behavior|behaviour|compatibility|contract)\b.{0,80}\b(?:fails?|failed|broken|regression)\b|"
+    r"发现.{0,24}(?:问题|错误|回归)|(?:破坏|打破).{0,32}(?:测试|兼容性|行为)"
+    r")",
+    re.IGNORECASE | re.DOTALL,
+)
+_ENVIRONMENT_BLOCKER_REPORT_PATTERN = re.compile(
+    r"(?:"
+    r"\b(?:host|environment|dependency|dependencies|toolchain)\b.{0,96}"
+    r"\b(?:block(?:ed|er)?|incompatib(?:le|ility)|missing|unavailable|cannot|can't)\b|"
+    r"\b(?:blocked|cannot|can't|unable\s+to)\b.{0,96}"
+    r"\b(?:collect|import|run|execute)\b.{0,48}\b(?:environment|dependency|toolchain)\b|"
+    r"(?:环境|依赖|工具链).{0,64}(?:阻塞|不兼容|缺失|不可用|无法)"
+    r")",
+    re.IGNORECASE | re.DOTALL,
+)
+_BEHAVIOR_FAILURE_GAP = "Coder reported observable behavioral check failures or a regression."
+
+
+def _task_actor_label(task: SPSubagentTask | None) -> str:
+    if task is not None and str(task.stage or task.metadata.get("stage") or "").strip().lower() == "verification":
+        return "Verification subagent"
+    if task is not None and str(task.subagent_type or "").strip():
+        return str(task.subagent_type).replace("_", " ").strip().title()
+    return "Subagent"
+
+
+def _unverified_execution_gap(task: SPSubagentTask | None) -> str:
+    return (
+        f"{_task_actor_label(task)} claimed execution or test verification without a successful "
+        "execution-tool result after the latest source change."
+    )
+
+
+def _unverified_test_gap(task: SPSubagentTask | None) -> str:
+    return (
+        f"{_task_actor_label(task)} claimed test verification without a successful "
+        "test-command result after the latest source change."
+    )
 
 
 def _json_safe(value: Any) -> Any:
@@ -58,7 +136,9 @@ def _json_safe(value: Any) -> Any:
 
 def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
     """Render a structured SP task for a DR2 subagent prompt."""
+    task.validate_protocol()
     payload = {
+        "protocol": task.protocol_payload(),
         "action_id": task.action_id,
         "subagent_type": task.subagent_type,
         "description": task.description,
@@ -76,6 +156,8 @@ def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
             "",
             "Complete the task using the tools available to this DR2 subagent.",
             "Treat task, input_refs, expected_output, and context_refs as one execution contract. Verify the expected_output before claiming completion.",
+            "If context_refs.task_contract is present, its authoritative and immutable fields preserve the caller's original acceptance contract. Do not replace them with a narrower interpretation from the latest delegated wording; report a gap or request recovery when the contract is not satisfied.",
+            "Return the task_result envelope fields implied by protocol.message_type. Do not expose private chain-of-thought; report only observable actions, evidence, tests, files, and blockers.",
             "Honor the subagent output contract: return compact JSON with summary, artifact_content, artifact_type, and artifact_metadata.",
             'Set artifact_metadata.completion_status to "complete", "partial", or "blocked", and list unmet requirements in artifact_metadata.evidence_gaps.',
             "Use artifact_metadata.filename for a desired text-artifact filename. Use artifact_metadata.created_paths only for absolute /mnt/user-data/outputs/... files that were actually created by a file tool.",
@@ -197,10 +279,66 @@ def _message_text(value: Any) -> str:
 def _tool_result_succeeded(value: Any) -> bool:
     text = _message_text(value).strip()
     lowered = text.lower()
-    if lowered.startswith("error:") or "traceback (most recent call last)" in lowered or "permission denied" in lowered:
+    if (
+        lowered.startswith("error:")
+        or "traceback (most recent call last)" in lowered
+        or "assertionerror" in lowered
+        or "permission denied" in lowered
+        or _OBSERVABLE_FALSE_CHECK_PATTERN.search(text)
+    ):
         return False
-    exit_codes = [int(match.group(1)) for match in _NONZERO_EXIT_PATTERN.finditer(text)]
+    exit_codes = [
+        int(match.group(1))
+        for pattern in _EXIT_STATUS_PATTERNS
+        for match in pattern.finditer(text)
+    ]
     return not exit_codes or exit_codes[-1] == 0
+
+
+def _coder_reported_behavior_failure(raw_result: Any, ai_messages: Any) -> bool:
+    # Treat the subagent's final report and observable tool results as
+    # evidence. Intermediate assistant narration is deliberative text: models
+    # frequently say "the test failed because the host dependency is
+    # incompatible" before a later focused behavioral check succeeds. Folding
+    # that narration into the verdict caused valid patches to be mislabeled as
+    # regressions and sent into an unrelated recovery loop.
+    raw_text = _message_text(raw_result)
+    if _OBSERVABLE_FALSE_CHECK_PATTERN.search(raw_text):
+        return True
+    if _BEHAVIOR_FAILURE_REPORT_PATTERN.search(raw_text) and not _ENVIRONMENT_BLOCKER_REPORT_PATTERN.search(raw_text):
+        return True
+
+    tool_texts: list[str] = []
+    if isinstance(ai_messages, list):
+        for message in ai_messages:
+            if isinstance(message, Mapping) and message.get("type") == "tool":
+                tool_texts.append(_message_text(message.get("content")))
+    for text in tool_texts:
+        if _ENVIRONMENT_BLOCKER_REPORT_PATTERN.search(text) and not _OBSERVABLE_FALSE_CHECK_PATTERN.search(text):
+            continue
+        if _OBSERVABLE_FALSE_CHECK_PATTERN.search(text) or _BEHAVIOR_FAILURE_REPORT_PATTERN.search(text):
+            return True
+    return False
+
+
+def _command_preserves_exit_status(command: str) -> bool:
+    """Reject shell wrappers that can turn a failed test into exit code zero."""
+
+    lowered = command.lower()
+    if re.search(r"\|\|\s*(?:true|:)(?:\s|$)", lowered):
+        return False
+    # Without pipefail, ``pytest ... | head`` reports the consumer's status,
+    # not pytest's. This exact pattern produced false-complete SWE patches.
+    if re.search(r"(?<!\|)\|(?!\|)", command) and not re.search(
+        r"\bset\s+(?:-[^;\n]*o\s+pipefail|-o\s+pipefail)\b",
+        lowered,
+    ):
+        return False
+    # A semicolon always runs the next command and therefore discards the test
+    # status. ``&&`` is safe because the suffix runs only after success.
+    if re.search(r";\s*(?:echo|printf|head|tail|cat)\b", lowered):
+        return False
+    return True
 
 
 def _recover_research_tool_evidence(ai_messages: Any) -> str | None:
@@ -277,6 +415,134 @@ def _coder_requires_execution_evidence(task: SPSubagentTask | None) -> bool:
         return False
     text = "\n".join(str(value) for value in (task.task, task.description, task.expected_output) if value)
     return bool(_CODER_EXECUTION_REQUIRED_PATTERN.search(text))
+
+
+def coder_task_requires_implementation(task: SPSubagentTask) -> bool:
+    """Return whether a coder delegation must produce a source-file change.
+
+    ``perception`` coder tasks are intentionally read-only.  Every other coder
+    stage is an implementation/verification task in SP's contract, including a
+    follow-up that only says "locate the implementation" after an earlier
+    failed edit.  The latter is why this is metadata-driven rather than inferred
+    from the latest natural-language task alone.
+    """
+    if task.subagent_type != "coder":
+        return False
+    explicit = task.metadata.get("requires_implementation")
+    if isinstance(explicit, bool):
+        return explicit
+    stage = str(task.metadata.get("stage") or "").strip().lower()
+    if stage == "perception":
+        return False
+    # Coder work outside the read-only perception stage is an implementation
+    # contract by default. Relying only on action verbs made recovery turns
+    # such as "investigate" or "verify" look read-only, allowing a test-only
+    # patch to satisfy the model while the requested source fix remained
+    # absent.
+    if stage in {"implementation", "verification", "revision"}:
+        return True
+    text = "\n".join(str(value) for value in (task.task, task.description, task.expected_output) if value)
+    return bool(_CODER_IMPLEMENTATION_ACTION_PATTERN.search(text))
+
+
+def _is_test_path(path: str) -> bool:
+    normalized = path.replace("\\", "/").strip()
+    return bool(_TEST_PATH_PATTERN.search(normalized))
+
+
+def _implementation_verification(ai_messages: Any) -> dict[str, Any]:
+    """Check whether successful file edits include a non-test source path."""
+    calls: dict[str, tuple[str, Mapping[str, Any] | None]] = {}
+    source_paths: list[str] = []
+    test_paths: list[str] = []
+    if not isinstance(ai_messages, list):
+        ai_messages = []
+
+    for index, message in enumerate(ai_messages):
+        if not isinstance(message, Mapping):
+            continue
+        if message.get("type") == "ai":
+            tool_calls = message.get("tool_calls")
+            if not isinstance(tool_calls, list):
+                continue
+            for call_index, call in enumerate(tool_calls):
+                if not isinstance(call, Mapping):
+                    continue
+                call_id = str(call.get("id") or f"anonymous-{index}-{call_index}")
+                calls[call_id] = (str(call.get("name") or ""), _tool_call_args(call.get("args")))
+            continue
+        if message.get("type") != "tool" or not _tool_result_succeeded(message.get("content")):
+            continue
+        call_id = str(message.get("tool_call_id") or "")
+        tool_name, args = calls.get(call_id, (str(message.get("name") or ""), None))
+        if tool_name not in _FILE_WRITE_TOOLS or args is None:
+            continue
+        path = args.get("path")
+        if not isinstance(path, str) or not path.strip():
+            continue
+        path = path.strip()
+        if _is_test_path(path):
+            test_paths.append(path)
+        else:
+            source_paths.append(path)
+
+    return {
+        "required": True,
+        "passed": bool(source_paths),
+        "source_write_count": len(source_paths),
+        "source_paths": list(dict.fromkeys(source_paths)),
+        "test_write_count": len(test_paths),
+        "test_paths": list(dict.fromkeys(test_paths)),
+    }
+
+
+def _test_execution_verification(ai_messages: Any) -> dict[str, Any]:
+    """Check for a successful, recognizable test command after source edits."""
+    calls: dict[str, tuple[str, Mapping[str, Any] | None]] = {}
+    latest_source_write_index: int | None = None
+    successful_test_indices: list[int] = []
+    masked_test_command_count = 0
+    if not isinstance(ai_messages, list):
+        ai_messages = []
+    for index, message in enumerate(ai_messages):
+        if not isinstance(message, Mapping):
+            continue
+        if message.get("type") == "ai":
+            tool_calls = message.get("tool_calls")
+            if not isinstance(tool_calls, list):
+                continue
+            for call_index, call in enumerate(tool_calls):
+                if not isinstance(call, Mapping):
+                    continue
+                call_id = str(call.get("id") or f"anonymous-{index}-{call_index}")
+                calls[call_id] = (str(call.get("name") or ""), _tool_call_args(call.get("args")))
+            continue
+        if message.get("type") != "tool":
+            continue
+        call_id = str(message.get("tool_call_id") or "")
+        tool_name, args = calls.get(call_id, (str(message.get("name") or ""), None))
+        if not _tool_result_succeeded(message.get("content")):
+            continue
+        if tool_name in _FILE_WRITE_TOOLS:
+            path = args.get("path") if args is not None else None
+            if isinstance(path, str) and not _is_test_path(path):
+                latest_source_write_index = index
+        if tool_name == "bash" and args is not None:
+            command = args.get("command")
+            if isinstance(command, str) and _TEST_COMMAND_PATTERN.search(command):
+                if not _command_preserves_exit_status(command):
+                    masked_test_command_count += 1
+                    continue
+                successful_test_indices.append(index)
+    latest_test_index = successful_test_indices[-1] if successful_test_indices else None
+    return {
+        "required": True,
+        "passed": bool(latest_test_index is not None and (latest_source_write_index is None or latest_test_index > latest_source_write_index)),
+        "successful_test_count": len(successful_test_indices),
+        "masked_test_command_count": masked_test_command_count,
+        "latest_source_write_index": latest_source_write_index,
+        "latest_successful_test_index": latest_test_index,
+    }
 
 
 def _execution_verification(
@@ -394,6 +660,10 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         if isinstance(payload_metadata, dict):
             artifact_metadata = {**payload_metadata, **artifact_metadata}
 
+    normalized_result = _compact_result(summary)
+    if is_memory_recaller:
+        normalized_result = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) if payload is not None else raw_result
+
     if artifact_content is None and not recovered_created_paths and isinstance(raw_result, str) and len(raw_result) > DEFAULT_LARGE_RESULT_THRESHOLD and status == SPSubagentStatus.COMPLETED and not is_memory_recaller:
         artifact_content = raw_result
         artifact_type = artifact_type or _default_artifact_type(task.subagent_type if task is not None else None)
@@ -433,20 +703,78 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         if not isinstance(evidence_gaps, list):
             evidence_gaps = []
         artifact_metadata["evidence_gaps"] = [str(item) for item in evidence_gaps if str(item).strip()][:12]
+        if (
+            task is not None
+            and task.subagent_type == "coder"
+            and _coder_reported_behavior_failure(raw_result, ai_messages)
+        ):
+            artifact_metadata["completion_status"] = "partial"
+            if _BEHAVIOR_FAILURE_GAP not in artifact_metadata["evidence_gaps"]:
+                artifact_metadata["evidence_gaps"].append(_BEHAVIOR_FAILURE_GAP)
+        if artifact_metadata["completion_status"] == "complete" and artifact_metadata["evidence_gaps"]:
+            # ``evidence_gaps`` is the output contract's list of unmet
+            # requirements. A result cannot simultaneously be complete and
+            # declare one or more unmet requirements.
+            artifact_metadata["completion_status"] = "partial"
         if stop_reason and not artifact_metadata["evidence_gaps"]:
             artifact_metadata["evidence_gaps"] = [f"Subagent execution ended early: {stop_reason}"]
+        if not str(normalized_result or "").strip() or str(normalized_result).strip() == "No response generated":
+            if artifact_metadata["completion_status"] == "complete":
+                artifact_metadata["completion_status"] = "partial"
+            if _NO_RESPONSE_GAP not in artifact_metadata["evidence_gaps"]:
+                artifact_metadata["evidence_gaps"].append(_NO_RESPONSE_GAP)
         if _coder_requires_execution_evidence(task):
             verification = _execution_verification(ai_messages)
             artifact_metadata["execution_verification"] = verification
             if not verification["passed"]:
                 if artifact_metadata["completion_status"] == "complete":
                     artifact_metadata["completion_status"] = "partial"
-                if _UNVERIFIED_EXECUTION_GAP not in artifact_metadata["evidence_gaps"]:
-                    artifact_metadata["evidence_gaps"].append(_UNVERIFIED_EXECUTION_GAP)
+                execution_gap = _unverified_execution_gap(task)
+                if execution_gap not in artifact_metadata["evidence_gaps"]:
+                    artifact_metadata["evidence_gaps"].append(execution_gap)
+        if coder_task_requires_implementation(task):
+            implementation = _implementation_verification(ai_messages)
+            artifact_metadata["implementation_verification"] = implementation
+            if not implementation["passed"]:
+                if artifact_metadata["completion_status"] == "complete":
+                    artifact_metadata["completion_status"] = "partial"
+                if _UNVERIFIED_IMPLEMENTATION_GAP not in artifact_metadata["evidence_gaps"]:
+                    artifact_metadata["evidence_gaps"].append(_UNVERIFIED_IMPLEMENTATION_GAP)
+        # Every implementation-stage coder must leave execution evidence after
+        # the final source edit. A task that omits the word "test" is still not
+        # safely complete from a source diff alone: syntax checks, focused
+        # tests, or the repository's equivalent must be observable.
+        code_verification_only = bool(
+            task is not None
+            and task.subagent_type == "coder"
+            and task.metadata.get("verification_only") is True
+            and str(task.stage or task.metadata.get("stage") or "").strip().lower() == "verification"
+        )
+        if coder_task_requires_implementation(task) or code_verification_only:
+            test_verification = _test_execution_verification(ai_messages)
+            artifact_metadata["test_verification"] = test_verification
+            if not test_verification["passed"]:
+                if artifact_metadata["completion_status"] == "complete":
+                    artifact_metadata["completion_status"] = "partial"
+                test_gap = _unverified_test_gap(task)
+                if test_gap not in artifact_metadata["evidence_gaps"]:
+                    artifact_metadata["evidence_gaps"].append(test_gap)
+                if test_verification["masked_test_command_count"] and _MASKED_TEST_EXIT_GAP not in artifact_metadata["evidence_gaps"]:
+                    artifact_metadata["evidence_gaps"].append(_MASKED_TEST_EXIT_GAP)
 
-    normalized_result = _compact_result(summary)
-    if is_memory_recaller:
-        normalized_result = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) if payload is not None else raw_result
+    completion_status = artifact_metadata.get("completion_status")
+    retryable = status != SPSubagentStatus.COMPLETED or completion_status in {"partial", "blocked"}
+    changed_files: list[str] = []
+    created_paths = artifact_metadata.get("created_paths")
+    if isinstance(created_paths, list):
+        changed_files.extend(str(path) for path in created_paths if isinstance(path, str) and path.strip())
+    implementation_verification = artifact_metadata.get("implementation_verification")
+    if isinstance(implementation_verification, Mapping):
+        source_paths = implementation_verification.get("source_paths")
+        if isinstance(source_paths, list):
+            changed_files.extend(str(path) for path in source_paths if isinstance(path, str) and path.strip())
+    test_verification = artifact_metadata.get("test_verification")
+    tests = [dict(test_verification)] if isinstance(test_verification, Mapping) else []
 
     return SPSubagentResult(
         status=status,
@@ -458,6 +786,11 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         artifact_type=str(artifact_type) if artifact_type else None,
         artifact_metadata=artifact_metadata,
         token_usage_records=list(getattr(result, "token_usage_records", None) or []),
+        completion_status=completion_status if completion_status in _COMPLETION_STATUSES else None,
+        retryable=retryable,
+        recommended_action="retry" if retryable else "accept",
+        changed_files=list(dict.fromkeys(changed_files)),
+        tests=tests,
     )
 
 
@@ -543,6 +876,11 @@ def _merge_research_continuations(
         ),
         artifact_metadata=metadata,
         token_usage_records=[record for result in results for record in result.token_usage_records],
+        completion_status=metadata.get("completion_status"),
+        retryable=base.retryable or failed_tail is not None,
+        recommended_action="retry" if (base.retryable or failed_tail is not None) else "accept",
+        changed_files=list(dict.fromkeys(path for result in results for path in result.changed_files)),
+        tests=[test for result in results for test in result.tests],
     )
 
 
@@ -599,6 +937,7 @@ class DR2SubagentExecutorAdapter:
         self._result_observer = result_observer
 
     def execute(self, task: SPSubagentTask) -> SPSubagentResult:
+        task.validate_protocol()
         current_task = task
         normalized_results: list[SPSubagentResult] = []
         previous_gaps: tuple[str, ...] | None = None
