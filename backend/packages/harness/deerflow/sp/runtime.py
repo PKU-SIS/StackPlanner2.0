@@ -25,6 +25,7 @@ from deerflow.sp.agent_tools import (
 )
 from deerflow.sp.central import CENTRAL_AGENT_ACTION_PROMPT
 from deerflow.sp.central.runtime_context import SPCentralRuntimeContext, build_sp_central_runtime_context
+from deerflow.sp.memory.entry import utc_now_iso
 from deerflow.sp.subagents import (
     DR2SubagentExecutorAdapter,
     SPSubagentExecutorProtocol,
@@ -347,6 +348,7 @@ class DR2SPExecutorProvider:
                             "message": message,
                             "message_index": skill_step_offset + message_index,
                             "subagent_type": task.subagent_type,
+                            "occurred_at": utc_now_iso(),
                         }
                     )
 
@@ -412,6 +414,7 @@ class _ProgressReportingExecutor:
                     "description": task.task,
                     "prompt": task.task,
                     "subagent_type": task.subagent_type,
+                    "occurred_at": utc_now_iso(),
                 }
             )
             skill_names = task.metadata.get("skill_names")
@@ -433,6 +436,7 @@ class _ProgressReportingExecutor:
                             },
                             "message_index": index,
                             "subagent_type": task.subagent_type,
+                            "occurred_at": utc_now_iso(),
                         }
                     )
         try:
@@ -445,6 +449,7 @@ class _ProgressReportingExecutor:
                         "task_id": task_id,
                         "error": str(exc),
                         "subagent_type": task.subagent_type,
+                        "occurred_at": utc_now_iso(),
                     }
                 )
             raise
@@ -463,9 +468,26 @@ class _ProgressReportingExecutor:
                     "error": result.error,
                     "stop_reason": result.stop_reason,
                     "subagent_type": task.subagent_type,
+                    "usage": _summarize_sp_usage(result.token_usage_records),
+                    "occurred_at": utc_now_iso(),
                 }
             )
         return result
+
+
+def _summarize_sp_usage(records: list[dict[str, Any]] | None) -> dict[str, int] | None:
+    """Compact per-call subagent usage for the persisted debug timeline."""
+
+    if not records:
+        return None
+    input_tokens = sum(int(record.get("input_tokens", 0) or 0) for record in records)
+    output_tokens = sum(int(record.get("output_tokens", 0) or 0) for record in records)
+    total_tokens = sum(int(record.get("total_tokens", 0) or 0) for record in records)
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens or input_tokens + output_tokens,
+    }
 
 
 def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None):

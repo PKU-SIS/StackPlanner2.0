@@ -1561,10 +1561,20 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
         if not callable(record):
             return
         for event in events:
+            occurred_at = event.get("ts")
             record(
                 str(event.get("event_type") or "sp.event"),
-                content={"action_id": event.get("action_id"), "payload": event.get("payload") or {}},
-                metadata={"source": "stackplanner", "action_id": event.get("action_id"), "run_id": event.get("run_id")},
+                content={
+                    "action_id": event.get("action_id"),
+                    "payload": event.get("payload") or {},
+                    "occurred_at": occurred_at,
+                },
+                metadata={
+                    "source": "stackplanner",
+                    "action_id": event.get("action_id"),
+                    "run_id": event.get("run_id"),
+                    "occurred_at": occurred_at,
+                },
             )
 
 

@@ -21,6 +21,7 @@ from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, Field
 
 from app.gateway.authz import require_permission
+from app.gateway.debug_trace import build_debug_trace
 from app.gateway.deps import get_checkpointer, get_current_user, get_feedback_repo, get_run_event_store, get_run_manager, get_run_store, get_stream_bridge
 from app.gateway.pagination import trim_run_message_page
 from app.gateway.services import sse_consumer, start_run, wait_for_run_completion
@@ -31,6 +32,8 @@ from deerflow.workspace_changes import get_workspace_changes_response
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/threads", tags=["runs"])
 REGENERATE_HISTORY_SCAN_LIMIT = 200
+DEBUG_TRACE_EVENT_PAGE_SIZE = 2000
+DEBUG_TRACE_MAX_EVENTS = 20000
 
 
 def compute_run_durations(runs) -> dict[str, int]:
@@ -741,6 +744,49 @@ async def list_run_events(
     event_store = get_run_event_store(request)
     types = event_types.split(",") if event_types else None
     return await event_store.list_events(thread_id, run_id, event_types=types, task_id=task_id, limit=limit, after_seq=after_seq)
+
+
+@router.get("/{thread_id}/runs/{run_id}/debug-trace")
+@require_permission("runs", "read", owner_check=True)
+async def get_run_debug_trace(thread_id: str, run_id: str, request: Request) -> dict[str, Any]:
+    """Return a safe, hierarchical execution trace for one run.
+
+    Events are paged forward so long delegated runs are not silently cut off.
+    The response excludes provider-private reasoning fields and redacts
+    credential-shaped values before returning explicit action/tool details.
+    """
+
+    run_mgr = get_run_manager(request)
+    user_id = await get_current_user(request)
+    record = await run_mgr.get(run_id, user_id=user_id)
+    if record is None or record.thread_id != thread_id:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+
+    event_store = get_run_event_store(request)
+    events: list[dict[str, Any]] = []
+    after_seq: int | None = None
+    while len(events) < DEBUG_TRACE_MAX_EVENTS:
+        remaining = DEBUG_TRACE_MAX_EVENTS - len(events)
+        page_limit = min(DEBUG_TRACE_EVENT_PAGE_SIZE, remaining)
+        page = await event_store.list_events(
+            thread_id,
+            run_id,
+            limit=page_limit,
+            after_seq=after_seq,
+        )
+        if not page:
+            break
+        events.extend(page)
+        if len(page) < page_limit:
+            break
+        next_seq = page[-1].get("seq")
+        if not isinstance(next_seq, int) or next_seq == after_seq:
+            break
+        after_seq = next_seq
+
+    trace = build_debug_trace(record, events)
+    trace["truncated"] = len(events) >= DEBUG_TRACE_MAX_EVENTS
+    return trace
 
 
 @router.get("/{thread_id}/runs/{run_id}/workspace-changes")

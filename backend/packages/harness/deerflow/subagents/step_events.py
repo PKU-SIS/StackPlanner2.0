@@ -183,23 +183,47 @@ def subagent_run_event(chunk: Any) -> dict[str, Any] | None:
         return None
 
     task_id = chunk.get("task_id")
+    occurred_at = chunk.get("occurred_at") if isinstance(chunk.get("occurred_at"), str) else None
+    subagent_type = chunk.get("subagent_type")
+
+    def _record(payload: dict[str, Any], *, event_type: str, metadata: dict[str, Any]) -> dict[str, Any]:
+        if occurred_at:
+            payload["occurred_at"] = occurred_at
+            metadata["occurred_at"] = occurred_at
+        if subagent_type:
+            payload["subagent_type"] = subagent_type
+            metadata["subagent_type"] = subagent_type
+        record = {
+            "event_type": event_type,
+            "category": SUBAGENT_EVENT_CATEGORY,
+            "content": payload,
+            "metadata": metadata,
+        }
+        if occurred_at:
+            # ``task_*`` chunks can be buffered by a synchronous graph node and
+            # reach the async persistence loop together. Preserve when the
+            # event actually happened rather than assigning the flush time.
+            record["created_at"] = occurred_at
+        return record
 
     if event == "task_started":
-        return {
-            "event_type": "subagent.start",
-            "category": SUBAGENT_EVENT_CATEGORY,
-            "content": {"task_id": task_id, "description": chunk.get("description")},
-            "metadata": {"task_id": task_id},
-        }
+        return _record(
+            {
+                "task_id": task_id,
+                "description": chunk.get("description"),
+                "prompt": chunk.get("prompt"),
+            },
+            event_type="subagent.start",
+            metadata={"task_id": task_id},
+        )
 
     if event == "task_running":
         message_index = chunk.get("message_index")
-        return {
-            "event_type": "subagent.step",
-            "category": SUBAGENT_EVENT_CATEGORY,
-            "content": build_subagent_step(chunk.get("message") or {}, task_id=task_id, message_index=message_index),
-            "metadata": {"task_id": task_id, "message_index": message_index},
-        }
+        return _record(
+            build_subagent_step(chunk.get("message") or {}, task_id=task_id, message_index=message_index),
+            event_type="subagent.step",
+            metadata={"task_id": task_id, "message_index": message_index},
+        )
 
     status = _TERMINAL_EVENT_STATUS.get(event)
     if status is not None:
@@ -217,11 +241,10 @@ def subagent_run_event(chunk: Any) -> dict[str, Any] | None:
             content["error"] = error
             if error_truncated:
                 content["error_truncated"] = True
-        return {
-            "event_type": "subagent.end",
-            "category": SUBAGENT_EVENT_CATEGORY,
-            "content": content,
-            "metadata": {"task_id": task_id},
-        }
+        if chunk.get("stop_reason") is not None:
+            content["stop_reason"] = str(chunk["stop_reason"])
+        if isinstance(chunk.get("usage"), dict):
+            content["usage"] = dict(chunk["usage"])
+        return _record(content, event_type="subagent.end", metadata={"task_id": task_id})
 
     return None

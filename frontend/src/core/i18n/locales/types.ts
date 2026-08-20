@@ -170,6 +170,7 @@ export interface Translations {
     demoChats: string;
     agents: string;
     scheduledTasks: string;
+    executionTrace: string;
     agentsDisabledTooltip: string;
     channels: string;
   };

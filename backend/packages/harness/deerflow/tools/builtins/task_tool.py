@@ -4,6 +4,7 @@ import asyncio
 import logging
 import uuid
 from dataclasses import replace
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Any, cast
 
 from langchain.tools import InjectedToolCallId, tool
@@ -36,6 +37,11 @@ if TYPE_CHECKING:
     from deerflow.config.app_config import AppConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _task_event_time() -> str:
+    return datetime.now(UTC).isoformat()
+
 
 # Cache subagent token usage by tool_call_id so TokenUsageMiddleware can
 # write it back to the triggering AIMessage's usage_metadata.
@@ -398,7 +404,16 @@ async def task_tool(
 
     writer = get_stream_writer()
     # Send Task Started message'
-    writer({"type": "task_started", "task_id": task_id, "description": description})
+    writer(
+        {
+            "type": "task_started",
+            "task_id": task_id,
+            "description": description,
+            "prompt": description,
+            "subagent_type": subagent_type,
+            "occurred_at": _task_event_time(),
+        }
+    )
 
     try:
         while True:
@@ -406,7 +421,15 @@ async def task_tool(
 
             if result is None:
                 logger.error(f"[trace={trace_id}] Task {task_id} not found in background tasks")
-                writer({"type": "task_failed", "task_id": task_id, "error": "Task disappeared from background tasks"})
+                writer(
+                    {
+                        "type": "task_failed",
+                        "task_id": task_id,
+                        "error": "Task disappeared from background tasks",
+                        "subagent_type": subagent_type,
+                        "occurred_at": _task_event_time(),
+                    }
+                )
                 cleanup_background_task(task_id)
                 error = f"Task {task_id} disappeared from background tasks"
                 return _task_result_command(
@@ -434,6 +457,8 @@ async def task_tool(
                             "message": message,
                             "message_index": i + 1,  # 1-based index for display
                             "total_messages": current_message_count,
+                            "subagent_type": subagent_type,
+                            "occurred_at": _task_event_time(),
                         }
                     )
                     logger.info(f"[trace={trace_id}] Task {task_id} sent message #{i + 1}/{current_message_count}")
@@ -444,7 +469,17 @@ async def task_tool(
             if result.status == SubagentStatus.COMPLETED:
                 _cache_subagent_usage(tool_call_id, usage, enabled=cache_token_usage)
                 _report_subagent_usage(runtime, result)
-                writer({"type": "task_completed", "task_id": task_id, "result": result.result, "usage": usage})
+                writer(
+                    {
+                        "type": "task_completed",
+                        "task_id": task_id,
+                        "result": result.result,
+                        "stop_reason": result.stop_reason,
+                        "usage": usage,
+                        "subagent_type": subagent_type,
+                        "occurred_at": _task_event_time(),
+                    }
+                )
                 logger.info(f"[trace={trace_id}] Task {task_id} completed after {poll_count} polls")
                 cleanup_background_task(task_id)
                 # stop_reason carries a guardrail cap (token_capped / turn_capped)
@@ -459,7 +494,17 @@ async def task_tool(
             elif result.status == SubagentStatus.FAILED:
                 _cache_subagent_usage(tool_call_id, usage, enabled=cache_token_usage)
                 _report_subagent_usage(runtime, result)
-                writer({"type": "task_failed", "task_id": task_id, "error": result.error, "usage": usage})
+                writer(
+                    {
+                        "type": "task_failed",
+                        "task_id": task_id,
+                        "error": result.error,
+                        "stop_reason": result.stop_reason,
+                        "usage": usage,
+                        "subagent_type": subagent_type,
+                        "occurred_at": _task_event_time(),
+                    }
+                )
                 logger.error(f"[trace={trace_id}] Task {task_id} failed: {result.error}")
                 cleanup_background_task(task_id)
                 # A turn-capped run with no usable output surfaces as failed +
@@ -474,7 +519,16 @@ async def task_tool(
             elif result.status == SubagentStatus.CANCELLED:
                 _cache_subagent_usage(tool_call_id, usage, enabled=cache_token_usage)
                 _report_subagent_usage(runtime, result)
-                writer({"type": "task_cancelled", "task_id": task_id, "error": result.error, "usage": usage})
+                writer(
+                    {
+                        "type": "task_cancelled",
+                        "task_id": task_id,
+                        "error": result.error,
+                        "usage": usage,
+                        "subagent_type": subagent_type,
+                        "occurred_at": _task_event_time(),
+                    }
+                )
                 logger.info(f"[trace={trace_id}] Task {task_id} cancelled: {result.error}")
                 cleanup_background_task(task_id)
                 return _task_result_command(
@@ -485,7 +539,16 @@ async def task_tool(
             elif result.status == SubagentStatus.TIMED_OUT:
                 _cache_subagent_usage(tool_call_id, usage, enabled=cache_token_usage)
                 _report_subagent_usage(runtime, result)
-                writer({"type": "task_timed_out", "task_id": task_id, "error": result.error, "usage": usage})
+                writer(
+                    {
+                        "type": "task_timed_out",
+                        "task_id": task_id,
+                        "error": result.error,
+                        "usage": usage,
+                        "subagent_type": subagent_type,
+                        "occurred_at": _task_event_time(),
+                    }
+                )
                 logger.warning(f"[trace={trace_id}] Task {task_id} timed out: {result.error}")
                 cleanup_background_task(task_id)
                 return _task_result_command(
@@ -507,7 +570,15 @@ async def task_tool(
                 _report_subagent_usage(runtime, result)
                 usage = _summarize_usage(getattr(result, "token_usage_records", None))
                 _cache_subagent_usage(tool_call_id, usage, enabled=cache_token_usage)
-                writer({"type": "task_timed_out", "task_id": task_id, "usage": usage})
+                writer(
+                    {
+                        "type": "task_timed_out",
+                        "task_id": task_id,
+                        "usage": usage,
+                        "subagent_type": subagent_type,
+                        "occurred_at": _task_event_time(),
+                    }
+                )
                 # The task may still be running in the background. Signal cooperative
                 # cancellation and schedule deferred cleanup to remove the entry from
                 # _background_tasks once the background thread reaches a terminal state.

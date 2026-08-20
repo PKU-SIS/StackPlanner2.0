@@ -13,6 +13,7 @@ export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
     model_name: undefined,
     mode: undefined,
     reasoning_effort: undefined,
+    debug_trace_enabled: false,
   },
 };
 
@@ -43,6 +44,7 @@ export interface LocalSettings {
     model_name?: string | undefined;
     mode: "flash" | "thinking" | "pro" | "ultra" | undefined;
     reasoning_effort?: "minimal" | "low" | "medium" | "high";
+    debug_trace_enabled?: boolean;
   };
 }
 

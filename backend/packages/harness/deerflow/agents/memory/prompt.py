@@ -261,8 +261,15 @@ def _get_tiktoken_encoding(encoding_name: str = "cl100k_base") -> tiktoken.Encod
 
     try:
         encoding = tiktoken.get_encoding(encoding_name)
-    except Exception:
-        logger.warning("Failed to load tiktoken encoding %r; falling back to char-based estimation", encoding_name, exc_info=True)
+    except Exception as exc:
+        # This is an expected, recoverable condition in network-restricted
+        # deployments.  Keep the operational signal without printing a full
+        # requests/urllib3 traceback that looks like a fatal gateway failure.
+        logger.warning(
+            "Failed to load tiktoken encoding %r; falling back to char-based estimation: %s",
+            encoding_name,
+            exc,
+        )
         with _tiktoken_encoding_cache_lock:
             _tiktoken_encoding_cache[encoding_name] = (None, time.monotonic())
         return None

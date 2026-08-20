@@ -247,6 +247,15 @@ class ActionRouter:
                 run_id=run_id,
                 action_type=action.action_type.value,
                 idempotency_key=action.idempotency_key,
+                reason=action.reason,
+                task=action.task,
+                target_agent=action.target_agent,
+                input_refs=list(action.input_refs),
+                expected_output=action.expected_output,
+                stage=action.stage,
+                priority=action.priority,
+                requires_human=action.requires_human,
+                metadata=dict(action.metadata),
             ),
             *(
                 [

@@ -233,6 +233,7 @@ export const enUS: Translations = {
     demoChats: "Demo chats",
     agents: "Agents",
     scheduledTasks: "Scheduled tasks",
+    executionTrace: "Execution trace",
     agentsDisabledTooltip: "Feature not enabled",
   },
 

@@ -244,12 +244,25 @@ def test_capture_new_step_messages_is_noop_on_values_reyield():
 
 
 def test_run_event_for_task_started():
-    record = subagent_run_event({"type": "task_started", "task_id": "call_1", "description": "research X"})
+    record = subagent_run_event(
+        {
+            "type": "task_started",
+            "task_id": "call_1",
+            "description": "research X",
+            "prompt": "research X carefully",
+            "subagent_type": "researcher",
+            "occurred_at": "2026-08-09T10:00:00+00:00",
+        }
+    )
 
     assert record["event_type"] == "subagent.start"
     assert record["category"] == SUBAGENT_EVENT_CATEGORY
     assert record["metadata"]["task_id"] == "call_1"
     assert record["content"]["description"] == "research X"
+    assert record["content"]["prompt"] == "research X carefully"
+    assert record["content"]["subagent_type"] == "researcher"
+    assert record["content"]["occurred_at"] == "2026-08-09T10:00:00+00:00"
+    assert record["created_at"] == "2026-08-09T10:00:00+00:00"
 
 
 def test_run_event_for_task_running_carries_step_payload():
@@ -269,11 +282,23 @@ def test_run_event_for_task_running_carries_step_payload():
 
 
 def test_run_event_for_terminal_status():
-    record = subagent_run_event({"type": "task_completed", "task_id": "call_1", "result": "done"})
+    record = subagent_run_event(
+        {
+            "type": "task_completed",
+            "task_id": "call_1",
+            "result": "done",
+            "subagent_type": "researcher",
+            "stop_reason": "finished",
+            "usage": {"input_tokens": 7, "output_tokens": 3, "total_tokens": 10},
+        }
+    )
 
     assert record["event_type"] == "subagent.end"
     assert record["content"]["status"] == "completed"
     assert record["content"]["result"] == "done"
+    assert record["content"]["subagent_type"] == "researcher"
+    assert record["content"]["stop_reason"] == "finished"
+    assert record["content"]["usage"]["total_tokens"] == 10
 
     failed = subagent_run_event({"type": "task_failed", "task_id": "call_1", "error": "boom"})
     assert failed["content"]["status"] == "failed"

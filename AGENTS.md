@@ -62,9 +62,26 @@ servers + skills). Both real files are gitignored and may be edited at runtime v
 Gateway API. Config schema and resolution order are documented in
 [backend/AGENTS.md](backend/AGENTS.md).
 
+`config.example.yaml` is the canonical copy/upgrade source and must not contain duplicate
+mapping keys. `backend/tests/test_config_example_yaml.py` loads it with a strict
+unique-key YAML loader so a later key cannot silently shadow an earlier setting.
+
 Scheduled-task note:
 - The scheduled-task MVP adds a workspace page at `/workspace/scheduled-tasks` plus a background scheduler service gated by `config.yaml -> scheduler.enabled`.
 - Scheduled background runs are intentionally non-interactive: they execute through the normal run lifecycle, but the lead-agent toolset excludes `ask_clarification` when `context.non_interactive=true`. The key is honored only for internally-authenticated callers (the scheduler launch path); client-supplied `context.non_interactive` is dropped.
+
+StackPlanner 2.0 is an optional orchestration policy inside the same Gateway
+runtime. Its CentralAgent exposes only `sp_*` control actions; ordinary Tools
+and Skills execute inside scoped subagents. The policy chooses direct, bounded,
+or deliberate workflows, carries pinned feedback and bounded stage-artifact
+bodies across delegations, and requires an explicit artifact-family contract
+before finishing file-producing work. See `backend/AGENTS.md` for the handler,
+memory, Qwen compatibility, and live policy-evaluation details.
+The opt-in `/workspace/debug` execution-audit surface is backed by persisted
+run events and `GET /api/threads/{thread_id}/runs/{run_id}/debug-trace`; it
+shows explicit decisions, injected task-memory context, tool/subagent activity,
+timing, and token attribution while redacting secrets and excluding
+provider-private hidden chain-of-thought.
 
 ## Commands: Root vs. Module
 
@@ -103,6 +120,14 @@ cd frontend && pnpm test      # Unit tests
 
 Rule of thumb: **root `make` = the full application**; **`backend/Makefile` and `frontend/`
 (`pnpm`) = per-module work.**
+
+`scripts/serve.sh` accepts `GATEWAY_PORT`, `FRONTEND_PORT`, and `NGINX_PORT`
+environment overrides for parallel worktrees. It validates and exports all three so
+child processes, runtime diagnostics, SSR routing, and the generated Nginx config
+observe the same selected ports.
+The launcher also appends `127.0.0.1,localhost` to both `NO_PROXY` spellings so
+internal Gateway, SSR, and local vLLM traffic cannot be diverted through a
+machine-wide HTTP proxy.
 
 ## Where to Go Next
 

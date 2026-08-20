@@ -3804,6 +3804,8 @@ def test_central_prompt_exposes_sp_controls_without_forcing_json_actions():
     assert "Direct:" in prompt
     assert "Bounded execution:" in prompt
     assert "Deliberate:" in prompt
+    assert "audit-ready decision note" in prompt
+    assert "observable result or stop condition" in prompt
     assert "Current-data" in prompt
     assert "read-only request to query or fetch an external HTTP/API endpoint" in prompt
     assert "call `web_fetch` on the official API before trying" in prompt

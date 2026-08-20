@@ -194,6 +194,46 @@ def test_wrap_model_call_injects_context_before_latest_user_message_only_for_req
     assert sent.messages[-1].content == "Continue the migration"
 
 
+def test_wrap_model_call_records_exact_context_only_when_debug_enabled():
+    stack = TaskMemoryStack()
+    entry = stack.append_feedback("Use the approved outline before reporting", stage="planning")
+    state = {"sp_task_memory": stack.to_dict(), "sp_current_stage": "planning"}
+    request = _make_request(messages=[HumanMessage(content="Continue")], state=state)
+    recorded: list[dict] = []
+
+    class FakeJournal:
+        def record_custom_event(self, event_type, **kwargs):
+            recorded.append({"event_type": event_type, **kwargs})
+
+    request.runtime.context.update(
+        {
+            "debug_trace_enabled": True,
+            "__run_journal": FakeJournal(),
+        }
+    )
+
+    TaskMemoryMiddleware().wrap_model_call(request, lambda _request: "response")
+
+    assert [event["event_type"] for event in recorded] == ["sp.central.context"]
+    content = recorded[0]["content"]
+    assert "approved outline" in content["prompt_context"]
+    assert content["active_memory_entry_ids"] == [entry.id]
+    assert content["current_stage"] == "planning"
+
+
+def test_wrap_model_call_does_not_record_context_when_debug_disabled():
+    stack = TaskMemoryStack()
+    stack.append_think("Internal checkpoint")
+    state = {"sp_task_memory": stack.to_dict()}
+    request = _make_request(messages=[HumanMessage(content="Continue")], state=state)
+    journal = MagicMock()
+    request.runtime.context["__run_journal"] = journal
+
+    TaskMemoryMiddleware().wrap_model_call(request, lambda _request: "response")
+
+    journal.record_custom_event.assert_not_called()
+
+
 def test_wrap_model_call_skips_empty_context():
     request = _make_request(messages=[HumanMessage(content="Hello")], state={})
     captured, handler = _capture_handler()

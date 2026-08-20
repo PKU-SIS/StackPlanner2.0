@@ -57,6 +57,7 @@ export interface AgentThreadContext extends Record<string, unknown> {
   subagent_enabled: boolean;
   reasoning_effort?: "minimal" | "low" | "medium" | "high";
   agent_name?: string;
+  debug_trace_enabled?: boolean;
 }
 
 export interface AgentThread extends Thread<AgentThreadState> {

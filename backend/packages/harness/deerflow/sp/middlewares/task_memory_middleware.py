@@ -8,6 +8,7 @@ default Lead Agent chain; SP orchestration should opt into it explicitly.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, override
 
@@ -26,6 +27,43 @@ SP_TASK_CONTEXT_MESSAGE_NAME = "sp_task_memory_context"
 SP_TASK_CONTEXT_KWARG = "sp_task_memory_context"
 AUTO_SUMMARY_MAX_CHARS = 1100
 AUTO_SUMMARY_ENTRY_MAX_CHARS = 160
+DEBUG_TASK_CONTEXT_MAX_CHARS = 24000
+
+
+def _record_debug_task_context(
+    runtime: Runtime | None,
+    *,
+    context: str,
+    stack: TaskMemoryStack,
+    current_stage: Any,
+) -> None:
+    """Persist the exact task-memory block sent to CentralAgent in debug mode."""
+
+    runtime_context = getattr(runtime, "context", None)
+    if not isinstance(runtime_context, Mapping) or not bool(runtime_context.get("debug_trace_enabled")):
+        return
+    journal = runtime_context.get("__run_journal")
+    record = getattr(journal, "record_custom_event", None)
+    if not callable(record):
+        return
+    active_entries = stack.get_active_entries()
+    record(
+        "sp.central.context",
+        content={
+            "prompt_context": context[:DEBUG_TASK_CONTEXT_MAX_CHARS],
+            "prompt_context_chars": len(context),
+            "prompt_context_truncated": len(context) > DEBUG_TASK_CONTEXT_MAX_CHARS,
+            "prompt_context_sha256": hashlib.sha256(context.encode("utf-8")).hexdigest(),
+            "current_stage": current_stage,
+            "active_memory_entry_ids": [entry.id for entry in active_entries],
+            "active_memory_entry_count": len(active_entries),
+        },
+        metadata={
+            "source": "stackplanner",
+            "run_id": _run_id(runtime),
+            "debug_trace": True,
+        },
+    )
 
 
 def _automatic_fallback_summary(
@@ -219,6 +257,12 @@ class TaskMemoryMiddleware(AgentMiddleware[ThreadState]):
             artifact_refs=_mapping_or_none(state.get("sp_current_artifact_refs")),
             report_version=state.get("sp_current_report_version"),
             current_run_id=_run_id(runtime),
+        )
+        _record_debug_task_context(
+            runtime,
+            context=context,
+            stack=stack,
+            current_stage=state.get("sp_current_stage"),
         )
         context_message = HumanMessage(
             content=context,

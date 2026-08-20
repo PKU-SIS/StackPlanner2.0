@@ -770,6 +770,12 @@ StackPlanner passes authoritative pinned feedback to every specialist outside th
 
 For local Qwen/vLLM deployments, `VllmChatModel` also recovers Qwen `<tool_call>` blocks returned as ordinary reasoning/content when the vLLM server has no compatible automatic tool parser. The live StackPlanner policy check can be rerun from `backend/` with `uv run python scripts/evaluate_sp_qwen_actions.py --async-mode`; add `--thinking --scenario current_information_routes_to_research` for a focused reasoning-mode check.
 
+### Execution Debug Trace
+
+The Web UI includes an **Execution trace** page at `/workspace/debug`. Debug mode is opt-in and applies to newly submitted queries. For each run, the page shows the user request, CentralAgent model calls and explicit SP action reasons, the task-memory context actually injected into CentralAgent, sub-agent and tool steps, middleware events, failures/retries, elapsed time, and token attribution. Running traces refresh automatically and can be filtered or exported as JSON.
+
+The Gateway aggregates this view through `GET /api/threads/{thread_id}/runs/{run_id}/debug-trace`. Historical runs remain available at a baseline level. New debug runs preserve original sub-agent/action timestamps even when events are batch-written, so per-stage timing is not inferred from flush time. Credential-shaped fields are redacted and large details are bounded before reaching the browser. The trace is an execution audit: it includes observable model output and explicit decision records, but does not expose provider-private hidden chain-of-thought.
+
 ### Sandbox & File System
 
 DeerFlow doesn't just _talk_ about doing things. It has its own computer.

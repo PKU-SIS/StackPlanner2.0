@@ -227,6 +227,7 @@ _CONTEXT_CONFIGURABLE_KEYS: frozenset[str] = frozenset(
         "max_concurrent_subagents",
         "agent_name",
         "is_bootstrap",
+        "debug_trace_enabled",
     }
 )
 
@@ -676,11 +677,16 @@ async def start_run(
             async with goal_thread_lock(thread_id):
                 previous_runs = await run_mgr.list_by_thread(thread_id, user_id=owner_user_id, limit=1)
                 isolate_new_turn = _should_isolate_new_turn(body.input, previous_runs, command)
+                run_metadata = dict(body.metadata or {})
+                # This marker is server-derived from the whitelisted runtime
+                # context. Do not trust a client-supplied metadata field to
+                # claim enhanced capture when no context snapshot was recorded.
+                run_metadata["debug_trace_enabled"] = bool(body_context.get("debug_trace_enabled"))
                 record = await run_mgr.create_or_reject(
                     thread_id,
                     body.assistant_id,
                     on_disconnect=disconnect,
-                    metadata=body.metadata or {},
+                    metadata=run_metadata,
                     # Persist a secret-redacted copy of the config: the run record is
                     # written to runs.kwargs_json and echoed by the run API, so a
                     # request-scoped secret (#3861) must not ride along. The live

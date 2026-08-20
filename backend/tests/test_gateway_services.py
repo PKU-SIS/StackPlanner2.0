@@ -500,6 +500,7 @@ def test_run_create_request_accepts_context():
             "thinking_enabled": True,
             "is_plan_mode": True,
             "subagent_enabled": True,
+            "debug_trace_enabled": True,
             "thread_id": "some-thread-id",
         },
     )
@@ -507,6 +508,7 @@ def test_run_create_request_accepts_context():
     assert body.context["model_name"] == "deepseek-v3"
     assert body.context["is_plan_mode"] is True
     assert body.context["subagent_enabled"] is True
+    assert body.context["debug_trace_enabled"] is True
 
 
 def test_run_create_request_context_defaults_to_none():
@@ -641,12 +643,22 @@ def test_merge_run_context_overrides_propagates_to_runtime_context():
     from app.gateway.services import build_run_config, merge_run_context_overrides
 
     config = build_run_config("thread-1", None, None)
-    merge_run_context_overrides(config, {"agent_name": "my-agent", "is_bootstrap": True, "thread_id": "ignored"})
+    merge_run_context_overrides(
+        config,
+        {
+            "agent_name": "my-agent",
+            "is_bootstrap": True,
+            "debug_trace_enabled": True,
+            "thread_id": "ignored",
+        },
+    )
 
     assert config["configurable"]["agent_name"] == "my-agent"
     assert config["configurable"]["is_bootstrap"] is True
     assert config["context"]["agent_name"] == "my-agent"
     assert config["context"]["is_bootstrap"] is True
+    assert config["configurable"]["debug_trace_enabled"] is True
+    assert config["context"]["debug_trace_enabled"] is True
     # Non-whitelisted keys are not forwarded.
     assert "thread_id" not in config["context"]
 

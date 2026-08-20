@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from collections.abc import Mapping
 from typing import Any, Literal, Protocol
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SP_MAX_ITERATIONS = 20
 STACKPLANNER_HUMAN_INPUT_SOURCE = "stackplanner"
+DEBUG_DECISION_CONTEXT_MAX_CHARS = 24000
 
 
 class SPExecutorProvider(Protocol):
@@ -60,11 +62,16 @@ def _emit_events(runtime: Runtime | None, events: list[Mapping[str, Any]]) -> No
             payload = event.get("payload") if isinstance(event.get("payload"), Mapping) else {}
             record(
                 str(event.get("event_type") or "sp.event"),
-                content={"action_id": event.get("action_id"), "payload": dict(payload)},
+                content={
+                    "action_id": event.get("action_id"),
+                    "payload": dict(payload),
+                    "occurred_at": event.get("ts"),
+                },
                 metadata={
                     "source": "stackplanner",
                     "action_id": event.get("action_id"),
                     "run_id": event.get("run_id"),
+                    "occurred_at": event.get("ts"),
                 },
             )
         except Exception:
@@ -402,7 +409,31 @@ def create_sp_agent_graph(
                 "sp_last_handler_result": {"next_step": next_step, "error": error},
             }
 
-        _emit_events(runtime, [make_sp_event("sp.central.decided", run_id=run_id, iteration=iteration)])
+        decision_payload: dict[str, Any] = {
+            "iteration": iteration,
+            "action_id": action_payload.get("action_id"),
+            "action_type": action_payload.get("action_type"),
+            "reason": action_payload.get("reason"),
+            "task": action_payload.get("task"),
+            "target_agent": action_payload.get("target_agent"),
+            "stage": action_payload.get("stage"),
+            "expected_output": action_payload.get("expected_output"),
+            "input_refs": action_payload.get("input_refs"),
+        }
+        if bool(_runtime_context(runtime).get("debug_trace_enabled")):
+            # ``task_context`` is the exact working-context block handed to the
+            # CentralAgent. Keeping a bounded copy makes memory-use failures
+            # diagnosable without recording provider-private reasoning.
+            prompt_context = str(request.task_context or "")
+            decision_payload.update(
+                {
+                    "prompt_context": prompt_context[:DEBUG_DECISION_CONTEXT_MAX_CHARS],
+                    "prompt_context_chars": len(prompt_context),
+                    "prompt_context_truncated": len(prompt_context) > DEBUG_DECISION_CONTEXT_MAX_CHARS,
+                    "prompt_context_sha256": hashlib.sha256(prompt_context.encode("utf-8")).hexdigest(),
+                }
+            )
+        _emit_events(runtime, [make_sp_event("sp.central.decided", run_id=run_id, **decision_payload)])
         return {
             "sp_current_action": action_payload,
             "sp_current_action_id": action_payload.get("action_id"),

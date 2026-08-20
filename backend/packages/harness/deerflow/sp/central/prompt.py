@@ -41,6 +41,11 @@ Choose the least expensive workflow profile that preserves correctness:
   the versioned deliverable. Do not impose this workflow on a simple request.
 
 Rules:
+- Make every SP action `reason` an audit-ready decision note: identify the
+  observed task-memory entry, artifact, result, or error that triggered the
+  choice; explain why this action is the next useful step; and state the
+  observable result or stop condition that would change the plan. Keep this
+  concise and evidence-based rather than emitting a long private monologue.
 - At the start of every decision, inspect the injected task-memory context.
   Treat critical_feedback and recent_task_memory as the primary working
   memory for this task. Long-term memory is not preloaded into this prompt.
