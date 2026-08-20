@@ -71,8 +71,7 @@ class SubagentLimitMiddleware(AgentMiddleware[AgentState]):
 
         dropped_count = len(indices_to_drop)
         logger.warning(
-            "Truncated %s excess delegated-task tool call(s) from model response "
-            "(tools=%s, limit=%s)",
+            "Truncated %s excess delegated-task tool call(s) from model response (tools=%s, limit=%s)",
             dropped_count,
             sorted(self.tool_names),
             self.max_concurrent,

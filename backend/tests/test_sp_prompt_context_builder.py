@@ -206,10 +206,7 @@ def test_context_recognizes_natural_constraint_update_as_correction():
         StackMemoryEntry(
             action="user_request",
             actor="human",
-            content=(
-                "我刚收到消息，小安和小陈也不能同住，其他要求不变。"
-                "请检查你上次的安排，重新排房。"
-            ),
+            content=("我刚收到消息，小安和小陈也不能同住，其他要求不变。请检查你上次的安排，重新排房。"),
             run_id="run-new",
             priority="high",
         )

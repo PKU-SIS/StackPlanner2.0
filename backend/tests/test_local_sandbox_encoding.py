@@ -108,7 +108,7 @@ def test_execute_command_uses_powershell_command_mode_on_windows(monkeypatch):
                 "shell": False,
                 "capture_output": True,
                 "text": True,
-                "timeout": 600,
+                "timeout": local_sandbox.DEFAULT_COMMAND_TIMEOUT_SECONDS,
                 "env": {"PATH": r"C:\Windows"},
             },
         )
@@ -137,7 +137,7 @@ def test_execute_command_uses_posix_shell_command_mode_on_windows(monkeypatch):
                 "shell": False,
                 "capture_output": True,
                 "text": True,
-                "timeout": 600,
+                "timeout": local_sandbox.DEFAULT_COMMAND_TIMEOUT_SECONDS,
                 "env": {
                     "PATH": r"C:\Program Files\Git\bin",
                     "MSYS_NO_PATHCONV": "1",
@@ -193,7 +193,7 @@ def test_execute_command_uses_cmd_command_mode_on_windows(monkeypatch):
                 "shell": False,
                 "capture_output": True,
                 "text": True,
-                "timeout": 600,
+                "timeout": local_sandbox.DEFAULT_COMMAND_TIMEOUT_SECONDS,
                 "env": {"PATH": r"C:\Windows"},
             },
         )

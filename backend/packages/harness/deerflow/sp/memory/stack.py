@@ -242,16 +242,9 @@ class TaskMemoryStack:
         protected = [entry.id for entry in targets if entry.status == "pinned" or entry.priority == "critical"]
         if protected:
             raise ValueError(f"REVISE cannot invalidate pinned or critical memory: {', '.join(protected)}")
-        human_authored = [
-            entry.id
-            for entry in targets
-            if entry.actor == "human" or entry.action in {"user_request", "feedback"}
-        ]
+        human_authored = [entry.id for entry in targets if entry.actor == "human" or entry.action in {"user_request", "feedback"}]
         if human_authored:
-            raise ValueError(
-                "REVISE cannot invalidate human-authored task memory: "
-                + ", ".join(human_authored)
-            )
+            raise ValueError("REVISE cannot invalidate human-authored task memory: " + ", ".join(human_authored))
         inactive = [entry.id for entry in targets if entry.status != "active"]
         if inactive:
             raise ValueError(f"REVISE target memory is not active: {', '.join(inactive)}")

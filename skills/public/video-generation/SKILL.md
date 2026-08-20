@@ -1,8 +1,6 @@
 ---
 name: video-generation
 description: Use this skill when the user requests to generate, create, or imagine videos. Supports structured prompts and reference image for guided generation.
-required-secrets:
-  - MINIMAX_API_KEY
 ---
 
 # Video Generation Skill
@@ -144,6 +142,8 @@ After generation:
 
 Auto-selected by environment variables (CLI unchanged):
 
+- Configure at least one provider credential before execution: `GEMINI_API_KEY`
+  or `MINIMAX_API_KEY`.
 - `GEMINI_API_KEY` set → Gemini Veo (default, unchanged).
 - Only `MINIMAX_API_KEY` set → MiniMax video (`/v1/video_generation`, async 3-step poll/download).
 - Force with `VIDEO_GENERATION_PROVIDER=gemini|minimax`.

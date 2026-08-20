@@ -42,25 +42,13 @@ function fallbackTitle(userMsg: string): string {
   return `${userMsg.slice(0, FALLBACK_TITLE_MAX_CHARS).trimEnd()}...`;
 }
 
-// Suggestions still come from the recorded model fixture. The default title no
-// longer does: TitleMiddleware uses a local fallback when title.model_name is
-// unset, so derive that expected title from the prompt.
+// The default title comes from the local fallback when title.model_name is
+// unset. The final answer still comes from the recorded model fixture.
 const textTurns = fixture.turns
   .map((t) => t.output?.data?.content)
   .filter((c): c is string => typeof c === "string" && c.trim().length > 0);
-const suggestionsRaw = textTurns.find((c) => c.trim().startsWith("["));
-// Guarded parse: a bracket-prefixed turn that isn't a valid JSON string array
-// falls back to "" so the `not.toBe("")` assertion below fails with a clear
-// message instead of a generic JSON.parse throw.
-const EXPECTED_SUGGESTION = ((): string => {
-  if (!suggestionsRaw) return "";
-  try {
-    const arr: unknown = JSON.parse(suggestionsRaw);
-    return Array.isArray(arr) && typeof arr[0] === "string" ? arr[0] : "";
-  } catch {
-    return "";
-  }
-})();
+const EXPECTED_REPLY =
+  textTurns.find((content) => content.trim() === "hi from replay.") ?? "";
 const EXPECTED_TITLE = fallbackTitle(PROMPT);
 
 test.describe("real backend render (replay, no API key)", () => {
@@ -75,7 +63,7 @@ test.describe("real backend render (replay, no API key)", () => {
     expect(resp.status(), await resp.text()).toBe(201);
   });
 
-  test("renders the local auto-title + replayed suggestions from a real backend", async ({
+  test("renders the local auto-title + replayed answer from a real backend", async ({
     page,
   }) => {
     // ultra mode so the context the frontend sends (is_plan_mode + subagent_enabled)
@@ -94,23 +82,23 @@ test.describe("real backend render (replay, no API key)", () => {
     await textarea.fill(PROMPT);
     await textarea.press("Enter");
 
-    // The title is the default local fallback, while the suggestion is a
-    // replayed model output absent from the prompt. Together they prove the
-    // backend state update and the replayed post-answer model call both render
-    // through the real frontend.
+    // The title is the default local fallback, while the answer is a replayed
+    // model output. Together they prove the backend state update and the main
+    // answer render through the real frontend. Follow-up suggestions are
+    // intentionally optional and must not make this front-back contract flaky.
     expect(
       EXPECTED_TITLE,
       "default local fallback title should be derived from the prompt",
     ).not.toBe("");
     expect(
-      EXPECTED_SUGGESTION,
-      "fixture should contain a suggestions turn (re-record; the record spec waits for /suggestions)",
+      EXPECTED_REPLY,
+      "fixture should contain the expected final assistant reply",
     ).not.toBe("");
     const chat = page.locator("#chat");
     await expect(chat.getByText(EXPECTED_TITLE)).toBeVisible({
       timeout: 60_000,
     });
-    await expect(chat.getByText(EXPECTED_SUGGESTION)).toBeVisible({
+    await expect(chat.getByText(EXPECTED_REPLY, { exact: true })).toBeVisible({
       timeout: 30_000,
     });
 

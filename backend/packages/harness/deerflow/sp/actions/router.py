@@ -316,11 +316,7 @@ class ActionRouter:
             )
             if isinstance(value, str) and value.strip()
         )
-        if (
-            action.target_agent == "coder"
-            and _READ_ONLY_REMOTE_API_PATTERN.search(text)
-            and not _REMOTE_API_IMPLEMENTATION_PATTERN.search(text)
-        ):
+        if action.target_agent == "coder" and _READ_ONLY_REMOTE_API_PATTERN.search(text) and not _REMOTE_API_IMPLEMENTATION_PATTERN.search(text):
             action.metadata.setdefault("declared_target_agent", "coder")
             action.metadata["target_agent_normalization"] = {
                 "from_target": "coder",
@@ -372,11 +368,7 @@ class ActionRouter:
             target = str(value)
             if target in known_ids or not target.startswith("spmem_") or len(target) < 20:
                 return target
-            matches = [
-                candidate
-                for candidate in known_ids
-                if _is_one_edit_memory_id(target, candidate)
-            ]
+            matches = [candidate for candidate in known_ids if _is_one_edit_memory_id(target, candidate)]
             if len(matches) != 1:
                 return target
             replacements.append({"from": target, "to": matches[0]})
@@ -384,22 +376,12 @@ class ActionRouter:
 
         raw_targets = action.metadata.get("target_entry_ids")
         if isinstance(raw_targets, list):
-            action.metadata["target_entry_ids"] = [
-                normalize(value) for value in raw_targets
-            ]
+            action.metadata["target_entry_ids"] = [normalize(value) for value in raw_targets]
         source_ids = action.metadata.get("source_entry_ids")
         if isinstance(source_ids, list):
-            action.metadata["source_entry_ids"] = [
-                normalize(value) for value in source_ids
-            ]
-        if (
-            action.action_type is ActionType.BACKTRACK
-            and action.metadata.get("backtrack_target_type") == "entry"
-            and action.metadata.get("backtrack_target_id")
-        ):
-            action.metadata["backtrack_target_id"] = normalize(
-                action.metadata["backtrack_target_id"]
-            )
+            action.metadata["source_entry_ids"] = [normalize(value) for value in source_ids]
+        if action.action_type is ActionType.BACKTRACK and action.metadata.get("backtrack_target_type") == "entry" and action.metadata.get("backtrack_target_id"):
+            action.metadata["backtrack_target_id"] = normalize(action.metadata["backtrack_target_id"])
         if replacements:
             action.metadata["memory_target_normalization"] = {
                 "reason": "unique_one_edit_opaque_id",
@@ -509,18 +491,10 @@ class ActionRouter:
         exploratory request.
         """
 
-        if (
-            action.action_type is not ActionType.DELEGATE
-            or action.metadata.get("allow_derived_identifiers") is True
-        ):
+        if action.action_type is not ActionType.DELEGATE or action.metadata.get("allow_derived_identifiers") is True:
             return None
         stack = TaskMemoryStack.from_dict(state.get("sp_task_memory"))
-        human_entries = [
-            entry
-            for entry in stack.get_active_entries()
-            if entry.actor == "human"
-            and entry.action in {"user_request", "feedback"}
-        ]
+        human_entries = [entry for entry in stack.get_active_entries() if entry.actor == "human" and entry.action in {"user_request", "feedback"}]
         if not human_entries:
             return None
         latest_human = human_entries[-1].content
@@ -528,9 +502,7 @@ class ActionRouter:
             return None
 
         human_text = "\n".join(entry.content for entry in human_entries)
-        user_identifiers = set(
-            _QUALIFIED_IDENTIFIER_PATTERN.findall(human_text)
-        )
+        user_identifiers = set(_QUALIFIED_IDENTIFIER_PATTERN.findall(human_text))
         if not user_identifiers:
             return None
         action_text = "\n".join(
@@ -542,17 +514,9 @@ class ActionRouter:
             )
             if isinstance(value, str) and value.strip()
         )
-        action_identifiers = set(
-            _QUALIFIED_IDENTIFIER_PATTERN.findall(action_text)
-        )
-        namespaces = {
-            identifier.split(".", 1)[0] for identifier in user_identifiers
-        }
-        ungrounded = sorted(
-            identifier
-            for identifier in action_identifiers - user_identifiers
-            if identifier.split(".", 1)[0] in namespaces
-        )
+        action_identifiers = set(_QUALIFIED_IDENTIFIER_PATTERN.findall(action_text))
+        namespaces = {identifier.split(".", 1)[0] for identifier in user_identifiers}
+        ungrounded = sorted(identifier for identifier in action_identifiers - user_identifiers if identifier.split(".", 1)[0] in namespaces)
         if not ungrounded:
             return None
 

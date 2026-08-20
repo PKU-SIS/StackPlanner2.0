@@ -174,9 +174,7 @@ class DurableContextMiddleware(AgentMiddleware[AgentState]):
     def _inject(self, request: ModelRequest) -> ModelRequest:
         state = request.state or {}
         runtime_context = getattr(getattr(request, "runtime", None), "context", None)
-        isolate_abandoned_run = isinstance(runtime_context, dict) and bool(
-            runtime_context.get("fresh_user_turn_after_terminal")
-        )
+        isolate_abandoned_run = isinstance(runtime_context, dict) and bool(runtime_context.get("fresh_user_turn_after_terminal"))
         data_block = _render_durable_context_data(
             state.get("summary_text") if self._include_summary and not isolate_abandoned_run else None,
             (state.get("delegations") or []) if self._include_delegations else [],

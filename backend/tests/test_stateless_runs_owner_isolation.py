@@ -85,6 +85,7 @@ def _client(user):
     app.state.run_events_config = None
     app.state.run_event_store = MagicMock()
     run_manager = MagicMock()
+    run_manager.list_by_thread = AsyncMock(return_value=[])
     run_manager.create_or_reject = AsyncMock(side_effect=ConflictError("sentinel: owner check passed"))
     app.state.run_manager = run_manager
     with TestClient(app) as client:

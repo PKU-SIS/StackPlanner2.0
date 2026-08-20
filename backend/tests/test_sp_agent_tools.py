@@ -1489,31 +1489,18 @@ def test_think_label_middleware_enforces_explicit_strict_json_and_sort_order():
     update = middleware.after_model(
         {
             "messages": [
-                HumanMessage(
-                    content=(
-                        "输出严格 JSON 数组，不要解释，并按 iso3 升序排列。"
-                    )
-                ),
+                HumanMessage(content=("输出严格 JSON 数组，不要解释，并按 iso3 升序排列。")),
                 AIMessage(content=response, id="ai-strict-json"),
             ]
         },
-        SimpleNamespace(
-            context={"thread_id": "thread-1", "run_id": "run-1"}
-        ),
+        SimpleNamespace(context={"thread_id": "thread-1", "run_id": "run-1"}),
     )
 
     normalized = update["messages"][0]
     assert normalized.id == "ai-strict-json"
     assert not normalized.content.startswith("```")
-    assert [
-        item["iso3"] for item in json.loads(normalized.content)
-    ] == ["BRA", "CHN", "IND"]
-    assert (
-        normalized.additional_kwargs[
-            "stackplanner_strict_json_normalized"
-        ]
-        is True
-    )
+    assert [item["iso3"] for item in json.loads(normalized.content)] == ["BRA", "CHN", "IND"]
+    assert normalized.additional_kwargs["stackplanner_strict_json_normalized"] is True
     assert "```" not in update["sp_task_memory"]["entries"][-1]["content"]
 
 
@@ -1528,15 +1515,11 @@ def test_think_label_middleware_does_not_rewrite_json_without_strict_request():
                 AIMessage(content=response, id="ai-normal-json"),
             ]
         },
-        SimpleNamespace(
-            context={"thread_id": "thread-1", "run_id": "run-1"}
-        ),
+        SimpleNamespace(context={"thread_id": "thread-1", "run_id": "run-1"}),
     )
 
     assert "messages" not in update
-    assert update["sp_task_memory"]["entries"][-1]["content"] == (
-        '```json {"status":"ok"} ```'
-    )
+    assert update["sp_task_memory"]["entries"][-1]["content"] == ('```json {"status":"ok"} ```')
 
 
 def test_think_label_middleware_deduplicates_same_model_message():

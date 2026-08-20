@@ -413,15 +413,8 @@ def test_targeted_reflection_is_idempotent_for_an_already_inactive_target():
     assert by_id[wrong.id].status == "pruned"
     assert restored.entries[-1].action == "reflect"
     assert restored.entries[-1].metadata["skipped_inactive_target_ids"] == [wrong.id]
-    assert not any(
-        event["event_type"] == "sp.handler.failed"
-        for event in result.run_events
-    )
-    assert any(
-        event["event_type"] == "sp.reflect.targets_already_inactive"
-        and event["payload"]["source_entry_ids"] == [wrong.id]
-        for event in result.run_events
-    )
+    assert not any(event["event_type"] == "sp.handler.failed" for event in result.run_events)
+    assert any(event["event_type"] == "sp.reflect.targets_already_inactive" and event["payload"]["source_entry_ids"] == [wrong.id] for event in result.run_events)
 
 
 def test_targeted_reflection_cannot_backtrack_pinned_human_memory():
@@ -607,10 +600,7 @@ def test_natural_user_phrase_saying_prior_statement_has_an_error_forces_reflecti
 
     assert resumed.next_step == "continue"
     assert len(executor.tasks) == 1
-    assert not any(
-        event["event_type"] == "sp.action.correction_reflection_forced"
-        for event in resumed.run_events
-    )
+    assert not any(event["event_type"] == "sp.action.correction_reflection_forced" for event in resumed.run_events)
 
 
 def test_natural_user_phrase_saying_prior_answer_omitted_correction_forces_reflection():
@@ -652,13 +642,8 @@ def test_natural_user_phrase_saying_prior_answer_omitted_correction_forces_refle
     )
 
     restored = TaskMemoryStack.from_dict(result.state_update["sp_task_memory"])
-    assert next(
-        entry for entry in restored.entries if entry.id == old_answer.id
-    ).status == "pruned"
-    assert any(
-        event["event_type"] == "sp.action.correction_reflection_forced"
-        for event in result.run_events
-    )
+    assert next(entry for entry in restored.entries if entry.id == old_answer.id).status == "pruned"
+    assert any(event["event_type"] == "sp.action.correction_reflection_forced" for event in result.run_events)
 
 
 def test_ordinary_follow_up_does_not_force_correction_reflection():
@@ -1130,11 +1115,7 @@ def test_revise_repairs_unique_one_character_typo_in_opaque_memory_id():
     assert result.next_step == "continue"
     assert by_id[target.id].status == "superseded"
     assert restored.entries[-1].parent_ids == [target.id]
-    normalized = next(
-        event
-        for event in result.run_events
-        if event["event_type"] == "sp.action.target_normalized"
-    )
+    normalized = next(event for event in result.run_events if event["event_type"] == "sp.action.target_normalized")
     assert normalized["payload"] == {
         "reason": "unique_one_edit_opaque_id",
         "replacements": [{"from": mistyped_id, "to": target.id}],
@@ -2078,10 +2059,7 @@ def test_read_only_external_api_retrieval_is_rerouted_from_coder_to_researcher(
         ActionType.DELEGATE,
         action_id="delegate-api-to-wrong-role",
         target_agent="coder",
-        task=(
-            "Call the official World Bank Indicators API and retrieve the "
-            "requested country values as JSON."
-        ),
+        task=("Call the official World Bank Indicators API and retrieve the requested country values as JSON."),
         expected_output="Verified values from the official API endpoint.",
         stage="implementation",
     )
@@ -2096,17 +2074,12 @@ def test_read_only_external_api_retrieval_is_rerouted_from_coder_to_researcher(
     task = executor.tasks[0]
     assert task.subagent_type == "researcher"
     assert task.metadata["declared_target_agent"] == "coder"
-    delegated = next(
-        entry
-        for entry in TaskMemoryStack.from_dict(
-            result.state_update["sp_task_memory"]
-        ).entries
-        if entry.action == "delegate"
-    )
+    delegated = next(entry for entry in TaskMemoryStack.from_dict(result.state_update["sp_task_memory"]).entries if entry.action == "delegate")
     assert delegated.stage == "research"
     assert any(
         event["event_type"] == "sp.delegate.target_normalized"
-        and event["payload"] == {
+        and event["payload"]
+        == {
             "from_target": "coder",
             "to_target": "researcher",
             "reason": "read_only_remote_api_retrieval",
@@ -2139,17 +2112,12 @@ def test_closed_user_query_rejects_ungrounded_delegated_identifier(tmp_path):
         )
     )
 
-    result = build_default_action_router(
-        delegate_executor=executor
-    ).execute(
+    result = build_default_action_router(delegate_executor=executor).execute(
         _action(
             ActionType.DELEGATE,
             action_id="delegate-invented-indicator",
             target_agent="researcher",
-            task=(
-                "Query the official API with invented code "
-                "NY.HDI.METH.ME."
-            ),
+            task=("Query the official API with invented code NY.HDI.METH.ME."),
             stage="research",
         ),
         state={
@@ -2164,15 +2132,9 @@ def test_closed_user_query_rejects_ungrounded_delegated_identifier(tmp_path):
     assert executor.tasks == []
     assert "NY.HDI.METH.ME" in str(result.error)
     assert "NY.GDP.PCAP.CD" in str(result.error)
-    restored = TaskMemoryStack.from_dict(
-        result.state_update["sp_task_memory"]
-    )
+    restored = TaskMemoryStack.from_dict(result.state_update["sp_task_memory"])
     assert restored.entries[-1].action == "delegate_skipped"
-    assert any(
-        event["event_type"]
-        == "sp.delegate.ungrounded_identifier_rejected"
-        for event in result.run_events
-    )
+    assert any(event["event_type"] == "sp.delegate.ungrounded_identifier_rejected" for event in result.run_events)
 
 
 def test_closed_user_query_allows_exact_user_provided_identifier(tmp_path):
@@ -2199,9 +2161,7 @@ def test_closed_user_query_allows_exact_user_provided_identifier(tmp_path):
         )
     )
 
-    result = build_default_action_router(
-        delegate_executor=executor
-    ).execute(
+    result = build_default_action_router(delegate_executor=executor).execute(
         _action(
             ActionType.DELEGATE,
             action_id="delegate-grounded-indicator",
@@ -2394,10 +2354,7 @@ def test_reporter_literal_acceptance_guard_extracts_bare_preservation_ids(tmp_pa
             status=SPSubagentStatus.COMPLETED,
             result="Report written.",
             task_id="report-bare-literals",
-            artifact_content=(
-                "# Report\n\nPreserves CORRECTION-JULY and AURORA-AUDIT-7319, "
-                "but omits the historical action."
-            ),
+            artifact_content=("# Report\n\nPreserves CORRECTION-JULY and AURORA-AUDIT-7319, but omits the historical action."),
             artifact_type="report_revision",
             artifact_metadata={
                 "completion_status": "complete",
@@ -2407,14 +2364,7 @@ def test_reporter_literal_acceptance_guard_extracts_bare_preservation_ids(tmp_pa
     )
     state = {
         **_thread_state_with_outputs(tmp_path),
-        "messages": [
-            HumanMessage(
-                content=(
-                    "其他来源说明和历史审计都不要丢，尤其保留 "
-                    "CORRECTION-JULY、AURORA-AUDIT-7319、OLD-R7。"
-                )
-            )
-        ],
+        "messages": [HumanMessage(content=("其他来源说明和历史审计都不要丢，尤其保留 CORRECTION-JULY、AURORA-AUDIT-7319、OLD-R7。"))],
     }
 
     result = build_default_action_router(delegate_executor=executor).execute(
@@ -2492,9 +2442,7 @@ def test_reporter_accepts_unique_tool_call_suffix_in_created_filename(tmp_path):
             artifact_metadata={
                 "completion_status": "complete",
                 "evidence_gaps": [],
-                "created_paths": [
-                    "/mnt/user-data/outputs/report_revision-v3-spart_8d806b58caf7.md"
-                ],
+                "created_paths": ["/mnt/user-data/outputs/report_revision-v3-spart_8d806b58caf7.md"],
             },
         )
     )
@@ -2515,9 +2463,7 @@ def test_reporter_accepts_unique_tool_call_suffix_in_created_filename(tmp_path):
 
     ref = result.state_update["sp_current_artifact_refs"]["report_revision"]
     assert ref["metadata"]["completion_status"] == "complete"
-    assert result.state_update["artifacts"] == [
-        "/mnt/user-data/outputs/report_revision-v3-spart_8d806b58caf7.md"
-    ]
+    assert result.state_update["artifacts"] == ["/mnt/user-data/outputs/report_revision-v3-spart_8d806b58caf7.md"]
     assert ref["metadata"]["quality_checks"]["created_path_ownership"] == {
         "discarded_paths": [],
         "fallback_artifact_content": False,
@@ -2921,23 +2867,13 @@ def test_reporter_requires_explicit_user_supplied_boundary_adjustment(tmp_path):
     )
     state = {
         **_thread_state_with_outputs(tmp_path),
-        "messages": [
-            HumanMessage(
-                content=(
-                    "<uploaded_files>inventory only</uploaded_files>\n"
-                    "请修订刚才的报告。最小边界改进只是把流失率降低0.1个百分点到5.0%。"
-                )
-            )
-        ],
+        "messages": [HumanMessage(content=("<uploaded_files>inventory only</uploaded_files>\n请修订刚才的报告。最小边界改进只是把流失率降低0.1个百分点到5.0%。"))],
         "sp_task_memory": TaskMemoryStack(
             entries=[
                 StackMemoryEntry(
                     action="user_request",
                     actor="human",
-                    content=(
-                        "<uploaded_files>inventory only</uploaded_files>\n"
-                        "请修订刚才的报告。最小边界改进只是把流失率降低0.1个百分点到5.0%。"
-                    ),
+                    content=("<uploaded_files>inventory only</uploaded_files>\n请修订刚才的报告。最小边界改进只是把流失率降低0.1个百分点到5.0%。"),
                     run_id="run-2",
                 )
             ]
@@ -2961,14 +2897,8 @@ def test_reporter_requires_explicit_user_supplied_boundary_adjustment(tmp_path):
     requirements = executor.tasks[0].context_refs["report_requirements"]
     assert requirements["human_feedback"] == [
         {
-            "entry_id": next(
-                entry["id"]
-                for entry in state["sp_task_memory"]["entries"]
-                if entry["action"] == "user_request"
-            ),
-            "content": (
-                "请修订刚才的报告。最小边界改进只是把流失率降低0.1个百分点到5.0%。"
-            ),
+            "entry_id": next(entry["id"] for entry in state["sp_task_memory"]["entries"] if entry["action"] == "user_request"),
+            "content": ("请修订刚才的报告。最小边界改进只是把流失率降低0.1个百分点到5.0%。"),
             "run_id": "run-2",
         }
     ]
@@ -3008,11 +2938,7 @@ def test_reporter_accepts_explicit_user_supplied_boundary_adjustment(tmp_path):
     )
     state = {
         **_thread_state_with_outputs(tmp_path),
-        "messages": [
-            HumanMessage(
-                content="最小边界改进只是把流失率降低0.1个百分点到5.0%。"
-            )
-        ],
+        "messages": [HumanMessage(content="最小边界改进只是把流失率降低0.1个百分点到5.0%。")],
     }
 
     result = build_default_action_router(delegate_executor=executor).execute(
@@ -3031,9 +2957,7 @@ def test_reporter_accepts_explicit_user_supplied_boundary_adjustment(tmp_path):
 
     ref = result.state_update["sp_current_artifact_refs"]["report_revision"]
     assert ref["metadata"]["completion_status"] == "complete"
-    assert ref["metadata"]["quality_checks"]["required_boundary_adjustments"][
-        "passed"
-    ] is True
+    assert ref["metadata"]["quality_checks"]["required_boundary_adjustments"]["passed"] is True
 
 
 def test_reporter_revision_discards_prior_created_path_and_persists_fallback_body(
@@ -3748,10 +3672,7 @@ def test_delegate_surfaces_research_artifact_evidence_excerpt_to_central_memory(
             artifact_metadata={
                 "completion_status": "complete",
                 "evidence_gaps": [],
-                "central_evidence_preview": (
-                    '[{"countryiso3code":"CHN","date":"2023",'
-                    '"value":12951.1782397043}]'
-                ),
+                "central_evidence_preview": ('[{"countryiso3code":"CHN","date":"2023","value":12951.1782397043}]'),
             },
         )
     )

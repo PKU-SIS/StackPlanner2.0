@@ -1618,11 +1618,7 @@ class SPThinkLabelMiddleware(AgentMiddleware[AgentState]):
         message_id = str(latest.id or _implicit_think_message_id(latest))
         normalized_json = _normalize_strict_json_response(
             message_to_text(latest),
-            latest_user_request=message_to_text(
-                SPFinishAvailabilityMiddleware._latest_visible_human_message(
-                    state
-                )
-            ),
+            latest_user_request=message_to_text(SPFinishAvailabilityMiddleware._latest_visible_human_message(state)),
         )
         update: dict[str, Any] = {
             "sp_last_handler_result": {
@@ -1631,9 +1627,7 @@ class SPThinkLabelMiddleware(AgentMiddleware[AgentState]):
                 "next_step": "continue",
             }
         }
-        if normalized_json is not None and normalized_json != message_to_text(
-            latest
-        ):
+        if normalized_json is not None and normalized_json != message_to_text(latest):
             latest = latest.model_copy(
                 update={
                     "content": normalized_json,
@@ -1910,10 +1904,7 @@ def _json_safe_for_output(value: Any) -> Any:
     if value is None or isinstance(value, str | int | float | bool):
         return value
     if isinstance(value, Mapping):
-        return {
-            str(key): _json_safe_for_output(item)
-            for key, item in value.items()
-        }
+        return {str(key): _json_safe_for_output(item) for key, item in value.items()}
     if isinstance(value, list | tuple):
         return [_json_safe_for_output(item) for item in value]
     return str(value)
@@ -1938,20 +1929,11 @@ def _normalize_strict_json_response(
         return None
 
     sort_requirement = _json_sort_requirement(latest_user_request)
-    if (
-        sort_requirement is not None
-        and isinstance(payload, list)
-        and payload
-        and all(isinstance(item, Mapping) for item in payload)
-    ):
+    if sort_requirement is not None and isinstance(payload, list) and payload and all(isinstance(item, Mapping) for item in payload):
         field, descending = sort_requirement
         if all(field in item for item in payload):
-            present = [
-                item for item in payload if item.get(field) is not None
-            ]
-            missing = [
-                item for item in payload if item.get(field) is None
-            ]
+            present = [item for item in payload if item.get(field) is not None]
+            missing = [item for item in payload if item.get(field) is None]
             payload = [
                 *sorted(
                     present,

@@ -30,34 +30,14 @@ def select_correction_review_candidates(
     """Return recent active model conclusions targeted by an explicit correction."""
     if not current_run_id:
         return []
-    if any(
-        entry.run_id == current_run_id
-        and entry.action == "reflect"
-        and entry.metadata.get("trigger") == "user_correction"
-        for entry in stack.entries
-    ):
+    if any(entry.run_id == current_run_id and entry.action == "reflect" and entry.metadata.get("trigger") == "user_correction" for entry in stack.entries):
         # One targeted reflection/backtrack is enough for a single user turn.
         # Without this reservation, a deep prior stack is peeled in repeated
         # batches (``limit`` entries at a time), consuming multiple model turns
         # before the corrected work can actually run.
         return []
-    current_user_requests = [
-        entry
-        for entry in stack.get_active_entries()
-        if entry.run_id == current_run_id
-        and entry.actor == "human"
-        and entry.action == "user_request"
-    ]
-    if (
-        not current_user_requests
-        or not CORRECTION_REVIEW_PATTERN.search(current_user_requests[-1].content)
-    ):
+    current_user_requests = [entry for entry in stack.get_active_entries() if entry.run_id == current_run_id and entry.actor == "human" and entry.action == "user_request"]
+    if not current_user_requests or not CORRECTION_REVIEW_PATTERN.search(current_user_requests[-1].content):
         return []
-    prior_model_entries = [
-        entry
-        for entry in stack.get_active_entries()
-        if entry.run_id != current_run_id
-        and entry.actor != "human"
-        and entry.action in {"observe", "think", "finish"}
-    ]
+    prior_model_entries = [entry for entry in stack.get_active_entries() if entry.run_id != current_run_id and entry.actor != "human" and entry.action in {"observe", "think", "finish"}]
     return prior_model_entries[-max(1, limit) :]

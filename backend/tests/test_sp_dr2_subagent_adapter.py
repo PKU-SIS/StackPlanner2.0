@@ -264,9 +264,7 @@ def test_researcher_recovers_successful_fetch_evidence_when_contract_omits_artif
                         {
                             "id": "fetch-china",
                             "name": "web_fetch",
-                            "args": {
-                                "url": "https://api.worldbank.org/v2/country/CHN/indicator/NY.GDP.PCAP.CD?date=2023&format=json"
-                            },
+                            "args": {"url": "https://api.worldbank.org/v2/country/CHN/indicator/NY.GDP.PCAP.CD?date=2023&format=json"},
                         }
                     ],
                 },
@@ -327,9 +325,7 @@ def test_researcher_automatically_continues_bounded_multi_item_fetches():
             result=json.dumps(
                 {
                     "summary": f"Fetched {country}={value}.",
-                    "artifact_content": json.dumps(
-                        {"country": country, "value": value}
-                    ),
+                    "artifact_content": json.dumps({"country": country, "value": value}),
                     "artifact_type": "research_observation",
                     "artifact_metadata": {
                         "completion_status": status,
@@ -383,17 +379,10 @@ def test_researcher_automatically_continues_bounded_multi_item_fetches():
     assert result.artifact_metadata["completion_status"] == "complete"
     assert result.artifact_metadata["research_continuation_attempts"] == 2
     assert result.artifact_metadata["research_pass_count"] == 3
-    assert "2434.45111237626" in result.artifact_metadata[
-        "central_evidence_preview"
-    ]
+    assert "2434.45111237626" in result.artifact_metadata["central_evidence_preview"]
     assert result.artifact_content is not None
-    assert all(
-        expected in result.artifact_content
-        for expected in ("12951.1782397043", "2434.45111237626", "10377.5892792557")
-    )
-    assert result.artifact_content.index("10377.5892792557") < (
-        result.artifact_content.index("12951.1782397043")
-    )
+    assert all(expected in result.artifact_content for expected in ("12951.1782397043", "2434.45111237626", "10377.5892792557"))
+    assert result.artifact_content.index("10377.5892792557") < (result.artifact_content.index("12951.1782397043"))
 
 
 def test_coder_complete_claim_is_downgraded_without_successful_execution_evidence():

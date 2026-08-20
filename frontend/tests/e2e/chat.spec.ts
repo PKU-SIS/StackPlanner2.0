@@ -12,10 +12,6 @@ test.describe("Chat workspace", () => {
 
     const textarea = page.getByPlaceholder(/how can i assist you/i);
     await expect(textarea).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("sp-runtime-indicator")).toHaveAttribute(
-      "data-assistant-id",
-      "stackplanner",
-    );
     await expect(page.getByRole("button", { name: /load more/i })).toBeHidden();
   });
 

@@ -37,14 +37,10 @@ async def test_fetch_public_url_returns_pretty_json(monkeypatch):
 async def test_fetch_public_url_rejects_private_destination():
     result = await tools.fetch_public_url(
         "http://127.0.0.1/private",
-        transport=httpx.MockTransport(
-            lambda _request: httpx.Response(200, text="must not run")
-        ),
+        transport=httpx.MockTransport(lambda _request: httpx.Response(200, text="must not run")),
     )
 
-    assert result == (
-        "Error: Refusing to fetch a private, loopback, or metadata address"
-    )
+    assert result == ("Error: Refusing to fetch a private, loopback, or metadata address")
 
 
 @pytest.mark.asyncio
@@ -83,9 +79,7 @@ async def test_fetch_public_url_enforces_response_byte_limit(monkeypatch):
     result = await tools.fetch_public_url(
         "https://public.example.test/large",
         max_bytes=4,
-        transport=httpx.MockTransport(
-            lambda _request: httpx.Response(200, content=b"12345")
-        ),
+        transport=httpx.MockTransport(lambda _request: httpx.Response(200, content=b"12345")),
     )
 
     assert result == "Error: Response exceeded the configured 4-byte limit"

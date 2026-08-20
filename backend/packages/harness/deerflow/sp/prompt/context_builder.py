@@ -187,10 +187,7 @@ class PromptContextBuilder:
         )
         if correction_candidates:
             footer.append("correction_review_required: true")
-            footer.append(
-                "correction_candidate_ids: "
-                + ", ".join(f"id={entry.id}" for entry in correction_candidates)
-            )
+            footer.append("correction_candidate_ids: " + ", ".join(f"id={entry.id}" for entry in correction_candidates))
         if summarize_ids:
             footer.append("summarization_candidate_ids: " + ", ".join(f"id={entry_id}" for entry_id in summarize_ids))
         # These execution refs are control-critical. Keep them in the reserved
@@ -264,19 +261,10 @@ class PromptContextBuilder:
         # continuity improves without repopulating the Central stack with every
         # old observation.
         correction_ids = {entry.id for entry in correction_candidates or []}
-        carryover = [
-            entry
-            for entry in active
-            if entry.run_id != current_run_id
-            and (
-                entry.action in {"summarize", "user_request", "revise"}
-                or entry.id in correction_ids
-            )
-        ][-self.recent_entry_limit :]
+        carryover = [entry for entry in active if entry.run_id != current_run_id and (entry.action in {"summarize", "user_request", "revise"} or entry.id in correction_ids)][-self.recent_entry_limit :]
         current_limit = max(self.recent_entry_limit - len(carryover), 0)
         selected_current = current[-current_limit:] if current_limit else []
         return [*carryover, *selected_current]
-
 
     def _format_entries(self, entries: Iterable[StackMemoryEntry], *, max_content_chars: int | None = None) -> list[str]:
         return [self._format_entry(entry, max_content_chars=max_content_chars) for entry in entries]

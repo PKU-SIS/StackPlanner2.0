@@ -164,12 +164,7 @@ def _structured_evidence_preview(value: Any) -> str | None:
     if len(preview) <= _CENTRAL_STRUCTURED_EVIDENCE_PREVIEW_MAX_CHARS:
         return preview
     suffix = "...<truncated>"
-    return (
-        preview[
-            : _CENTRAL_STRUCTURED_EVIDENCE_PREVIEW_MAX_CHARS - len(suffix)
-        ]
-        + suffix
-    )
+    return preview[: _CENTRAL_STRUCTURED_EVIDENCE_PREVIEW_MAX_CHARS - len(suffix)] + suffix
 
 
 def _output_path(value: Any) -> str | None:
@@ -244,12 +239,7 @@ def _recover_research_tool_evidence(ai_messages: Any) -> str | None:
         call_id = str(message.get("tool_call_id") or "")
         tool_name = str(message.get("name") or calls.get(call_id) or "")
         content = _message_text(message.get("content")).strip()
-        if (
-            tool_name not in _RECOVERABLE_RESEARCH_EVIDENCE_TOOLS
-            or not content
-            or not _tool_result_succeeded(content)
-            or remaining_chars <= 0
-        ):
+        if tool_name not in _RECOVERABLE_RESEARCH_EVIDENCE_TOOLS or not content or not _tool_result_succeeded(content) or remaining_chars <= 0:
             continue
         item_limit = min(
             _RECOVERED_RESEARCH_EVIDENCE_PER_ITEM_MAX_CHARS,
@@ -487,12 +477,7 @@ def _research_result_needs_continuation(
     *,
     task: SPSubagentTask,
 ) -> bool:
-    if (
-        task.subagent_type != "researcher"
-        or normalized.status != SPSubagentStatus.COMPLETED
-        or normalized.stop_reason
-        or normalized.artifact_metadata.get("completion_status") != "partial"
-    ):
+    if task.subagent_type != "researcher" or normalized.status != SPSubagentStatus.COMPLETED or normalized.stop_reason or normalized.artifact_metadata.get("completion_status") != "partial":
         return False
     gaps = normalized.artifact_metadata.get("evidence_gaps")
     if not isinstance(gaps, list) or not any(str(gap).strip() for gap in gaps):
@@ -510,13 +495,7 @@ def _merge_research_continuations(
 
     successful = [result for result in results if result.status == SPSubagentStatus.COMPLETED]
     base = successful[-1] if successful else results[-1]
-    summaries = list(
-        dict.fromkeys(
-            str(result.result).strip()
-            for result in successful
-            if result.result and str(result.result).strip()
-        )
-    )
+    summaries = list(dict.fromkeys(str(result.result).strip() for result in successful if result.result and str(result.result).strip()))
     artifact_sections: list[str] = []
     remaining_chars = _RESEARCH_CONTINUATION_CONTEXT_MAX_CHARS
     indexed_results = list(enumerate(successful, start=1))
@@ -537,21 +516,9 @@ def _merge_research_continuations(
     metadata = dict(base.artifact_metadata)
     metadata["research_continuation_attempts"] = len(results) - 1
     metadata["research_pass_count"] = len(results)
-    structured_previews = list(
-        dict.fromkeys(
-            preview
-            for result in reversed(successful)
-            if (
-                preview := _structured_evidence_preview(
-                    result.artifact_content
-                )
-            )
-        )
-    )
+    structured_previews = list(dict.fromkeys(preview for result in reversed(successful) if (preview := _structured_evidence_preview(result.artifact_content))))
     if structured_previews:
-        metadata["central_evidence_preview"] = " | ".join(
-            structured_previews
-        )[:_CENTRAL_STRUCTURED_EVIDENCE_PREVIEW_MAX_CHARS]
+        metadata["central_evidence_preview"] = " | ".join(structured_previews)[:_CENTRAL_STRUCTURED_EVIDENCE_PREVIEW_MAX_CHARS]
     failed_tail = results[-1] if results[-1].status != SPSubagentStatus.COMPLETED else None
     if failed_tail is not None:
         metadata["completion_status"] = "partial"
@@ -568,27 +535,14 @@ def _merge_research_continuations(
         error=failed_tail.error if failed_tail is not None else base.error,
         stop_reason=failed_tail.stop_reason if failed_tail is not None else base.stop_reason,
         task_id=results[0].task_id or base.task_id,
-        artifact_content=(
-            "# Combined researcher evidence\n\n"
-            + "\n\n---\n\n".join(artifact_sections)
-            if artifact_sections
-            else base.artifact_content
-        ),
+        artifact_content=("# Combined researcher evidence\n\n" + "\n\n---\n\n".join(artifact_sections) if artifact_sections else base.artifact_content),
         artifact_type=base.artifact_type
         or next(
-            (
-                result.artifact_type
-                for result in reversed(successful)
-                if result.artifact_type
-            ),
+            (result.artifact_type for result in reversed(successful) if result.artifact_type),
             None,
         ),
         artifact_metadata=metadata,
-        token_usage_records=[
-            record
-            for result in results
-            for record in result.token_usage_records
-        ],
+        token_usage_records=[record for result in results for record in result.token_usage_records],
     )
 
 
@@ -600,9 +554,7 @@ def _research_continuation_task(
 ) -> SPSubagentTask:
     gaps = accumulated.artifact_metadata.get("evidence_gaps")
     normalized_gaps = [str(item) for item in gaps if str(item).strip()] if isinstance(gaps, list) else []
-    evidence = str(accumulated.artifact_content or "")[
-        :_RESEARCH_CONTINUATION_CONTEXT_MAX_CHARS
-    ]
+    evidence = str(accumulated.artifact_content or "")[:_RESEARCH_CONTINUATION_CONTEXT_MAX_CHARS]
     continuation_context = {
         "attempt": attempt,
         "unresolved_evidence_gaps": normalized_gaps,
@@ -665,11 +617,7 @@ class DR2SubagentExecutorAdapter:
             ):
                 break
             gaps = normalized.artifact_metadata.get("evidence_gaps")
-            current_gaps = tuple(
-                str(item).strip()
-                for item in gaps
-                if str(item).strip()
-            )
+            current_gaps = tuple(str(item).strip() for item in gaps if str(item).strip())
             if not current_gaps or current_gaps == previous_gaps:
                 break
             previous_gaps = current_gaps

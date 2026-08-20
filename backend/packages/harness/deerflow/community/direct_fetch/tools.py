@@ -142,10 +142,7 @@ async def fetch_public_url(
                     async for chunk in response.aiter_bytes():
                         body.extend(chunk)
                         if len(body) > max_bytes:
-                            return (
-                                "Error: Response exceeded the configured "
-                                f"{max_bytes}-byte limit"
-                            )
+                            return f"Error: Response exceeded the configured {max_bytes}-byte limit"
                     return _decode_body(
                         response,
                         bytes(body),
