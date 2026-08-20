@@ -26,8 +26,8 @@ from deerflow.sp.agent_tools import (
     build_sp_control_tools,
 )
 from deerflow.sp.central import CENTRAL_AGENT_ACTION_PROMPT
-from deerflow.sp.central_resilience import SPCentralResilienceMiddleware
 from deerflow.sp.central.runtime_context import SPCentralRuntimeContext, build_sp_central_runtime_context
+from deerflow.sp.central_resilience import SPCentralResilienceMiddleware
 from deerflow.sp.memory.entry import utc_now_iso
 from deerflow.sp.subagents import (
     A2A_PROGRESS_MESSAGE,
@@ -414,11 +414,7 @@ class DR2SPExecutorProvider:
                 "sp_protect_test_files",
                 configurable.get("sp_protect_test_files"),
             )
-            protect_test_files = (
-                raw_protect_tests.strip().lower() in {"1", "true", "yes", "on"}
-                if isinstance(raw_protect_tests, str)
-                else bool(raw_protect_tests)
-            )
+            protect_test_files = raw_protect_tests.strip().lower() in {"1", "true", "yes", "on"} if isinstance(raw_protect_tests, str) else bool(raw_protect_tests)
             _infer_task_skill_selection(
                 task,
                 available_skill_names=self.available_skill_names,

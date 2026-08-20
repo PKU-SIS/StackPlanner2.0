@@ -133,45 +133,22 @@ CASES: dict[str, dict[str, Any]] = {
     "case-06-price-rule-correction": {
         "title": "优惠门槛更正后的实付价格纠错",
         "turns": [
-            (
-                "我在两家店选洗衣机。A店标价3200元，会员打9折，满3000元再减300元，"
-                "服务费按打折后商品价的8%收，运费60元；店员说满减门槛按标价判断。"
-                "B店全部算下来是3140元。先帮我算选哪家便宜、差多少。"
-            ),
-            (
-                "我刚问清楚，店员前面说错了：A店满3000元的门槛其实看会员打折后的商品价，"
-                "服务费还是按打折后的商品价算，运费不参与。B店仍是3140元。"
-                "请重新检查你上次的结论，告诉我最后选谁、两边各付多少、差多少。"
-            ),
+            ("我在两家店选洗衣机。A店标价3200元，会员打9折，满3000元再减300元，服务费按打折后商品价的8%收，运费60元；店员说满减门槛按标价判断。B店全部算下来是3140元。先帮我算选哪家便宜、差多少。"),
+            ("我刚问清楚，店员前面说错了：A店满3000元的门槛其实看会员打折后的商品价，服务费还是按打折后的商品价算，运费不参与。B店仍是3140元。请重新检查你上次的结论，告诉我最后选谁、两边各付多少、差多少。"),
         ],
     },
     "case-07-rooming-constraint-correction": {
         "title": "分房约束变化后的方案回退与唯一性验证",
         "turns": [
-            (
-                "我要给6个朋友分3间双人房。小安只能和小陈或小丁住，小博只能和小娥住，"
-                "小芳只能和小陈或小丁住。前台排的是小安和小陈、小博和小娥、小丁和小芳。"
-                "先帮我看看这样是否满足要求，并把分房结果写清楚。"
-            ),
-            (
-                "我刚收到消息，小安和小陈也不能同住，其他要求不变。请检查你上次的安排，"
-                "重新排房；不要漏人、不要重复，最后说明新安排是不是唯一的。"
-            ),
+            ("我要给6个朋友分3间双人房。小安只能和小陈或小丁住，小博只能和小娥住，小芳只能和小陈或小丁住。前台排的是小安和小陈、小博和小娥、小丁和小芳。先帮我看看这样是否满足要求，并把分房结果写清楚。"),
+            ("我刚收到消息，小安和小陈也不能同住，其他要求不变。请检查你上次的安排，重新排房；不要漏人、不要重复，最后说明新安排是不是唯一的。"),
         ],
     },
     "case-08-range-script-repair": {
         "title": "区间解析脚本的边界条件发现与修复",
         "turns": [
-            (
-                "帮我写个Python小脚本，把“1-3,5,7-9”这种写法展开成数字列表。"
-                "还要支持倒序区间，去重但保留数字第一次出现的顺序。请实际运行几个例子检查，"
-                "然后把代码文件给我下载。"
-            ),
-            (
-                "我又试了一下，输入“-3--1,2”会出问题。负数和负数区间也要支持，"
-                "这个例子的结果应该是[-3,-2,-1,2]。请检查之前的做法哪里不对，修好后"
-                "把原来的例子和这个新例子都实际跑一遍，再给我修订后的代码文件。"
-            ),
+            ("帮我写个Python小脚本，把“1-3,5,7-9”这种写法展开成数字列表。还要支持倒序区间，去重但保留数字第一次出现的顺序。请实际运行几个例子检查，然后把代码文件给我下载。"),
+            ("我又试了一下，输入“-3--1,2”会出问题。负数和负数区间也要支持，这个例子的结果应该是[-3,-2,-1,2]。请检查之前的做法哪里不对，修好后把原来的例子和这个新例子都实际跑一遍，再给我修订后的代码文件。"),
         ],
     },
     "case-09-hotel-price-correction": {
@@ -184,11 +161,7 @@ CASES: dict[str, dict[str, Any]] = {
                 "停车费135元不计税。B酒店最终一共5108.50元。所有中间数先别四舍五入，"
                 "只把最后实付保留两位小数。先帮我算选哪家、两边各付多少、差多少。"
             ),
-            (
-                "我刚确认，前台把优惠券门槛说错了：满4200元其实看会员折后的房费，"
-                "其他计算规则都不变。请重新检查上次的结论，最后明确选哪家、"
-                "A和B各付多少、差多少，并把关键算式列出来。"
-            ),
+            ("我刚确认，前台把优惠券门槛说错了：满4200元其实看会员折后的房费，其他计算规则都不变。请重新检查上次的结论，最后明确选哪家、A和B各付多少、差多少，并把关键算式列出来。"),
         ],
     },
     "case-10-rooming-all-solutions": {
@@ -200,11 +173,7 @@ CASES: dict[str, dict[str, Any]] = {
                 "小安和小陈、小博和小娥、小丁和小高、小芳和小慧。先帮我检查这个安排"
                 "是否符合规则，并把结果写清楚。"
             ),
-            (
-                "我刚收到更正：小安和小陈也不能同住，其他规则都不变。请重新分房。"
-                "别找到一种就停，把所有可行方案都列出来；调换房间编号、或者交换同一房间"
-                "两个人的先后，都不算新的方案。最后说明新安排是不是唯一的。"
-            ),
+            ("我刚收到更正：小安和小陈也不能同住，其他规则都不变。请重新分房。别找到一种就停，把所有可行方案都列出来；调换房间编号、或者交换同一房间两个人的先后，都不算新的方案。最后说明新安排是不是唯一的。"),
         ],
     },
     "case-11-rooming-six-solutions": {
@@ -228,11 +197,7 @@ CASES: dict[str, dict[str, Any]] = {
         "title": "报告事实纠错后的反思回退与证据保真",
         "uploads": ["aurora_baseline.md", "aurora_correction.md", "aurora_policy.md"],
         "turns": [
-            (
-                "请只依据附带的三个 Project Aurora 文件，做一份完整的董事会 Markdown 报告。"
-                "请写清当前指标、各区域是否达到门槛、来源优先级和历史审计，并把报告做成"
-                "可下载文件。不要联网，也不要虚构。"
-            ),
+            ("请只依据附带的三个 Project Aurora 文件，做一份完整的董事会 Markdown 报告。请写清当前指标、各区域是否达到门槛、来源优先级和历史审计，并把报告做成可下载文件。不要联网，也不要虚构。"),
             (
                 "我看了一下，你刚才对南区门槛的说法有错：南区毛利率30.1%已经达到30.0%，"
                 "只有流失率5.1%没有达到“不高于5.0%”。所以最小边界改进只是把流失率降低"
@@ -247,10 +212,7 @@ CASES: dict[str, dict[str, Any]] = {
         "title": "轻量判断后的纠错反思与完整报告",
         "uploads": ["aurora_baseline.md", "aurora_correction.md", "aurora_policy.md"],
         "turns": [
-            (
-                "请先快速核对这三个 Project Aurora 文件，只用两三句话告诉我南区现在是否 "
-                "ready、具体是哪项指标没过线。暂时不要做报告或文件，不要联网。"
-            ),
+            ("请先快速核对这三个 Project Aurora 文件，只用两三句话告诉我南区现在是否 ready、具体是哪项指标没过线。暂时不要做报告或文件，不要联网。"),
             (
                 "我发现你刚才遗漏了一个关键纠错点：南区毛利率30.1%已经达到30.0%，"
                 "只有流失率5.1%超过5.0%；最小边界改进是把流失率降低0.1个百分点到5.0%。"
@@ -293,13 +255,7 @@ CASES: dict[str, dict[str, Any]] = {
                 "USER: Yes. Just one person.\n\n"
                 "更新当前需求，只回复“收到。”。"
             ),
-            (
-                "片段4：\n"
-                "SYSTEM: Great your reference number is 2K1P6FTA. Thank you.\n"
-                "USER: I also need to find a train from stansted airport to "
-                "cambridge that arrives by 8:00 on tuesday.\n\n"
-                "保留餐厅需求并增加火车需求，只回复“收到。”。"
-            ),
+            ("片段4：\nSYSTEM: Great your reference number is 2K1P6FTA. Thank you.\nUSER: I also need to find a train from stansted airport to cambridge that arrives by 8:00 on tuesday.\n\n保留餐厅需求并增加火车需求，只回复“收到。”。"),
             (
                 "片段5：\n"
                 "SYSTEM: Alright, there are three different trains leaving that "
@@ -336,26 +292,9 @@ CASES: dict[str, dict[str, Any]] = {
                 "SYSTEM: Please confirm: reservation for 2 at Villa Romano in Napa, "
                 "today at 12:45 pm."
             ),
-            (
-                "片段2：\n"
-                "USER: Make it for 4 people.\n"
-                "SYSTEM: Okay, please confirm: reservation for 4 people at Villa "
-                "Romano.\n\n"
-                "更新当前状态，只回复“收到。”。"
-            ),
-            (
-                "片段3：\n"
-                "USER: Actually, can we change it to Big 4.\n"
-                "SYSTEM: Please confirm: table for 4 people at The Big 4.\n"
-                "USER: Yes, that's right.\n\n"
-                "更新当前状态，只回复“收到。”。"
-            ),
-            (
-                "片段4：\n"
-                "SYSTEM: I'm sorry, I couldn't make that reservation for you.\n"
-                "USER: No, that's it.\n\n"
-                "更新当前状态，只回复“收到。”。"
-            ),
+            ("片段2：\nUSER: Make it for 4 people.\nSYSTEM: Okay, please confirm: reservation for 4 people at Villa Romano.\n\n更新当前状态，只回复“收到。”。"),
+            ("片段3：\nUSER: Actually, can we change it to Big 4.\nSYSTEM: Please confirm: table for 4 people at The Big 4.\nUSER: Yes, that's right.\n\n更新当前状态，只回复“收到。”。"),
+            ("片段4：\nSYSTEM: I'm sorry, I couldn't make that reservation for you.\nUSER: No, that's it.\n\n更新当前状态，只回复“收到。”。"),
             (
                 "现在只输出一个严格 JSON 对象，不要解释。字段固定为 restaurant_name、"
                 "location、date、time、number_of_seats、booking_status。使用客服最终确认"
@@ -368,28 +307,12 @@ CASES: dict[str, dict[str, Any]] = {
     "case-16-public-worldbank-query-state": {
         "title": "世界银行公开API查询条件的多轮覆盖与最终执行",
         "turns": [
-            (
-                "我准备查询世界银行 Indicators API。先记录查询条件：国家是中国、印度、"
-                "日本；年份是2022年；指标是 GDP（current US$，代码 NY.GDP.MKTP.CD）。"
-                "现在不要联网，只回复“收到。”。"
-            ),
-            (
-                "把指标改为人均 GDP（current US$，代码 NY.GDP.PCAP.CD）；总 GDP 指标"
-                "作废。不要联网，只回复“收到。”。"
-            ),
-            (
-                "把日本替换为巴西；中国和印度继续保留。不要联网，只回复“收到。”。"
-            ),
-            (
-                "把年份改为2023年，2022年作废。不要联网，只回复“收到。”。"
-            ),
-            (
-                "再增加人口总数指标 SP.POP.TOTL，其他条件不变。不要联网，只回复“收到。”。"
-            ),
-            (
-                "撤销刚才增加的人口指标；国家替换、2023年和人均GDP修改仍然有效。不要"
-                "联网，只回复“收到。”。"
-            ),
+            ("我准备查询世界银行 Indicators API。先记录查询条件：国家是中国、印度、日本；年份是2022年；指标是 GDP（current US$，代码 NY.GDP.MKTP.CD）。现在不要联网，只回复“收到。”。"),
+            ("把指标改为人均 GDP（current US$，代码 NY.GDP.PCAP.CD）；总 GDP 指标作废。不要联网，只回复“收到。”。"),
+            ("把日本替换为巴西；中国和印度继续保留。不要联网，只回复“收到。”。"),
+            ("把年份改为2023年，2022年作废。不要联网，只回复“收到。”。"),
+            ("再增加人口总数指标 SP.POP.TOTL，其他条件不变。不要联网，只回复“收到。”。"),
+            ("撤销刚才增加的人口指标；国家替换、2023年和人均GDP修改仍然有效。不要联网，只回复“收到。”。"),
             (
                 "现在执行当前有效查询，只能使用世界银行官方 Indicators API。输出严格 "
                 "JSON 数组，不要解释。每项字段固定为 country、iso3、year、indicator、"
@@ -440,13 +363,7 @@ CASES: dict[str, dict[str, Any]] = {
                 "USER: Yes please book it for 5 people.\n\n"
                 "更新餐厅需求，只回复“收到。”。"
             ),
-            (
-                "片段5：\n"
-                "SYSTEM: Please verify the date and time for the restaurant booking.\n"
-                "USER: I'd like it for thursday at 10:45.\n"
-                "SYSTEM: All booked!\n\n"
-                "更新餐厅需求，只回复“收到。”。"
-            ),
+            ("片段5：\nSYSTEM: Please verify the date and time for the restaurant booking.\nUSER: I'd like it for thursday at 10:45.\nSYSTEM: All booked!\n\n更新餐厅需求，只回复“收到。”。"),
             (
                 "现在输出严格 JSON，不要解释。JSON 只能有 train 和 restaurant 两个顶层"
                 "对象。train 字段固定为 departure、destination、day、leave_at、people；"

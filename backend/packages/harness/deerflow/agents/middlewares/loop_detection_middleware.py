@@ -179,17 +179,13 @@ _TOOL_FREQ_WARNING_MSG = (
     "[LOOP DETECTED] You have called {tool_name} {count} times without producing a final answer. Stop calling tools and produce your final answer now. If you cannot complete the task, summarize what you accomplished so far."
 )
 
-_TOOL_TOTAL_WARNING_MSG = (
-    "[LOOP DETECTED] You have made {count} total tool calls without producing a final answer. Stop exploring, use the evidence already collected, and produce your final answer now."
-)
+_TOOL_TOTAL_WARNING_MSG = "[LOOP DETECTED] You have made {count} total tool calls without producing a final answer. Stop exploring, use the evidence already collected, and produce your final answer now."
 
 _HARD_STOP_MSG = "[FORCED STOP] Repeated tool calls exceeded the safety limit. Producing final answer with results collected so far."
 
 _TOOL_FREQ_HARD_STOP_MSG = "[FORCED STOP] Tool {tool_name} called {count} times — exceeded the per-tool safety limit. Producing final answer with results collected so far."
 
-_TOOL_TOTAL_HARD_STOP_MSG = (
-    "[FORCED STOP] Total tool calls reached {count} — exceeded the run safety limit. Producing final answer with results collected so far."
-)
+_TOOL_TOTAL_HARD_STOP_MSG = "[FORCED STOP] Total tool calls reached {count} — exceeded the run safety limit. Producing final answer with results collected so far."
 
 
 class LoopDetectionMiddleware(AgentMiddleware[AgentState]):

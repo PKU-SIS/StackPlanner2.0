@@ -96,12 +96,10 @@ def _python_workspace_syntax_error(path: str, content: str) -> str | None:
     except SyntaxError as exc:
         location = f"line {exc.lineno}" if exc.lineno else "an unknown line"
         detail = str(exc.msg or "invalid syntax")
-        return (
-            f"Error: Python syntax validation rejected the edit at {location}: {detail}. "
-            "Re-read the complete surrounding block, make a surgical correction, "
-            "and try again. The file was not modified."
-        )
+        return f"Error: Python syntax validation rejected the edit at {location}: {detail}. Re-read the complete surrounding block, make a surgical correction, and try again. The file was not modified."
     return None
+
+
 _LOCAL_BASH_CWD_COMMANDS = {"cd", "pushd"}
 _LOCAL_BASH_COMMAND_WRAPPERS = {"command", "builtin"}
 _LOCAL_BASH_COMMAND_PREFIX_KEYWORDS = {"!", "{", "case", "do", "elif", "else", "for", "if", "select", "then", "time", "until", "while"}
@@ -1060,11 +1058,7 @@ def _validate_bash_redirect_overwrites(command: str, thread_data: ThreadDataStat
             if not resolved.is_relative_to(workspace):
                 continue
             if resolved.is_file() and resolved.stat().st_size >= _BASH_REDIRECT_OVERWRITE_GUARD_MIN_BYTES:
-                raise PermissionError(
-                    "Refusing shell redirection that would truncate an existing sizeable workspace file: "
-                    f"{target}. Re-read the file and use str_replace for a surgical edit, "
-                    "or write a new output path."
-                )
+                raise PermissionError(f"Refusing shell redirection that would truncate an existing sizeable workspace file: {target}. Re-read the file and use str_replace for a surgical edit, or write a new output path.")
         except FileNotFoundError:
             continue
 
@@ -2285,20 +2279,14 @@ def write_file_tool(
                 if isinstance(existing_content, str):
                     existing_bytes = len(existing_content.encode("utf-8"))
                     new_bytes = len(content.encode("utf-8"))
-                    if (
-                        requested_path.startswith(f"{VIRTUAL_PATH_PREFIX}/workspace/")
-                        and existing_bytes >= _WRITE_FILE_WORKSPACE_OVERWRITE_GUARD_MIN_BYTES
-                    ):
+                    if requested_path.startswith(f"{VIRTUAL_PATH_PREFIX}/workspace/") and existing_bytes >= _WRITE_FILE_WORKSPACE_OVERWRITE_GUARD_MIN_BYTES:
                         return (
                             "Error: write_file refused to overwrite a sizeable source-workspace file "
                             f"({existing_bytes} bytes). Re-read the current file and use str_replace "
                             "for a surgical edit; use write_file only for a new/small file or an explicit "
                             "shell operation when replacing the entire source file is intentional."
                         )
-                    if (
-                        existing_bytes >= _WRITE_FILE_SHRINK_GUARD_MIN_BYTES
-                        and new_bytes < existing_bytes * _WRITE_FILE_SHRINK_GUARD_RATIO
-                    ):
+                    if existing_bytes >= _WRITE_FILE_SHRINK_GUARD_MIN_BYTES and new_bytes < existing_bytes * _WRITE_FILE_SHRINK_GUARD_RATIO:
                         return (
                             "Error: write_file refused a destructive shrink of an existing file "
                             f"from {existing_bytes} to {new_bytes} bytes. Re-read the current file "

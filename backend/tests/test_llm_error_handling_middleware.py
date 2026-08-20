@@ -184,8 +184,7 @@ def test_async_model_call_retries_nonstandard_400_rpm_quota_using_body_wait(
         attempts += 1
         if attempts == 1:
             raise FakeError(
-                "Rate limit exceeded. Please wait 28 seconds before retrying. "
-                "(User Quota (actual_rpm=10) limit: 10 RPM, Current: 10 requests)",
+                "Rate limit exceeded. Please wait 28 seconds before retrying. (User Quota (actual_rpm=10) limit: 10 RPM, Current: 10 requests)",
                 status_code=400,
             )
         return AIMessage(content="ok")
@@ -202,9 +201,7 @@ def test_async_model_call_retries_nonstandard_400_rpm_quota_using_body_wait(
 def test_billing_quota_without_rate_limit_remains_non_retriable() -> None:
     middleware = _build_middleware()
 
-    retriable, reason = middleware._classify_error(
-        FakeError("insufficient_quota: billing credit exhausted", status_code=400)
-    )
+    retriable, reason = middleware._classify_error(FakeError("insufficient_quota: billing credit exhausted", status_code=400))
 
     assert retriable is False
     assert reason == "quota"

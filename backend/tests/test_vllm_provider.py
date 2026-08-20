@@ -182,10 +182,7 @@ def test_vllm_provider_recovers_qwen_json_tool_call_from_reasoning_content():
                     "message": {
                         "role": "assistant",
                         "content": None,
-                        "reasoning_content": (
-                            '<tool_call>{"name":"sp_delegate","arguments":'
-                            '{"target_agent":"coder","task":"inspect files"}}</tool_call>'
-                        ),
+                        "reasoning_content": ('<tool_call>{"name":"sp_delegate","arguments":{"target_agent":"coder","task":"inspect files"}}</tool_call>'),
                     },
                     "finish_reason": "stop",
                 }

@@ -27,6 +27,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+
 def _run(command: list[str], *, cwd: Path | None = None, timeout: int = 900) -> str:
     result = subprocess.run(command, cwd=cwd, text=True, capture_output=True, timeout=timeout, check=False)
     if result.returncode != 0:
@@ -60,22 +61,14 @@ def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
             "instance_id": instance_id,
             "repo": row.get("repo") or metadata.get("repo"),
             "base_commit": row.get("base_commit") or metadata.get("base_commit"),
-            "problem_statement": (
-                row.get("problem_statement")
-                or row.get("fully_specified_question")
-                or row.get("question")
-            ),
+            "problem_statement": (row.get("problem_statement") or row.get("fully_specified_question") or row.get("question")),
             "FAIL_TO_PASS": row.get("FAIL_TO_PASS", metadata.get("FAIL_TO_PASS")),
             "PASS_TO_PASS": row.get("PASS_TO_PASS", metadata.get("PASS_TO_PASS")),
             "version": row.get("version", metadata.get("version")),
             "difficulty": row.get("difficulty", metadata.get("difficulty")),
         }
     )
-    missing = [
-        key
-        for key in ("instance_id", "repo", "base_commit", "problem_statement")
-        if not normalized.get(key)
-    ]
+    missing = [key for key in ("instance_id", "repo", "base_commit", "problem_statement") if not normalized.get(key)]
     if missing:
         raise ValueError(f"invalid SWE-bench row; missing required fields: {', '.join(missing)}")
     return normalized
@@ -183,9 +176,7 @@ def _select_prompt_tests(row: dict[str, Any], *, limit: int = 10) -> list[str]:
     remaining = max(0, limit - len(selected))
     if remaining == 0:
         return selected
-    seed = _test_relevance_tokens(
-        "\n".join([str(row.get("problem_statement") or ""), *fail_to_pass])
-    )
+    seed = _test_relevance_tokens("\n".join([str(row.get("problem_statement") or ""), *fail_to_pass]))
     ranked = sorted(
         enumerate(pass_to_pass),
         key=lambda item: (
@@ -226,14 +217,7 @@ def _is_external_grader_handoff_event(
         isinstance(payload, dict)
         and payload.get("type") == "task_completed"
         and str(payload.get("a2a_stage") or "") == "verification"
-        and (
-            verification_completions >= max(1, max_verification_completions)
-            or (
-                verification_completions >= 1
-                and verification_environment_blocked
-                and not verification_behavior_failed
-            )
-        )
+        and (verification_completions >= max(1, max_verification_completions) or (verification_completions >= 1 and verification_environment_blocked and not verification_behavior_failed))
     )
     return bool(
         enabled
@@ -241,14 +225,7 @@ def _is_external_grader_handoff_event(
         and isinstance(payload, dict)
         and payload.get("type") == "task_completed"
         and str(payload.get("a2a_stage") or "") == "verification"
-        and (
-            (
-                payload.get("completion_status") == "complete"
-                and isinstance(test_verification, dict)
-                and test_verification.get("passed") is True
-            )
-            or bounded_verification_boundary
-        )
+        and ((payload.get("completion_status") == "complete" and isinstance(test_verification, dict) and test_verification.get("passed") is True) or bounded_verification_boundary)
     )
 
 
@@ -380,7 +357,6 @@ def _clone_instance(
                 docker_image,
                 exc_info=True,
             )
-    last_error: Exception | None = None
     for attempt in range(1, 3):
         if repo_dir.exists():
             # A transport failure can leave a partial non-repository directory
@@ -391,8 +367,7 @@ def _clone_instance(
             _run(["git", "clone", "--filter=blob:none", "--no-tags", url, str(repo_dir)], timeout=1800)
             _run(["git", "checkout", "--detach", row["base_commit"]], cwd=repo_dir, timeout=300)
             return repo_dir
-        except RuntimeError as exc:
-            last_error = exc
+        except RuntimeError:
             if attempt < 2:
                 time.sleep(2 * attempt)
     if repo_dir.exists():
@@ -400,9 +375,7 @@ def _clone_instance(
     try:
         return _materialize_archive_instance(row, repo_dir)
     except Exception as archive_error:
-        raise RuntimeError(
-            f"failed to clone {row['repo']} after 3 attempts and archive fallback failed: {archive_error}"
-        ) from archive_error
+        raise RuntimeError(f"failed to clone {row['repo']} after 3 attempts and archive fallback failed: {archive_error}") from archive_error
 
 
 def _prompt(row: dict[str, Any]) -> str:
@@ -410,7 +383,6 @@ def _prompt(row: dict[str, Any]) -> str:
     prompt_tests = _select_prompt_tests(row)
     expected_tests = "\n".join(f"- {test}" for test in prompt_tests) or "- No test list was supplied; locate the smallest existing focused test from the repository."
     fail_to_pass = _test_names(row.get("FAIL_TO_PASS"))
-    pass_to_pass = _test_names(row.get("PASS_TO_PASS"))
     contract_tests = "\n".join(f"  - {test}" for test in fail_to_pass[:50]) or "  - none supplied"
     return f"""You are solving a SWE-bench issue in the repository currently mounted at /mnt/user-data/workspace.
 
@@ -422,7 +394,7 @@ Repository layout:
 - If a named file is not where expected, use `find /mnt/user-data/workspace/{repository_name} -type f` or `rg` before concluding it is missing.
 
 Issue:
-{row['problem_statement']}
+{row["problem_statement"]}
 
 Immutable benchmark contract:
 - The issue text above is the authoritative original requirement. Do not
@@ -439,7 +411,8 @@ Immutable benchmark contract:
   evidence. Never manufacture a source edit to turn missing evidence into a
   completion claim.
 
-Implement the fix in the repository. Inspect the existing code and tests, make the smallest correct change, and run the relevant tests. Do not merely describe a patch: actually edit the files. If tests cannot run because of dependency or environment limitations, still implement the fix and report the exact limitation. Do not modify files outside the repository.
+Implement the fix in the repository. Inspect the existing code and tests, make the smallest correct change, and run the relevant tests.
+Do not merely describe a patch: actually edit the files. If tests cannot run because of dependency or environment limitations, still implement the fix and report the exact limitation. Do not modify files outside the repository.
 
 Execution contract for StackPlanner: use one coder delegation to inspect the
 repository, make the source edit, and run focused checks. Do not terminate a
@@ -521,9 +494,7 @@ def _patch_quality(repo_dir: Path, *, run_error: str | None = None) -> dict[str,
     }
 
 
-def _benchmark_handoff_eligibility(
-    quality: dict[str, Any], benchmark_tests: dict[str, Any]
-) -> dict[str, Any]:
+def _benchmark_handoff_eligibility(quality: dict[str, Any], benchmark_tests: dict[str, Any]) -> dict[str, Any]:
     """Apply the benchmark-side acceptance gate before official grading."""
     if not quality.get("valid_source_patch"):
         return {
@@ -580,11 +551,7 @@ def _validation_pythonpath(repo_dir: Path) -> str:
     """
     repo_dir = repo_dir.resolve()
     roots = [repo_dir / "src", repo_dir]
-    roots.extend(
-        path
-        for path in repo_dir.rglob("ssl_match_hostname")
-        if path.is_dir() and (path / "_implementation.py").exists()
-    )
+    roots.extend(path for path in repo_dir.rglob("ssl_match_hostname") if path.is_dir() and (path / "_implementation.py").exists())
     return os.pathsep.join(str(path) for path in roots if path.exists())
 
 
@@ -655,7 +622,7 @@ def _run_benchmark_tests(repo_dir: Path, row: dict[str, Any], *, timeout: int = 
     (validation_dir / "sitecustomize.py").write_text(
         "import collections\n"
         "import collections.abc\n"
-        "for _name in (\"Callable\", \"Mapping\", \"MutableMapping\", \"MutableSet\", \"Sequence\"):\n"
+        'for _name in ("Callable", "Mapping", "MutableMapping", "MutableSet", "Sequence"):\n'
         "    if not hasattr(collections, _name):\n"
         "        setattr(collections, _name, getattr(collections.abc, _name))\n",
         encoding="utf-8",
@@ -785,8 +752,9 @@ async def _run_one(
 ) -> dict[str, Any]:
     # Imports are delayed until the process has established the runtime paths.
     from langchain_core.messages import HumanMessage
-    from deerflow.config.paths import get_paths
+
     from deerflow.config.app_config import get_app_config
+    from deerflow.config.paths import get_paths
     from deerflow.sp.runtime import make_sp_agent
 
     instance = row["instance_id"]
@@ -919,21 +887,16 @@ async def _run_one(
                         handoff_candidate = False
                         try:
                             if no_progress_timeout_seconds > 0:
-                                event = await asyncio.wait_for(
-                                    anext(stream_iterator), timeout=no_progress_timeout_seconds
-                                )
+                                event = await asyncio.wait_for(anext(stream_iterator), timeout=no_progress_timeout_seconds)
                             else:
                                 event = await anext(stream_iterator)
                         except StopAsyncIteration:
                             break
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             stop_reason_override = "no_progress_timeout"
                             stage = last_state.get("sp_current_stage") or "unknown"
                             action_id = last_state.get("sp_current_action_id") or last_state.get("sp_last_action_id")
-                            error = (
-                                f"No observable graph progress for {no_progress_timeout_seconds}s; "
-                                f"last_stage={stage}; last_action_id={action_id or 'none'}; events={events}"
-                            )
+                            error = f"No observable graph progress for {no_progress_timeout_seconds}s; last_stage={stage}; last_action_id={action_id or 'none'}; events={events}"
                             break
                         event_for_log: Any = event
                         if isinstance(event, tuple) and len(event) == 2 and isinstance(event[0], str):
@@ -941,17 +904,12 @@ async def _run_one(
                             event_for_log = {"stream_mode": mode, "data": payload}
                             if mode == "custom" and isinstance(payload, dict):
                                 environment_blocked, behavior_failed = _verification_event_flags(mode, payload)
-                                verification_environment_blocked = (
-                                    verification_environment_blocked or environment_blocked
-                                )
+                                verification_environment_blocked = verification_environment_blocked or environment_blocked
                                 verification_behavior_failed = verification_behavior_failed or behavior_failed
                                 raw_type = payload.get("type")
                                 if raw_type:
                                     last_event_type = str(raw_type)
-                                if (
-                                    raw_type == "task_completed"
-                                    and str(payload.get("a2a_stage") or "") == "verification"
-                                ):
+                                if raw_type == "task_completed" and str(payload.get("a2a_stage") or "") == "verification":
                                     verification_completions += 1
                                 handoff_candidate = _is_external_grader_handoff_event(
                                     mode,
@@ -1044,13 +1002,8 @@ async def main(args: argparse.Namespace) -> None:
     if args.repos:
         requested_repos = set(args.repos)
         all_rows = [row for row in all_rows if row.get("repo") in requested_repos]
-    rows = [
-        _normalize_row(row)
-        for row in all_rows[args.start_index : args.start_index + args.max_tasks]
-    ]
-    docker_image_map = _load_docker_image_map(
-        Path(args.docker_image_manifest).resolve() if args.docker_image_manifest else None
-    )
+    rows = [_normalize_row(row) for row in all_rows[args.start_index : args.start_index + args.max_tasks]]
+    docker_image_map = _load_docker_image_map(Path(args.docker_image_manifest).resolve() if args.docker_image_manifest else None)
     state_root = Path(args.state_root).resolve()
     output_root = Path(args.output_root).resolve()
     state_root.mkdir(parents=True, exist_ok=True)

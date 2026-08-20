@@ -59,9 +59,7 @@ _MEDIUM_RISK_PATTERNS: list[re.Pattern[str]] = [
     # PATH modification: long attack chain, warn rather than block
     re.compile(r"\bPATH\s*="),
 ]
-_DEPENDENCY_INSTALL_PATTERN = re.compile(
-    r"(?:^|\s)(?:python(?:3)?\s+-m\s+)?pip3?\s+install\b|(?:^|\s)apt(?:-get)?\s+install\b"
-)
+_DEPENDENCY_INSTALL_PATTERN = re.compile(r"(?:^|\s)(?:python(?:3)?\s+-m\s+)?pip3?\s+install\b|(?:^|\s)apt(?:-get)?\s+install\b")
 _FILE_MUTATION_TOOLS = frozenset({"write_file", "str_replace"})
 
 
@@ -69,12 +67,7 @@ def _is_test_file_path(path: str) -> bool:
     normalized = path.replace("\\", "/").strip().lower()
     parts = [part for part in normalized.split("/") if part]
     filename = parts[-1] if parts else ""
-    return (
-        "tests" in parts
-        or "test" in parts
-        or filename.startswith("test_")
-        or filename.endswith("_test.py")
-    )
+    return "tests" in parts or "test" in parts or filename.startswith("test_") or filename.endswith("_test.py")
 
 
 def _split_compound_command(command: str) -> list[str]:
@@ -316,10 +309,7 @@ class SandboxAuditMiddleware(AgentMiddleware[ThreadState]):
         path = str(args.get("path") or "") if isinstance(args, dict) else ""
         if not _is_test_file_path(path):
             return None
-        return (
-            "test-file mutation is disabled for this externally graded benchmark; "
-            "edit implementation files only and leave grader-owned tests unchanged"
-        )
+        return "test-file mutation is disabled for this externally graded benchmark; edit implementation files only and leave grader-owned tests unchanged"
 
     # ------------------------------------------------------------------
     # Core logic (shared between sync and async paths)
@@ -347,17 +337,9 @@ class SandboxAuditMiddleware(AgentMiddleware[ThreadState]):
         verdict = _classify_command(command)
         runtime_context = getattr(getattr(request, "runtime", None), "context", None)
         context = runtime_context if isinstance(runtime_context, dict) else {}
-        if (
-            verdict == "warn"
-            and context.get("is_subagent") is True
-            and _DEPENDENCY_INSTALL_PATTERN.search(" ".join(command.split()))
-            and context.get("allow_dependency_install") is not True
-        ):
+        if verdict == "warn" and context.get("is_subagent") is True and _DEPENDENCY_INSTALL_PATTERN.search(" ".join(command.split())) and context.get("allow_dependency_install") is not True:
             verdict = "block"
-            reject_reason = (
-                "dependency installation is not authorized for this delegated task; "
-                "use the existing environment and report the exact missing dependency"
-            )
+            reject_reason = "dependency installation is not authorized for this delegated task; use the existing environment and report the exact missing dependency"
 
         # ③ audit log
         self._write_audit(thread_id, command, verdict)

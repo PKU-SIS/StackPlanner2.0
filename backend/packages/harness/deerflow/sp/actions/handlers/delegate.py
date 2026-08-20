@@ -526,22 +526,21 @@ class DelegateHandler:
             # without this inherited flag that read-only step could be marked
             # complete and FINISH would become available despite no source edit.
             verification_only = action.stage == "verification" and action.metadata.get("verification_only") is True and action.metadata.get("requires_implementation") is False
-            prior_requires_implementation = any(
-                entry.action == "delegate"
-                and entry.metadata.get("target_agent") == "coder"
-                and entry.metadata.get("requires_implementation") is True
-                for entry in context.stack.entries
-            )
-            task_metadata["requires_implementation"] = False if verification_only else bool(
-                prior_requires_implementation
-                or coder_task_requires_implementation(
-                    SPSubagentTask(
-                        action_id=action.action_id,
-                        subagent_type="coder",
-                        task=str(action.task),
-                        description=action.reason,
-                        expected_output=action.expected_output,
-                        metadata={"stage": action.stage},
+            prior_requires_implementation = any(entry.action == "delegate" and entry.metadata.get("target_agent") == "coder" and entry.metadata.get("requires_implementation") is True for entry in context.stack.entries)
+            task_metadata["requires_implementation"] = (
+                False
+                if verification_only
+                else bool(
+                    prior_requires_implementation
+                    or coder_task_requires_implementation(
+                        SPSubagentTask(
+                            action_id=action.action_id,
+                            subagent_type="coder",
+                            task=str(action.task),
+                            description=action.reason,
+                            expected_output=action.expected_output,
+                            metadata={"stage": action.stage},
+                        )
                     )
                 )
             )
@@ -609,23 +608,11 @@ class DelegateHandler:
         requested_acceptance = task_metadata.get("acceptance_criteria")
         acceptance_criteria = [str(action.expected_output)] if action.expected_output else []
         if isinstance(requested_acceptance, list):
-            acceptance_criteria.extend(
-                str(value).strip()
-                for value in requested_acceptance
-                if isinstance(value, str) and value.strip()
-            )
+            acceptance_criteria.extend(str(value).strip() for value in requested_acceptance if isinstance(value, str) and value.strip())
         raw_budgets = task_metadata.get("budgets")
-        budgets = {
-            str(name): value
-            for name, value in raw_budgets.items()
-            if isinstance(name, str) and name.strip() and isinstance(value, int) and not isinstance(value, bool) and value > 0
-        } if isinstance(raw_budgets, Mapping) else {}
+        budgets = {str(name): value for name, value in raw_budgets.items() if isinstance(name, str) and name.strip() and isinstance(value, int) and not isinstance(value, bool) and value > 0} if isinstance(raw_budgets, Mapping) else {}
         allowed_tools = task_metadata.get("tool_names")
-        allowed_tools = (
-            list(dict.fromkeys(str(value).strip() for value in allowed_tools if isinstance(value, str) and value.strip()))
-            if isinstance(allowed_tools, list)
-            else []
-        )
+        allowed_tools = list(dict.fromkeys(str(value).strip() for value in allowed_tools if isinstance(value, str) and value.strip())) if isinstance(allowed_tools, list) else []
 
         task = SPSubagentTask(
             action_id=action.action_id,

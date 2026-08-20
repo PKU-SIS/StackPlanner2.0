@@ -46,9 +46,7 @@ def test_build_debug_trace_groups_actions_and_exposes_bounded_api_reasoning_in_d
             "content": {
                 "type": "ai",
                 "content": "",
-                "additional_kwargs": {
-                    "reasoning_content": "API-visible reasoning with sk-secret-reasoning"
-                },
+                "additional_kwargs": {"reasoning_content": "API-visible reasoning with sk-secret-reasoning"},
                 "tool_calls": [
                     {
                         "name": "sp_delegate",
@@ -215,9 +213,7 @@ def test_build_debug_trace_hides_provider_reasoning_without_enhanced_debug():
                 "content": {
                     "type": "ai",
                     "content": "answer",
-                    "additional_kwargs": {
-                        "reasoning_content": "provider-only reasoning"
-                    },
+                    "additional_kwargs": {"reasoning_content": "provider-only reasoning"},
                 },
                 "metadata": {"caller": "lead_agent", "llm_call_index": 1},
             }

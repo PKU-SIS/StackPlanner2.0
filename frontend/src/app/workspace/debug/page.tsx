@@ -444,7 +444,7 @@ export default function DebugTracePage() {
                         )}
                       </div>
                       {trace.stop_detail && (
-                        <p className="text-muted-foreground mt-2 break-words text-sm">
+                        <p className="text-muted-foreground mt-2 text-sm break-words">
                           {trace.stop_detail}
                         </p>
                       )}

@@ -84,23 +84,13 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
         # Perception/planning are the expensive first-decision boundary. Do
         # not impose this retry policy on later Central decisions after a child
         # result, where the normal LLM error middleware is sufficient.
-        return (
-            stage in {"perception", "planning"}
-            and current_action is None
-            and not active_delegate
-            and loop_iteration == 0
-            and not last_action
-        )
+        return stage in {"perception", "planning"} and current_action is None and not active_delegate and loop_iteration == 0 and not last_action
 
     @staticmethod
     def _is_central_decision_call(request: ModelRequest) -> bool:
         state = request.state if isinstance(request.state, Mapping) else {}
         stage = str(state.get("sp_current_stage") or "").strip().lower()
-        return (
-            stage in {"perception", "planning", "research", "implementation", "verification", "reporting", "revision"}
-            and state.get("sp_current_action") is None
-            and not state.get("sp_active_delegate_id")
-        )
+        return stage in {"perception", "planning", "research", "implementation", "verification", "reporting", "revision"} and state.get("sp_current_action") is None and not state.get("sp_active_delegate_id")
 
     def _run_key(self, request: ModelRequest) -> str:
         context = self._context(request)
@@ -119,11 +109,7 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
         settings = dict(getattr(request, "model_settings", {}) or {})
         current_max_tokens = settings.get("max_tokens")
         if isinstance(current_max_tokens, int) and current_max_tokens > 0:
-            settings["max_tokens"] = (
-                max(current_max_tokens, self.retry_max_tokens)
-                if expand_tokens
-                else min(current_max_tokens, self.retry_max_tokens)
-            )
+            settings["max_tokens"] = max(current_max_tokens, self.retry_max_tokens) if expand_tokens else min(current_max_tokens, self.retry_max_tokens)
         else:
             settings["max_tokens"] = self.retry_max_tokens
         return request.override(model_settings=settings)
@@ -190,16 +176,10 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
                 continue
             if message.tool_calls:
                 return None
-            invalid_sp_calls = [
-                call
-                for call in (message.invalid_tool_calls or [])
-                if str(call.get("name") or "").startswith("sp_")
-            ]
+            invalid_sp_calls = [call for call in (message.invalid_tool_calls or []) if str(call.get("name") or "").startswith("sp_")]
             if invalid_sp_calls:
                 names = ", ".join(sorted({str(call.get("name")) for call in invalid_sp_calls}))
-                return SPCentralInvalidToolCall(
-                    f"CentralAgent emitted invalid or truncated SP tool arguments: {names}"
-                )
+                return SPCentralInvalidToolCall(f"CentralAgent emitted invalid or truncated SP tool arguments: {names}")
             saw_length_limit = saw_length_limit or str(message.response_metadata.get("finish_reason") or "") == "length"
             content = message.content
             if isinstance(content, str) and content.strip():
@@ -238,13 +218,7 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
         is_empty = isinstance(error, SPCentralEmptyResponse)
         self._emit(
             {
-                "type": (
-                    "sp_central_invalid_tool_call"
-                    if is_invalid_tool
-                    else "sp_central_empty_response"
-                    if is_empty
-                    else "sp_central_model_timeout"
-                ),
+                "type": ("sp_central_invalid_tool_call" if is_invalid_tool else "sp_central_empty_response" if is_empty else "sp_central_model_timeout"),
                 "run_id": run_key,
                 "attempt": attempt,
                 "timeout_seconds": timeout_seconds,
@@ -273,7 +247,7 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
                 request,
                 timeout_seconds=first_timeout,
             )
-        except (asyncio.TimeoutError, TimeoutError, SPCentralEmptyResponse, SPCentralInvalidToolCall) as first_exc:
+        except (TimeoutError, SPCentralEmptyResponse, SPCentralInvalidToolCall) as first_exc:
             self._emit_attempt_failure(
                 request,
                 run_key=run_key,
@@ -291,7 +265,7 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
                     ),
                     timeout_seconds=self.retry_timeout_seconds,
                 )
-            except (asyncio.TimeoutError, TimeoutError, SPCentralEmptyResponse, SPCentralInvalidToolCall) as second_exc:
+            except (TimeoutError, SPCentralEmptyResponse, SPCentralInvalidToolCall) as second_exc:
                 self._emit_attempt_failure(
                     request,
                     run_key=run_key,
@@ -303,12 +277,8 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
                 if self._mark_fallback_used(run_key, phase):
                     return self._fallback_response(request, run_key=run_key)
                 if isinstance(second_exc, (SPCentralEmptyResponse, SPCentralInvalidToolCall)):
-                    raise SPCentralEmptyResponse(
-                        "CentralAgent returned an unusable response after retry"
-                    ) from second_exc
-                raise SPCentralModelTimeout(
-                    f"CentralAgent model stalled after retry: {self.initial_timeout_seconds}s + {self.retry_timeout_seconds}s"
-                ) from second_exc
+                    raise SPCentralEmptyResponse("CentralAgent returned an unusable response after retry") from second_exc
+                raise SPCentralModelTimeout(f"CentralAgent model stalled after retry: {self.initial_timeout_seconds}s + {self.retry_timeout_seconds}s") from second_exc
             except Exception:
                 raise
         except Exception:

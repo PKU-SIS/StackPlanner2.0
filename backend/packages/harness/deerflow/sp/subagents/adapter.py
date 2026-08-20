@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Protocol
 
-
 A2A_PROTOCOL_VERSION = "1.0"
 A2A_DELEGATE_MESSAGE = "delegate"
 A2A_RESULT_MESSAGE = "task_result"
@@ -153,11 +152,7 @@ class SPSubagentResult:
             "changed_files": list(self.changed_files),
             "tests": list(self.tests),
             "artifact_type": self.artifact_type,
-            "artifact_metadata": {
-                key: self.artifact_metadata.get(key)
-                for key in ("created_paths", "filename", "artifact_id", "artifact_url", "evidence_gaps", "completion_status")
-                if key in self.artifact_metadata
-            },
+            "artifact_metadata": {key: self.artifact_metadata.get(key) for key in ("created_paths", "filename", "artifact_id", "artifact_url", "evidence_gaps", "completion_status") if key in self.artifact_metadata},
         }
 
     @property

@@ -1324,9 +1324,7 @@ class TestAsyncExecutionPath:
         mock_agent.astream = lambda *args, **kwargs: async_iterator([final_state])
 
         executor = SubagentExecutor(config=base_config, tools=[], thread_id="test-thread")
-        executor._stop_reason_middlewares = [
-            SimpleNamespace(consume_stop_reason=lambda _run_id: "loop_capped")
-        ]
+        executor._stop_reason_middlewares = [SimpleNamespace(consume_stop_reason=lambda _run_id: "loop_capped")]
 
         with patch.object(executor, "_create_agent", return_value=mock_agent):
             result = await executor._aexecute("Task")
@@ -1338,9 +1336,7 @@ class TestAsyncExecutionPath:
         assert "src/flask/cli.py:973:def routes_command" in result.result
 
     @pytest.mark.anyio
-    async def test_aexecute_recursion_error_prefers_tool_evidence_over_interrupted_intent(
-        self, classes, base_config, mock_agent, msg
-    ):
+    async def test_aexecute_recursion_error_prefers_tool_evidence_over_interrupted_intent(self, classes, base_config, mock_agent, msg):
         """An interrupted tool-calling turn is intent, not the tool's result."""
         from langgraph.errors import GraphRecursionError
 

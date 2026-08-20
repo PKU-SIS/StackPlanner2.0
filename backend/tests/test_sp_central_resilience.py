@@ -3,8 +3,7 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
-from langchain.agents.middleware.types import ModelRequest
-from langchain.agents.middleware.types import ModelResponse
+from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage, HumanMessage
 
 from deerflow.sp.central_resilience import SPCentralResilienceMiddleware

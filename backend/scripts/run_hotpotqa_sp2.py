@@ -29,8 +29,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from scripts.compare_sp2_deerflow_qwen import DEPLOYMENTS, GatewaySession
-
+from scripts.compare_sp2_deerflow_qwen import DEPLOYMENTS, GatewaySession  # noqa: E402
 
 DEFAULT_SAMPLE = Path("/data/sp/jxk/xwx/data/hotpotqa/experience_sample_7500.jsonl")
 DEFAULT_RAW = Path("/data/sp/jxk/xwx/data/hotpotqa/raw")
@@ -88,11 +87,7 @@ def _prompt(row: dict[str, Any]) -> str:
     for title, sentences in zip(context["title"], context["sentences"], strict=True):
         documents.append(f"[{title}]\n{''.join(sentences).strip()}")
     evidence = "\n\n".join(documents)
-    return (
-        "请仅根据下面给出的本地资料回答问题，不要联网，不要调用搜索。"
-        "答案必须尽量简短，只输出答案本身，不要解释、不要重复问题。\n\n"
-        f"资料：\n{evidence}\n\n问题：{row['question']}"
-    )
+    return f"请仅根据下面给出的本地资料回答问题，不要联网，不要调用搜索。答案必须尽量简短，只输出答案本身，不要解释、不要重复问题。\n\n资料：\n{evidence}\n\n问题：{row['question']}"
 
 
 async def _run(args: argparse.Namespace) -> dict[str, Any]:
@@ -179,8 +174,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                     "event_summary": turn["event_summary"],
                 }
                 print(
-                    f"    EM={score['exact_match']:.0f} F1={score['f1']:.3f} "
-                    f"elapsed={turn['elapsed_seconds']:.1f}s prediction={turn['answer']!r}",
+                    f"    EM={score['exact_match']:.0f} F1={score['f1']:.3f} elapsed={turn['elapsed_seconds']:.1f}s prediction={turn['answer']!r}",
                     flush=True,
                 )
             except Exception as exc:

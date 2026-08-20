@@ -447,13 +447,7 @@ class ActionRouter:
             return
         stack = TaskMemoryStack.from_dict(state.get("sp_task_memory"), run_id=run_id)
         observation = next(
-            (
-                entry
-                for entry in reversed(stack.entries)
-                if entry.action == "observe"
-                and entry.actor == "coder"
-                and (not run_id or entry.run_id in {None, run_id})
-            ),
+            (entry for entry in reversed(stack.entries) if entry.action == "observe" and entry.actor == "coder" and (not run_id or entry.run_id in {None, run_id})),
             None,
         )
         if observation is None:
@@ -468,10 +462,7 @@ class ActionRouter:
         source_recovery = bool(_CODER_SOURCE_GAP_PATTERN.search(gap_text))
         behavior_recovery = bool(_CODER_BEHAVIOR_GAP_PATTERN.search(gap_text))
         implementation_verification = observation.metadata.get("implementation_verification")
-        implementation_exists = bool(
-            isinstance(implementation_verification, Mapping)
-            and implementation_verification.get("passed") is True
-        )
+        implementation_exists = bool(isinstance(implementation_verification, Mapping) and implementation_verification.get("passed") is True)
         verification_observation = str(observation.stage or "") == "verification"
         if not (source_recovery or behavior_recovery or implementation_exists or verification_observation):
             return
@@ -507,10 +498,7 @@ class ActionRouter:
                 f"read-only inspection. Remaining evidence gap: {concise_gap}. "
                 f"The CentralAgent's superseded delegation request was: {declared_task}"
             )
-            action.expected_output = (
-                "A non-test source patch plus observable focused-test and git diff --check evidence; "
-                "report exact environment blockers without claiming they passed."
-            )
+            action.expected_output = "A non-test source patch plus observable focused-test and git diff --check evidence; report exact environment blockers without claiming they passed."
             return
 
         action.stage = "verification"
@@ -523,10 +511,7 @@ class ActionRouter:
             f"statuses. If the host environment blocks native tests, report the exact blocker. Remaining evidence "
             f"gap: {concise_gap}. The CentralAgent's superseded delegation request was: {declared_task}"
         )
-        action.expected_output = (
-            "Observable verification evidence for the existing patch, or the exact external environment blocker "
-            "that requires canonical grader handoff; do not claim blocked checks passed."
-        )
+        action.expected_output = "Observable verification evidence for the existing patch, or the exact external environment blocker that requires canonical grader handoff; do not claim blocked checks passed."
 
     @staticmethod
     def _normalize_memory_target_ids(
@@ -630,18 +615,13 @@ class ActionRouter:
                     if entry.action == "observe"
                     and entry.actor == action.target_agent
                     and entry.stage == "perception"
-                    and str(entry.metadata.get("completion_status") or "").strip().lower()
-                    == "complete"
+                    and str(entry.metadata.get("completion_status") or "").strip().lower() == "complete"
                     and (not run_id or entry.run_id in {None, run_id})
                 ),
                 None,
             )
             if completed_perception is not None:
-                content = (
-                    f"Blocked repeated completed perception by {action.target_agent}. "
-                    "Advance to planning, research, implementation, or verification; "
-                    "a new user turn/run is required to reopen perception."
-                )
+                content = f"Blocked repeated completed perception by {action.target_agent}. Advance to planning, research, implementation, or verification; a new user turn/run is required to reopen perception."
                 entry = StackMemoryEntry(
                     run_id=run_id,
                     actor="policy",
@@ -700,13 +680,7 @@ class ActionRouter:
         # and, under a slow provider, often consumed the whole run watchdog.
         stack = TaskMemoryStack.from_dict(state.get("sp_task_memory"), run_id=run_id)
         latest_observation = next(
-            (
-                entry
-                for entry in reversed(stack.entries)
-                if entry.action == "observe"
-                and str(entry.metadata.get("target_agent") or entry.actor) == action.target_agent
-                and (not run_id or entry.run_id in {None, run_id})
-            ),
+            (entry for entry in reversed(stack.entries) if entry.action == "observe" and str(entry.metadata.get("target_agent") or entry.actor) == action.target_agent and (not run_id or entry.run_id in {None, run_id})),
             None,
         )
         if latest_observation is not None and str(latest_observation.metadata.get("completion_status") or "").strip().lower() in {"partial", "blocked"}:

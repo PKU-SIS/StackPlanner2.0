@@ -250,10 +250,7 @@ def _verification_found_environment_blocker(observation: StackMemoryEntry | None
     if isinstance(raw_gaps, list):
         parts.extend(str(value) for value in raw_gaps)
     text = "\n".join(parts)
-    return bool(
-        _CODE_ENVIRONMENT_BLOCKER_PATTERN.search(text)
-        and not _has_observable_code_behavior_failure(text)
-    )
+    return bool(_CODE_ENVIRONMENT_BLOCKER_PATTERN.search(text) and not _has_observable_code_behavior_failure(text))
 
 
 def _artifact_is_complete(ref: Mapping[str, Any]) -> bool:
@@ -632,10 +629,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         return sum(
             1
             for entry in stack.entries
-            if entry.action == "delegate"
-            and entry.metadata.get("target_agent") == target_agent
-            and (stage is None or str(entry.stage or "") == stage)
-            and (not current_run_id or str(entry.run_id or "") == current_run_id)
+            if entry.action == "delegate" and entry.metadata.get("target_agent") == target_agent and (stage is None or str(entry.stage or "") == stage) and (not current_run_id or str(entry.run_id or "") == current_run_id)
         )
 
     @staticmethod
@@ -674,11 +668,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         # budget and route back to implementation.
         if _verification_found_environment_blocker(observation):
             return 1
-        stop_reason = str(
-            observation.metadata.get("stop_reason")
-            or observation.metadata.get("subagent_stop_reason")
-            or ""
-        ).strip().lower()
+        stop_reason = str(observation.metadata.get("stop_reason") or observation.metadata.get("subagent_stop_reason") or "").strip().lower()
         if stop_reason in {"token_capped", "turn_capped", "loop_capped"}:
             return SP_CAPPED_DELEGATE_RECOVERY_MAX_ATTEMPTS
         return SP_DELEGATE_RECOVERY_MAX_ATTEMPTS
@@ -826,18 +816,9 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 if not gaps and latest_observation.failure_note:
                     gaps = [latest_observation.failure_note]
                 gap_text = "; ".join(gaps[:5]) or ("the delegated acceptance criteria remain incomplete")
-                verification_only = (
-                    target == "coder"
-                    and str(latest_observation.stage or "") == "verification"
-                    and not _verification_found_behavior_failure(latest_observation)
-                )
+                verification_only = target == "coder" and str(latest_observation.stage or "") == "verification" and not _verification_found_behavior_failure(latest_observation)
                 implementation_evidence = latest_observation.metadata.get("implementation_verification")
-                if (
-                    target == "coder"
-                    and isinstance(implementation_evidence, Mapping)
-                    and implementation_evidence.get("passed") is True
-                    and not _verification_found_behavior_failure(latest_observation)
-                ):
+                if target == "coder" and isinstance(implementation_evidence, Mapping) and implementation_evidence.get("passed") is True and not _verification_found_behavior_failure(latest_observation):
                     # The source mutation already exists. A retry whose only
                     # missing evidence is execution belongs to the read-only
                     # verification stage; requiring another source write here
@@ -855,7 +836,9 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 coder_instruction = (
                     (
                         ' For read-only verification recovery, set metadata={"verification_only": true, "requires_implementation": false, "tool_names": ["read_file", "bash"]}; '
-                        "inspect the existing diff and run the missing checks without editing source or tests. If the test runner is unavailable, read the actual named tests and reproduce their exact literal/parameterized cases; self-chosen examples are not substitutes."
+                        "inspect the existing diff and run the missing checks without editing source or tests. "
+                        "If the test runner is unavailable, read the actual named tests and reproduce their "
+                        "exact literal/parameterized cases; self-chosen examples are not substitutes."
                     )
                     if verification_only
                     else (
@@ -1002,20 +985,15 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) == "sp_delegate"]
                 messages = list(request.messages)
                 if not any(getattr(message, "name", None) == _SP_CODE_VERIFICATION_MESSAGE_NAME for message in messages):
-                    artifact_id = str(
-                        completed_deliverable.get("artifact_id")
-                        or completed_deliverable.get("virtual_path")
-                        or completed_deliverable.get("artifact_url")
-                        or ""
-                    )
+                    artifact_id = str(completed_deliverable.get("artifact_id") or completed_deliverable.get("virtual_path") or completed_deliverable.get("artifact_url") or "")
                     messages.append(
                         HumanMessage(
                             name=_SP_CODE_VERIFICATION_MESSAGE_NAME,
                             content=(
                                 "<sp-code-verification-required>\n"
                                 "The implementation specialist produced a source change, but implementation and verification must be separate control stages. "
-                                "Call sp_delegate exactly once with target_agent=\"coder\", stage=\"verification\", "
-                                f"input_refs=[\"{artifact_id}\"], and metadata={{\"verification_only\": true, \"requires_implementation\": false, \"tool_names\": [\"read_file\", \"bash\"]}}. "
+                                'Call sp_delegate exactly once with target_agent="coder", stage="verification", '
+                                f'input_refs=["{artifact_id}"], and metadata={{"verification_only": true, "requires_implementation": false, "tool_names": ["read_file", "bash"]}}. '
                                 "Ask the verifier to inspect the current diff, test backward compatibility and boundary cases, run the named focused tests plus relevant existing regressions, "
                                 "and execute git diff --check. It must not edit source or tests. If a supplied test is absent or cannot run, it must report that exact gap instead of treating "
                                 "syntax-only checks as sufficient. When the test runner is unavailable, it must locate and read the actual named tests, extract their literal/parameterized inputs "
@@ -1070,16 +1048,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         # delegation must not make the recovery gate disappear and reopen
         # arbitrary actions; only a newer complete observation clears it.
         delegate_incomplete = latest_delegate_status in {"partial", "blocked"}
-        code_recovery = bool(
-            delegate_incomplete
-            and latest_delegate_observation is not None
-            and str(
-                latest_delegate_observation.metadata.get("target_agent")
-                or latest_delegate_observation.actor
-                or ""
-            )
-            == "coder"
-        )
+        code_recovery = bool(delegate_incomplete and latest_delegate_observation is not None and str(latest_delegate_observation.metadata.get("target_agent") or latest_delegate_observation.actor or "") == "coder")
         reporter_attempts = self._reporter_attempt_count(state)
         if incomplete_current_report is not None and reporter_attempts >= SP_REPORT_RECOVERY_MAX_ATTEMPTS:
             active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) == "sp_ask_human"]
@@ -1117,9 +1086,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 target_agent,
                 stage=str(latest_delegate_observation.stage or "") or None,
             )
-            delegate_recovery_limit = self._delegate_recovery_limit(
-                latest_delegate_observation
-            )
+            delegate_recovery_limit = self._delegate_recovery_limit(latest_delegate_observation)
             if delegate_attempts >= delegate_recovery_limit:
                 active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) not in SP_CONTROL_TOOL_NAMES]
                 messages = list(request.messages)
@@ -1172,11 +1139,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                     )
                 )
             return request.override(tools=active_tools, messages=messages)
-        artifact_recovery = incomplete_current_report is not None or (
-            (finish_rejected or delegate_incomplete)
-            and not has_finalizable_artifact
-            and (requires_artifact or code_recovery)
-        )
+        artifact_recovery = incomplete_current_report is not None or ((finish_rejected or delegate_incomplete) and not has_finalizable_artifact and (requires_artifact or code_recovery))
         if artifact_recovery:
             active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) == "sp_delegate"]
             messages = list(request.messages)
@@ -1268,12 +1231,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
 
         if attempts >= recovery_limit:
             if use_chinese:
-                content = (
-                    "以下是已保留的未验证草稿，仅供参考，不代表产物已通过验证：\n\n"
-                    f"{draft_text}\n\n---\n"
-                    f"验证状态：本轮已达到 {attempts} 次恢复上限。"
-                    f"未解决问题：{gap_text}。请稍后重试或缩小修复范围。"
-                )
+                content = f"以下是已保留的未验证草稿，仅供参考，不代表产物已通过验证：\n\n{draft_text}\n\n---\n验证状态：本轮已达到 {attempts} 次恢复上限。未解决问题：{gap_text}。请稍后重试或缩小修复范围。"
             else:
                 content = (
                     "The following unverified draft has been preserved for reference; "
@@ -1298,11 +1256,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             )
             return {"messages": [guarded]}
 
-        verification_only = (
-            target_agent == "coder"
-            and str(observation.stage or "") == "verification"
-            and not _verification_found_behavior_failure(observation)
-        )
+        verification_only = target_agent == "coder" and str(observation.stage or "") == "verification" and not _verification_found_behavior_failure(observation)
         stage = {
             "coder": "implementation",
             "researcher": "research",
@@ -1349,17 +1303,9 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         call_seed = f"{message_id}:{target_agent}:{attempts + 1}"
         call_id = f"sp-recovery-{hashlib.sha256(call_seed.encode('utf-8')).hexdigest()[:16]}"
         if use_chinese:
-            recovery_content = (
-                f"正在执行第 {attempts + 1} 次有界恢复验证。"
-                "为避免已生成内容从界面消失，下面保留临时草稿；"
-                f"验证完成前请勿视为最终结果：\n\n{draft_text}"
-            )
+            recovery_content = f"正在执行第 {attempts + 1} 次有界恢复验证。为避免已生成内容从界面消失，下面保留临时草稿；验证完成前请勿视为最终结果：\n\n{draft_text}"
         else:
-            recovery_content = (
-                f"Bounded recovery attempt {attempts + 1} is running. The draft below "
-                "is preserved so generated content does not disappear; do not treat "
-                f"it as final until verification completes:\n\n{draft_text}"
-            )
+            recovery_content = f"Bounded recovery attempt {attempts + 1} is running. The draft below is preserved so generated content does not disappear; do not treat it as final until verification completes:\n\n{draft_text}"
         guarded = latest.model_copy(
             update={
                 "id": message_id,
@@ -1446,13 +1392,9 @@ class SPActionBudgetMiddleware(AgentMiddleware[AgentState]):
         latest = SPFinishAvailabilityMiddleware._latest_visible_human_message(state)
         use_chinese = latest is not None and bool(_CJK_TEXT_PATTERN.search(message_to_text(latest)))
         content = (
-            f"本轮已达到 {self._max_actions} 次中枢动作上限，任务尚未形成可安全交付的已验证结果。"
-            "我已停止继续循环；请重试，或缩小任务范围后继续。"
+            f"本轮已达到 {self._max_actions} 次中枢动作上限，任务尚未形成可安全交付的已验证结果。我已停止继续循环；请重试，或缩小任务范围后继续。"
             if use_chinese
-            else (
-                f"This run reached its {self._max_actions}-action CentralAgent limit without a safely deliverable verified result. "
-                "I stopped the loop; please retry or narrow the task scope."
-            )
+            else (f"This run reached its {self._max_actions}-action CentralAgent limit without a safely deliverable verified result. I stopped the loop; please retry or narrow the task scope.")
         )
         return {
             "jump_to": "end",
@@ -1487,19 +1429,11 @@ class SPActionBudgetMiddleware(AgentMiddleware[AgentState]):
         # The preceding finish/recovery policy has already narrowed the schema.
         # Only truly terminal actions may consume the reserved final slot.
         terminal_names = {"sp_finish", "sp_ask_human"}
-        exposed_sp_names = {
-            str(getattr(candidate, "name", ""))
-            for candidate in request.tools
-            if str(getattr(candidate, "name", "")) in SP_CONTROL_TOOL_NAMES
-        }
+        exposed_sp_names = {str(getattr(candidate, "name", "")) for candidate in request.tools if str(getattr(candidate, "name", "")) in SP_CONTROL_TOOL_NAMES}
         if exposed_sp_names and exposed_sp_names <= terminal_names:
             return request
 
-        active_tools = [
-            candidate
-            for candidate in request.tools
-            if str(getattr(candidate, "name", "")) not in SP_CONTROL_TOOL_NAMES
-        ]
+        active_tools = [candidate for candidate in request.tools if str(getattr(candidate, "name", "")) not in SP_CONTROL_TOOL_NAMES]
         messages = list(request.messages)
         if not any(getattr(message, "name", None) == _SP_ACTION_BUDGET_MESSAGE_NAME for message in messages):
             messages.append(
@@ -1694,19 +1628,10 @@ def _infer_missing_delegate_task(payload: dict[str, Any]) -> str | None:
             "Inspect the existing work, make the smallest required non-test source change, and "
             "run focused checks plus git diff --check after the final edit."
         ),
-        ("researcher", "research"): (
-            "Continue the current research task using the supplied input_refs and return concise, "
-            "source-backed evidence with explicit gaps."
-        ),
-        ("perception", "perception"): (
-            "Inspect the supplied local inputs and return the decision-relevant facts without editing them."
-        ),
-        ("outline", "planning"): (
-            "Create the requested outline from the current task context and supplied input_refs."
-        ),
-        ("reporter", "reporting"): (
-            "Synthesize the requested final report from the supplied input_refs without inventing evidence."
-        ),
+        ("researcher", "research"): ("Continue the current research task using the supplied input_refs and return concise, source-backed evidence with explicit gaps."),
+        ("perception", "perception"): ("Inspect the supplied local inputs and return the decision-relevant facts without editing them."),
+        ("outline", "planning"): ("Create the requested outline from the current task context and supplied input_refs."),
+        ("reporter", "reporting"): ("Synthesize the requested final report from the supplied input_refs without inventing evidence."),
     }
     inferred = fallbacks.get((target, stage))
     if inferred is None:
@@ -1745,11 +1670,7 @@ def _canonical_coder_stage(
     """
     normalized = str(requested_stage or "").strip().lower() or None
     if normalized == "perception":
-        text = "\n".join(
-            str(value)
-            for key in ("task", "expected_output", "reason")
-            if (value := payload.get(key)) not in (None, "")
-        )
+        text = "\n".join(str(value) for key in ("task", "expected_output", "reason") if (value := payload.get(key)) not in (None, ""))
         if _CODER_MUTATION_PATTERN.search(text):
             return "implementation", "coder_mutation_requires_implementation"
         return "perception", None
@@ -1774,11 +1695,7 @@ def _normalize_model_string_list(value: Any) -> list[str] | None:
                 value = decoded
     if isinstance(value, Mapping):
         identifier = next(
-            (
-                value.get(key)
-                for key in ("artifact_id", "entry_id", "id", "ref", "virtual_path")
-                if isinstance(value.get(key), str) and str(value.get(key)).strip()
-            ),
+            (value.get(key) for key in ("artifact_id", "entry_id", "id", "ref", "virtual_path") if isinstance(value.get(key), str) and str(value.get(key)).strip()),
             None,
         )
         values = [identifier] if identifier is not None else []
@@ -1786,13 +1703,7 @@ def _normalize_model_string_list(value: Any) -> list[str] | None:
         values = list(value)
     else:
         values = [value]
-    return list(
-        dict.fromkeys(
-            text.replace("/mnt-user-data/", "/mnt/user-data/")
-            for item in values
-            if (text := str(item).strip())
-        )
-    )
+    return list(dict.fromkeys(text.replace("/mnt-user-data/", "/mnt/user-data/") for item in values if (text := str(item).strip())))
 
 
 def _normalize_model_mapping(value: Any) -> dict[str, Any]:
@@ -1865,11 +1776,7 @@ def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: st
             payload["metadata"].pop("verification_only", None)
             requested_tools = payload["metadata"].get("tool_names")
             if isinstance(requested_tools, list):
-                payload["metadata"]["tool_names"] = [
-                    name
-                    for name in requested_tools
-                    if name in {"read_file", "grep", "glob", "ls"}
-                ]
+                payload["metadata"]["tool_names"] = [name for name in requested_tools if name in {"read_file", "grep", "glob", "ls"}]
         if not revision_reason and target_agent in {"reporter", "outline"} and payload.get("stage") == "revision":
             # Models reliably express the revision rationale in `reason` even
             # when they omit the optional dedicated field. Keep the explicit
@@ -1906,11 +1813,7 @@ def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: st
                 if task_inference_reason
                 else {}
             ),
-            **(
-                {"stage_routed_from": requested_stage, "stage_routing_reason": coder_stage_reason}
-                if coder_stage_reason
-                else {}
-            ),
+            **({"stage_routed_from": requested_stage, "stage_routing_reason": coder_stage_reason} if coder_stage_reason else {}),
             "__sp_parent_tool_call_id": tool_call_id,
         }
     elif tool_name == "sp_recall_memory":

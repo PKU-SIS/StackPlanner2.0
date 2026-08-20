@@ -86,9 +86,7 @@ class _ModelRequestStub:
 def test_action_budget_sets_independent_central_action_limit():
     middleware = SPActionBudgetMiddleware(max_actions=7)
 
-    assert middleware.before_agent({}, SimpleNamespace(context={})) == {
-        "sp_max_loop_iterations": 7
-    }
+    assert middleware.before_agent({}, SimpleNamespace(context={})) == {"sp_max_loop_iterations": 7}
 
 
 def test_action_budget_reserves_last_slot_for_finish():
@@ -174,8 +172,7 @@ def test_delegate_recovery_attempts_are_counted_per_stage():
 def test_verification_environment_blocker_allows_no_duplicate_verifier():
     stack = TaskMemoryStack()
     observation = stack.append_observe(
-        "The source diff is clean, but canonical tests cannot run because the host environment "
-        "extension modules are not built.",
+        "The source diff is clean, but canonical tests cannot run because the host environment extension modules are not built.",
         actor="coder",
         stage="verification",
         metadata={
@@ -239,9 +236,7 @@ def test_guard_capped_delegate_gets_only_one_recovery_attempt():
 
     filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
 
-    assert not {
-        tool.name for tool in filtered.tools
-    } & {tool.name for tool in build_sp_control_tools()}
+    assert not {tool.name for tool in filtered.tools} & {tool.name for tool in build_sp_control_tools()}
     assert filtered.messages[-1].name == "sp_delegate_recovery_exhausted"
     assert "2 perception attempts" in filtered.messages[-1].content
 

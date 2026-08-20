@@ -359,11 +359,7 @@ def _llm_steps(
 ) -> list[dict[str, Any]]:
     request_events = [event for event in events if event.get("event_type") == "llm.request"]
     response_events = [event for event in events if event.get("event_type") == "llm.ai.response"]
-    response_indexes = {
-        int(index)
-        for event in response_events
-        if (index := _metadata(event).get("llm_call_index")) is not None
-    }
+    response_indexes = {int(index) for event in response_events if (index := _metadata(event).get("llm_call_index")) is not None}
     last_lead_text_seq: int | None = None
     for event in response_events:
         metadata = _metadata(event)
@@ -382,13 +378,7 @@ def _llm_steps(
         if call_index in response_indexes:
             continue
         caller = str(metadata.get("caller") or "lead_agent")
-        actor = (
-            "central"
-            if caller == "lead_agent"
-            else caller.split(":", 1)[1]
-            if ":" in caller
-            else caller
-        )
+        actor = "central" if caller == "lead_agent" else caller.split(":", 1)[1] if ":" in caller else caller
         content = _content(event)
         seq = int(event.get("seq") or 0)
         steps.append(
@@ -419,11 +409,7 @@ def _llm_steps(
         raw_tool_calls = content.get("tool_calls")
         tool_calls = [dict(item) for item in raw_tool_calls if isinstance(item, Mapping)] if isinstance(raw_tool_calls, list) else []
         token_usage = _usage(metadata.get("usage") or content.get("usage_metadata"))
-        provider_reasoning = (
-            _provider_reasoning_text(content)
-            if expose_provider_reasoning
-            else None
-        )
+        provider_reasoning = _provider_reasoning_text(content) if expose_provider_reasoning else None
 
         if caller == "lead_agent" and tool_calls:
             action_calls = [call for call in tool_calls if str(call.get("name") or "").startswith("sp_")]
@@ -732,11 +718,7 @@ def _bound_total_detail_size(steps: list[dict[str, Any]]) -> None:
             if len(reasoning) <= remaining:
                 remaining -= len(reasoning)
             else:
-                step["provider_reasoning"] = (
-                    _clip(reasoning, max(min(remaining, TRACE_PROVIDER_REASONING_MAX_CHARS), 0))
-                    if remaining
-                    else "<trace budget exhausted>"
-                )
+                step["provider_reasoning"] = _clip(reasoning, max(min(remaining, TRACE_PROVIDER_REASONING_MAX_CHARS), 0)) if remaining else "<trace budget exhausted>"
                 remaining = 0
         detail = step.get("detail")
         if detail is None:
@@ -791,9 +773,7 @@ def build_debug_trace(record: Any, events: Sequence[Mapping[str, Any]]) -> dict[
     )
     _bound_total_detail_size(steps)
 
-    has_provider_reasoning = any(
-        bool(step.get("provider_reasoning")) for step in steps
-    )
+    has_provider_reasoning = any(bool(step.get("provider_reasoning")) for step in steps)
     diagnostics = _stop_diagnostics(record, ordered_events)
     return {
         "thread_id": str(getattr(record, "thread_id", "")),
@@ -819,18 +799,14 @@ def build_debug_trace(record: Any, events: Sequence[Mapping[str, Any]]) -> dict[
         "disclosure": {
             "hidden_chain_of_thought": False,
             "provider_returned_reasoning": has_provider_reasoning,
-            "reasoning_notice": (
-                "This is reasoning text returned by the configured model API; it may be incomplete and is not guaranteed to be the model's full internal chain of thought."
-                if has_provider_reasoning
-                else None
-            ),
+            "reasoning_notice": ("This is reasoning text returned by the configured model API; it may be incomplete and is not guaranteed to be the model's full internal chain of thought." if has_provider_reasoning else None),
             "shows": [
                 "observable_model_output",
                 "explicit_action_reasons",
                 "captured_task_context",
                 "tool_and_subagent_io",
                 "latency_and_token_usage",
-                *( ["provider_returned_reasoning"] if has_provider_reasoning else [] ),
+                *(["provider_returned_reasoning"] if has_provider_reasoning else []),
             ],
         },
     }

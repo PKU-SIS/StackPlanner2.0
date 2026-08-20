@@ -59,8 +59,7 @@ def _subagent_tool_loop_limits(max_turns: int) -> tuple[int, int]:
         2,
         min(
             _SUBAGENT_TOOL_LOOP_HARD_CAP,
-            (max(1, int(max_turns)) - _SUBAGENT_LOOP_SHUTDOWN_RESERVED_STEPS)
-            // _SUBAGENT_GRAPH_STEPS_PER_TOOL_LOOP,
+            (max(1, int(max_turns)) - _SUBAGENT_LOOP_SHUTDOWN_RESERVED_STEPS) // _SUBAGENT_GRAPH_STEPS_PER_TOOL_LOOP,
         ),
     )
     safe_warn_limit = max(1, min(safe_hard_limit - 1, (safe_hard_limit * 3) // 5))

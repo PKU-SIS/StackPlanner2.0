@@ -157,10 +157,7 @@ class PromptContextBuilder:
             compact_header.insert(4, "conversation_status: new_conversation")
         bounded_task_contract = _task_contract_ref(task_contract)
         if bounded_task_contract is not None:
-            compact_header.append(
-                "task_contract (authoritative/immutable): "
-                + _json_ref(bounded_task_contract, max_chars=1800)
-            )
+            compact_header.append("task_contract (authoritative/immutable): " + _json_ref(bounded_task_contract, max_chars=1800))
         full_header = [
             *compact_header,
             "",
@@ -220,7 +217,7 @@ class PromptContextBuilder:
             [
                 "memory_control:",
                 "memory_scope: short_term_task_memory",
-                *( ["new_conversation: true"] if new_conversation else [] ),
+                *(["new_conversation: true"] if new_conversation else []),
                 f"summarization_pressure: {str(bool(pressure_ids)).lower()}",
                 f"summarization_needed: {str(bool(summarize_entries)).lower()}",
                 f"summarization_cooldown: {cooldown}",

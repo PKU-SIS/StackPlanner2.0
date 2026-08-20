@@ -25,18 +25,10 @@ class ReflectHandler:
             # backtracked unless every requested target resolves safely.
             if missing_target_entry_ids:
                 active_target_entry_ids = []
-            protected = [
-                entry_id
-                for entry_id in target_entry_ids
-                if entry_id in by_id and (by_id[entry_id].status == "pinned" or by_id[entry_id].priority == "critical")
-            ]
+            protected = [entry_id for entry_id in target_entry_ids if entry_id in by_id and (by_id[entry_id].status == "pinned" or by_id[entry_id].priority == "critical")]
             if protected:
                 raise ValueError(f"REFLECT cannot backtrack pinned or critical memory: {', '.join(protected)}")
-            human_authored = [
-                entry_id
-                for entry_id in target_entry_ids
-                if entry_id in by_id and (by_id[entry_id].actor == "human" or by_id[entry_id].action in {"user_request", "feedback"})
-            ]
+            human_authored = [entry_id for entry_id in target_entry_ids if entry_id in by_id and (by_id[entry_id].actor == "human" or by_id[entry_id].action in {"user_request", "feedback"})]
             if human_authored:
                 raise ValueError("REFLECT cannot backtrack human-authored task memory: " + ", ".join(human_authored))
             inactive_target_entry_ids = [entry_id for entry_id in target_entry_ids if entry_id in by_id and by_id[entry_id].status != "active"]

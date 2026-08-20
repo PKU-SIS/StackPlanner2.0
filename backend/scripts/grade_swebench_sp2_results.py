@@ -42,16 +42,9 @@ def _summary(results_root: Path, grade_root: Path, *, expected_count: int) -> di
         "harness_error_instances": sum(1 for grade in grades if grade.get("harness_error")),
         "skipped_invalid_patch_instances": sum(1 for grade in grades if grade.get("skipped_grading") is True),
         "scored_instances": sum(1 for grade in grades if grade.get("skipped_grading") is not True),
-        "resolved_rate_over_graded": (
-            sum(1 for grade in grades if grade.get("resolved") is True) / len(grades)
-            if grades
-            else None
-        ),
+        "resolved_rate_over_graded": (sum(1 for grade in grades if grade.get("resolved") is True) / len(grades) if grades else None),
         "resolved_rate_over_scored": (
-            sum(1 for grade in grades if grade.get("resolved") is True)
-            / sum(1 for grade in grades if grade.get("skipped_grading") is not True)
-            if any(grade.get("skipped_grading") is not True for grade in grades)
-            else None
+            sum(1 for grade in grades if grade.get("resolved") is True) / sum(1 for grade in grades if grade.get("skipped_grading") is not True) if any(grade.get("skipped_grading") is not True for grade in grades) else None
         ),
     }
 

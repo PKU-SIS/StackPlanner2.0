@@ -3,6 +3,9 @@
 import json
 from dataclasses import dataclass
 
+from deerflow.sp.actions.handlers.base import HandlerContext
+from deerflow.sp.actions.handlers.context import build_handler_context_refs
+from deerflow.sp.memory import TaskMemoryStack
 from deerflow.sp.subagents import (
     A2A_DELEGATE_MESSAGE,
     A2A_PROTOCOL_VERSION,
@@ -12,9 +15,6 @@ from deerflow.sp.subagents import (
     render_sp_subagent_prompt,
 )
 from deerflow.sp.subagents.dr2_adapter import coder_task_requires_implementation
-from deerflow.sp.actions.handlers.base import HandlerContext
-from deerflow.sp.actions.handlers.context import build_handler_context_refs
-from deerflow.sp.memory import TaskMemoryStack
 
 
 @dataclass
@@ -112,7 +112,7 @@ def test_delegate_context_carries_task_contract_without_arbitrary_metadata():
                     "original_issue": "Fix the exact boundary behavior.",
                     "fail_to_pass": ["tests/test_core.py::test_boundary"],
                     "secret": "must not cross the delegation boundary",
-                }
+                },
             },
             stack=TaskMemoryStack(),
             run_id="run-1",
@@ -569,9 +569,7 @@ def test_verification_stage_uses_stage_role_in_unverified_test_gap():
     result = DR2SubagentExecutorAdapter(lambda _: executor).execute(task)
 
     assert result.artifact_metadata["completion_status"] == "partial"
-    assert result.artifact_metadata["evidence_gaps"] == [
-        "Verification subagent claimed test verification without a successful test-command result after the latest source change."
-    ]
+    assert result.artifact_metadata["evidence_gaps"] == ["Verification subagent claimed test verification without a successful test-command result after the latest source change."]
 
 
 def test_coder_complete_claim_accepts_successful_execution_after_source_write():
@@ -691,10 +689,7 @@ def test_coder_reported_regression_is_structured_for_central_recovery():
     executor = FakeDR2Executor(
         FakeDR2Result(
             status="completed",
-            result=(
-                "I found an issue: the applied fix breaks the existing compatibility test. "
-                "The source must be revised before completion."
-            ),
+            result=("I found an issue: the applied fix breaks the existing compatibility test. The source must be revised before completion."),
             ai_messages=[],
         )
     )
@@ -717,10 +712,7 @@ def test_coder_environment_blocker_and_intermediate_narration_are_not_a_regressi
     executor = FakeDR2Executor(
         FakeDR2Result(
             status="completed",
-            result=(
-                "Native test collection failed because the host environment dependency is incompatible. "
-                "A focused behavioral check passed and the existing patch is ready for canonical grading."
-            ),
+            result=("Native test collection failed because the host environment dependency is incompatible. A focused behavioral check passed and the existing patch is ready for canonical grading."),
             ai_messages=[
                 {
                     "type": "ai",
@@ -781,9 +773,7 @@ def test_coder_test_command_with_masked_pipeline_exit_is_not_verification():
                         {
                             "id": "masked-test",
                             "name": "bash",
-                            "args": {
-                                "command": "python -m pytest -q tests/test_core.py 2>&1 | tail -20"
-                            },
+                            "args": {"command": "python -m pytest -q tests/test_core.py 2>&1 | tail -20"},
                         },
                     ],
                 },
@@ -1039,9 +1029,7 @@ def test_coder_implementation_claim_accepts_non_test_source_change():
 
     assert result.artifact_metadata["completion_status"] == "complete"
     assert result.artifact_metadata["implementation_verification"]["passed"] is True
-    assert result.artifact_metadata["implementation_verification"]["source_paths"] == [
-        "/mnt/user-data/workspace/src/flask/config.py"
-    ]
+    assert result.artifact_metadata["implementation_verification"]["source_paths"] == ["/mnt/user-data/workspace/src/flask/config.py"]
 
 
 def test_memory_recaller_keeps_full_recall_json_for_normalization():

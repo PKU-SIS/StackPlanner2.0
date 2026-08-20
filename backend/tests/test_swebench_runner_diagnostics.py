@@ -20,39 +20,42 @@ def test_swebench_runner_waits_for_post_adapter_verification_acceptance():
     }
 
     assert _is_external_grader_handoff_event("custom", raw_completed, enabled=True) is False
-    assert _is_external_grader_handoff_event(
-        "custom", raw_completed, enabled=True, verification_completions=1
-    ) is False
-    assert _is_external_grader_handoff_event(
-        "custom", raw_completed, enabled=True, verification_completions=2
-    ) is False
-    assert _is_external_grader_handoff_event(
-        "custom", raw_completed, enabled=True, verification_completions=3
-    ) is True
-    assert _is_external_grader_handoff_event(
-        "custom",
-        raw_completed,
-        enabled=True,
-        verification_completions=1,
-        verification_environment_blocked=True,
-    ) is True
-    assert _is_external_grader_handoff_event(
-        "custom",
-        raw_completed,
-        enabled=True,
-        verification_completions=1,
-        verification_environment_blocked=True,
-        verification_behavior_failed=True,
-    ) is False
+    assert _is_external_grader_handoff_event("custom", raw_completed, enabled=True, verification_completions=1) is False
+    assert _is_external_grader_handoff_event("custom", raw_completed, enabled=True, verification_completions=2) is False
+    assert _is_external_grader_handoff_event("custom", raw_completed, enabled=True, verification_completions=3) is True
+    assert (
+        _is_external_grader_handoff_event(
+            "custom",
+            raw_completed,
+            enabled=True,
+            verification_completions=1,
+            verification_environment_blocked=True,
+        )
+        is True
+    )
+    assert (
+        _is_external_grader_handoff_event(
+            "custom",
+            raw_completed,
+            enabled=True,
+            verification_completions=1,
+            verification_environment_blocked=True,
+            verification_behavior_failed=True,
+        )
+        is False
+    )
     assert _is_external_grader_handoff_event("custom", partial, enabled=True) is False
     assert _is_external_grader_handoff_event("custom", accepted, enabled=True) is True
     assert _is_external_grader_handoff_event("values", accepted, enabled=True) is False
     assert _is_external_grader_handoff_event("custom", accepted, enabled=False) is False
-    assert _is_external_grader_handoff_event(
-        "custom",
-        {"type": "task_running", "a2a_stage": "verification"},
-        enabled=True,
-    ) is False
+    assert (
+        _is_external_grader_handoff_event(
+            "custom",
+            {"type": "task_running", "a2a_stage": "verification"},
+            enabled=True,
+        )
+        is False
+    )
 
 
 def test_swebench_prompt_requires_real_repository_cases_when_pytest_is_blocked():
@@ -125,9 +128,7 @@ def test_swebench_handoff_gate_rejects_valid_but_behaviorally_failed_patch():
 def test_swebench_handoff_gate_allows_external_grader_when_local_env_blocked():
     from scripts.run_swebench_sp2 import _benchmark_handoff_eligibility
 
-    result = _benchmark_handoff_eligibility(
-        {"valid_source_patch": True}, {"status": "blocked"}
-    )
+    result = _benchmark_handoff_eligibility({"valid_source_patch": True}, {"status": "blocked"})
 
     assert result["eligible"] is True
     assert result["verification_status"] == "blocked"
@@ -136,37 +137,46 @@ def test_swebench_handoff_gate_allows_external_grader_when_local_env_blocked():
 def test_swebench_grader_rejects_unverified_result_before_harness():
     from scripts.grade_swebench_sp2_results import _pregrade_rejection
 
-    assert _pregrade_rejection(
-        {
-            "patch_quality": {"valid_source_patch": False},
-            "patch_status": "none",
-        }
-    ) == "invalid_source_patch"
-    assert _pregrade_rejection(
-        {
-            "patch_quality": {"valid_source_patch": True},
-            "patch_status": "needs_revision",
-            "verification_gate": {
-                "eligible": False,
-                "reason": "declared_benchmark_test_failed",
-            },
-        }
-    ) == "needs_revision"
+    assert (
+        _pregrade_rejection(
+            {
+                "patch_quality": {"valid_source_patch": False},
+                "patch_status": "none",
+            }
+        )
+        == "invalid_source_patch"
+    )
+    assert (
+        _pregrade_rejection(
+            {
+                "patch_quality": {"valid_source_patch": True},
+                "patch_status": "needs_revision",
+                "verification_gate": {
+                    "eligible": False,
+                    "reason": "declared_benchmark_test_failed",
+                },
+            }
+        )
+        == "needs_revision"
+    )
 
 
 def test_swebench_grader_allows_blocked_local_verification():
     from scripts.grade_swebench_sp2_results import _pregrade_rejection
 
-    assert _pregrade_rejection(
-        {
-            "patch_quality": {"valid_source_patch": True},
-            "patch_status": "ready",
-            "verification_gate": {
-                "eligible": True,
-                "reason": "local_verification_blocked_external_grader_required",
-            },
-        }
-    ) is None
+    assert (
+        _pregrade_rejection(
+            {
+                "patch_quality": {"valid_source_patch": True},
+                "patch_status": "ready",
+                "verification_gate": {
+                    "eligible": True,
+                    "reason": "local_verification_blocked_external_grader_required",
+                },
+            }
+        )
+        is None
+    )
 
 
 def test_swebench_runner_distinguishes_stalled_perception_timeout():
@@ -313,9 +323,7 @@ def test_swebench_runner_loads_canonical_docker_image_map(tmp_path):
         encoding="utf-8",
     )
 
-    assert _load_docker_image_map(manifest) == {
-        "owner__project-123": "docker.io/swebench/example:latest"
-    }
+    assert _load_docker_image_map(manifest) == {"owner__project-123": "docker.io/swebench/example:latest"}
 
 
 def test_swebench_runner_marks_missing_test_metadata_not_configured(tmp_path):

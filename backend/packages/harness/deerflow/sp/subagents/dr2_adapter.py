@@ -109,17 +109,11 @@ def _task_actor_label(task: SPSubagentTask | None) -> str:
 
 
 def _unverified_execution_gap(task: SPSubagentTask | None) -> str:
-    return (
-        f"{_task_actor_label(task)} claimed execution or test verification without a successful "
-        "execution-tool result after the latest source change."
-    )
+    return f"{_task_actor_label(task)} claimed execution or test verification without a successful execution-tool result after the latest source change."
 
 
 def _unverified_test_gap(task: SPSubagentTask | None) -> str:
-    return (
-        f"{_task_actor_label(task)} claimed test verification without a successful "
-        "test-command result after the latest source change."
-    )
+    return f"{_task_actor_label(task)} claimed test verification without a successful test-command result after the latest source change."
 
 
 def _json_safe(value: Any) -> Any:
@@ -156,7 +150,12 @@ def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
             "",
             "Complete the task using the tools available to this DR2 subagent.",
             "Treat task, input_refs, expected_output, and context_refs as one execution contract. Verify the expected_output before claiming completion.",
-            "If context_refs.task_contract is present, its authoritative and immutable fields preserve the caller's original acceptance contract. Do not replace them with a narrower interpretation from the latest delegated wording; report a gap or request recovery when the contract is not satisfied.",
+            (
+                "If context_refs.task_contract is present, its authoritative and immutable fields "
+                "preserve the caller's original acceptance contract. Do not replace them with a "
+                "narrower interpretation from the latest delegated wording; report a gap or request "
+                "recovery when the contract is not satisfied."
+            ),
             "Return the task_result envelope fields implied by protocol.message_type. Do not expose private chain-of-thought; report only observable actions, evidence, tests, files, and blockers.",
             "Honor the subagent output contract: return compact JSON with summary, artifact_content, artifact_type, and artifact_metadata.",
             'Set artifact_metadata.completion_status to "complete", "partial", or "blocked", and list unmet requirements in artifact_metadata.evidence_gaps.',
@@ -279,19 +278,9 @@ def _message_text(value: Any) -> str:
 def _tool_result_succeeded(value: Any) -> bool:
     text = _message_text(value).strip()
     lowered = text.lower()
-    if (
-        lowered.startswith("error:")
-        or "traceback (most recent call last)" in lowered
-        or "assertionerror" in lowered
-        or "permission denied" in lowered
-        or _OBSERVABLE_FALSE_CHECK_PATTERN.search(text)
-    ):
+    if lowered.startswith("error:") or "traceback (most recent call last)" in lowered or "assertionerror" in lowered or "permission denied" in lowered or _OBSERVABLE_FALSE_CHECK_PATTERN.search(text):
         return False
-    exit_codes = [
-        int(match.group(1))
-        for pattern in _EXIT_STATUS_PATTERNS
-        for match in pattern.finditer(text)
-    ]
+    exit_codes = [int(match.group(1)) for pattern in _EXIT_STATUS_PATTERNS for match in pattern.finditer(text)]
     return not exit_codes or exit_codes[-1] == 0
 
 
@@ -703,11 +692,7 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         if not isinstance(evidence_gaps, list):
             evidence_gaps = []
         artifact_metadata["evidence_gaps"] = [str(item) for item in evidence_gaps if str(item).strip()][:12]
-        if (
-            task is not None
-            and task.subagent_type == "coder"
-            and _coder_reported_behavior_failure(raw_result, ai_messages)
-        ):
+        if task is not None and task.subagent_type == "coder" and _coder_reported_behavior_failure(raw_result, ai_messages):
             artifact_metadata["completion_status"] = "partial"
             if _BEHAVIOR_FAILURE_GAP not in artifact_metadata["evidence_gaps"]:
                 artifact_metadata["evidence_gaps"].append(_BEHAVIOR_FAILURE_GAP)
@@ -744,12 +729,7 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         # the final source edit. A task that omits the word "test" is still not
         # safely complete from a source diff alone: syntax checks, focused
         # tests, or the repository's equivalent must be observable.
-        code_verification_only = bool(
-            task is not None
-            and task.subagent_type == "coder"
-            and task.metadata.get("verification_only") is True
-            and str(task.stage or task.metadata.get("stage") or "").strip().lower() == "verification"
-        )
+        code_verification_only = bool(task is not None and task.subagent_type == "coder" and task.metadata.get("verification_only") is True and str(task.stage or task.metadata.get("stage") or "").strip().lower() == "verification")
         if coder_task_requires_implementation(task) or code_verification_only:
             test_verification = _test_execution_verification(ai_messages)
             artifact_metadata["test_verification"] = test_verification
