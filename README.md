@@ -20,6 +20,44 @@ Gateway、ThreadState、Checkpoint、Artifact、Sandbox、Subagent 与 Web UI。
 > does not include deployment credentials, private experiment traces, or hosted
 > model keys. Configure providers locally through `.env` and `config.yaml`.
 
+## DCC 迁移分支与 CAUD 验证
+
+`DCC` 是从 SP2 `origin/main` 创建的独立迁移分支，用于承接 SP1 的 DCC
+实现并在 SP2 Runtime 上验证。当前分支只提供迁移基线和测试约定；SP1 的
+远程 `DCC` 内容需要先拉取并逐项迁移，不能直接把 SP1 工作树覆盖到 SP2。
+
+推荐迁移顺序：
+
+1. 在 SP1 仓库获取 `DCC` 分支，记录其基线提交、入口、配置项、依赖和测试数据。
+2. 以本分支（从 SP2 `origin/main` 创建）为目标，按模块迁移 DCC 的算法、提示词和数据适配层。
+3. 将 SP1 的启动方式映射到 SP2 的 Gateway、ThreadState、Artifact 和 Subagent 生命周期；不要复用 SP1 的独立服务入口。
+4. 先运行 CAUD 小规模测试，确认模型调用、工具调用、产物落盘和结果格式，再扩大数据集。
+5. 迁移完成后补齐回归测试，并将 SP1 对照结果与 SP2/CAUD 结果一起记录。
+
+### CAUD 测试记录约定
+
+每次 CAUD 测试至少记录以下信息：
+
+- SP2 DCC 分支提交号；
+- 使用的模型、API 地址（不要提交 API Key）；
+- CAUD 数据/任务版本和样本数量；
+- 成功率、平均耗时、失败样本及日志路径；
+- 与 SP1 DCC 基线的差异说明。
+
+本地工作树可以这样准备和运行（具体 CAUD runner 以迁移后的实现为准）：
+
+```bash
+git fetch origin main
+git switch DCC
+make doctor
+# 配好模型后启动 SP2；迁移 CAUD runner 后，再执行项目提供的 CAUD 测试命令
+make dev
+```
+
+> 注意：截至当前提交，仓库中尚未包含可直接运行的 SP1 DCC 迁移代码，且
+> `CAUD` runner/数据入口尚未在 SP2 中注册。先完成 SP1 远程 DCC 的可访问性
+> 和代码盘点，再提交实际迁移，避免把未验证的接口写进主流程。
+
 ## Why SP2.0
 
 SP2.0 separates **decision making** from **tool execution**:
