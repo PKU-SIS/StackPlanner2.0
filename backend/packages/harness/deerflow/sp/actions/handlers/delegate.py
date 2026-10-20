@@ -655,7 +655,16 @@ class DelegateHandler:
         )
         task.validate_protocol()
 
-        result = self._executor.execute(task)
+        try:
+            result = self._executor.execute(task)
+        except Exception as exc:
+            try:
+                from deerflow.sp.report import fail_delegation_action
+
+                fail_delegation_action(context.state, action.action_id, f"{type(exc).__name__}: {exc}")
+            except Exception:  # noqa: BLE001 - preserve the original execution failure
+                pass
+            raise
         if result.is_success:
             return self._handle_success(action, context, delegate_entry, result, task=task)
         return self._handle_failure(action, context, delegate_entry, result, task=task)

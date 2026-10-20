@@ -11,6 +11,7 @@ from langchain.tools import tool
 from langchain_core.messages import HumanMessage
 
 from deerflow.sp.actions.handlers.base import HandlerContext
+from deerflow.sp.actions.handlers.delegate import DelegateHandler
 from deerflow.sp.actions.handlers.finish import FinishHandler
 from deerflow.sp.actions.schema import ActionType, SPAction
 from deerflow.sp.artifacts import SPArtifactAdapter
@@ -450,3 +451,34 @@ def test_sync_user_inputs_deduplicates_visible_messages(tmp_path):
     ledger = ReportLedger.load_for_context(hooks.report_context(state))
     assert [item["preview"] for item in ledger.inputs()] == ["请写一份关于示例公司的研究报告。", "只看母公司口径"]
     assert ledger.unapplied_input_ids() == ["u2"]
+
+
+def test_executor_exception_releases_in_flight_action_without_a_round(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    _register_gap(ctx, "a-outline")
+    outline_action, outline_task = _delegate(ctx, "a-outline", "outline", {})
+    assert _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=["g1"])).next_step == "continue"
+
+    class RaisingExecutor:
+        def execute(self, task):
+            raise RuntimeError("executor unavailable")
+
+    handler = DelegateHandler(executor=RaisingExecutor())
+    action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-r-raise",
+        reason="research",
+        task="research",
+        target_agent="researcher",
+        stage="research",
+        metadata={"report_gap_ids": ["g1"]},
+    )
+    with pytest.raises(RuntimeError, match="executor unavailable"):
+        handler.handle(action, ctx)
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    gap = ledger.require_gap("g1")
+    assert gap["status"] == "open"
+    assert gap["rounds"] == 0
+    assert gap["technical_attempts"] == 1
+    assert ledger.action("a-r-raise")["status"] == "failed"

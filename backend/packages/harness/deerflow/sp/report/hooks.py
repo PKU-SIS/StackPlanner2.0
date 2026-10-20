@@ -368,6 +368,19 @@ def handle_failure(
         return
 
 
+def fail_delegation_action(state: Mapping[str, Any] | None, action_id: str, error: str) -> None:
+    """Release an in-flight report research action after an executor exception."""
+    report = report_context(state)
+    if not report.is_active:
+        return
+    try:
+        ledger = ReportLedger.load_for_context(report)
+        ledger.fail_research_action(action_id, error)
+        ledger.save()
+    except Exception:  # noqa: BLE001 - the original execution error is more useful
+        return
+
+
 def _accept_outline(
     action: SPAction,
     context: HandlerContext,
