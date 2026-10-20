@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
 from deerflow.sp.report import store as report_store
+from deerflow.sp.report import tree as report_tree
+from deerflow.sp.report import writing as report_writing
 from deerflow.sp.report.ledger import ReportLedger, ReportValidationError, gap_next_action
-from deerflow.sp.report.prompts import REPORT_OUTLINE_PROMPT, REPORT_RESEARCH_PROMPT
+from deerflow.sp.report.prompts import REPORT_OUTLINE_PROMPT, REPORT_RESEARCH_PROMPT, REPORT_WRITER_PROMPT
 
 OUTLINE_SUMMARY_MAX_CHARS = 24_000
 OUTLINE_TREE_MAX_CHARS = 80_000
@@ -60,6 +63,119 @@ def _gap_entry(gap: Mapping[str, Any], ledger: ReportLedger) -> dict[str, Any]:
     }
 
 
+def load_current_tree(ledger: ReportLedger) -> dict[str, Any] | None:
+    tree_ref = ledger.payload.get("tree")
+    if not isinstance(tree_ref, Mapping) or not tree_ref.get("path"):
+        return None
+    try:
+        payload = json.loads(Path(str(tree_ref["path"])).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ReportValidationError(f"current report tree is unreadable: {exc}") from exc
+    return payload if isinstance(payload, dict) else None
+
+
+def writer_basis(ledger: ReportLedger, node_id: str) -> dict[str, Any]:
+    tree = load_current_tree(ledger)
+    if tree is None:
+        raise ReportValidationError("cannot write a node before an accepted tree")
+    nodes = {str(node.get("node_id")): node for node in tree.get("nodes") or [] if isinstance(node, Mapping)}
+    node = nodes.get(node_id)
+    if node is None or node.get("kind") != "writable":
+        raise ReportValidationError(f"write target is not a writable node: {node_id}")
+    requirements = {str(item.get("id")): item for item in tree.get("requirements") or [] if isinstance(item, Mapping)}
+    fingerprints = report_tree.node_fingerprints(tree)
+    return {
+        "tree_version": tree.get("version"),
+        "node_id": node_id,
+        "fingerprint": fingerprints.get(node_id),
+        "node_spec": report_tree.node_spec_payload(node, requirements, nodes),
+    }
+
+
+def build_writer_packet(
+    ledger: ReportLedger,
+    *,
+    write_key: str,
+    node_id: str,
+    draft_virtual_path: str,
+    basis: Mapping[str, Any],
+    prior_draft: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    tree = load_current_tree(ledger)
+    if tree is None:
+        raise ReportValidationError("cannot write a node before an accepted tree")
+    nodes = {str(node.get("node_id")): node for node in tree.get("nodes") or [] if isinstance(node, Mapping)}
+    node = nodes.get(node_id)
+    if node is None:
+        raise ReportValidationError(f"unknown writer node: {node_id}")
+    request = ledger.payload.get("request") if isinstance(ledger.payload.get("request"), Mapping) else {}
+    request_text, request_error = _read_text(request.get("path"))
+    inputs = []
+    for item in ledger.inputs():
+        text, error = _read_text(item.get("path"))
+        inputs.append(
+            {
+                "input_id": item.get("input_id"),
+                "source": item.get("source"),
+                "path": item.get("virtual_path"),
+                "text": text,
+                "error": error,
+            }
+        )
+    evidence = []
+    for item in node.get("evidence") or []:
+        if not isinstance(item, Mapping):
+            continue
+        material = ledger.material(str(item.get("material_id")))
+        if material is None:
+            continue
+        evidence.append(
+            {
+                "material_id": material.get("material_id"),
+                "source_id": material.get("source_id"),
+                "title": material.get("title"),
+                "url": material.get("url"),
+                "path": material.get("virtual_path"),
+                "lines": (item.get("locator") or {}).get("lines") if isinstance(item.get("locator"), Mapping) else None,
+                "use": item.get("use"),
+                "content_scope": material.get("content_scope"),
+                "upstream_truncation": material.get("upstream_truncation"),
+            }
+        )
+    prior = None
+    if prior_draft is not None:
+        prior_text, prior_error = _read_text(prior_draft.get("path"))
+        prior = {
+            "draft_id": prior_draft.get("draft_id"),
+            "path": prior_draft.get("virtual_path"),
+            "content": prior_text[:OUTLINE_SUMMARY_MAX_CHARS],
+            "content_truncated": len(prior_text) > OUTLINE_SUMMARY_MAX_CHARS,
+            "error": prior_error,
+        }
+    parent_id = node.get("parent_id")
+    parent = nodes.get(str(parent_id)) if parent_id else None
+    siblings = [{"node_id": item.get("node_id"), "title": item.get("title"), "status": item.get("status")} for item in nodes.values() if item.get("parent_id") == parent_id and item.get("node_id") != node_id]
+    return {
+        "report_id": ledger.payload.get("report_id"),
+        "write_key": write_key,
+        "node_id": node_id,
+        "draft_path": draft_virtual_path,
+        "request": {"text": request_text, "path": ledger.paths.virtual(ledger.paths.request), "error": request_error},
+        "inputs": inputs,
+        "tree_version": tree.get("version"),
+        "node": node,
+        "basis": dict(basis),
+        "evidence": evidence,
+        "context": {
+            "parent": {"node_id": parent.get("node_id"), "title": parent.get("title")} if parent else None,
+            "siblings": siblings,
+            "relations": node.get("relations") or [],
+        },
+        "prior_draft": prior,
+        "instructions": REPORT_WRITER_PROMPT,
+    }
+
+
 def build_outline_packet(ledger: ReportLedger) -> dict[str, Any]:
     """Build the full planning view for one Outline delegation."""
     request_text, request_error = _read_text(ledger.paths.request)
@@ -106,6 +222,46 @@ def build_outline_packet(ledger: ReportLedger) -> dict[str, Any]:
         tree_truncated = len(tree_content) > OUTLINE_TREE_MAX_CHARS
         tree_content = tree_content[:OUTLINE_TREE_MAX_CHARS]
 
+    draft_entries: list[dict[str, Any]] = []
+    for item in report_writing.drafts(ledger):
+        text, error = _read_text(item.get("path"))
+        truncated = len(text) > OUTLINE_SUMMARY_MAX_CHARS
+        draft_entries.append(
+            {
+                "draft_id": item.get("draft_id"),
+                "write_key": item.get("write_key"),
+                "node_id": item.get("node_id"),
+                "path": item.get("virtual_path"),
+                "chars": item.get("chars"),
+                "sha256": item.get("sha256"),
+                "status": item.get("status"),
+                "is_current": bool(item.get("is_current")),
+                "review_status": item.get("review_status"),
+                "generated_fingerprint": item.get("generated_fingerprint"),
+                "applicable_fingerprint": item.get("applicable_fingerprint"),
+                "keep_reason": item.get("keep_reason"),
+                "content": text[:OUTLINE_SUMMARY_MAX_CHARS],
+                "content_truncated": truncated,
+                "error": error,
+            }
+        )
+    feedback_entries = [
+        {
+            "feedback_id": item.get("feedback_id"),
+            "write_key": item.get("write_key"),
+            "node_id": item.get("node_id"),
+            "kind": item.get("kind"),
+            "message": item.get("message"),
+            "material_ids": item.get("material_ids") or [],
+            "requirement_ids": item.get("requirement_ids") or [],
+            "status": item.get("status"),
+            "gap_id": item.get("gap_id"),
+        }
+        for item in report_writing.feedback_entries(ledger)
+        if item.get("status") in {"open", "handed_off"}
+    ]
+    writing_control = report_writing.control_entries(ledger)
+
     return {
         "report_id": ledger.payload.get("report_id"),
         "request": {
@@ -124,10 +280,16 @@ def build_outline_packet(ledger: ReportLedger) -> dict[str, Any]:
                 "content": tree_content,
                 "content_truncated": tree_truncated,
                 "error": tree_error,
+                "last_changes": tree_payload.get("last_changes"),
             }
             if tree_payload is not None
             else None
         ),
+        "drafts": draft_entries,
+        "write_requests": writing_control["write_requests"],
+        "writes_pending": writing_control["writes_pending"],
+        "draft_review_due": writing_control["draft_review_due"],
+        "feedback": feedback_entries,
         "gaps": [_gap_entry(gap, ledger) for gap in ledger.gaps()],
         "unapplied_input_ids": ledger.unapplied_input_ids(),
         "instructions": REPORT_OUTLINE_PROMPT,

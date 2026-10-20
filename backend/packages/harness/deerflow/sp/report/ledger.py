@@ -104,6 +104,8 @@ class ReportLedger:
             "user_decisions": [],
             "write_requests": [],
             "writes_pending": [],
+            "drafts": [],
+            "feedback": [],
             "outline_review_due": False,
             "feedback_dispositions": [],
             "draft_dispositions": [],
@@ -749,13 +751,20 @@ class ReportLedger:
                 }
             )
         closed = [gap for gap in self.gaps() if gap.get("status") in {"resolved", "not_needed"}]
+        from deerflow.sp.report import writing as report_writing
+
+        writing = report_writing.control_entries(self)
         return {
             "report_id": self.payload.get("report_id"),
             "status": self.payload.get("status"),
             "tree_version": int(tree.get("version") or 0) if tree else 0,
             "gaps": open_gaps,
             "closed_gap_count": len(closed),
-            "writes_pending": list(self.payload.get("writes_pending") or []),
+            "writes_pending": writing["writes_pending"],
+            "write_requests": writing["write_requests"],
+            "current_drafts": writing["current_drafts"],
+            "draft_review_due": writing["draft_review_due"],
+            "feedback_open": writing["feedback_open"],
             "outline_review_due": bool(self.payload.get("outline_review_due")),
             "unapplied_input_ids": self.unapplied_input_ids(),
             "review_status": str((self.payload.get("review") or {}).get("status") or "none") if isinstance(self.payload.get("review"), Mapping) else "none",
@@ -773,6 +782,12 @@ class ReportLedger:
             blockers.append("unapplied user inputs: " + ", ".join(summary["unapplied_input_ids"]))
         if summary["research_actions_in_flight"]:
             blockers.append("research actions in flight: " + ", ".join(summary["research_actions_in_flight"]))
+        if summary["writes_pending"]:
+            blockers.append("write requests pending: " + ", ".join(summary["writes_pending"]))
+        if summary["draft_review_due"]:
+            blockers.append("draft review due: " + ", ".join(summary["draft_review_due"]))
+        if summary["feedback_open"]:
+            blockers.append("node feedback open: " + ", ".join(str(item.get("feedback_id")) for item in summary["feedback_open"]))
         if summary["outline_review_due"]:
             blockers.append("Outline review is due")
         if not self.payload.get("tree"):

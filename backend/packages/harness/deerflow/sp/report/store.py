@@ -207,6 +207,10 @@ class ReportPaths:
     def research(self) -> Path:
         return self.directory / "research"
 
+    @property
+    def drafts(self) -> Path:
+        return self.directory / "drafts"
+
     def input_file(self, input_id: str) -> Path:
         return self.inputs / f"{input_id}.md"
 
@@ -218,6 +222,9 @@ class ReportPaths:
 
     def summary_file(self, action_id: str) -> Path:
         return self.research / action_id / "summary.md"
+
+    def draft_file(self, node_id: str, draft_id: str) -> Path:
+        return self.drafts / node_id / f"{draft_id}.md"
 
     def virtual(self, host_path: Path) -> str:
         return virtual_path_for(host_path, self.outputs_path)

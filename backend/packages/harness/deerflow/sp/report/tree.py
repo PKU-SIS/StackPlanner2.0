@@ -307,6 +307,99 @@ def _validate_write_requests(value: Any, nodes: Mapping[str, Mapping[str, Any]])
     return result
 
 
+def _requirements_map(tree: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    return {str(item.get("id")): item for item in tree.get("requirements") or [] if isinstance(item, Mapping)}
+
+
+def node_spec_payload(node: Mapping[str, Any], requirements: Mapping[str, Mapping[str, Any]], nodes: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    """Return the content-bearing node basis used for draft applicability."""
+    requirement_ids = list(node.get("requirement_ids") or [])
+    requirement_context = [
+        {
+            "id": str(requirement_id),
+            "text": str((requirements.get(str(requirement_id)) or {}).get("text") or ""),
+            "hard": bool((requirements.get(str(requirement_id)) or {}).get("hard", True)),
+            "input_id": str((requirements.get(str(requirement_id)) or {}).get("input_id") or ""),
+        }
+        for requirement_id in requirement_ids
+    ]
+    parent = nodes.get(str(node.get("parent_id"))) if node.get("parent_id") else None
+    relation_context = []
+    for relation in node.get("relations") or []:
+        if not isinstance(relation, Mapping):
+            continue
+        target = nodes.get(str(relation.get("node_id")))
+        relation_context.append(
+            {
+                "node_id": str(relation.get("node_id") or ""),
+                "type": str(relation.get("type") or ""),
+                "title": str((target or {}).get("title") or ""),
+                "question": str((target or {}).get("question") or ""),
+            }
+        )
+    return {
+        "title": str(node.get("title") or ""),
+        "question": str(node.get("question") or ""),
+        "argument": list(node.get("argument") or []),
+        "conclusion": str(node.get("conclusion") or ""),
+        "evidence": list(node.get("evidence") or []),
+        "constraints": dict(node.get("constraints") or {}),
+        "requirement_ids": requirement_ids,
+        "requirement_context": requirement_context,
+        "parent": {
+            "node_id": str(node.get("parent_id") or ""),
+            "title": str((parent or {}).get("title") or ""),
+            "kind": str((parent or {}).get("kind") or ""),
+        },
+        "relation_context": relation_context,
+    }
+
+
+def node_fingerprints(tree: Mapping[str, Any]) -> dict[str, str]:
+    requirements = _requirements_map(tree)
+    nodes = {str(node.get("node_id")): node for node in tree.get("nodes") or [] if isinstance(node, Mapping)}
+    result: dict[str, str] = {}
+    for node_id, node in nodes.items():
+        payload = node_spec_payload(node, requirements, nodes)
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        result[node_id] = report_store.sha256_text(encoded)
+    return result
+
+
+def tree_change_summary(previous: Mapping[str, Any] | None, current: Mapping[str, Any]) -> dict[str, Any]:
+    previous = previous or {}
+    old_requirements = _requirements_map(previous)
+    new_requirements = _requirements_map(current)
+    old_nodes = {str(node.get("node_id")): node for node in previous.get("nodes") or [] if isinstance(node, Mapping)}
+    new_nodes = {str(node.get("node_id")): node for node in current.get("nodes") or [] if isinstance(node, Mapping)}
+    requirement_changes = {
+        "added": sorted(set(new_requirements) - set(old_requirements)),
+        "removed": sorted(set(old_requirements) - set(new_requirements)),
+        "changed": sorted(
+            key
+            for key in set(old_requirements) & set(new_requirements)
+            if {
+                "text": str(old_requirements[key].get("text") or ""),
+                "hard": bool(old_requirements[key].get("hard", True)),
+                "input_id": str(old_requirements[key].get("input_id") or ""),
+            }
+            != {
+                "text": str(new_requirements[key].get("text") or ""),
+                "hard": bool(new_requirements[key].get("hard", True)),
+                "input_id": str(new_requirements[key].get("input_id") or ""),
+            }
+        ),
+    }
+    node_changes = {
+        "added": sorted(set(new_nodes) - set(old_nodes)),
+        "removed": sorted(set(old_nodes) - set(new_nodes)),
+        "title_changed": sorted(key for key in set(old_nodes) & set(new_nodes) if str(old_nodes[key].get("title") or "") != str(new_nodes[key].get("title") or "")),
+        "moved": sorted(key for key in set(old_nodes) & set(new_nodes) if old_nodes[key].get("parent_id") != new_nodes[key].get("parent_id")),
+        "relations_changed": sorted(key for key in set(old_nodes) & set(new_nodes) if list(old_nodes[key].get("relations") or []) != list(new_nodes[key].get("relations") or [])),
+    }
+    return {"from_version": previous.get("version"), "to_version": current.get("version"), "requirements": requirement_changes, "nodes": node_changes}
+
+
 def write_tree_candidate(
     tree: Mapping[str, Any],
     ledger: ReportLedger,
@@ -329,6 +422,13 @@ def commit_tree(
 ) -> None:
     """Switch the authoritative tree after the Artifact view has been registered."""
     content = path.read_text(encoding="utf-8")
+    previous_tree: Mapping[str, Any] | None = None
+    previous_ref = ledger.payload.get("tree")
+    if isinstance(previous_ref, Mapping) and previous_ref.get("path"):
+        try:
+            previous_tree = json.loads(Path(str(previous_ref["path"])).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            previous_tree = None
     ledger.payload["tree"] = {
         "version": version,
         "path": str(path),
@@ -336,6 +436,7 @@ def commit_tree(
         "sha256": report_store.sha256_text(content),
         "node_ids": [node["node_id"] for node in candidate["nodes"]],
         "accepted_at": candidate["accepted_at"],
+        "last_changes": tree_change_summary(previous_tree, candidate),
     }
     ledger.payload["nodes"] = {
         node["node_id"]: {
@@ -348,10 +449,6 @@ def commit_tree(
         for node in candidate["nodes"]
     }
     ledger.attach_nodes_to_gaps(candidate["nodes"])
-    ledger.payload["writes_pending"] = [item["key"] for item in candidate.get("write_requests") or []]
-    ledger.payload["outline_review_due"] = False
-    ledger.payload["feedback_dispositions"] = candidate.get("feedback_dispositions") or []
-    ledger.payload["draft_dispositions"] = candidate.get("draft_dispositions") or []
     ledger.save()
 
 

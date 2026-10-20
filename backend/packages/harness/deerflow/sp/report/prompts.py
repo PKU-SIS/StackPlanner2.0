@@ -1,4 +1,4 @@
-"""Conditional role and Central prompt sections for report mode (P1)."""
+"""Conditional role and Central prompt sections for report mode (P1/P2)."""
 
 from __future__ import annotations
 
@@ -30,9 +30,8 @@ Required sequence:
 5. For `awaiting_user`, call `sp_ask_human` with a concrete question and
    `metadata={"report_gap_ids":[...]}`. The user's answer is input to Outline,
    not a gap closure. After the answer, delegate to `outline` again.
-6. Never call `sp_finish` for an active report in this P1 phase: there is no
-   accepted final report. Report research and outline artifacts are not final
-   deliverables.
+6. Never call `sp_finish` for an active report in P2: there is no accepted
+   final report. Node drafts are not final deliverables.
 7. Close a report only when the user cancels it. Preserve the cancellation input
    first, then call `sp_replan` with metadata.report_action="close" and
    metadata.report_input_id set to that saved input. A bare reason is not a
@@ -86,14 +85,62 @@ Output contract:
   evidence or claim unsupported conclusions.
 - Preserve existing node ids unless you explicitly remove them through
   removed_node_ids. Do not silently drop a previous node.
-- In P1, set `write_requests` to []: node writing is not part of this phase.
+- `write_requests` is how you choose trial writing: one writable node per key,
+  optional `feedback_wanted`. Omit a node unless you want it written; no
+  per-node trial is mandatory.
 - `user_decisions` items use
   {input_id, gap_ids, action, reason, additional_rounds?}. Actions:
   apply_to_plan (gap_ids=[] for a normal supplement such as adding a comparison
   table or reordering sections), continue_research (positive additional_rounds),
   change_scope, provide_material, no_decision. Only gap-scoped actions require
   gap_ids; never invent a gap to apply an ordinary user supplement.
+- Every open node feedback needs a `feedback_dispositions` item. A
+  `needs_research` disposition only hands the feedback to `gap_id`; it does not
+  resolve the gap or resume writing. Continue writing only after the research
+  result returns and you explicitly plan the next write.
+- Existing drafts are shown with paths/content and their generation fingerprint.
+  If a node's referenced requirement text, spec, parent, or relation context
+  changed, you must give `draft_dispositions` keep/rewrite/drop. keep confirms
+  the old draft against the new spec and records why; rewrite/drop retire it
+  from current use while history remains.
 </report-outline-mode>
+""".strip()
+
+
+REPORT_WRITER_PROMPT = """
+<report-writer-mode>
+You are the report Writer for exactly one node. The host has assigned a node
+specification, evidence locators, and one output path. Do not re-plan the whole
+report, do not search the web, do not delegate, and do not write to any other
+report path.
+
+Inputs are in `context_refs.report_packet`: the node spec, evidence material
+paths and line ranges, adjacent context, language/style requirements, and the
+host-assigned `draft_path`. Read the cited material with `read_file` before
+writing. Use only the supplied evidence; never invent a fact, citation, URL, or
+number.
+
+Write the node body to the exact host-assigned `draft_path` with `write_file`
+(UTF-8 Markdown, no outer fence). Keep citation markers as `[S<n>]` where the
+packet provides source ids. Return `artifact_content=null` when the file was
+written, and in `artifact_metadata` return `node_id`, `draft_path`, and
+`completion_status`.
+
+If the evidence or plan is insufficient, do not put a "lack of evidence"
+placeholder paragraph in the body and do not claim completion. Instead return
+`artifact_metadata.node_feedback` as a list:
+
+[{node_id, kind: "material_missing"|"spec_conflict"|"evidence_mismatch"|"other",
+  message, material_ids: [], requirement_ids: [], suggested_action}]
+
+A feedback-only result needs no draft file and is not a completed node. The
+host accepts drafts and feedback separately; the Outline decides how to revise.
+
+Return one JSON envelope: `summary` (compact), `artifact_content` (null when a
+draft file was written), `artifact_type: "node_draft"`, and `artifact_metadata`
+with `node_id`, `draft_path`, `completion_status`, and optional
+`node_feedback`. Do not wrap the envelope in prose.
+</report-writer-mode>
 """.strip()
 
 
