@@ -19,17 +19,18 @@ import deerflow.config.paths as paths_module
 from deerflow.config.app_config import AppConfig, reset_app_config, set_app_config
 from deerflow.config.paths import get_paths
 from deerflow.runtime.user_context import get_effective_user_id
-from deerflow.sandbox.tools import glob_tool, grep_tool, ls_tool, read_file_tool
+from deerflow.sandbox.tools import glob_tool, grep_tool, ls_tool, read_file_tool, write_file_tool
 from deerflow.sp.actions.handlers.base import HandlerContext
 from deerflow.sp.actions.handlers.delegate import DelegateHandler
 from deerflow.sp.actions.schema import ActionType, SPAction
+from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.memory import TaskMemoryStack
 from deerflow.sp.report import hooks
 from deerflow.sp.report import store as report_store
 from deerflow.sp.report.hooks import configure_report_subagent
 from deerflow.sp.report.ledger import ReportLedger
 from deerflow.sp.report.materials import build_fetch_material_tool
-from deerflow.sp.subagents import DR2SubagentExecutorAdapter, SPSubagentTask
+from deerflow.sp.subagents import DR2SubagentExecutorAdapter, SPSubagentResult, SPSubagentStatus, SPSubagentTask
 from deerflow.subagents import get_subagent_config
 
 
@@ -49,11 +50,11 @@ def real_executor():
             sys.modules.pop(key, None)
 
 
-def _app_config() -> AppConfig:
+def _app_config(*, supports_thinking: bool = False) -> AppConfig:
     return AppConfig.model_validate(
         {
             "sandbox": {"use": "deerflow.sandbox.local:LocalSandboxProvider"},
-            "models": [{"name": "fake-model", "use": "pkg:Cls", "model": "fake-model", "supports_thinking": False}],
+            "models": [{"name": "fake-model", "use": "pkg:Cls", "model": "fake-model", "supports_thinking": supports_thinking}],
             "summarization": {"enabled": False},
             "title": {"enabled": False},
             "memory": {"enabled": False},
@@ -103,7 +104,7 @@ def _state(tmp_path: Path) -> dict:
     return state
 
 
-def _executor_factory(state: dict, app_config: AppConfig, available_tools: list, registry_name: str, executor_module, step_observer=None):
+def _executor_factory(state: dict, app_config: AppConfig, available_tools: list, registry_name: str, executor_module, step_observer=None, thinking_enabled=None):
     base_config = get_subagent_config(registry_name, app_config=app_config)
     assert base_config is not None
 
@@ -114,7 +115,7 @@ def _executor_factory(state: dict, app_config: AppConfig, available_tools: list,
             available_tools=available_tools,
             subagent_config=base_config,
         )
-        assert role in {"outline", "researcher"}
+        assert role in {"outline", "researcher", "writer"}
         return executor_module.SubagentExecutor(
             config=report_config,
             tools=tools,
@@ -124,6 +125,7 @@ def _executor_factory(state: dict, app_config: AppConfig, available_tools: list,
             thread_id="t-e2e",
             run_id="run-e2e",
             step_observer=step_observer,
+            thinking_enabled=thinking_enabled,
         )
 
     return factory
@@ -474,3 +476,123 @@ def test_real_executor_toolnode_concurrent_material_calls_keep_both(tmp_path, mo
     assert {item["source_id"] for item in ledger.materials()} == {"S1", "S2"}
     assert {item["material_id"] for item in ledger.materials()} == {"m1", "m2"}
     assert ledger.action("a-concurrent-material")["status"] == "completed"
+
+
+def test_real_executor_writer_writes_host_path_and_disables_thinking(tmp_path, monkeypatch, real_executor):
+    app_config = _app_config(supports_thinking=True)
+    state = _state(tmp_path)
+    ctx = HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="t-e2e", run_id="run-e2e")
+    tree = {
+        "report_title": "示例公司报告",
+        "requirements": [{"id": "R1", "input_id": "u1", "text": "示例公司 FY2024 偿付能力", "hard": True}],
+        "nodes": [
+            {"node_id": "n1", "parent_id": None, "kind": "section", "title": "偿付能力"},
+            {
+                "node_id": "n2",
+                "parent_id": "n1",
+                "kind": "writable",
+                "title": "指标",
+                "question": "FY2024 指标如何？",
+                "argument": ["读取官方附注"],
+                "conclusion": "待证据",
+                "evidence": [],
+                "constraints": {"period": "FY2024"},
+                "requirement_ids": ["R1"],
+                "relations": [],
+                "gap_ids": [],
+                "status": "planned",
+            },
+        ],
+        "removed_node_ids": [],
+        "write_requests": [{"key": "w1", "node_ids": ["n2"], "feedback_wanted": True}],
+        "gap_outcomes": [],
+        "feedback_dispositions": [],
+        "draft_dispositions": [],
+        "user_decisions": [],
+    }
+    outline_action = SPAction.create(ActionType.DELEGATE, action_id="a-outline-writer", reason="plan", task="plan", target_agent="outline", stage="planning")
+    outline_meta: dict = {"stage": "planning"}
+    outline_refs: dict = {}
+    hooks.prepare_delegation(outline_action, ctx, outline_meta, outline_refs)
+    outline_task = SPSubagentTask(action_id="a-outline-writer", subagent_type="outline", task="plan", description="plan", metadata=outline_meta, context_refs=outline_refs)
+    outline_entry = ctx.stack.append_delegate("outline", thread_id="t-e2e", run_id="run-e2e", stage="planning")
+    outline_result = SPSubagentResult(
+        status=SPSubagentStatus.COMPLETED,
+        result="tree",
+        artifact_content=json.dumps(tree, ensure_ascii=False),
+        artifact_type="outline",
+        artifact_metadata={"completion_status": "complete"},
+    )
+    accepted = hooks.handle_success(outline_action, ctx, outline_result, outline_task, artifact_adapter=SPArtifactAdapter(), delegate_entry=outline_entry)
+    assert accepted.next_step == "continue", accepted.error
+
+    captured: list[dict] = []
+    writer_model = FakeToolCallingModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "write_file",
+                        "args": {
+                            "description": "write the assigned node draft",
+                            "path": "/mnt/user-data/outputs/report/r1/drafts/n2/d1.md",
+                            "content": "Node two body from the Writer.\n",
+                        },
+                        "id": "call-write",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(
+                content=json.dumps(
+                    {
+                        "summary": "draft written",
+                        "artifact_content": None,
+                        "artifact_type": "node_draft",
+                        "artifact_metadata": {
+                            "node_id": "n2",
+                            "draft_path": "/mnt/user-data/outputs/report/r1/drafts/n2/d1.md",
+                            "completion_status": "complete",
+                        },
+                    },
+                    ensure_ascii=False,
+                )
+            ),
+        ]
+    )
+    monkeypatch.setattr(real_executor, "create_chat_model", lambda **kwargs: (captured.append(kwargs), writer_model)[1])
+    from deerflow.sp.runtime import _resolve_report_role_thinking
+
+    writer_thinking = _resolve_report_role_thinking("writer", None, {}, {})
+    handler = DelegateHandler(
+        executor=DR2SubagentExecutorAdapter(
+            _executor_factory(
+                state,
+                app_config,
+                [read_file_tool, ls_tool, grep_tool, glob_tool, write_file_tool],
+                "sp-reporter",
+                real_executor,
+                thinking_enabled=writer_thinking,
+            )
+        )
+    )
+    action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-writer-e2e",
+        reason="write node",
+        task="write node n2",
+        target_agent="reporter",
+        stage="reporting",
+        metadata={"report_write_key": "w1"},
+    )
+    result = handler.handle(action, ctx)
+    assert result.next_step == "continue", result.error
+    assert captured and captured[0]["thinking_enabled"] is False
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    draft = next(item for item in ledger.payload["drafts"] if item["node_id"] == "n2")
+    assert draft["review_status"] == "open"
+    assert Path(draft["path"]).read_text(encoding="utf-8") == "Node two body from the Writer.\n"
+    assert ledger.payload["write_requests"][0]["status"] == "completed"
+    assert ledger.payload["write_requests"][0]["attempts"][0]["action_id"] == "a-writer-e2e"
