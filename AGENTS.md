@@ -77,6 +77,11 @@ or deliberate workflows, carries pinned feedback and bounded stage-artifact
 bodies across delegations, and requires an explicit artifact-family contract
 before finishing file-producing work. See `backend/AGENTS.md` for the handler,
 memory, Qwen compatibility, and live policy-evaluation details.
+The SP2.0 report capability (P1: request, materials, Outline tree, research
+gaps/rounds, and HITL continuation) lives in
+`backend/packages/harness/deerflow/sp/report/`; its ledger, file layout, and P1
+limits are documented in
+[docs/research-report/P1_IMPLEMENTATION.md](docs/research-report/P1_IMPLEMENTATION.md).
 The opt-in `/workspace/debug` execution-audit surface is backed by persisted
 run events and `GET /api/threads/{thread_id}/runs/{run_id}/debug-trace`; it
 shows explicit decisions, injected task-memory context, tool/subagent activity,
