@@ -1,0 +1,44 @@
+---
+name: report-research
+description: Use inside the StackPlanner report Researcher to answer host-assigned evidence questions, save every relied-upon fetch as a readable material, and report per-gap execution honestly without deciding whether a gap is resolved.
+---
+
+# Report Research
+
+## Boundary
+
+Execute only the evidence questions assigned by the host. The host binds the
+report id, action id, and gap ids. Do not invent identity, do not design the
+report, and do not decide whether evidence is sufficient; the Outline judges.
+
+## Work
+
+1. Read the gap briefs, their constraints and stop conditions, and the saved
+   material catalog. Reuse saved material instead of re-fetching a source.
+2. Search with `web_search` to find candidate sources.
+3. Retrieve exact URLs with `report_fetch_material(url=...)`. It invokes the
+   deployment's configured fetch tool and saves the returned text before any
+   summary. Direct `web_fetch` is not exposed to this role.
+4. Save every source you rely on, even if the search snippet looks sufficient.
+   The saved path and material id are the evidence identity.
+5. Report `upstream_truncation` honestly. A provider's returned text is not
+   necessarily the whole page.
+6. Continue across independent assigned gaps when useful. Do not claim a search
+   or fetch that did not execute. A failed fetch is a technical failure, not
+   evidence that the fact does not exist.
+
+## Output
+
+Return the normal subagent envelope. Put the complete evidence summary in
+`artifact_content` (Markdown; source URLs; material ids; locatable line ranges;
+conflicts; remaining gaps). Keep `summary` compact.
+
+In `artifact_metadata.gap_attempts`, return one item for every assigned gap:
+
+```json
+{"gap_id": "g1", "execution": "searched|not_attempted|technical_error",
+ "material_ids": ["m1"], "note": "what was executed or why not"}
+```
+
+Use `not_attempted` for untouched gaps; never claim `searched` for work that did
+not happen. Use `artifact_type: "research_observation"`.
