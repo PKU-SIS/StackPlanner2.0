@@ -7,28 +7,40 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
 from langchain.tools import tool
 from langchain_core.messages import AIMessage, HumanMessage
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _agent_e2e_helpers import FakeToolCallingModel
 
-# conftest mocks the executor module to break a circular import for lightweight
-# tests. This file exercises the real executor, so reload it explicitly.
-sys.modules.pop("deerflow.subagents.executor", None)
-executor_module = importlib.import_module("deerflow.subagents.executor")
+from deerflow.config.app_config import AppConfig
+from deerflow.sandbox.tools import glob_tool, grep_tool, ls_tool, read_file_tool
+from deerflow.sp.actions.handlers.base import HandlerContext
+from deerflow.sp.actions.handlers.delegate import DelegateHandler
+from deerflow.sp.actions.schema import ActionType, SPAction
+from deerflow.sp.memory import TaskMemoryStack
+from deerflow.sp.report import hooks
+from deerflow.sp.report.hooks import configure_report_subagent
+from deerflow.sp.report.ledger import ReportLedger
+from deerflow.sp.subagents import DR2SubagentExecutorAdapter, SPSubagentTask
+from deerflow.subagents import get_subagent_config
 
-from deerflow.config.app_config import AppConfig  # noqa: E402
-from deerflow.sandbox.tools import glob_tool, grep_tool, ls_tool, read_file_tool  # noqa: E402
-from deerflow.sp.actions.handlers.base import HandlerContext  # noqa: E402
-from deerflow.sp.actions.handlers.delegate import DelegateHandler  # noqa: E402
-from deerflow.sp.actions.schema import ActionType, SPAction  # noqa: E402
-from deerflow.sp.memory import TaskMemoryStack  # noqa: E402
-from deerflow.sp.report import hooks  # noqa: E402
-from deerflow.sp.report.hooks import configure_report_subagent  # noqa: E402
-from deerflow.sp.report.ledger import ReportLedger  # noqa: E402
-from deerflow.sp.subagents import DR2SubagentExecutorAdapter, SPSubagentTask  # noqa: E402
-from deerflow.subagents import get_subagent_config  # noqa: E402
+
+@pytest.fixture()
+def real_executor():
+    """Load the real executor for this test and restore conftest's module mock."""
+    key = "deerflow.subagents.executor"
+    original = sys.modules.get(key)
+    sys.modules.pop(key, None)
+    module = importlib.import_module(key)
+    try:
+        yield module
+    finally:
+        if original is not None:
+            sys.modules[key] = original
+        else:
+            sys.modules.pop(key, None)
 
 
 def _app_config() -> AppConfig:
@@ -62,7 +74,7 @@ def _state(tmp_path: Path) -> dict:
     return state
 
 
-def _executor_factory(state: dict, app_config: AppConfig, available_tools: list, registry_name: str):
+def _executor_factory(state: dict, app_config: AppConfig, available_tools: list, registry_name: str, executor_module):
     base_config = get_subagent_config(registry_name, app_config=app_config)
     assert base_config is not None
 
@@ -87,7 +99,7 @@ def _executor_factory(state: dict, app_config: AppConfig, available_tools: list,
     return factory
 
 
-def _install_fake_model(monkeypatch, model) -> None:
+def _install_fake_model(monkeypatch, model, executor_module) -> None:
     monkeypatch.setattr(executor_module, "create_chat_model", lambda **kwargs: model)
 
 
@@ -164,11 +176,11 @@ def _outline_model() -> FakeToolCallingModel:
     )
 
 
-def test_real_executor_outline_registers_gap_before_tree_is_accepted(tmp_path, monkeypatch):
+def test_real_executor_outline_registers_gap_before_tree_is_accepted(tmp_path, monkeypatch, real_executor):
     app_config = _app_config()
     state = _state(tmp_path)
-    _install_fake_model(monkeypatch, _outline_model())
-    handler = DelegateHandler(executor=DR2SubagentExecutorAdapter(_executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool], "sp-outline")))
+    _install_fake_model(monkeypatch, _outline_model(), real_executor)
+    handler = DelegateHandler(executor=DR2SubagentExecutorAdapter(_executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool], "sp-outline", real_executor)))
     action = SPAction.create(ActionType.DELEGATE, action_id="a-outline-e2e", reason="plan", task="plan the report", target_agent="outline", stage="planning")
     ctx = HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="t-e2e", run_id="run-e2e")
     result = handler.handle(action, ctx)
@@ -180,11 +192,11 @@ def test_real_executor_outline_registers_gap_before_tree_is_accepted(tmp_path, m
     assert (tmp_path / "outputs" / "report" / "r1" / "tree" / "1.json").exists()
 
 
-def test_real_executor_researcher_saves_tool_return_and_charges_one_round(tmp_path, monkeypatch):
+def test_real_executor_researcher_saves_tool_return_and_charges_one_round(tmp_path, monkeypatch, real_executor):
     app_config = _app_config()
     state = _state(tmp_path)
-    _install_fake_model(monkeypatch, _outline_model())
-    outline_handler = DelegateHandler(executor=DR2SubagentExecutorAdapter(_executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool], "sp-outline")))
+    _install_fake_model(monkeypatch, _outline_model(), real_executor)
+    outline_handler = DelegateHandler(executor=DR2SubagentExecutorAdapter(_executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool], "sp-outline", real_executor)))
     outline_action = SPAction.create(ActionType.DELEGATE, action_id="a-outline-e2e", reason="plan", task="plan", target_agent="outline", stage="planning")
     ctx = HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="t-e2e", run_id="run-e2e")
     assert outline_handler.handle(outline_action, ctx).error is None
@@ -230,8 +242,9 @@ def test_real_executor_researcher_saves_tool_return_and_charges_one_round(tmp_pa
                 ),
             ]
         ),
+        real_executor,
     )
-    researcher_handler = DelegateHandler(executor=DR2SubagentExecutorAdapter(_executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool, controlled_search, controlled_fetch], "sp-researcher")))
+    researcher_handler = DelegateHandler(executor=DR2SubagentExecutorAdapter(_executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool, controlled_search, controlled_fetch], "sp-researcher", real_executor)))
     researcher_action = SPAction.create(
         ActionType.DELEGATE,
         action_id="a-research-e2e",
