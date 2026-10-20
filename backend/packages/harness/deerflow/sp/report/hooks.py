@@ -48,8 +48,8 @@ your model call. Do not edit the ledger by writing files. Use gap ids exactly.
 Follow each gap's next_action: open -> delegate researcher with
 metadata.report_gap_ids; awaiting_outline -> delegate outline; awaiting_user ->
 sp_ask_human with metadata.report_gap_ids; in_flight -> wait. After an Outline
-result, inspect the returned tree version and gap changes. P1 has no final report;
-sp_finish is blocked while a report is active.
+result, inspect the returned tree version and gap changes. P1/P2 have no final
+report; sp_finish is blocked while a report is active.
 </report-control>
 """.strip()
 
@@ -349,7 +349,7 @@ def configure_report_subagent(
     if task.metadata.get("report_id") != report.report_id:
         raise ReportValidationError("report delegation identity does not match the active report")
     if role == "reporter":
-        raise ReportValidationError("P1 report mode has no Writer/reporter configuration")
+        raise ReportValidationError("reporter must be bound as a writer delegation with report_write_key")
     paths = report_store.ReportPaths(report.outputs_path, report.report_id)  # type: ignore[arg-type]
     tools_by_name = {str(getattr(tool, "name", "")): tool for tool in available_tools}
     if role == "outline":
@@ -1097,8 +1097,8 @@ def finish_block_reason(context: HandlerContext) -> str | None:
         return f"Report ledger cannot be read: {exc}"
     reason = ledger.block_finish_reason()
     if reason:
-        return f"Active report cannot be delivered in P1: {reason}"
-    return "Active report has no accepted final report path in P1; sp_finish is not available."
+        return f"Active report cannot be delivered in P1/P2: {reason}"
+    return "Active report has no accepted final report path in P1/P2; sp_finish is not available."
 
 
 def control_context(state: Mapping[str, Any] | None) -> dict[str, Any] | None:

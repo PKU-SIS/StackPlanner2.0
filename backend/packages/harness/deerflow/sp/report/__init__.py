@@ -1,4 +1,4 @@
-"""SP2.0 report capability (P1: materials -> outline -> research -> user loop)."""
+"""SP2.0 report capability (P1 research loop + P2 node drafts/feedback)."""
 
 from deerflow.sp.report.context import SPReportContextMiddleware
 from deerflow.sp.report.hooks import (
