@@ -226,6 +226,22 @@ def _tool_execution_ok(tool_name: str, content: str) -> bool:
     return not text.lower().startswith("error:")
 
 
+def _resolve_report_role_thinking(
+    report_role: str,
+    inherited: bool | None,
+    context: Mapping[str, Any],
+    configurable: Mapping[str, Any],
+) -> bool | None:
+    """Resolve thinking for one report role; Writer is explicit, others inherit."""
+    value = inherited
+    raw = context.get(f"sp_report_{report_role}_thinking_enabled", configurable.get(f"sp_report_{report_role}_thinking_enabled"))
+    if raw is not None:
+        value = raw.strip().lower() in {"1", "true", "yes", "on"} if isinstance(raw, str) else bool(raw)
+    if report_role == "writer":
+        value = False
+    return value
+
+
 def _apply_task_skill_policy(
     subagent_config: Any,
     task: SPSubagentTask,
@@ -464,15 +480,12 @@ class DR2SPExecutorProvider:
                 )
                 subagent_config = _apply_sp_stage_tool_policy(subagent_config, task)
             if report_role:
-                raw_report_thinking = context.get(
-                    f"sp_report_{report_role}_thinking_enabled",
-                    configurable.get(f"sp_report_{report_role}_thinking_enabled"),
+                subagent_thinking_enabled = _resolve_report_role_thinking(
+                    report_role,
+                    subagent_thinking_enabled,
+                    context,
+                    configurable,
                 )
-                if raw_report_thinking is not None:
-                    if isinstance(raw_report_thinking, str):
-                        subagent_thinking_enabled = raw_report_thinking.strip().lower() in {"1", "true", "yes", "on"}
-                    else:
-                        subagent_thinking_enabled = bool(raw_report_thinking)
                 # Record the actual role setting so real-provider verification
                 # can distinguish inherited settings from an explicit choice.
                 task.metadata["thinking_enabled"] = subagent_thinking_enabled

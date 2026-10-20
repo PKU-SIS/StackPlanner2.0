@@ -24,6 +24,7 @@ from deerflow.sp.memory import StackMemoryEntry
 from deerflow.sp.report import packets as report_packets
 from deerflow.sp.report import store as report_store
 from deerflow.sp.report import tree as report_tree
+from deerflow.sp.report import writing as report_writing
 from deerflow.sp.report.ledger import (
     ACTIVE_GAP_STATUSES,
     ReportLedger,
@@ -32,12 +33,12 @@ from deerflow.sp.report.ledger import (
     utc_now_iso,
 )
 from deerflow.sp.report.materials import build_fetch_material_tool
-from deerflow.sp.report.prompts import REPORT_OUTLINE_PROMPT, REPORT_RESEARCH_PROMPT
+from deerflow.sp.report.prompts import REPORT_OUTLINE_PROMPT, REPORT_RESEARCH_PROMPT, REPORT_WRITER_PROMPT
 from deerflow.sp.report.tools import build_register_research_request_tool
 from deerflow.sp.subagents import SPSubagentResult, SPSubagentTask
 from deerflow.utils.messages import message_to_text
 
-REPORT_DELEGATE_ROLES = frozenset({"outline", "researcher", "reporter"})
+REPORT_DELEGATE_ROLES = frozenset({"outline", "researcher", "reporter", "writer"})
 REPORT_READ_TOOLS = ("read_file", "grep", "glob", "ls")
 REPORT_CONTEXT_MESSAGE_NAME = "sp_report_context"
 CONTEXT_INSTRUCTIONS = """
@@ -259,9 +260,40 @@ def prepare_delegation(
         # Unrelated work proceeds through the ordinary role path; report work
         # must start a new report or explicitly resume the delivered one first.
         return
-    if role == "reporter":
-        raise ReportValidationError("P1 report mode has no Writer/reporter delegation; delegate to outline or researcher")
     paths = _paths_for_context(report)
+    if role == "reporter":
+        key = str(task_metadata.get("report_write_key") or action.metadata.get("report_write_key") or "").strip()
+        if not key:
+            raise ReportValidationError("report Writer delegation requires metadata.report_write_key")
+        with report_store.report_lock(paths):
+            ledger = ReportLedger.load(paths)
+            request = report_writing.require_write_request(ledger, key)
+            node_ids = list(request.get("node_ids") or [])
+            if len(node_ids) != 1:
+                raise ReportValidationError(f"write request {key} must target exactly one node")
+            attempt = report_writing.begin_writer_attempt(ledger, key, action_id=action.action_id, node_id=str(node_ids[0]))
+            basis = report_packets.writer_basis(ledger, str(node_ids[0]))
+            packet = report_packets.build_writer_packet(
+                ledger,
+                write_key=key,
+                node_id=str(node_ids[0]),
+                draft_virtual_path=attempt["virtual_path"],
+                basis=basis,
+                prior_draft=attempt.get("prior_draft"),
+            )
+            ledger.save()
+        task_metadata["report_id"] = report.report_id
+        task_metadata["report_role"] = "writer"
+        task_metadata["report_delegate_action_id"] = action.action_id
+        task_metadata["report_write_key"] = key
+        task_metadata["report_node_id"] = str(node_ids[0])
+        task_metadata["report_draft_id"] = attempt["draft_id"]
+        task_metadata["report_draft_path"] = attempt["virtual_path"]
+        task_metadata["report_draft_basis"] = basis
+        context_refs["report_packet"] = packet
+        return
+    if role == "writer":
+        raise ReportValidationError("writer binding must come from a reporter delegation with report_write_key")
     if role == "researcher":
         raw_gap_ids = task_metadata.get("report_gap_ids", action.metadata.get("report_gap_ids"))
         gap_ids = _normalize_report_gap_ids(raw_gap_ids)
@@ -334,6 +366,18 @@ def configure_report_subagent(
         )
         return config, [*available_tools, register_tool], role
 
+    if role == "writer":
+        if "write_file" not in tools_by_name:
+            raise ReportValidationError("report Writer requires a configured write_file tool")
+        selected = [tools_by_name[name] for name in [*REPORT_READ_TOOLS, "write_file"] if name in tools_by_name]
+        config = replace(
+            subagent_config,
+            system_prompt=REPORT_WRITER_PROMPT,
+            tools=[str(getattr(tool, "name", "")) for tool in selected],
+            skills=["report-node-writing"],
+        )
+        return config, list(available_tools), role
+
     fetch_tool = tools_by_name.get("web_fetch")
     if fetch_tool is None:
         raise ReportValidationError("report research requires a configured web_fetch tool")
@@ -375,6 +419,8 @@ def handle_success(
         return _accept_outline(action, context, result, task, artifact_adapter=artifact_adapter, delegate_entry=delegate_entry)
     if role == "researcher":
         return _accept_research(action, context, result, task, artifact_adapter=artifact_adapter, delegate_entry=delegate_entry)
+    if role == "writer":
+        return _accept_writer(action, context, result, task, artifact_adapter=artifact_adapter, delegate_entry=delegate_entry)
     return None
 
 
@@ -384,6 +430,24 @@ def handle_failure(
     result: SPSubagentResult,
     task: SPSubagentTask,
 ) -> None:
+    if str(task.metadata.get("report_role") or "") == "writer":
+        key = str(task.metadata.get("report_write_key") or "")
+        report = report_context(context.state)
+        if report.is_active:
+            try:
+                paths = _paths_for_context(report)
+                with report_store.report_lock(paths):
+                    ledger = ReportLedger.load(paths)
+                    report_writing.fail_writer_attempt(
+                        ledger,
+                        key=key,
+                        action_id=action.action_id,
+                        error=result.error or f"writer delegation failed: {result.status.value}",
+                    )
+                    ledger.save()
+            except Exception:  # noqa: BLE001 - preserve the real execution error
+                pass
+        return
     if str(task.metadata.get("report_role") or "") != "researcher":
         return
     report = report_context(context.state)
@@ -412,6 +476,215 @@ def fail_delegation_action(state: Mapping[str, Any] | None, action_id: str, erro
             ledger.save()
     except Exception:  # noqa: BLE001 - the original execution error is more useful
         return
+
+
+def _accept_writer(
+    action: SPAction,
+    context: HandlerContext,
+    result: SPSubagentResult,
+    task: SPSubagentTask,
+    *,
+    artifact_adapter: SPArtifactAdapter,
+    delegate_entry: StackMemoryEntry,
+) -> HandlerResult:
+    context_info = active_report_required(context.state)
+    paths = _paths_for_context(context_info)
+    with report_store.report_lock(paths):
+        return _accept_writer_locked(
+            action,
+            context,
+            result,
+            task,
+            artifact_adapter=artifact_adapter,
+            delegate_entry=delegate_entry,
+        )
+
+
+def _accept_writer_locked(
+    action: SPAction,
+    context: HandlerContext,
+    result: SPSubagentResult,
+    task: SPSubagentTask,
+    *,
+    artifact_adapter: SPArtifactAdapter,
+    delegate_entry: StackMemoryEntry,
+) -> HandlerResult:
+    ledger = ledger_for_state(context.state)
+    key = str(task.metadata.get("report_write_key") or "")
+    node_id = str(task.metadata.get("report_node_id") or "")
+    draft_id = str(task.metadata.get("report_draft_id") or "")
+    virtual_path = str(task.metadata.get("report_draft_path") or "")
+    basis = task.metadata.get("report_draft_basis") if isinstance(task.metadata.get("report_draft_basis"), Mapping) else {}
+    if not key or not node_id or not draft_id or not virtual_path:
+        return _rejection(action, context, "Writer delegation is missing host draft identity.", reason="writer_binding_missing")
+    feedback_items = result.artifact_metadata.get("node_feedback")
+    try:
+        if feedback_items:
+            if not isinstance(feedback_items, list):
+                raise ReportValidationError("node_feedback must be a list")
+            records = report_writing.record_writer_feedback(
+                ledger,
+                key=key,
+                action_id=action.action_id,
+                node_id=node_id,
+                feedback_items=feedback_items,
+            )
+            ledger.save()
+            observe_content = json.dumps(
+                {
+                    "report_id": ledger.paths.report_id,
+                    "write_key": key,
+                    "node_id": node_id,
+                    "draft_accepted": False,
+                    "feedback": [{"feedback_id": item["feedback_id"], "kind": item["kind"]} for item in records],
+                    "next_action": "delegate_outline",
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            entry = context.stack.append_observe(
+                observe_content,
+                actor="writer",
+                thread_id=context.thread_id,
+                run_id=context.run_id,
+                stage=action.stage,
+                priority="high",
+                metadata={
+                    "action_id": action.action_id,
+                    "target_agent": "reporter",
+                    "completion_status": "partial",
+                    "report_id": ledger.paths.report_id,
+                    "report_role": "writer",
+                    "report_write_key": key,
+                },
+            )
+            return HandlerResult(
+                next_step="continue",
+                state_update={"sp_active_delegate_id": None, "sp_current_stage": action.stage or "reporting"},
+                memory_entries=[delegate_entry, entry],
+                idempotency_key=action.idempotency_key,
+                run_events=[
+                    make_sp_event("sp.delegate.completed", action_id=action.action_id, run_id=context.run_id, target_agent="reporter", completion_status="partial"),
+                    make_sp_event("sp.report.node_feedback_recorded", action_id=action.action_id, run_id=context.run_id, report_id=ledger.paths.report_id, write_key=key, feedback_ids=[item["feedback_id"] for item in records]),
+                ],
+            )
+
+        completion_status = str(result.artifact_metadata.get("completion_status") or "complete").strip().lower()
+        if completion_status != "complete":
+            raise ReportValidationError(f"Writer returned completion_status={completion_status} without node_feedback")
+        declared_path = str(result.artifact_metadata.get("draft_path") or "").strip()
+        if declared_path and declared_path != virtual_path:
+            raise ReportValidationError("Writer returned a draft_path that does not match the host-assigned path")
+        host_path = ledger.paths.draft_file(node_id, draft_id)
+        if not host_path.exists():
+            raise ReportValidationError(f"Writer did not create the host-assigned draft: {virtual_path}")
+        content = host_path.read_text(encoding="utf-8")
+        if not content.strip():
+            raise ReportValidationError("Writer draft is empty")
+        if len(content) > 2_000_000:
+            raise ReportValidationError("Writer draft exceeds the P2 draft size bound")
+        artifact = artifact_adapter.register_existing_artifact(
+            virtual_path,
+            artifact_type="node_draft",
+            state=context.state,
+            thread_id=context.thread_id,
+            run_id=context.run_id,
+            created_by="writer",
+            stage=action.stage,
+            source_entry_id=delegate_entry.id,
+            summary=f"Node draft {draft_id} for {node_id}",
+            metadata={
+                "report_id": ledger.paths.report_id,
+                "write_key": key,
+                "node_id": node_id,
+                "draft_id": draft_id,
+                "report_delegate_action_id": action.action_id,
+            },
+        )
+        draft = report_writing.accept_draft(
+            ledger,
+            key=key,
+            action_id=action.action_id,
+            node_id=node_id,
+            draft_id=draft_id,
+            virtual_path=virtual_path,
+            host_path=str(host_path),
+            content=content,
+            basis=basis,
+            feedback_wanted=bool(report_writing.require_write_request(ledger, key).get("feedback_wanted")),
+        )
+        ledger.save()
+    except ReportValidationError as exc:
+        report_writing.fail_writer_attempt(ledger, key=key, action_id=action.action_id, error=str(exc))
+        try:
+            ledger.save()
+        except Exception:  # noqa: BLE001 - preserve the rejection
+            pass
+        return _rejection(action, context, f"Writer result rejected: {exc}", reason="invalid_writer_result")
+    except Exception as exc:  # noqa: BLE001 - persistence boundary must surface a technical fault
+        report_writing.fail_writer_attempt(ledger, key=key, action_id=action.action_id, error=f"{type(exc).__name__}: {exc}")
+        try:
+            ledger.save()
+        except Exception:  # noqa: BLE001 - preserve the original fault
+            pass
+        return _rejection(action, context, f"Writer acceptance failed: {type(exc).__name__}: {exc}", reason="writer_acceptance_failed")
+
+    observe_content = json.dumps(
+        {
+            "report_id": ledger.paths.report_id,
+            "write_key": key,
+            "node_id": node_id,
+            "draft_id": draft["draft_id"],
+            "draft_path": draft["virtual_path"],
+            "review_required": bool(draft.get("review_status") == "open"),
+            "writes_pending": list(ledger.payload.get("writes_pending") or []),
+            "next_action": "delegate_outline" if draft.get("review_status") == "open" else "continue",
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    entry = context.stack.append_observe(
+        observe_content,
+        actor="writer",
+        thread_id=context.thread_id,
+        run_id=context.run_id,
+        stage=action.stage,
+        priority="high" if draft.get("review_status") == "open" else action.priority,
+        result_ref=artifact.metadata.artifact_id,
+        metadata={
+            "action_id": action.action_id,
+            "target_agent": "reporter",
+            "completion_status": "complete",
+            "report_id": ledger.paths.report_id,
+            "report_role": "writer",
+            "report_write_key": key,
+            "draft_id": draft["draft_id"],
+            "draft_review_due": draft.get("review_status") == "open",
+        },
+    )
+    state_update = _artifact_state_update(artifact.state_update)
+    state_update.update({"sp_active_delegate_id": None, "sp_current_stage": action.stage or "reporting"})
+    return HandlerResult(
+        next_step="continue",
+        state_update=state_update,
+        memory_entries=[delegate_entry, entry],
+        artifact_refs=state_update.get("sp_current_artifact_refs") or {},
+        idempotency_key=action.idempotency_key,
+        run_events=[
+            make_sp_event("sp.delegate.completed", action_id=action.action_id, run_id=context.run_id, target_agent="reporter", completion_status="complete"),
+            make_sp_event(
+                "sp.report.draft_accepted",
+                action_id=action.action_id,
+                run_id=context.run_id,
+                report_id=ledger.paths.report_id,
+                write_key=key,
+                node_id=node_id,
+                draft_id=draft["draft_id"],
+                review_required=draft.get("review_status") == "open",
+            ),
+            make_sp_event("sp.artifact.created", action_id=action.action_id, run_id=context.run_id, artifact_id=artifact.metadata.artifact_id, artifact_type="node_draft", virtual_path=artifact.metadata.virtual_path),
+        ],
+    )
 
 
 def _accept_outline(
@@ -453,6 +726,10 @@ def _accept_outline_locked(
         tree = report_tree.validate_tree(payload, ledger)
         user_decisions = ledger.apply_user_decisions(tree.get("user_decisions") or [])
         gap_outcomes = ledger.apply_gap_outcomes(tree.get("gap_outcomes") or [])
+        fingerprints = report_tree.node_fingerprints(tree)
+        feedback_disposed = report_writing.apply_feedback_dispositions(ledger, tree)
+        draft_disposed = report_writing.apply_draft_dispositions(ledger, tree, fingerprints)
+        write_requests = report_writing.apply_write_requests(ledger, tree)
         candidate, version, tree_path = report_tree.write_tree_candidate(tree, ledger)
         artifact = artifact_adapter.write_text_artifact(
             json.dumps(candidate, ensure_ascii=False, indent=2),
@@ -487,6 +764,9 @@ def _accept_outline_locked(
             "nodes": [node.get("node_id") for node in candidate.get("nodes") or []],
             "gap_outcomes": gap_outcomes,
             "user_decisions": user_decisions,
+            "feedback_disposed": feedback_disposed,
+            "draft_disposed": draft_disposed,
+            "write_requests": write_requests,
             "open_gaps": gap_summary,
             "material_catalog_path": ledger.paths.virtual(ledger.paths.catalog),
         },

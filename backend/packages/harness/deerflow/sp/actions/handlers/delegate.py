@@ -1717,6 +1717,14 @@ def _prepare_partial_report_retry(
     state: Mapping[str, Any],
 ) -> None:
     """Turn a corrective retry of an incomplete report into a real revision."""
+    try:
+        from deerflow.sp.report import report_context
+
+        if report_context(state).is_active:
+            # P2 node writing is not the legacy whole-report retry path.
+            return
+    except Exception:  # noqa: BLE001 - non-report behavior stays unchanged
+        pass
     revision_reason = action.metadata.get("revision_reason")
     if isinstance(revision_reason, str) and revision_reason.strip():
         return
@@ -1799,6 +1807,13 @@ def _is_unrequested_report_revision(action: SPAction, state: Mapping[str, Any], 
     """Prevent model drift from creating report versions without new intent."""
     if action.target_agent != "reporter":
         return False
+    try:
+        from deerflow.sp.report import report_context
+
+        if report_context(state).is_active:
+            return False
+    except Exception:  # noqa: BLE001 - non-report behavior stays unchanged
+        pass
     revision_reason = action.metadata.get("revision_reason")
     if isinstance(revision_reason, str) and revision_reason.strip():
         return False
