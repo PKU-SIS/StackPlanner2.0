@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from langchain.tools import tool
@@ -174,3 +176,76 @@ def test_known_truncation_marker_is_reported(tmp_path):
     assert payload["saved"] is True
     assert payload["upstream_truncation"] is True
     assert payload["content_scope"] == "fetch_tool_return"
+
+
+def test_async_fetch_tool_is_supported(tmp_path):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+
+    @tool("web_fetch")
+    async def async_fetch(url: str) -> str:
+        """Fetch a URL asynchronously."""
+        await asyncio.sleep(0)
+        return "async page body"
+
+    material_tool = _tool_for(_paths(ctx), async_fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/async"))
+    assert payload["saved"] is True
+    assert Path(payload["path"].replace("/mnt/user-data/outputs", str(tmp_path))).read_text(encoding="utf-8") == "async page body"
+
+
+def test_async_fetch_tool_works_inside_a_running_loop(tmp_path):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+
+    @tool("web_fetch")
+    async def async_fetch(url: str) -> str:
+        """Fetch a URL asynchronously."""
+        await asyncio.sleep(0)
+        return "loop page body"
+
+    material_tool = _tool_for(_paths(ctx), async_fetch)
+
+    async def call_from_loop() -> dict:
+        return json.loads(material_tool.func(url="https://example.com/loop"))
+
+    payload = asyncio.run(call_from_loop())
+    assert payload["saved"] is True
+
+
+def test_async_jina_style_provider_marks_truncation(tmp_path):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+
+    @tool("web_fetch")
+    async def async_fetch(url: str) -> str:
+        """Fetch a URL asynchronously."""
+        return "jina body"
+
+    async_fetch.coroutine.__module__ = "deerflow.community.jina_ai.tools"
+    material_tool = _tool_for(_paths(ctx), async_fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/jina"))
+    assert payload["saved"] is True
+    assert payload["upstream_truncation"] is True
+
+
+def test_concurrent_material_calls_keep_both_identities(tmp_path):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    material_tool = _tool_for(_paths(ctx), _short_fetch)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(
+            executor.map(
+                lambda url: json.loads(material_tool.func(url=url)),
+                ["https://example.com/a", "https://example.com/b"],
+            )
+        )
+    assert all(item["saved"] for item in results)
+    assert {item["source_id"] for item in results} == {"S1", "S2"}
+    assert {item["material_id"] for item in results} == {"m1", "m2"}
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert len(ledger.payload["sources"]) == 2
+    assert len(ledger.materials()) == 2
+    catalog = (tmp_path / "report" / "r1" / "materials" / "catalog.md").read_text(encoding="utf-8")
+    assert "m1" in catalog and "m2" in catalog

@@ -53,6 +53,16 @@ Return the complete tree JSON in `artifact_content`:
 - Every previous node that is removed must be listed in `removed_node_ids`.
 - P1 does not write nodes: leave `write_requests` empty.
 
+## User Inputs
+
+A normal supplement such as "add a comparison table" or "reorder sections" is
+applied through `user_decisions` with `action: "apply_to_plan"` and
+`gap_ids: []`; the tree itself records the resulting changes. Do not invent a
+gap for it. Gap-scoped actions (`continue_research`, `change_scope`,
+`provide_material`, `no_decision`) require the relevant `gap_ids` and a reason.
+`continue_research` requires a positive `additional_rounds`. All decisions must
+reference an existing `input_id`.
+
 ## Judge Returned Results
 
 Every research result arrives as `awaiting_outline`. On the next accepted

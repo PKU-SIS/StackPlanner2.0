@@ -8,7 +8,10 @@ source/material identities in the report ledger.
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
 import json
+import threading
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -49,12 +52,13 @@ def _provider_scope(fetch_tool: Any, text: str) -> tuple[str, Any]:
     """Return ``(content_scope, upstream_truncation)`` for one fetch return."""
     module = ""
     for candidate in (
-        type(fetch_tool).__module__,
-        getattr(getattr(fetch_tool, "func", None), "__module__", ""),
-        getattr(getattr(fetch_tool, "coroutine", None), "__module__", ""),
+        getattr(fetch_tool, "coroutine", None),
+        getattr(fetch_tool, "func", None),
+        type(fetch_tool),
     ):
-        if isinstance(candidate, str) and candidate:
-            module = candidate
+        candidate_module = getattr(candidate, "__module__", "")
+        if isinstance(candidate_module, str) and candidate_module and candidate_module != "langchain_core.tools.structured":
+            module = candidate_module
             break
     if "jina_ai" in module:
         return "fetch_tool_return", True
@@ -80,9 +84,40 @@ def _is_transport_error(value: Any) -> str | None:
     return None
 
 
+def _run_coroutine_sync(factory: Any) -> Any:
+    """Run an async tool coroutine from a sync tool without nested-loop errors."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(factory())
+
+    result: dict[str, Any] = {}
+    context = contextvars.copy_context()
+
+    def runner() -> None:
+        try:
+            result["value"] = context.run(asyncio.run, factory())
+        except BaseException as exc:  # noqa: BLE001 - re-raised in caller thread
+            result["error"] = exc
+
+    thread = threading.Thread(target=runner, name="report-fetch-async", daemon=True)
+    thread.start()
+    thread.join()
+    error = result.get("error")
+    if error is not None:
+        raise error
+    return result.get("value")
+
+
 def invoke_fetch_tool(fetch_tool: Any, url: str) -> Any:
-    """Invoke the configured fetch tool through its standard tool interface."""
-    return fetch_tool.invoke({"url": url})
+    """Invoke the configured fetch tool through its standard sync/async interface."""
+    coroutine = getattr(fetch_tool, "coroutine", None)
+    if callable(coroutine):
+        return _run_coroutine_sync(lambda: fetch_tool.ainvoke({"url": url}))
+    func = getattr(fetch_tool, "func", None)
+    if callable(func) or hasattr(fetch_tool, "invoke"):
+        return fetch_tool.invoke({"url": url})
+    raise TypeError("configured web_fetch tool exposes neither a sync nor async interface")
 
 
 def _source_for_url(ledger: ReportLedger, normalized_url: str, *, url: str, title: str | None) -> dict[str, Any]:
@@ -150,80 +185,106 @@ def build_fetch_material_tool(
         try:
             raw = invoke_fetch_tool(fetch_tool, str(url).strip())
         except Exception as exc:  # noqa: BLE001 - transport failure is data, not a tool crash
-            ledger.record_tool_execution(action_id, tool="report_fetch_material", ok=False, detail=f"{type(exc).__name__}: {exc}")
-            ledger.save()
-            return json.dumps(
-                {"saved": False, "error": f"fetch_failed: {type(exc).__name__}: {exc}", "url": url},
-                ensure_ascii=False,
+            return _record_material_failure(
+                paths,
+                action_id,
+                f"fetch_failed: {type(exc).__name__}: {exc}",
+                url=str(url).strip(),
             )
 
         error = _is_transport_error(raw)
         if error is not None:
-            ledger.record_tool_execution(action_id, tool="report_fetch_material", ok=False, detail=error)
-            ledger.save()
-            return json.dumps({"saved": False, "error": f"fetch_failed: {error}", "url": url}, ensure_ascii=False)
+            return _record_material_failure(paths, action_id, f"fetch_failed: {error}", url=str(url).strip())
 
         text = str(raw)
         if len(text) > MATERIAL_MAX_CHARS:
-            ledger.record_tool_execution(action_id, tool="report_fetch_material", ok=False, detail="material exceeded the maximum saved size")
-            ledger.save()
-            return json.dumps({"saved": False, "error": "fetch return exceeded the maximum saveable size", "chars": len(text)}, ensure_ascii=False)
+            return _record_material_failure(
+                paths,
+                action_id,
+                "fetch return exceeded the maximum saveable size",
+                url=str(url).strip(),
+            )
 
         content_sha = report_store.sha256_text(text)
         try:
-            source = _source_for_url(ledger, normalized, url=str(url).strip(), title=str(title).strip() if isinstance(title, str) and title.strip() else None)
-            source_id = str(source["source_id"])
-            existing = _existing_material(ledger, source_id, content_sha)
-            if existing is not None:
-                ledger.record_tool_execution(action_id, tool="report_fetch_material", ok=True, detail=f"reused {existing.get('material_id')}")
+            with report_store.report_lock(paths):
+                ledger = ReportLedger.load(paths)
+                action = ledger.action(action_id)
+                if action is None:
+                    return json.dumps({"saved": False, "error": f"research action was not begun: {action_id}"}, ensure_ascii=False)
+                if action.get("status") != "in_flight":
+                    return json.dumps(
+                        {"saved": False, "error": f"research action is no longer accepting materials: {action.get('status')}"},
+                        ensure_ascii=False,
+                    )
+                source = _source_for_url(ledger, normalized, url=str(url).strip(), title=str(title).strip() if isinstance(title, str) and title.strip() else None)
+                source_id = str(source["source_id"])
+                existing = _existing_material(ledger, source_id, content_sha)
+                if existing is not None:
+                    ledger.record_tool_execution(action_id, tool="report_fetch_material", ok=True, detail=f"reused {existing.get('material_id')}")
+                    ledger.save()
+                    return json.dumps(
+                        _material_payload(existing, duplicate_of=str(existing.get("material_id")), preview=str(existing.get("preview") or "")),
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+
+                material_id = ledger.next_material_id()
+                path = paths.material_file(source_id, content_sha)
+                report_store.write_text_atomic(path, text)
+                read_back = path.read_text(encoding="utf-8")
+                if read_back != text:
+                    raise OSError("material verification failed: file content differs from tool return")
+
+                preview = " ".join(text.split())[:MATERIAL_PREVIEW_CHARS]
+                content_scope, upstream_truncation = _provider_scope(fetch_tool, text)
+                material = {
+                    "material_id": material_id,
+                    "source_id": source_id,
+                    "url": str(url).strip(),
+                    "normalized_url": normalized,
+                    "title": str(title).strip() if isinstance(title, str) and title.strip() else source.get("title"),
+                    "locator_note": str(locator_note).strip() if isinstance(locator_note, str) and locator_note.strip() else None,
+                    "path": str(path),
+                    "virtual_path": paths.virtual(path),
+                    "chars": len(text),
+                    "lines": report_store.line_count(text),
+                    "sha256": content_sha,
+                    "content_scope": content_scope,
+                    "upstream_truncation": upstream_truncation,
+                    "preview": preview,
+                    "fetched_at": utc_now_iso(),
+                    "action_id": action_id,
+                    "gap_ids": list(gap_ids),
+                }
+                ledger.payload.setdefault("materials", []).append(material)
+                ledger.record_tool_execution(action_id, tool="report_fetch_material", ok=True, detail=f"saved {material_id}")
                 ledger.save()
-                return json.dumps(
-                    _material_payload(existing, duplicate_of=str(existing.get("material_id")), preview=str(existing.get("preview") or "")),
-                    ensure_ascii=False,
-                    indent=2,
-                )
-
-            material_id = ledger.next_material_id()
-            path = paths.material_file(source_id, content_sha)
-            report_store.write_text_atomic(path, text)
-            read_back = path.read_text(encoding="utf-8")
-            if read_back != text:
-                return json.dumps({"saved": False, "error": "material verification failed: file content differs from tool return"}, ensure_ascii=False)
-
-            preview = " ".join(text.split())[:MATERIAL_PREVIEW_CHARS]
-            content_scope, upstream_truncation = _provider_scope(fetch_tool, text)
-            material = {
-                "material_id": material_id,
-                "source_id": source_id,
-                "url": str(url).strip(),
-                "normalized_url": normalized,
-                "title": str(title).strip() if isinstance(title, str) and title.strip() else source.get("title"),
-                "locator_note": str(locator_note).strip() if isinstance(locator_note, str) and locator_note.strip() else None,
-                "path": str(path),
-                "virtual_path": paths.virtual(path),
-                "chars": len(text),
-                "lines": report_store.line_count(text),
-                "sha256": content_sha,
-                "content_scope": content_scope,
-                "upstream_truncation": upstream_truncation,
-                "preview": preview,
-                "fetched_at": utc_now_iso(),
-                "action_id": action_id,
-                "gap_ids": list(gap_ids),
-            }
-            ledger.payload.setdefault("materials", []).append(material)
-            ledger.record_tool_execution(action_id, tool="report_fetch_material", ok=True, detail=f"saved {material_id}")
-            ledger.save()
-            return json.dumps(_material_payload(material, duplicate_of=None, preview=preview), ensure_ascii=False, indent=2)
+                return json.dumps(_material_payload(material, duplicate_of=None, preview=preview), ensure_ascii=False, indent=2)
         except Exception as exc:  # noqa: BLE001 - persistence failure must not look like a research result
-            try:
-                ledger.record_tool_execution(action_id, tool="report_fetch_material", ok=False, detail=f"material_save_failed: {exc}")
-                ledger.save()
-            except Exception:
-                pass
-            return json.dumps({"saved": False, "error": f"material_save_failed: {type(exc).__name__}: {exc}"}, ensure_ascii=False)
+            return _record_material_failure(
+                paths,
+                action_id,
+                f"material_save_failed: {type(exc).__name__}: {exc}",
+                url=str(url).strip(),
+            )
 
     return report_fetch_material
+
+
+def _record_material_failure(paths: report_store.ReportPaths, action_id: str, error: str, *, url: str | None = None) -> str:
+    """Record a failed attempt without registering material evidence."""
+    try:
+        with report_store.report_lock(paths):
+            ledger = ReportLedger.load(paths)
+            ledger.record_tool_execution(action_id, tool="report_fetch_material", ok=False, detail=error)
+            ledger.save()
+    except Exception as exc:  # noqa: BLE001 - the tool still reports the original failure
+        error = f"{error}; failure record unavailable: {type(exc).__name__}: {exc}"
+    payload: dict[str, Any] = {"saved": False, "error": error}
+    if url:
+        payload["url"] = url
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def _material_payload(material: Mapping[str, Any], *, duplicate_of: str | None, preview: str) -> dict[str, Any]:

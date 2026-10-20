@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -146,6 +147,8 @@ def _research(
     execution: str = "searched",
     tool_ok: bool = True,
     save_material: bool = True,
+    host_executions: list[dict] | None = None,
+    model_executions: bool = True,
     summary: str = "research summary",
 ) -> object:
     action, task = _delegate(ctx, action_id, "researcher", {"report_gap_ids": gap_ids})
@@ -170,7 +173,8 @@ def _research(
         artifact_metadata={
             "completion_status": "complete",
             "gap_attempts": [{"gap_id": gap_ids[0], "execution": execution, "material_ids": [material_id] if material_id else [], "note": "test"}],
-            "tool_execution_records": [{"tool": "web_search", "ok": tool_ok}],
+            **({"host_tool_execution_records": host_executions} if host_executions is not None else {}),
+            **({"tool_execution_records": [{"tool": "web_search", "ok": tool_ok}]} if model_executions else {}),
         },
     )
     return hooks.handle_success(action, ctx, result, task, artifact_adapter=SPArtifactAdapter(), delegate_entry=delegate_entry)
@@ -426,12 +430,27 @@ def test_resume_and_close_report_lifecycle(tmp_path):
     assert ledger.payload["delivered"] is None
     assert ledger.payload["delivery_history"][0]["artifact_id"] == "spart_demo"
 
+    input_id = ledger.add_user_input("取消这份报告", source="user_message", source_message_id="m-cancel")
+    ledger.save()
+    with pytest.raises(Exception, match="report_input_id"):
+        hooks.close_report(
+            ctx,
+            SPAction.create(ActionType.REPLAN, reason="close", task="close", metadata={"report_close_reason": "用户取消"}),
+            reason="用户取消",
+        )
     closed = hooks.close_report(
         ctx,
-        SPAction.create(ActionType.REPLAN, reason="close", task="close", metadata={"report_close_reason": "用户取消"}),
+        SPAction.create(
+            ActionType.REPLAN,
+            reason="close",
+            task="close",
+            metadata={"report_close_reason": "用户取消", "report_input_id": input_id},
+        ),
         reason="用户取消",
     )
     assert closed["status"] == "abandoned"
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.payload["closed"]["input_id"] == input_id
     with pytest.raises(Exception, match="abandoned"):
         hooks.resume_report(ctx, SPAction.create(ActionType.REPLAN, reason="resume", task="resume", metadata={"report_action": "resume"}))
 
@@ -482,3 +501,183 @@ def test_executor_exception_releases_in_flight_action_without_a_round(tmp_path):
     assert gap["rounds"] == 0
     assert gap["technical_attempts"] == 1
     assert ledger.action("a-r-raise")["status"] == "failed"
+
+
+def _prepare_gap_for_round(ctx: HandlerContext) -> None:
+    _register_gap(ctx, "a-outline")
+    action, task = _delegate(ctx, "a-outline", "outline", {})
+    accepted = _accept_outline(ctx, action, task, _tree(gap_ids=["g1"]))
+    assert accepted.next_step == "continue", accepted.error
+
+
+def test_search_completed_without_hit_counts_as_an_effective_round(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    _prepare_gap_for_round(ctx)
+    result = _research(
+        ctx,
+        "a-r-search",
+        ["g1"],
+        save_material=False,
+        host_executions=[{"tool": "web_search", "ok": True}],
+        model_executions=False,
+    )
+    assert result.next_step == "continue", result.error
+    gap = ReportLedger.load_for_context(hooks.report_context(ctx.state)).require_gap("g1")
+    assert (gap["status"], gap["rounds"]) == ("awaiting_outline", 1)
+
+
+def test_only_read_file_or_model_claimed_execution_never_charges_a_round(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    _prepare_gap_for_round(ctx)
+    result = _research(
+        ctx,
+        "a-r-read",
+        ["g1"],
+        save_material=False,
+        host_executions=[{"tool": "read_file", "ok": True}],
+        model_executions=True,
+    )
+    assert result.next_step == "continue", result.error
+    gap = ReportLedger.load_for_context(hooks.report_context(ctx.state)).require_gap("g1")
+    assert (gap["status"], gap["rounds"]) == ("awaiting_outline", 0)
+    assert gap["technical_attempts"] == 1
+
+
+def test_all_host_research_executions_failed_does_not_charge_a_round(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    _prepare_gap_for_round(ctx)
+    result = _research(
+        ctx,
+        "a-r-fail",
+        ["g1"],
+        save_material=False,
+        host_executions=[{"tool": "web_search", "ok": False}, {"tool": "report_fetch_material", "ok": False}],
+        model_executions=False,
+    )
+    assert result.next_step == "continue", result.error
+    gap = ReportLedger.load_for_context(hooks.report_context(ctx.state)).require_gap("g1")
+    assert (gap["status"], gap["rounds"]) == ("awaiting_outline", 0)
+    assert gap["technical_attempts"] == 1
+
+
+def test_ordinary_user_supplement_uses_apply_to_plan_without_a_gap(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    state = {
+        **ctx.state,
+        "messages": [
+            HumanMessage(content="请写一份关于示例公司的研究报告。", id="m1"),
+            HumanMessage(content="增加一张横向比较表。", id="m2"),
+        ],
+    }
+    hooks.sync_user_inputs(state)
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    input_id = ledger.unapplied_input_ids()[0]
+    action, task = _delegate(ctx, "a-outline", "outline", {})
+    tree = _tree(
+        gap_ids=[],
+        decisions=[
+            {
+                "input_id": input_id,
+                "gap_ids": [],
+                "action": "apply_to_plan",
+                "reason": "在树中加入横向比较节点",
+            }
+        ],
+    )
+    result = _accept_outline(ctx, action, task, tree)
+    assert result.next_step == "continue", result.error
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    assert ledger.input(input_id)["applied"] is True
+    decision = ledger.payload["user_decisions"][0]
+    assert decision["action"] == "apply_to_plan"
+    assert decision["gap_id"] is None
+
+
+def test_start_after_close_creates_a_new_report_and_unrelated_work_is_not_blocked(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    input_id = ledger.add_user_input("取消旧报告", source="user_message", source_message_id="m-cancel")
+    ledger.save()
+    hooks.close_report(
+        ctx,
+        SPAction.create(
+            ActionType.REPLAN,
+            reason="close",
+            task="close",
+            metadata={"report_close_reason": "用户取消", "report_input_id": input_id},
+        ),
+        reason="用户取消",
+    )
+
+    researcher = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="ordinary-research",
+        reason="unrelated",
+        task="研究另一个公开主题",
+        target_agent="researcher",
+        stage="research",
+    )
+    task_meta: dict = {"stage": "research"}
+    refs: dict = {}
+    hooks.prepare_delegation(researcher, ctx, task_meta, refs)
+    assert "report_role" not in task_meta
+    assert refs == {}
+
+    fresh = hooks.start_report(ctx, SPAction.create(ActionType.REPLAN, reason="start", task="start", metadata={"report_action": "start"}))
+    assert fresh["started"] is True
+    assert fresh["report_id"] == "r2"
+    assert (tmp_path / "report" / "r1" / "ledger.json").exists()
+    assert (tmp_path / "report" / "r2" / "ledger.json").exists()
+
+
+def test_delivered_report_can_start_a_new_report_or_resume(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    ledger.payload["status"] = "delivered"
+    ledger.save()
+    resumed = hooks.resume_report(ctx, SPAction.create(ActionType.REPLAN, reason="resume", task="resume", metadata={"report_action": "resume"}))
+    assert resumed["status"] == "active"
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    ledger.payload["status"] = "delivered"
+    ledger.save()
+    fresh = hooks.start_report(ctx, SPAction.create(ActionType.REPLAN, reason="start", task="start", metadata={"report_action": "start"}))
+    assert fresh["started"] is True
+    assert fresh["report_id"] == "r2"
+
+
+def test_concurrent_gap_registration_keeps_both_gaps(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    tool = build_register_research_request_tool(paths=_paths(ctx), action_id="a-outline")
+
+    def register(index: int) -> dict:
+        return json.loads(
+            tool.func(
+                questions=[
+                    {
+                        "mode": "new",
+                        "question": f"并发问题 {index}",
+                        "constraints": {},
+                        "why_insufficient": "test",
+                        "stop_condition": "test",
+                        "requirement_refs": [{"input_id": "u1", "quote": "示例公司"}],
+                        "node_ids": [],
+                        "materials_checked": [],
+                    }
+                ],
+                tool_call_id=f"tc-{index}",
+            )
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(register, [1, 2]))
+    assert {item["registered"][0]["gap_id"] for item in results} == {"g1", "g2"}
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert {gap["gap_id"] for gap in ledger.gaps()} == {"g1", "g2"}

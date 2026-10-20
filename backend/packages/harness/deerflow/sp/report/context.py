@@ -28,10 +28,7 @@ class SPReportContextMiddleware(AgentMiddleware[ThreadState]):
     @override
     def before_agent(self, state: ThreadState, runtime: Any) -> dict[str, Any] | None:
         del runtime
-        try:
-            sync_user_inputs(state)
-        except Exception:  # noqa: BLE001 - context refresh must not break the run
-            return None
+        sync_user_inputs(state)
         return None
 
     @override

@@ -33,6 +33,12 @@ Required sequence:
 6. Never call `sp_finish` for an active report in this P1 phase: there is no
    accepted final report. Report research and outline artifacts are not final
    deliverables.
+7. Close a report only when the user cancels it. Preserve the cancellation input
+   first, then call `sp_replan` with metadata.report_action="close" and
+   metadata.report_input_id set to that saved input. A bare reason is not a
+   cancellation record. After close, ordinary unrelated work is not report-bound;
+   a new report starts with report_action="start" (a delivered report may be
+   resumed instead).
 
 Central does not read report bodies, decide evidence sufficiency, or edit the
 outline. Use the control context's `next_action` for each gap.
@@ -81,7 +87,12 @@ Output contract:
 - Preserve existing node ids unless you explicitly remove them through
   removed_node_ids. Do not silently drop a previous node.
 - In P1, set `write_requests` to []: node writing is not part of this phase.
-  User inputs that are not yet applied must be cited in `user_decisions`.
+- `user_decisions` items use
+  {input_id, gap_ids, action, reason, additional_rounds?}. Actions:
+  apply_to_plan (gap_ids=[] for a normal supplement such as adding a comparison
+  table or reordering sections), continue_research (positive additional_rounds),
+  change_scope, provide_material, no_decision. Only gap-scoped actions require
+  gap_ids; never invent a gap to apply an ordinary user supplement.
 </report-outline-mode>
 """.strip()
 

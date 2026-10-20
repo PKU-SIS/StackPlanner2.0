@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import tempfile
+import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,10 +23,38 @@ CURRENT_POINTER = "current.json"
 OUTPUTS_VIRTUAL_PREFIX = "/mnt/user-data/outputs"
 REPORT_STATUSES = frozenset({"active", "delivered", "abandoned"})
 REPORT_CONTEXT_STATUSES = frozenset({"disabled", *REPORT_STATUSES, "error"})
+_LOCK_GUARD = threading.Lock()
+_REPORT_LOCKS: dict[str, threading.RLock] = {}
 
 
 class ReportStoreError(RuntimeError):
     """Raised when report storage cannot be resolved or read safely."""
+
+
+def _lock_for(key: str) -> threading.RLock:
+    with _LOCK_GUARD:
+        lock = _REPORT_LOCKS.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _REPORT_LOCKS[key] = lock
+        return lock
+
+
+def report_lock(paths: ReportPaths) -> threading.RLock:
+    """Process-wide serialization for one report ledger read-modify-write.
+
+    Report tools can run concurrently inside one subagent ToolNode turn.  A
+    single atomic file replace is not enough because two writers that loaded
+    the same base ledger would overwrite each other's identity allocation.
+    The lock is process-local and keyed by the ledger path; distributed writers
+    are outside the current single-Gateway deployment boundary.
+    """
+    return _lock_for(f"ledger:{paths.ledger}")
+
+
+def report_root_lock(outputs_path: Path | str) -> threading.RLock:
+    """Serialize report-id allocation/pointer changes for one outputs root."""
+    return _lock_for(f"root:{Path(outputs_path).expanduser()}")
 
 
 @dataclass(frozen=True, slots=True)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -211,6 +212,18 @@ def _infer_task_skill_selection(
 def _task_stream_id(task: SPSubagentTask) -> str:
     parent_tool_call_id = task.metadata.get("__sp_parent_tool_call_id")
     return str(parent_tool_call_id) if parent_tool_call_id else task.action_id
+
+
+def _tool_execution_ok(tool_name: str, content: str) -> bool:
+    """Classify one observed tool result as host-observed success/failure."""
+    text = str(content or "").strip()
+    if tool_name == "report_fetch_material":
+        try:
+            payload = json.loads(text)
+        except (json.JSONDecodeError, TypeError):
+            return False
+        return isinstance(payload, dict) and payload.get("saved") is True
+    return not text.lower().startswith("error:")
 
 
 def _apply_task_skill_policy(
@@ -472,10 +485,11 @@ class DR2SPExecutorProvider:
             def observe_step(message: dict[str, Any], message_index: int) -> None:
                 if report_role and isinstance(message, dict) and message.get("type") == "tool":
                     content = str(message.get("content") or "")
+                    tool_name = str(message.get("name") or "unknown")
                     task.metadata.setdefault("_report_tool_executions", []).append(
                         {
-                            "tool": str(message.get("name") or "unknown"),
-                            "ok": not content.strip().lower().startswith("error:"),
+                            "tool": tool_name,
+                            "ok": _tool_execution_ok(tool_name, content),
                             "detail": content[:500],
                         }
                     )
@@ -601,8 +615,10 @@ class _ProgressReportingExecutor:
                 )
             raise
         report_executions = task.metadata.pop("_report_tool_executions", None)
-        if task.metadata.get("report_role") and isinstance(report_executions, list):
-            result.artifact_metadata["tool_execution_records"] = report_executions
+        if task.metadata.get("report_role"):
+            # This key is host-derived. Always overwrite any model-supplied
+            # value so model-declared execution records cannot create rounds.
+            result.artifact_metadata["host_tool_execution_records"] = list(report_executions or [])
         if callable(self.writer):
             if result.status == SPSubagentStatus.CANCELLED:
                 event_type = "task_cancelled"

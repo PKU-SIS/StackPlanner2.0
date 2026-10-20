@@ -18,6 +18,7 @@ from deerflow.sp.report import store as report_store
 GAP_STATUSES = frozenset({"open", "in_flight", "awaiting_outline", "awaiting_user", "resolved", "not_needed"})
 GAP_OUTCOMES = frozenset({"resolved", "unresolved", "not_needed"})
 GAP_ATTEMPT_EXECUTIONS = frozenset({"searched", "not_attempted", "technical_error"})
+RESEARCH_EXECUTION_TOOLS = frozenset({"web_search", "web_fetch", "report_fetch_material"})
 ACTIVE_GAP_STATUSES = frozenset({"open", "in_flight", "awaiting_outline", "awaiting_user"})
 DEFAULT_ALLOWED_ROUNDS = 2
 LEDGER_SCHEMA_VERSION = 1
@@ -209,9 +210,17 @@ class ReportLedger:
         if not clean:
             raise ReportValidationError("report user input must be non-empty")
         for item in self.inputs():
-            if source_message_id and str(item.get("source_message_id") or "") == str(source_message_id):
-                return str(item.get("input_id"))
-            if interaction_id and str(item.get("interaction_id") or "") == str(interaction_id):
+            matched = (source_message_id and str(item.get("source_message_id") or "") == str(source_message_id)) or (interaction_id and str(item.get("interaction_id") or "") == str(interaction_id))
+            if matched:
+                # One HITL answer can arrive through a hidden response message
+                # and later through generic message synchronization. Keep one
+                # input identity and link both host identities.
+                if source_message_id and not item.get("source_message_id"):
+                    item["source_message_id"] = source_message_id
+                if interaction_id and not item.get("interaction_id"):
+                    item["interaction_id"] = interaction_id
+                if source == "hitl_feedback" and item.get("source") == "user_message":
+                    item["source"] = "hitl_feedback"
                 return str(item.get("input_id"))
         input_id = self.next_input_id()
         report_store.append_user_input_file(self.paths, input_id, clean)
@@ -430,7 +439,7 @@ class ReportLedger:
         gap_attempts: Iterable[Mapping[str, Any]],
         summary_path: Path | None,
         artifact_id: str | None,
-        declared_tool_executions: Iterable[Mapping[str, Any]] = (),
+        host_tool_executions: Iterable[Mapping[str, Any]] = (),
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         action = self.payload.setdefault("actions", {}).get(action_id)
         if not isinstance(action, dict):
@@ -452,19 +461,30 @@ class ReportLedger:
         for gap_id in action_gap_ids:
             attempts.setdefault(gap_id, "not_attempted")
 
+        # Only host-observed tool results count as execution evidence. The
+        # model's own artifact_metadata.tool_execution_records is descriptive
+        # and must not be able to manufacture a research round.
         executions = list(action.get("tool_executions") or []) + [
-            {"tool": str(item.get("tool") or "unknown"), "ok": bool(item.get("ok")), "detail": str(item.get("detail") or "")[:500], "at": utc_now_iso()} for item in declared_tool_executions if isinstance(item, Mapping)
+            {"tool": str(item.get("tool") or "unknown"), "ok": bool(item.get("ok")), "detail": str(item.get("detail") or "")[:500], "at": utc_now_iso()} for item in host_tool_executions if isinstance(item, Mapping)
         ]
-        has_successful_execution = any(bool(item.get("ok")) for item in executions if isinstance(item, Mapping))
+        research_executions = [item for item in executions if str(item.get("tool") or "") in RESEARCH_EXECUTION_TOOLS]
+        has_successful_execution = any(bool(item.get("ok")) for item in research_executions)
+        has_research_attempt = bool(research_executions)
         changed: list[dict[str, Any]] = []
         for gap_id in action_gap_ids:
             gap = self.require_gap(gap_id)
             declared = attempts[gap_id]
             effective = declared
             note = ""
-            if declared == "searched" and not has_successful_execution:
-                effective = "technical_error"
-                note = "Researcher declared a search but this action recorded no successful tool execution."
+            if declared == "searched":
+                if has_successful_execution:
+                    effective = "searched"
+                elif has_research_attempt:
+                    effective = "technical_error"
+                    note = "All host-recorded research tool executions for this action failed; no effective round was charged."
+                else:
+                    effective = "technical_error"
+                    note = "Researcher declared a search but the host recorded no research tool execution; no effective round was charged."
             now = utc_now_iso()
             if effective == "searched":
                 gap["rounds"] = int(gap.get("rounds") or 0) + 1
@@ -494,6 +514,7 @@ class ReportLedger:
         action["updated_at"] = utc_now_iso()
         action["finished_at"] = action["updated_at"]
         action["gap_attempts"] = attempts
+        action["host_tool_executions"] = executions
         action["summary_path"] = str(summary_path) if summary_path is not None else None
         action["summary_virtual_path"] = self.paths.virtual(summary_path) if summary_path is not None else None
         action["artifact_id"] = artifact_id
@@ -617,19 +638,40 @@ class ReportLedger:
             input_id = _text(raw.get("input_id"), "user_decisions[].input_id")
             if self.input(input_id) is None:
                 raise ReportValidationError(f"user_decisions references unknown input: {input_id}")
-            gap_ids = _string_list(raw.get("gap_ids"), "user_decisions[].gap_ids")
-            if not gap_ids:
-                raise ReportValidationError("user_decisions[].gap_ids must contain at least one gap")
             action = str(raw.get("action") or "").strip().lower()
-            if action not in {"continue_research", "change_scope", "provide_material", "no_decision"}:
+            if action not in {"continue_research", "change_scope", "provide_material", "no_decision", "apply_to_plan"}:
                 raise ReportValidationError(f"unsupported user decision action: {action!r}")
             reason = _text(raw.get("reason"), "user_decisions[].reason")
+            gap_ids = _string_list(raw.get("gap_ids"), "user_decisions[].gap_ids")
             additional_rounds = raw.get("additional_rounds")
             if action == "continue_research":
                 if isinstance(additional_rounds, bool) or not isinstance(additional_rounds, int) or additional_rounds <= 0:
                     raise ReportValidationError("continue_research requires a positive integer additional_rounds")
             elif additional_rounds is not None:
                 raise ReportValidationError("additional_rounds is only valid for continue_research")
+
+            if action == "apply_to_plan":
+                if gap_ids:
+                    raise ReportValidationError("apply_to_plan applies a user input without inventing a gap; gap_ids must be empty")
+                duplicates = [item for item in self.payload.get("user_decisions", []) if isinstance(item, Mapping) and str(item.get("input_id")) == input_id and str(item.get("action")) == action and item.get("gap_id") in {None, ""}]
+                if duplicates:
+                    raise ReportValidationError(f"user decision already applied for input {input_id}, action {action}")
+                now = utc_now_iso()
+                record = {
+                    "input_id": input_id,
+                    "gap_id": None,
+                    "action": action,
+                    "reason": reason,
+                    "additional_rounds": None,
+                    "applied_at": now,
+                }
+                self.payload.setdefault("user_decisions", []).append(record)
+                self.mark_input_applied(input_id)
+                applied.append(record)
+                continue
+
+            if not gap_ids:
+                raise ReportValidationError("user_decisions[].gap_ids must contain at least one gap for gap-scoped actions")
             for gap_id in gap_ids:
                 gap = self.require_gap(gap_id)
                 duplicates = [item for item in self.payload.get("user_decisions", []) if isinstance(item, Mapping) and str(item.get("input_id")) == input_id and str(item.get("gap_id")) == gap_id and str(item.get("action")) == action]

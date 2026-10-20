@@ -610,10 +610,11 @@ class ActionRouter:
             from deerflow.sp.report import report_context
 
             report = report_context(state)
-            if report.is_active or report.status == "error":
+            if report.is_active and action.target_agent in {"outline", "researcher", "reporter"}:
                 # Report work is serialised and judged by the ledger; the
                 # legacy same-stage collision rule would block legitimate
-                # Outline -> Researcher -> Outline alternation.
+                # Outline -> Researcher -> Outline alternation. Unrelated
+                # coder/perception work keeps the ordinary guard.
                 return None
         except Exception:  # noqa: BLE001 - non-report behaviour stays unchanged
             pass

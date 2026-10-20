@@ -47,9 +47,9 @@
 
 `report_fetch_material` 不新建 HTTP 客户端；它绑定运行时已装配的 `web_fetch`
 实例，保存其返回文本，记录 `source_id/material_id/sha256/lines/content_scope/
-upstream_truncation`。已知 Jina 提供方内部截断到 4096 字符，因此标记
-`upstream_truncation=true`；`direct_fetch` 按返回中的 `<truncated>` 标记；未知
-提供方标记 `unknown`。失败或异常不登记为材料。
+upstream_truncation`。已知 Jina 提供方内部截断到 4096 字符，异步工具实例按
+`coroutine` 识别后标记 `upstream_truncation=true`；`direct_fetch` 按返回中的
+`<truncated>` 标记；未知提供方标记 `unknown`。失败或异常不登记为材料。
 
 ## 4. 缺口与轮次
 
@@ -94,15 +94,19 @@ upstream_truncation`。已知 Jina 提供方内部截断到 4096 字符，因此
 
 - `backend/tests/test_sp_report_lifecycle.py`：需求全文、start/resume/close、gap
   new/continue、无效树不接受、两轮→提问→回答→处置、技术失败、执行异常释放、
-  轮次与决定重放。
+  轮次与决定重放；普通补充 `apply_to_plan`、close 后新建/普通任务、delivered
+  分支、并发登记。
 - `backend/tests/test_sp_report_materials.py`：长/短返回逐字落盘、同 URL 来源身份、
-  同内容复用、不同内容新材料、抓取失败/异常/写失败不登记、截断标记。
+  同内容复用、不同内容新材料、抓取失败/异常/写失败不登记、截断标记；同步/异步
+  抓取、运行中事件循环、并发材料身份。
 - `backend/tests/test_sp_report_wiring.py`：真实 `make_sp_agent` + fake 模型（W）：
   start、控制摘要注入、P1 finish 拒绝、账本故障不降级、中途预算 60、串行判定、
-  报告工具 metadata、非报告角色不变、报告 Researcher 关闭自动续跑。
+  报告工具 metadata、非报告角色不变、报告 Researcher 关闭自动续跑；HITL 与通用
+  输入同步去重、HITL 失败传播、报告委派跳过旧关键词改派。
 - `backend/tests/test_sp_report_executor_e2e.py`：真实 `DelegateHandler` +
   `DR2SubagentExecutorAdapter` + 真实 `SubagentExecutor` + 真实报告工具（E）：
-  Outline 先登记 gap 再接受树；Researcher 通过受控抓取工具保存原文并计一轮。
+  Outline 先登记 gap 再接受树；Researcher 通过异步受控抓取保存原文并计一轮；
+  Outline 通过真实 `read_file` 读取已保存材料后再接受树。
 
 运行方式（242 的开发环境）：
 
@@ -114,8 +118,33 @@ PYTHONPATH=$PWD/packages/harness:$PWD \
   tests/test_sp_report_wiring.py tests/test_sp_report_executor_e2e.py -q
 ```
 
-P1 交付时该组 29 项通过；原有 SP 回归 278 项、非报告/共享回归 211 项通过。
+P1 交付时该组 **45** 项通过；原有 SP 回归 278 项、非报告/共享回归 211 项通过。
 `ruff check` 与 `ruff format --check` 通过。
+
+## 6.1 独立审查 R1—R6 收尾
+
+- **R1 异步抓取**：材料工具优先调用配置工具的 `ainvoke`，同步工具仍走 `invoke`；
+  在运行中的事件循环里用独立线程执行，避免嵌套 `asyncio.run`。提供方身份从
+  `coroutine`/`func` 的真实 callable 取，StructuredTool 包装类不再遮住 Jina。
+  已验证同步、异步、运行中事件循环、异常、截断，以及保存后真实 `read_file` 读取。
+- **R2 账本并发**：`store.report_lock` 按键串行化单个 ledger 的读—改—写（进程内
+  RLock，当前单 Gateway 部署边界）；材料抓取在锁外，返回后在锁内基于最新账本分配
+  `S/m` 身份并保存。登记工具、接受、HITL、输入同步、start/resume/close 使用同一
+  机制。已用两个并发材料调用和两个并发 gap 登记验证身份与目录完整。
+- **R3 轮次事实**：只有 host 记录的 `host_tool_execution_records` 与材料工具账本
+  执行记录能计轮；模型自填的 `tool_execution_records` 被忽略。仅
+  `web_search/web_fetch/report_fetch_material` 算研究执行，普通 `read_file` 不计。
+  搜索成功但无命中计一轮；全部技术失败、无 host 执行、仅模型声明均不计轮，只记
+  `technical_attempt`。
+- **R4 输入应用与 HITL**：`user_decisions` 新增 `apply_to_plan`（`gap_ids=[]`），
+  普通补充不必虚构 gap；HITL 同时记录 `interaction_id` 与 `source_message_id`，
+  通用输入同步按同一消息身份去重；HITL/输入同步异常不再静默吞掉。
+- **R5 报告生命周期**：active 不自动覆盖；delivered 可 resume 或新建；abandoned
+  保留历史但允许新建普通任务；close 必须引用真实用户取消输入
+  `report_input_id`，不能只凭任意 reason。
+- **R6 角色路由**：报告 active 时，已明确为 outline/researcher/reporter 的委派在
+  `_action_payload` 跳过旧关键词改派；router 的同目标豁免也只作用于这三个角色，
+  coder/perception 仍保留旧规则。
 
 ## 7. 可追踪轨迹（P1 实测）
 
@@ -142,12 +171,15 @@ P1 交付时该组 29 项通过；原有 SP 回归 278 项、非报告/共享回
    未验证；fake 模型只证明接线。
 2. 未部署、未配置真实 `web_fetch` 提供方；上游截断只做已知提供方标注，未在目标
    provider 上验证全文可得性。
-3. 远程 sandbox（AIO/E2B 等）是否与 host outputs 同路径挂载未验证；当前材料工具
-   写 host outputs，Outline 通过 sandbox 文件工具读虚拟路径，需在目标 provider
-   验证同一文件可读。
+3. 远程 sandbox（AIO/E2B 等）是否与 host outputs 同路径挂载未验证。本轮 E 测试在
+   local sandbox + 实际 thread outputs 上验证了材料保存后真实 `read_file` 可读；
+   远程 provider 仍需单独核对。
 4. Outline 输入包对超大 summary/树采用显式截断 + 路径，未验证真实大树的输出容量。
 5. P1 没有 Writer/终稿；任何活动报告都不能 `sp_finish`，这是阶段性限制而非最终
    交付语义。
-6. `report_fetch_material` 只移除 Researcher 的 `web_fetch`；非报告角色集合不变。
-7. 真实 provider 的 reasoning/thinking 设置按角色记录在 task metadata，但 P1 未
-   强制某角色开关；Writer 的显式关闭留到 P2。
+6. 报告账本锁是进程内 `threading.RLock`，按单个 ledger 路径串行；当前单 Gateway
+   进程边界成立，多进程/多实例写入未覆盖。
+7. 真实模型的规划质量、工具选择、`user_decisions`/`gap_attempts` 参数正确性仍未
+   验证；fake 只证明接线与 host 约束。
+8. `report_fetch_material` 仍以 `Error:` 约定识别提供方文本错误；不符合该约定的
+   错误文本可能被保存为材料，需在目标 provider 上核对。

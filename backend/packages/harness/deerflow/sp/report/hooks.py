@@ -27,7 +27,6 @@ from deerflow.sp.report import tree as report_tree
 from deerflow.sp.report.ledger import (
     ACTIVE_GAP_STATUSES,
     ReportLedger,
-    ReportLedgerError,
     ReportValidationError,
     gap_next_action,
     utc_now_iso,
@@ -107,71 +106,79 @@ def sync_user_inputs(state: Mapping[str, Any] | None) -> None:
     context = report_context(state)
     if not context.is_active:
         return
-    try:
-        ledger = ReportLedger.load_for_context(context)
-    except ReportLedgerError:
-        return
-    changed = False
-    for message in _visible_human_messages(state):
-        text = message_to_text(message).strip()
-        if not text:
-            continue
-        before = len(ledger.inputs())
-        ledger.add_user_input(
-            text,
-            source="user_message",
-            source_message_id=_message_id(message),
-        )
-        if len(ledger.inputs()) != before:
-            changed = True
-    if changed:
-        ledger.save()
+    paths = _paths_for_context(context)
+    with report_store.report_lock(paths):
+        ledger = ReportLedger.load(paths)
+        changed = False
+        for message in _visible_human_messages(state):
+            text = message_to_text(message).strip()
+            if not text:
+                continue
+            before = len(ledger.inputs())
+            ledger.add_user_input(
+                text,
+                source="user_message",
+                source_message_id=_message_id(message),
+            )
+            if len(ledger.inputs()) != before:
+                changed = True
+        if changed:
+            ledger.save()
+
+
+def _paths_for_context(context: report_store.ReportContext) -> report_store.ReportPaths:
+    if context.outputs_path is None or not context.report_id:
+        raise ReportValidationError(f"report context is not usable: {context.status}")
+    return report_store.ReportPaths(context.outputs_path, context.report_id)
 
 
 def start_report(context: HandlerContext, action: SPAction) -> dict[str, Any]:
     existing = report_context(context.state)
     if existing.status == "error":
         raise ReportValidationError(f"report ledger unavailable: {existing.error}")
-    if existing.is_enabled:
-        return {
-            "report_id": existing.report_id,
-            "status": existing.status,
-            "started": False,
-            "message": "A report already exists; resume or continue it instead of starting a new one.",
-        }
-
     try:
         outputs_path = report_store.outputs_path_from_state(context.state)
     except report_store.ReportStoreError as exc:
         raise ReportValidationError(str(exc)) from exc
-    messages = _visible_human_messages(context.state)
-    if not messages:
-        raise ReportValidationError("cannot start a report without a visible user request")
-    sections: list[str] = []
-    inputs: list[dict[str, Any]] = []
-    for index, message in enumerate(messages):
-        text = message_to_text(message).strip()
-        sections.append(f"## User input {index + 1}\n\n{text}")
-        inputs.append(
-            {
-                "text": text,
-                "source": "initial_user_request" if index == 0 else "user_message",
-                "source_message_id": _message_id(message),
+    with report_store.report_root_lock(outputs_path):
+        current = report_context(context.state)
+        if current.is_active:
+            return {
+                "report_id": current.report_id,
+                "status": current.status,
+                "started": False,
+                "message": "An active report already exists; resume or continue it instead of starting a new one.",
             }
-        )
-    request_text = "\n\n".join(["# Report request", "", *sections]).strip()
-    report_id = report_store.allocate_report_id(outputs_path)
-    paths = report_store.ReportPaths(outputs_path, report_id)
-    ledger = ReportLedger.create(paths, request_text=request_text, inputs=inputs)
-    report_store.write_json_atomic(report_store.pointer_path(outputs_path), {"report_id": report_id})
-    return {
-        "report_id": report_id,
-        "status": "active",
-        "started": True,
-        "request_chars": len(request_text),
-        "input_ids": [item.get("input_id") for item in ledger.inputs()],
-        "request_path": paths.virtual(paths.request),
-    }
+        if current.status == "error":
+            raise ReportValidationError(f"report ledger unavailable: {current.error}")
+        messages = _visible_human_messages(context.state)
+        if not messages:
+            raise ReportValidationError("cannot start a report without a visible user request")
+        sections: list[str] = []
+        inputs: list[dict[str, Any]] = []
+        for index, message in enumerate(messages):
+            text = message_to_text(message).strip()
+            sections.append(f"## User input {index + 1}\n\n{text}")
+            inputs.append(
+                {
+                    "text": text,
+                    "source": "initial_user_request" if index == 0 else "user_message",
+                    "source_message_id": _message_id(message),
+                }
+            )
+        request_text = "\n\n".join(["# Report request", "", *sections]).strip()
+        report_id = report_store.allocate_report_id(outputs_path)
+        paths = report_store.ReportPaths(outputs_path, report_id)
+        ledger = ReportLedger.create(paths, request_text=request_text, inputs=inputs)
+        report_store.write_json_atomic(report_store.pointer_path(outputs_path), {"report_id": report_id})
+        return {
+            "report_id": report_id,
+            "status": "active",
+            "started": True,
+            "request_chars": len(request_text),
+            "input_ids": [item.get("input_id") for item in ledger.inputs()],
+            "request_path": paths.virtual(paths.request),
+        }
 
 
 def resume_report(context: HandlerContext, action: SPAction) -> dict[str, Any]:
@@ -180,44 +187,56 @@ def resume_report(context: HandlerContext, action: SPAction) -> dict[str, Any]:
         raise ReportValidationError(f"report ledger unavailable: {context_info.error}")
     if not context_info.is_enabled:
         raise ReportValidationError("no report exists to resume")
-    ledger = ReportLedger.load_for_context(context_info)
     if context_info.status == "abandoned":
         raise ReportValidationError("cannot resume an abandoned report; start a new report instead")
-    if context_info.status == "delivered":
-        ledger.payload.setdefault("delivery_history", []).append(ledger.payload.get("delivered"))
-        ledger.payload["delivered"] = None
-        ledger.payload["status"] = "active"
-        ledger.payload["resumed_at"] = utc_now_iso()
-        ledger.payload["review"] = None
-        ledger.save()
-    return {
-        "report_id": context_info.report_id,
-        "status": ledger.payload.get("status"),
-        "resumed": True,
-        "tree_version": (ledger.payload.get("tree") or {}).get("version") if isinstance(ledger.payload.get("tree"), Mapping) else 0,
-        "control": ledger.control_summary(),
-    }
+    paths = _paths_for_context(context_info)
+    with report_store.report_lock(paths):
+        ledger = ReportLedger.load(paths)
+        if context_info.status == "delivered":
+            ledger.payload.setdefault("delivery_history", []).append(ledger.payload.get("delivered"))
+            ledger.payload["delivered"] = None
+            ledger.payload["status"] = "active"
+            ledger.payload["resumed_at"] = utc_now_iso()
+            ledger.payload["review"] = None
+            ledger.save()
+        return {
+            "report_id": context_info.report_id,
+            "status": ledger.payload.get("status"),
+            "resumed": True,
+            "tree_version": (ledger.payload.get("tree") or {}).get("version") if isinstance(ledger.payload.get("tree"), Mapping) else 0,
+            "control": ledger.control_summary(),
+        }
 
 
 def close_report(context: HandlerContext, action: SPAction, *, reason: str) -> dict[str, Any]:
     context_info = report_context(context.state)
     if not context_info.is_enabled:
         raise ReportValidationError("no report exists to close")
-    clean_reason = str(reason or "").strip()
-    if not clean_reason:
-        raise ReportValidationError("closing a report requires an explicit reason")
-    ledger = ReportLedger.load_for_context(context_info)
-    if ledger.payload.get("status") == "abandoned":
-        return {"report_id": context_info.report_id, "status": "abandoned", "closed": False}
-    ledger.payload["status"] = "abandoned"
-    ledger.payload["closed"] = {
-        "reason": clean_reason,
-        "input_id": action.metadata.get("report_input_id"),
-        "at": utc_now_iso(),
-    }
-    ledger.payload["outline_review_due"] = False
-    ledger.save()
-    return {"report_id": context_info.report_id, "status": "abandoned", "closed": True, "reason": clean_reason}
+    paths = _paths_for_context(context_info)
+    with report_store.report_lock(paths):
+        ledger = ReportLedger.load(paths)
+        if ledger.payload.get("status") == "abandoned":
+            return {"report_id": context_info.report_id, "status": "abandoned", "closed": False}
+        input_id = str(action.metadata.get("report_input_id") or "").strip()
+        if not input_id:
+            raise ReportValidationError("closing a report requires metadata.report_input_id citing the user's cancellation input")
+        input_record = ledger.input(input_id)
+        if input_record is None:
+            raise ReportValidationError(f"closing a report cites an unknown user input: {input_id}")
+        clean_reason = str(reason or input_record.get("preview") or "").strip()
+        if not clean_reason:
+            raise ReportValidationError("closing a report requires an explicit reason")
+        ledger.payload["status"] = "abandoned"
+        ledger.payload["closed"] = {
+            "reason": clean_reason,
+            "input_id": input_id,
+            "input_path": input_record.get("virtual_path"),
+            "input_preview": input_record.get("preview"),
+            "at": utc_now_iso(),
+        }
+        ledger.payload["outline_review_due"] = False
+        ledger.save()
+        return {"report_id": context_info.report_id, "status": "abandoned", "closed": True, "reason": clean_reason}
 
 
 def prepare_delegation(
@@ -236,32 +255,42 @@ def prepare_delegation(
     if report.status == "error":
         raise ReportValidationError(f"report ledger unavailable; refusing unbound report delegation: {report.error}")
     if report.status in {"delivered", "abandoned"}:
-        raise ReportValidationError(f"report is {report.status}; resume it before delegating to {role}")
+        # Historical reports stay readable but do not bind new delegations.
+        # Unrelated work proceeds through the ordinary role path; report work
+        # must start a new report or explicitly resume the delivered one first.
+        return
     if role == "reporter":
         raise ReportValidationError("P1 report mode has no Writer/reporter delegation; delegate to outline or researcher")
-    ledger = ReportLedger.load_for_context(report)
-    task_metadata["report_id"] = report.report_id
-    task_metadata["report_role"] = role
-    task_metadata["report_delegate_action_id"] = action.action_id
+    paths = _paths_for_context(report)
     if role == "researcher":
         raw_gap_ids = task_metadata.get("report_gap_ids", action.metadata.get("report_gap_ids"))
         gap_ids = _normalize_report_gap_ids(raw_gap_ids)
-        if not gap_ids:
-            if ledger.payload.get("tree") or ledger.gaps():
-                raise ReportValidationError("pre-research is only available before the first outline; dispatch each registered gap with metadata.report_gap_ids")
-            ledger.begin_research_action(action.action_id, [], allow_empty=True, kind="pre_research")
-            ledger.save()
-            packet = report_packets.build_pre_research_packet(ledger, action_id=action.action_id)
-            task_metadata["report_pre_research"] = True
+        with report_store.report_lock(paths):
+            ledger = ReportLedger.load(paths)
+            if not gap_ids:
+                if ledger.payload.get("tree") or ledger.gaps():
+                    raise ReportValidationError("pre-research is only available before the first outline; dispatch each registered gap with metadata.report_gap_ids")
+                ledger.begin_research_action(action.action_id, [], allow_empty=True, kind="pre_research")
+                ledger.save()
+                packet = report_packets.build_pre_research_packet(ledger, action_id=action.action_id)
+                task_metadata["report_pre_research"] = True
+            else:
+                ledger.begin_research_action(action.action_id, gap_ids)
+                ledger.save()
+                packet = report_packets.build_researcher_packet(ledger, gap_ids, action_id=action.action_id)
+            task_metadata["report_id"] = report.report_id
+            task_metadata["report_role"] = role
+            task_metadata["report_delegate_action_id"] = action.action_id
+            if gap_ids:
+                task_metadata["report_gap_ids"] = gap_ids
             context_refs["report_packet"] = packet
-            return
-        ledger.begin_research_action(action.action_id, gap_ids)
-        ledger.save()
-        packet = report_packets.build_researcher_packet(ledger, gap_ids, action_id=action.action_id)
-        context_refs["report_packet"] = packet
-        task_metadata["report_gap_ids"] = gap_ids
         return
-    packet = report_packets.build_outline_packet(ledger)
+    with report_store.report_lock(paths):
+        ledger = ReportLedger.load(paths)
+        packet = report_packets.build_outline_packet(ledger)
+    task_metadata["report_id"] = report.report_id
+    task_metadata["report_role"] = role
+    task_metadata["report_delegate_action_id"] = action.action_id
     context_refs["report_packet"] = packet
 
 
@@ -361,9 +390,11 @@ def handle_failure(
     if not report.is_active:
         return
     try:
-        ledger = ReportLedger.load_for_context(report)
-        ledger.fail_research_action(action.action_id, result.error or f"research delegation failed: {result.status.value}")
-        ledger.save()
+        paths = _paths_for_context(report)
+        with report_store.report_lock(paths):
+            ledger = ReportLedger.load(paths)
+            ledger.fail_research_action(action.action_id, result.error or f"research delegation failed: {result.status.value}")
+            ledger.save()
     except Exception:  # noqa: BLE001 - failure bookkeeping must not replace the real error
         return
 
@@ -374,14 +405,38 @@ def fail_delegation_action(state: Mapping[str, Any] | None, action_id: str, erro
     if not report.is_active:
         return
     try:
-        ledger = ReportLedger.load_for_context(report)
-        ledger.fail_research_action(action_id, error)
-        ledger.save()
+        paths = _paths_for_context(report)
+        with report_store.report_lock(paths):
+            ledger = ReportLedger.load(paths)
+            ledger.fail_research_action(action_id, error)
+            ledger.save()
     except Exception:  # noqa: BLE001 - the original execution error is more useful
         return
 
 
 def _accept_outline(
+    action: SPAction,
+    context: HandlerContext,
+    result: SPSubagentResult,
+    task: SPSubagentTask,
+    *,
+    artifact_adapter: SPArtifactAdapter,
+    delegate_entry: StackMemoryEntry,
+) -> HandlerResult:
+    context_info = active_report_required(context.state)
+    paths = _paths_for_context(context_info)
+    with report_store.report_lock(paths):
+        return _accept_outline_locked(
+            action,
+            context,
+            result,
+            task,
+            artifact_adapter=artifact_adapter,
+            delegate_entry=delegate_entry,
+        )
+
+
+def _accept_outline_locked(
     action: SPAction,
     context: HandlerContext,
     result: SPSubagentResult,
@@ -487,6 +542,28 @@ def _accept_research(
     artifact_adapter: SPArtifactAdapter,
     delegate_entry: StackMemoryEntry,
 ) -> HandlerResult:
+    context_info = active_report_required(context.state)
+    paths = _paths_for_context(context_info)
+    with report_store.report_lock(paths):
+        return _accept_research_locked(
+            action,
+            context,
+            result,
+            task,
+            artifact_adapter=artifact_adapter,
+            delegate_entry=delegate_entry,
+        )
+
+
+def _accept_research_locked(
+    action: SPAction,
+    context: HandlerContext,
+    result: SPSubagentResult,
+    task: SPSubagentTask,
+    *,
+    artifact_adapter: SPArtifactAdapter,
+    delegate_entry: StackMemoryEntry,
+) -> HandlerResult:
     ledger = ledger_for_state(context.state)
     previous = ledger.action(action.action_id)
     if previous is not None and previous.get("status") == "completed":
@@ -500,7 +577,7 @@ def _accept_research(
         return _rejection(action, context, "Report research returned no usable summary; no round was charged.", reason="empty_research_summary")
     try:
         gap_attempts = _validate_gap_attempts(result.artifact_metadata.get("gap_attempts"), ledger, task)
-        declared_executions = _validate_declared_executions(result.artifact_metadata.get("tool_execution_records"))
+        host_executions = _validate_host_executions(result.artifact_metadata.get("host_tool_execution_records"))
         summary_path = report_store.write_research_summary(ledger.paths, action.action_id, summary)
         artifact = artifact_adapter.write_text_artifact(
             summary,
@@ -524,7 +601,7 @@ def _accept_research(
             gap_attempts=gap_attempts,
             summary_path=summary_path,
             artifact_id=artifact.metadata.artifact_id,
-            declared_tool_executions=declared_executions,
+            host_tool_executions=host_executions,
         )
         ledger.save()
     except ReportValidationError as exc:
@@ -622,11 +699,11 @@ def _validate_gap_attempts(value: Any, ledger: ReportLedger, task: SPSubagentTas
     return result
 
 
-def _validate_declared_executions(value: Any) -> list[dict[str, Any]]:
+def _validate_host_executions(value: Any) -> list[dict[str, Any]]:
     if value is None:
         return []
     if not isinstance(value, list):
-        raise ReportValidationError("tool_execution_records must be a list")
+        raise ReportValidationError("host_tool_execution_records must be a list")
     result: list[dict[str, Any]] = []
     for item in value:
         if not isinstance(item, Mapping):
@@ -677,9 +754,11 @@ def _fail_action_quietly(context: HandlerContext, action_id: str, message: str) 
         report = report_context(context.state)
         if not report.is_active:
             return
-        ledger = ReportLedger.load_for_context(report)
-        ledger.fail_research_action(action_id, message)
-        ledger.save()
+        paths = _paths_for_context(report)
+        with report_store.report_lock(paths):
+            ledger = ReportLedger.load(paths)
+            ledger.fail_research_action(action_id, message)
+            ledger.save()
     except Exception:  # noqa: BLE001 - preserving the original rejection is more useful
         return
 
@@ -689,13 +768,15 @@ def record_human_feedback_input(
     feedback: str,
     *,
     pending: Mapping[str, Any] | None,
+    source_message_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Persist a HITL answer and return related gaps to awaiting_outline."""
     context = report_context(state)
     if not context.is_active:
         return None
-    try:
-        ledger = ReportLedger.load_for_context(context)
+    paths = _paths_for_context(context)
+    with report_store.report_lock(paths):
+        ledger = ReportLedger.load(paths)
         pending = pending or {}
         interaction_id = str(pending.get("interaction_id") or "") or None
         metadata = pending.get("metadata") if isinstance(pending.get("metadata"), Mapping) else {}
@@ -704,14 +785,12 @@ def record_human_feedback_input(
             feedback,
             source="hitl_feedback",
             interaction_id=interaction_id,
-            created_at=str(pending.get("created_at") or "") or None,
+            source_message_id=source_message_id,
         )
         if gap_ids:
             ledger.mark_gaps_awaiting_outline(gap_ids, input_id=input_id)
         ledger.save()
         return {"input_id": input_id, "gap_ids": gap_ids}
-    except Exception:  # noqa: BLE001 - HITL persistence must not block the answer itself
-        return None
 
 
 def prepare_ask_human(action: SPAction, context: HandlerContext, interaction: Any) -> None:
@@ -719,9 +798,11 @@ def prepare_ask_human(action: SPAction, context: HandlerContext, interaction: An
     if not gap_ids:
         return
     context_info = active_report_required(context.state)
-    ledger = ReportLedger.load_for_context(context_info)
-    ledger.bind_interaction(gap_ids, interaction.interaction_id)
-    ledger.save()
+    paths = _paths_for_context(context_info)
+    with report_store.report_lock(paths):
+        ledger = ReportLedger.load(paths)
+        ledger.bind_interaction(gap_ids, interaction.interaction_id)
+        ledger.save()
 
 
 def finish_block_reason(context: HandlerContext) -> str | None:

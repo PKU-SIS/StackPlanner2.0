@@ -47,68 +47,84 @@ def build_register_research_request_tool(
                 requirement_refs, optional node_ids, optional continue_gap_id,
                 and optional materials_checked.
         """
-        try:
-            ledger = ReportLedger.load(paths)
-        except Exception as exc:  # noqa: BLE001 - tool boundary reports instead of crashing
-            return _error(f"report_ledger_unavailable: {exc}")
-        if not isinstance(questions, list) or not questions:
-            return _error("questions must be a non-empty list")
-        if len(questions) > MAX_REGISTERED_QUESTIONS:
-            return _error(f"at most {MAX_REGISTERED_QUESTIONS} questions may be registered in one call")
-
-        idempotency_key = f"{action_id}:{tool_call_id}"
-        tool_calls = ledger.payload.setdefault("tool_calls", {})
-        if isinstance(tool_calls.get(idempotency_key), Mapping):
-            return json.dumps(dict(tool_calls[idempotency_key]), ensure_ascii=False)
-
-        prepared: list[dict[str, Any]] = []
-        try:
-            for index, raw in enumerate(questions):
-                prepared.append(_validate_question(raw, ledger, index))
-            registered: list[dict[str, Any]] = []
-            for item in prepared:
-                gap = ledger.register_gap(
-                    mode=item["mode"],
-                    continue_gap_id=item.get("continue_gap_id"),
-                    question=item["question"],
-                    constraints=item["constraints"],
-                    why_insufficient=item["why_insufficient"],
-                    stop_condition=item["stop_condition"],
-                    requirement_refs=item["requirement_refs"],
-                    node_ids=item["node_ids"],
-                    materials_checked=item["materials_checked"],
-                )
-                registered.append(
-                    {
-                        "gap_id": gap["gap_id"],
-                        "status": gap["status"],
-                        "rounds": gap["rounds"],
-                        "allowed_rounds": gap["allowed_rounds"],
-                        "next_action": gap_next_action(gap),
-                    }
-                )
-        except ReportValidationError as exc:
-            return _error(str(exc))
-
-        result = {
-            "registered": registered,
-            "open_gaps": [
-                {
-                    "gap_id": gap.get("gap_id"),
-                    "question": gap.get("question"),
-                    "status": gap.get("status"),
-                    "rounds": gap.get("rounds"),
-                    "allowed_rounds": gap.get("allowed_rounds"),
-                }
-                for gap in ledger.gaps()
-                if gap.get("status") not in {"resolved", "not_needed"}
-            ],
-        }
-        tool_calls[idempotency_key] = result
-        ledger.save()
-        return json.dumps(result, ensure_ascii=False, indent=2)
+        with report_store.report_lock(paths):
+            return _register_questions(
+                paths=paths,
+                action_id=action_id,
+                questions=questions,
+                tool_call_id=tool_call_id,
+            )
 
     return report_register_research_request
+
+
+def _register_questions(
+    *,
+    paths: report_store.ReportPaths,
+    action_id: str,
+    questions: list[dict[str, Any]],
+    tool_call_id: str,
+) -> str:
+    try:
+        ledger = ReportLedger.load(paths)
+    except Exception as exc:  # noqa: BLE001 - tool boundary reports instead of crashing
+        return _error(f"report_ledger_unavailable: {exc}")
+    if not isinstance(questions, list) or not questions:
+        return _error("questions must be a non-empty list")
+    if len(questions) > MAX_REGISTERED_QUESTIONS:
+        return _error(f"at most {MAX_REGISTERED_QUESTIONS} questions may be registered in one call")
+
+    idempotency_key = f"{action_id}:{tool_call_id}"
+    tool_calls = ledger.payload.setdefault("tool_calls", {})
+    if isinstance(tool_calls.get(idempotency_key), Mapping):
+        return json.dumps(dict(tool_calls[idempotency_key]), ensure_ascii=False)
+
+    prepared: list[dict[str, Any]] = []
+    try:
+        for index, raw in enumerate(questions):
+            prepared.append(_validate_question(raw, ledger, index))
+        registered: list[dict[str, Any]] = []
+        for item in prepared:
+            gap = ledger.register_gap(
+                mode=item["mode"],
+                continue_gap_id=item.get("continue_gap_id"),
+                question=item["question"],
+                constraints=item["constraints"],
+                why_insufficient=item["why_insufficient"],
+                stop_condition=item["stop_condition"],
+                requirement_refs=item["requirement_refs"],
+                node_ids=item["node_ids"],
+                materials_checked=item["materials_checked"],
+            )
+            registered.append(
+                {
+                    "gap_id": gap["gap_id"],
+                    "status": gap["status"],
+                    "rounds": gap["rounds"],
+                    "allowed_rounds": gap["allowed_rounds"],
+                    "next_action": gap_next_action(gap),
+                }
+            )
+    except ReportValidationError as exc:
+        return _error(str(exc))
+
+    result = {
+        "registered": registered,
+        "open_gaps": [
+            {
+                "gap_id": gap.get("gap_id"),
+                "question": gap.get("question"),
+                "status": gap.get("status"),
+                "rounds": gap.get("rounds"),
+                "allowed_rounds": gap.get("allowed_rounds"),
+            }
+            for gap in ledger.gaps()
+            if gap.get("status") not in {"resolved", "not_needed"}
+        ],
+    }
+    tool_calls[idempotency_key] = result
+    ledger.save()
+    return json.dumps(result, ensure_ascii=False, indent=2)
 
 
 def _validate_question(raw: Any, ledger: ReportLedger, index: int) -> dict[str, Any]:

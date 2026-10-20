@@ -1756,7 +1756,7 @@ def _normalize_model_mapping(value: Any) -> dict[str, Any]:
     return {}
 
 
-def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: str) -> dict[str, Any]:
+def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: str, state: Mapping[str, Any] | None = None) -> dict[str, Any]:
     mapping = {
         "sp_think": ActionType.THINK,
         "sp_delegate": ActionType.DELEGATE,
@@ -1787,9 +1787,26 @@ def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: st
         raw_metadata = payload.get("metadata")
         payload["metadata"] = _normalize_model_mapping(raw_metadata)
         revision_reason = payload.pop("revision_reason", None)
-        target_agent, inference_reason = _infer_missing_delegate_target(payload)
-        target_agent, routing_reason = _normalize_delegate_target(payload)
         requested_stage = payload.get("stage")
+        report_bound = False
+        raw_target = str(payload.get("target_agent") or "").strip()
+        if state is not None and raw_target in {"outline", "researcher", "reporter"}:
+            try:
+                from deerflow.sp.report import report_context
+
+                report_bound = report_context(state).is_active
+            except Exception:  # noqa: BLE001 - non-report behavior must stay unchanged
+                report_bound = False
+        if report_bound:
+            # A host-bound report action already has an explicit role. The
+            # legacy keyword router must not rewrite researcher/outline into
+            # coder/perception before the report layer sees it.
+            target_agent = raw_target
+            inference_reason = None
+            routing_reason = None
+        else:
+            target_agent, inference_reason = _infer_missing_delegate_target(payload)
+            target_agent, routing_reason = _normalize_delegate_target(payload)
         canonical_stage = {
             "perception": "perception",
             "researcher": "research",
@@ -1968,7 +1985,7 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
                     }
                 )
 
-        payload = _action_payload(tool_name, request.tool_call.get("args") or {}, tool_call_id=tool_call_id)
+        payload = _action_payload(tool_name, request.tool_call.get("args") or {}, tool_call_id=tool_call_id, state=request.state)
         if tool_name == "sp_finish":
             payload["metadata"] = {
                 **dict(payload.get("metadata") or {}),
@@ -2207,21 +2224,23 @@ class SPThinkLabelMiddleware(AgentMiddleware[AgentState]):
         pending = state.get("sp_pending_human_interaction") if isinstance(state, Mapping) else None
         if not isinstance(pending, Mapping):
             return None
-        feedback = _pending_human_feedback(state, pending)
+        feedback, feedback_message_id = _pending_human_feedback_message(state, pending)
         if not feedback:
             return None
+        from deerflow.sp.report import record_human_feedback_input
+
+        record_human_feedback_input(
+            dict(state),
+            feedback,
+            pending=pending,
+            source_message_id=feedback_message_id,
+        )
         result = record_human_feedback(
             dict(state),
             feedback,
             thread_id=_thread_id(runtime),
             run_id=_run_id(runtime),
         )
-        try:
-            from deerflow.sp.report import record_human_feedback_input
-
-            record_human_feedback_input(dict(state), feedback, pending=pending)
-        except Exception:  # noqa: BLE001 - report input bookkeeping must not block HITL resolution
-            pass
         SPControlActionMiddleware._record_events(runtime, result.run_events)
         return result.state_update
 
@@ -2484,9 +2503,13 @@ def _human_input_payload(
 
 
 def _pending_human_feedback(state: Mapping[str, Any], pending: Mapping[str, Any]) -> str | None:
+    return _pending_human_feedback_message(state, pending)[0]
+
+
+def _pending_human_feedback_message(state: Mapping[str, Any], pending: Mapping[str, Any]) -> tuple[str | None, str | None]:
     messages = state.get("messages")
     if not isinstance(messages, list):
-        return None
+        return None, None
     request_id = str(pending.get("interaction_id") or "")
     request_index: int | None = None
     for index, message in enumerate(messages):
@@ -2502,12 +2525,12 @@ def _pending_human_feedback(state: Mapping[str, Any], pending: Mapping[str, Any]
             continue
         response = read_human_input_response(message.additional_kwargs)
         if response is not None and (not request_id or response["request_id"] == request_id):
-            return response["value"].strip()
+            return response["value"].strip(), str(getattr(message, "id", None) or "") or None
         if request_index is not None:
             fallback = message_to_text(message).strip()
             if fallback:
-                return fallback
-    return None
+                return fallback, str(getattr(message, "id", None) or "") or None
+    return None, None
 
 
 def _json_sort_requirement(user_request: str) -> tuple[str, bool] | None:

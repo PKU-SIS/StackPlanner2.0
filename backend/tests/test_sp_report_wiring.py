@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -18,6 +19,7 @@ from deerflow.sp.actions.schema import ActionType, SPAction
 from deerflow.sp.memory import TaskMemoryStack
 from deerflow.sp.report import hooks
 from deerflow.sp.report.hooks import report_delegate_is_serial
+from deerflow.sp.report.ledger import ReportLedger
 
 _CAPTURED_REQUESTS: list[list[BaseMessage]] = []
 _CAPTURED_TOOLS: list[set[str]] = []
@@ -280,3 +282,121 @@ def test_report_researcher_automatic_continuation_is_disabled():
         ]
     )
     assert _research_result_needs_continuation(raw, normalized, task=task) is False
+
+
+def test_hitl_reply_and_generic_sync_share_one_input(tmp_path):
+    from types import SimpleNamespace
+
+    from langchain_core.messages import ToolMessage
+
+    from deerflow.sp.agent_tools import SPThinkLabelMiddleware
+
+    ctx = HandlerContext(
+        state={"thread_data": {"outputs_path": str(tmp_path)}, "messages": [HumanMessage(content="写报告", id="m1")]},
+        stack=TaskMemoryStack(),
+        thread_id="t1",
+        run_id="run1",
+    )
+    hooks.start_report(ctx, SPAction.create(ActionType.REPLAN, reason="start", task="start", metadata={"report_action": "start"}))
+    interaction_id = "sphitl_dedupe"
+    response = HumanMessage(
+        content="Answer",
+        id="answer-1",
+        additional_kwargs={
+            "human_input_response": {
+                "version": 1,
+                "kind": "human_input_response",
+                "source": "stackplanner",
+                "request_id": interaction_id,
+                "response_kind": "option",
+                "option_id": "option-1",
+                "value": "Answer",
+            }
+        },
+    )
+    state = {
+        **ctx.state,
+        "messages": [
+            HumanMessage(content="写报告", id="m1"),
+            ToolMessage(
+                content="question",
+                tool_call_id="ask-tool",
+                name="sp_ask_human",
+                artifact={"human_input": {"request_id": interaction_id}},
+            ),
+            response,
+        ],
+        "sp_pending_human_interaction": {
+            "interaction_id": interaction_id,
+            "metadata": {"report_gap_ids": []},
+        },
+    }
+    SPThinkLabelMiddleware().before_agent(state, SimpleNamespace(context={"thread_id": "t1", "run_id": "run2"}))
+    hooks.sync_user_inputs(state)
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    hitl_inputs = [item for item in ledger.inputs() if item["source"] == "hitl_feedback"]
+    assert len(hitl_inputs) == 1
+    assert hitl_inputs[0]["interaction_id"] == interaction_id
+    assert hitl_inputs[0]["source_message_id"] == "answer-1"
+
+
+def test_hitl_persistence_failure_is_not_silently_swallowed(tmp_path, monkeypatch):
+    from deerflow.sp.report.ledger import ReportLedger
+
+    ctx = HandlerContext(
+        state={"thread_data": {"outputs_path": str(tmp_path)}, "messages": [HumanMessage(content="写报告", id="m1")]},
+        stack=TaskMemoryStack(),
+        thread_id="t1",
+        run_id="run1",
+    )
+    hooks.start_report(ctx, SPAction.create(ActionType.REPLAN, reason="start", task="start", metadata={"report_action": "start"}))
+
+    def failing_save(self):
+        raise OSError("ledger write failed")
+
+    monkeypatch.setattr(ReportLedger, "save", failing_save)
+    with pytest.raises(OSError, match="ledger write failed"):
+        hooks.record_human_feedback_input(
+            ctx.state,
+            "Answer",
+            pending={"interaction_id": "sphitl_fail", "metadata": {"report_gap_ids": []}},
+        )
+
+
+def test_report_bound_delegate_skips_legacy_keyword_retargeting(tmp_path):
+    from deerflow.sp.agent_tools import _action_payload
+
+    ctx = HandlerContext(
+        state={"thread_data": {"outputs_path": str(tmp_path)}, "messages": [HumanMessage(content="写报告", id="m1")]},
+        stack=TaskMemoryStack(),
+        thread_id="t1",
+        run_id="run1",
+    )
+    hooks.start_report(ctx, SPAction.create(ActionType.REPLAN, reason="start", task="start", metadata={"report_action": "start"}))
+    args = {
+        "target_agent": "researcher",
+        "task": "Find company C's total assets in FY2024.",
+        "metadata": {"report_gap_ids": ["g1"]},
+    }
+    bound = _action_payload("sp_delegate", args, tool_call_id="tc-bound", state=ctx.state)
+    assert bound["target_agent"] == "researcher"
+    assert bound["stage"] == "research"
+    assert "routed_from_agent" not in bound["metadata"]
+
+    ordinary = _action_payload(
+        "sp_delegate",
+        {"target_agent": "coder", "task": "write a report about the repository"},
+        tool_call_id="tc-ordinary",
+        state=None,
+    )
+    assert ordinary["target_agent"] == "reporter"
+
+
+def test_runtime_tool_execution_classifier_distinguishes_saved_material():
+    from deerflow.sp.runtime import _tool_execution_ok
+
+    assert _tool_execution_ok("report_fetch_material", '{"saved": true, "material_id": "m1"}') is True
+    assert _tool_execution_ok("report_fetch_material", '{"saved": false, "error": "fetch_failed"}') is False
+    assert _tool_execution_ok("web_search", "two results") is True
+    assert _tool_execution_ok("web_search", "Error: quota") is False
