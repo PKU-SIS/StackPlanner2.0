@@ -790,6 +790,11 @@ def _research_result_needs_continuation(
     *,
     task: SPSubagentTask,
 ) -> bool:
+    if task.metadata.get("report_role") or task.metadata.get("report_id"):
+        # Report rounds are host-accounted. An automatic in-executor research
+        # continuation would create an unledgered round and hide work from
+        # Outline, so report research stops after the delegated pass.
+        return False
     if task.subagent_type != "researcher" or normalized.status != SPSubagentStatus.COMPLETED or normalized.stop_reason or normalized.artifact_metadata.get("completion_status") != "partial":
         return False
     gaps = normalized.artifact_metadata.get("evidence_gaps")
