@@ -109,8 +109,15 @@ class ReportLedger:
             "outline_review_due": False,
             "feedback_dispositions": [],
             "draft_dispositions": [],
+            "candidates": [],
+            "candidate": None,
+            "reviews": [],
             "review": None,
+            "final_reports": [],
+            "final_report": None,
+            "delivery_history": [],
             "delivered": None,
+            "resumed_at": None,
             "closed": None,
         }
         instance = cls(ledger, paths)
@@ -751,9 +758,20 @@ class ReportLedger:
                 }
             )
         closed = [gap for gap in self.gaps() if gap.get("status") in {"resolved", "not_needed"}]
+        from deerflow.sp.report import assembly as report_assembly
         from deerflow.sp.report import writing as report_writing
 
         writing = report_writing.control_entries(self)
+        review = self.payload.get("review") if isinstance(self.payload.get("review"), Mapping) else None
+        review_status = str((review or {}).get("status") or "none")
+        if review_status == "ready":
+            try:
+                if report_assembly.review_binding_error(self):
+                    review_status = "stale"
+            except Exception:  # noqa: BLE001 - derived control state must stay readable
+                review_status = "stale"
+        candidate = self.payload.get("candidate") if isinstance(self.payload.get("candidate"), Mapping) else None
+        final = self.payload.get("final_report") if isinstance(self.payload.get("final_report"), Mapping) else None
         return {
             "report_id": self.payload.get("report_id"),
             "status": self.payload.get("status"),
@@ -767,14 +785,30 @@ class ReportLedger:
             "feedback_open": writing["feedback_open"],
             "outline_review_due": bool(self.payload.get("outline_review_due")),
             "unapplied_input_ids": self.unapplied_input_ids(),
-            "review_status": str((self.payload.get("review") or {}).get("status") or "none") if isinstance(self.payload.get("review"), Mapping) else "none",
-            "final_report": self.payload.get("delivered"),
+            "review_status": review_status,
+            "review": review,
+            "candidate": (
+                {
+                    "candidate_id": candidate.get("candidate_id"),
+                    "status": candidate.get("status"),
+                    "path": candidate.get("virtual_path"),
+                    "sha256": candidate.get("sha256"),
+                    "inputs_digest": candidate.get("inputs_digest"),
+                    "pending_review": candidate.get("status") == "pending_review",
+                }
+                if candidate is not None
+                else None
+            ),
+            "final_report": final,
+            "delivered": self.payload.get("delivered"),
             "research_actions_in_flight": [action.get("action_id") for action in (self.payload.get("actions") or {}).values() if isinstance(action, Mapping) and action.get("status") == "in_flight"],
         }
 
     def block_finish_reason(self) -> str | None:
         """Return a deterministic reason why report delivery is still blocked."""
         summary = self.control_summary()
+        from deerflow.sp.report import assembly as report_assembly
+
         blockers: list[str] = []
         if summary["gaps"]:
             blockers.append("open gaps: " + ", ".join(f"{item['gap_id']}={item['status']}" for item in summary["gaps"]))
@@ -782,8 +816,9 @@ class ReportLedger:
             blockers.append("unapplied user inputs: " + ", ".join(summary["unapplied_input_ids"]))
         if summary["research_actions_in_flight"]:
             blockers.append("research actions in flight: " + ", ".join(summary["research_actions_in_flight"]))
-        if summary["writes_pending"]:
-            blockers.append("write requests pending: " + ", ".join(summary["writes_pending"]))
+        unfinished = [item for item in summary["write_requests"] if item.get("status") not in {"completed", "superseded"}]
+        if unfinished:
+            blockers.append("unfinished write requests: " + ", ".join(f"{item.get('key')}={item.get('status')}" for item in unfinished))
         if summary["draft_review_due"]:
             blockers.append("draft review due: " + ", ".join(summary["draft_review_due"]))
         if summary["feedback_open"]:
@@ -792,10 +827,16 @@ class ReportLedger:
             blockers.append("Outline review is due")
         if not self.payload.get("tree"):
             blockers.append("no accepted outline tree")
-        if self.payload.get("review") is None or str((self.payload.get("review") or {}).get("status")) != "ready":
-            blockers.append("no current ready integration review")
-        if not self.payload.get("delivered"):
-            blockers.append("no delivered final report")
+        try:
+            review_error = report_assembly.review_binding_error(self)
+            final_error = report_assembly.final_binding_error(self)
+        except Exception as exc:  # noqa: BLE001 - unreadable assembly state blocks delivery
+            blockers.append(f"assembly state cannot be verified: {exc}")
+        else:
+            if review_error:
+                blockers.append(f"no current ready integration review: {review_error}")
+            if final_error:
+                blockers.append(f"no current final report: {final_error}")
         return "; ".join(blockers) if blockers else None
 
 

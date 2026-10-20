@@ -211,6 +211,18 @@ class ReportPaths:
     def drafts(self) -> Path:
         return self.directory / "drafts"
 
+    @property
+    def assembly(self) -> Path:
+        return self.directory / "assembly"
+
+    @property
+    def reviews(self) -> Path:
+        return self.directory / "review"
+
+    @property
+    def final(self) -> Path:
+        return self.directory / "final"
+
     def input_file(self, input_id: str) -> Path:
         return self.inputs / f"{input_id}.md"
 
@@ -225,6 +237,24 @@ class ReportPaths:
 
     def draft_file(self, node_id: str, draft_id: str) -> Path:
         return self.drafts / node_id / f"{draft_id}.md"
+
+    def assembly_file(self, candidate_id: str) -> Path:
+        return self.assembly / f"{candidate_id}.md"
+
+    def assembly_manifest(self, candidate_id: str) -> Path:
+        return self.assembly / f"{candidate_id}.json"
+
+    def review_file(self, review_id: str) -> Path:
+        return self.reviews / f"{review_id}.json"
+
+    def final_file(self, version: int) -> Path:
+        return self.final / f"report-{version}.md"
+
+    def final_manifest(self, version: int) -> Path:
+        return self.final / f"report-{version}.json"
+
+    def delivery_file(self, delivery_id: str) -> Path:
+        return self.final / f"{delivery_id}.json"
 
     def virtual(self, host_path: Path) -> str:
         return virtual_path_for(host_path, self.outputs_path)
