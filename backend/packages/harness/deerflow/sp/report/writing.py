@@ -88,6 +88,17 @@ def begin_writer_attempt(ledger: ReportLedger, key: str, *, action_id: str, node
     prior = current_draft(ledger, node_id)
     if prior is None and request.get("last_draft_id"):
         prior = draft(ledger, str(request["last_draft_id"]))
+    if prior is None:
+        # An explicit rewrite disposition retires the old draft but must still
+        # be the source of the next writing round, even when that round uses a
+        # new write key. Keep the source in the ledger instead of inferring it
+        # from a non-existent current draft.
+        for item in reversed(drafts(ledger)):
+            if item.get("node_id") == node_id and item.get("disposition") == "rewrite" and not item.get("rewrite_source_consumed_by"):
+                prior = item
+                break
+    if prior is not None:
+        request["prior_draft_id"] = prior.get("draft_id")
     return {
         "key": key,
         "node_id": node_id,
@@ -154,12 +165,16 @@ def accept_draft(
     if request.get("status") != "in_flight" or request.get("last_action_id") != action_id:
         raise ReportValidationError(f"write request {key} is not in flight for action {action_id}")
     prior = current_draft(ledger, node_id)
+    prior_was_rewrite_source = prior is not None and prior.get("is_current") is not True and prior.get("disposition") == "rewrite"
     now = utc_now_iso()
     if prior is not None:
         prior["is_current"] = False
         prior["status"] = "rewritten"
         prior["superseded_at"] = now
         prior["superseded_by"] = draft_id
+    elif request.get("prior_draft_id"):
+        prior = draft(ledger, str(request["prior_draft_id"]))
+        prior_was_rewrite_source = prior is not None and prior.get("is_current") is not True and prior.get("disposition") == "rewrite"
     record = {
         "draft_id": draft_id,
         "write_key": key,
@@ -177,8 +192,11 @@ def accept_draft(
         "review_status": "open" if feedback_wanted else "none",
         "is_current": True,
         "status": "current",
+        "rewrite_of": prior.get("draft_id") if prior_was_rewrite_source and prior is not None else None,
         "created_at": now,
     }
+    if prior_was_rewrite_source and prior is not None:
+        prior["rewrite_source_consumed_by"] = draft_id
     ledger.payload.setdefault("drafts", []).append(record)
     request["status"] = "completed"
     request["draft_id"] = draft_id
@@ -334,6 +352,12 @@ def apply_draft_dispositions(
         else:
             record["is_current"] = False
             record["status"] = "rewritten" if action == "rewrite" else "dropped"
+            if action == "rewrite":
+                record["rewrite_source"] = {
+                    "reason": decision["reason"],
+                    "write_key": record.get("write_key"),
+                    "at": now,
+                }
             if request is not None:
                 request["updated_at"] = now
                 # A completed request keeps its identity. A rewrite retires the
@@ -415,6 +439,17 @@ def apply_write_requests(ledger: ReportLedger, tree: Mapping[str, Any]) -> list[
             continue
         record["status"] = "superseded"
         record["updated_at"] = utc_now_iso()
+    for record in write_requests(ledger):
+        if record.get("status") in {"completed", "superseded"}:
+            continue
+        node_ids = [str(item) for item in record.get("node_ids") or []]
+        if node_ids and all(node_id not in nodes for node_id in node_ids):
+            # The accepted tree explicitly removed the node. Retire the active
+            # write request, but keep attempts and feedback history. Research
+            # gaps are not touched here; they may still serve other nodes.
+            record["status"] = "superseded"
+            record["superseded_reason"] = "node removed from the accepted tree"
+            record["updated_at"] = utc_now_iso()
     _refresh(ledger)
     return applied
 

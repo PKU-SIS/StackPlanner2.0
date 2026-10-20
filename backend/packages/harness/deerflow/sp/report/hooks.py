@@ -463,8 +463,8 @@ def handle_failure(
         return
 
 
-def fail_delegation_action(state: Mapping[str, Any] | None, action_id: str, error: str) -> None:
-    """Release an in-flight report research action after an executor exception."""
+def fail_delegation_action(state: Mapping[str, Any] | None, action_id: str, error: str, *, task: SPSubagentTask | None = None) -> None:
+    """Release an in-flight report action after an executor exception."""
     report = report_context(state)
     if not report.is_active:
         return
@@ -472,7 +472,19 @@ def fail_delegation_action(state: Mapping[str, Any] | None, action_id: str, erro
         paths = _paths_for_context(report)
         with report_store.report_lock(paths):
             ledger = ReportLedger.load(paths)
-            ledger.fail_research_action(action_id, error)
+            key = ""
+            if task is not None and str(task.metadata.get("report_role") or "") == "writer":
+                key = str(task.metadata.get("report_write_key") or "").strip()
+            if not key:
+                request = next(
+                    (item for item in report_writing.write_requests(ledger) if action_id in {attempt.get("action_id") for attempt in item.get("attempts") or [] if isinstance(attempt, Mapping)}),
+                    None,
+                )
+                key = str((request or {}).get("key") or "")
+            if key:
+                report_writing.fail_writer_attempt(ledger, key=key, action_id=action_id, error=error)
+            else:
+                ledger.fail_research_action(action_id, error)
             ledger.save()
     except Exception:  # noqa: BLE001 - the original execution error is more useful
         return

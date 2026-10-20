@@ -145,12 +145,15 @@ def build_writer_packet(
     prior = None
     if prior_draft is not None:
         prior_text, prior_error = _read_text(prior_draft.get("path"))
+        rewrite_source = prior_draft.get("rewrite_source") if isinstance(prior_draft.get("rewrite_source"), Mapping) else {}
         prior = {
             "draft_id": prior_draft.get("draft_id"),
             "path": prior_draft.get("virtual_path"),
             "content": prior_text[:OUTLINE_SUMMARY_MAX_CHARS],
             "content_truncated": len(prior_text) > OUTLINE_SUMMARY_MAX_CHARS,
             "error": prior_error,
+            "status": prior_draft.get("status"),
+            "reason": rewrite_source.get("reason") or prior_draft.get("disposition_reason"),
         }
     parent_id = node.get("parent_id")
     parent = nodes.get(str(parent_id)) if parent_id else None

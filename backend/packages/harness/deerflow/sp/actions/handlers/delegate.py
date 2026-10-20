@@ -661,7 +661,7 @@ class DelegateHandler:
             try:
                 from deerflow.sp.report import fail_delegation_action
 
-                fail_delegation_action(context.state, action.action_id, f"{type(exc).__name__}: {exc}")
+                fail_delegation_action(context.state, action.action_id, f"{type(exc).__name__}: {exc}", task=task)
             except Exception:  # noqa: BLE001 - preserve the original execution failure
                 pass
             raise

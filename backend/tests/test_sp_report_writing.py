@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from langchain_core.messages import HumanMessage
 
 from deerflow.sp.actions.handlers.base import HandlerContext
@@ -345,6 +346,71 @@ def test_rewrite_disposition_retires_old_draft_and_queues_new_write(tmp_path):
     assert ledger.payload["write_requests"][-1]["key"] == "w4b"
     assert ledger.payload["writes_pending"] == ["w4b"]
 
+    new_action, new_task, new_host = _writer_action(ctx, "w4b", action_id="a-writer-rewrite")
+    packet = new_task.context_refs["report_packet"]
+    assert packet["prior_draft"]["draft_id"] == draft["draft_id"]
+    assert packet["prior_draft"]["path"] == draft["virtual_path"]
+    assert packet["prior_draft"]["content"] == "Old body.\n"
+    assert packet["prior_draft"]["reason"] == "口径变化"
+    report_store.write_text_atomic(new_host, "New body.\n")
+    accepted = _accept_writer(ctx, new_action, new_task, _writer_result("New body.\n", new_task))
+    assert accepted.next_step == "continue", accepted.error
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    replacement = writing.current_draft(ledger, "n2")
+    assert replacement["rewrite_of"] == draft["draft_id"]
+    assert writing.draft(ledger, draft["draft_id"])["rewrite_source_consumed_by"] == replacement["draft_id"]
+    assert writing.draft(ledger, draft["draft_id"])["is_current"] is False
+
+
+def test_removed_node_retires_blocked_feedback_request_without_closing_gap(tmp_path):
+    ctx = _context(tmp_path)
+    _outline(ctx, _tree(write_requests=[{"key": "w9", "node_ids": ["n2"], "feedback_wanted": False}]))
+    action, task, _host = _writer_action(ctx, "w9")
+    feedback = [{"node_id": "n2", "kind": "material_missing", "message": "缺少比较对象", "material_ids": [], "requirement_ids": ["R1"]}]
+    accepted = _accept_writer(ctx, action, task, _writer_result(None, task, feedback=feedback))
+    assert accepted.next_step == "continue", accepted.error
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    feedback_record = writing.feedback_entries(ledger)[0]
+    request = ledger.payload["write_requests"][0]
+    assert request["status"] == "feedback_pending"
+
+    register = build_register_research_request_tool(paths=_paths(ctx), action_id="a-outline-removed-gap")
+    registered = json.loads(
+        register.func(
+            questions=[
+                {
+                    "mode": "new",
+                    "question": "节点被删除前登记的研究问题",
+                    "constraints": {},
+                    "why_insufficient": "node feedback",
+                    "stop_condition": "evidence",
+                    "requirement_refs": [{"input_id": "u1", "quote": "示例公司"}],
+                    "node_ids": [],
+                    "materials_checked": [],
+                }
+            ],
+            tool_call_id="tc-removed-gap",
+        )
+    )
+    gap_id = registered["registered"][0]["gap_id"]
+    removed = _tree(
+        write_requests=[],
+        feedback_dispositions=[{"feedback_id": feedback_record["feedback_id"], "disposition": "needs_research", "reason": "节点删除，保留研究记录", "gap_id": gap_id}],
+    )
+    removed["nodes"] = [{"node_id": "n1", "parent_id": None, "kind": "section", "title": "偿付能力"}]
+    removed["removed_node_ids"] = ["n2"]
+    disposed = _outline(ctx, removed, action_id="a-outline-removed")
+    assert disposed.next_step == "continue", disposed.error
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    request = ledger.payload["write_requests"][0]
+    assert request["status"] == "superseded"
+    assert request["superseded_reason"] == "node removed from the accepted tree"
+    assert request["attempts"][0]["status"] == "feedback"
+    assert writing.next_action(request) == "none"
+    assert writing.feedback_entries(ledger)[0]["status"] == "handed_off"
+    assert ledger.require_gap(gap_id)["status"] == "open"
+    assert ledger.payload["writes_pending"] == []
+
 
 def test_parent_context_change_requires_disposition_and_is_visible(tmp_path):
     ctx = _context(tmp_path)
@@ -456,20 +522,41 @@ def test_writer_thinking_is_explicit_false_while_other_roles_keep_setting():
     assert _resolve_report_role_thinking("researcher", False, {}, {}) is False
 
 
-def test_writer_technical_failure_can_retry_with_new_action(tmp_path):
+def test_writer_executor_exception_releases_request_and_allows_retry(tmp_path):
+    from deerflow.sp.actions.handlers.delegate import DelegateHandler
+
     ctx = _context(tmp_path)
     _outline(ctx, _tree(write_requests=[{"key": "w5", "node_ids": ["n2"], "feedback_wanted": False}]))
-    action, task, _host = _writer_action(ctx, "w5", action_id="a-write-fail")
-    failed = SPSubagentResult(status=SPSubagentStatus.FAILED, error="sandbox write failed", task_id="failed")
-    hooks.handle_failure(action, ctx, failed, task)
+
+    class _ExplodingExecutor:
+        def execute(self, task):
+            raise RuntimeError("writer executor exploded")
+
+    action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-write-explode",
+        reason="write",
+        task="write n2",
+        target_agent="reporter",
+        stage="reporting",
+        metadata={"report_write_key": "w5"},
+    )
+    with pytest.raises(RuntimeError, match="writer executor exploded"):
+        DelegateHandler(executor=_ExplodingExecutor()).handle(action, ctx)
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
-    assert ledger.payload["write_requests"][0]["status"] == "technical_failed"
-    assert len(ledger.payload["write_requests"][0]["attempts"]) == 1
+    request = ledger.payload["write_requests"][0]
+    assert request["status"] == "technical_failed"
+    assert "writer executor exploded" in request["last_error"]
+    assert len(request["attempts"]) == 1
+    assert request["attempts"][0]["action_id"] == "a-write-explode"
+    assert request["attempts"][0]["status"] == "technical_failed"
+    assert writing.next_action(request) == "delegate_writer"
 
     retry_action, retry_task, _retry_host = _writer_action(ctx, "w5", action_id="a-write-retry")
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
     request = ledger.payload["write_requests"][0]
     assert request["status"] == "in_flight"
     assert len(request["attempts"]) == 2
-    assert [item["action_id"] for item in request["attempts"]] == ["a-write-fail", "a-write-retry"]
+    assert [item["action_id"] for item in request["attempts"]] == ["a-write-explode", "a-write-retry"]
+    assert request["attempts"][1]["status"] == "in_flight"
     del retry_action, retry_task
