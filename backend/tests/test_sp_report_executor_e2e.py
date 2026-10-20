@@ -391,3 +391,75 @@ def test_real_executor_outline_reads_saved_material_with_read_file(tmp_path, mon
     ledger = ReportLedger.load_for_context(hooks.report_context(state))
     assert ledger.payload["tree"]["version"] == 1
     assert ledger.materials()[0]["material_id"] == material["material_id"]
+
+
+def test_real_executor_toolnode_concurrent_material_calls_keep_both(tmp_path, monkeypatch, real_executor):
+    app_config = _app_config()
+    state = _state(tmp_path)
+
+    @tool("web_fetch")
+    async def controlled_fetch(url: str) -> str:
+        """Fetch one controlled URL asynchronously."""
+        return f"Controlled body for {url}"
+
+    @tool("web_search")
+    def controlled_search(query: str) -> str:
+        """Search one controlled query."""
+        return "controlled result"
+
+    _install_fake_model(
+        monkeypatch,
+        FakeToolCallingModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "report_fetch_material",
+                            "args": {"url": "https://example.com/a", "title": "A"},
+                            "id": "call-a",
+                            "type": "tool_call",
+                        },
+                        {
+                            "name": "report_fetch_material",
+                            "args": {"url": "https://example.com/b", "title": "B"},
+                            "id": "call-b",
+                            "type": "tool_call",
+                        },
+                    ],
+                ),
+                AIMessage(
+                    content=json.dumps(
+                        {
+                            "summary": "orientation saved",
+                            "artifact_content": "# Orientation\n\nTwo controlled materials saved.",
+                            "artifact_type": "research_observation",
+                            "artifact_metadata": {"completion_status": "complete"},
+                        },
+                        ensure_ascii=False,
+                    )
+                ),
+            ]
+        ),
+        real_executor,
+    )
+    handler = DelegateHandler(
+        executor=DR2SubagentExecutorAdapter(
+            _executor_factory(
+                state,
+                app_config,
+                [read_file_tool, ls_tool, grep_tool, glob_tool, controlled_search, controlled_fetch],
+                "sp-researcher",
+                real_executor,
+            )
+        )
+    )
+    action = SPAction.create(ActionType.DELEGATE, action_id="a-concurrent-material", reason="pre-research", task="orientation", target_agent="researcher", stage="research")
+    result = handler.handle(action, HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="t-e2e", run_id="run-e2e"))
+    assert result.next_step == "continue", result.error
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    assert len(ledger.payload["sources"]) == 2
+    assert len(ledger.materials()) == 2
+    assert {item["source_id"] for item in ledger.materials()} == {"S1", "S2"}
+    assert {item["material_id"] for item in ledger.materials()} == {"m1", "m2"}
+    assert ledger.action("a-concurrent-material")["status"] == "completed"

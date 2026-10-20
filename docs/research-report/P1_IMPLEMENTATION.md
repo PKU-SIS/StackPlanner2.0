@@ -106,7 +106,8 @@ upstream_truncation`。已知 Jina 提供方内部截断到 4096 字符，异步
 - `backend/tests/test_sp_report_executor_e2e.py`：真实 `DelegateHandler` +
   `DR2SubagentExecutorAdapter` + 真实 `SubagentExecutor` + 真实报告工具（E）：
   Outline 先登记 gap 再接受树；Researcher 通过异步受控抓取保存原文并计一轮；
-  Outline 通过真实 `read_file` 读取已保存材料后再接受树。
+  Outline 通过真实 `read_file` 读取已保存材料后再接受树；同一 ToolNode 响应内
+  两个材料调用并发保存且身份/目录完整。
 
 运行方式（242 的开发环境）：
 
@@ -118,7 +119,7 @@ PYTHONPATH=$PWD/packages/harness:$PWD \
   tests/test_sp_report_wiring.py tests/test_sp_report_executor_e2e.py -q
 ```
 
-P1 交付时该组 **45** 项通过；原有 SP 回归 278 项、非报告/共享回归 211 项通过。
+P1 交付时该组 **46** 项通过；原有 SP 回归 278 项、非报告/共享回归 211 项通过。
 `ruff check` 与 `ruff format --check` 通过。
 
 ## 6.1 独立审查 R1—R6 收尾
