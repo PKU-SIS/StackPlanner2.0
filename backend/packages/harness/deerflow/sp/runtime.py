@@ -415,27 +415,54 @@ class DR2SPExecutorProvider:
                 configurable.get("sp_protect_test_files"),
             )
             protect_test_files = raw_protect_tests.strip().lower() in {"1", "true", "yes", "on"} if isinstance(raw_protect_tests, str) else bool(raw_protect_tests)
-            _infer_task_skill_selection(
-                task,
-                available_skill_names=self.available_skill_names,
-            )
+            report_role = str(task.metadata.get("report_role") or "")
             available_tools = self._available_tools()
-            # The A2A request allowlist is authoritative for this delegation.
-            # It can only narrow the role defaults; it never grants Central a
-            # tool and never bypasses the role/disallowed-tool checks below.
-            if task.allowed_tools:
-                task.metadata["tool_names"] = list(task.allowed_tools)
-            subagent_config = _apply_task_skill_policy(
-                subagent_config,
-                task,
-                available_skill_names=self.available_skill_names,
-            )
-            subagent_config = _apply_task_tool_policy(
-                subagent_config,
-                task,
-                available_tools=available_tools,
-            )
-            subagent_config = _apply_sp_stage_tool_policy(subagent_config, task)
+            if report_role:
+                # Report roles receive a host-assembled tool/Skill/prompt set.
+                # Model-supplied skill/tool allowlists are not authoritative for
+                # these roles and must not be able to widen or mis-bind them.
+                from deerflow.sp.report import configure_report_subagent
+
+                subagent_config, available_tools, report_role = configure_report_subagent(
+                    task,
+                    state=state,
+                    available_tools=available_tools,
+                    subagent_config=subagent_config,
+                )
+            else:
+                _infer_task_skill_selection(
+                    task,
+                    available_skill_names=self.available_skill_names,
+                )
+                # The A2A request allowlist is authoritative for this delegation.
+                # It can only narrow the role defaults; it never grants Central a
+                # tool and never bypasses the role/disallowed-tool checks below.
+                if task.allowed_tools:
+                    task.metadata["tool_names"] = list(task.allowed_tools)
+                subagent_config = _apply_task_skill_policy(
+                    subagent_config,
+                    task,
+                    available_skill_names=self.available_skill_names,
+                )
+                subagent_config = _apply_task_tool_policy(
+                    subagent_config,
+                    task,
+                    available_tools=available_tools,
+                )
+                subagent_config = _apply_sp_stage_tool_policy(subagent_config, task)
+            if report_role:
+                raw_report_thinking = context.get(
+                    f"sp_report_{report_role}_thinking_enabled",
+                    configurable.get(f"sp_report_{report_role}_thinking_enabled"),
+                )
+                if raw_report_thinking is not None:
+                    if isinstance(raw_report_thinking, str):
+                        subagent_thinking_enabled = raw_report_thinking.strip().lower() in {"1", "true", "yes", "on"}
+                    else:
+                        subagent_thinking_enabled = bool(raw_report_thinking)
+                # Record the actual role setting so real-provider verification
+                # can distinguish inherited settings from an explicit choice.
+                task.metadata["thinking_enabled"] = subagent_thinking_enabled
             thread_id = str(context.get("thread_id") or task.thread_id or "") or None
             run_id = str(context.get("run_id") or task.run_id or "") or None
             stream_task_id = _task_stream_id(task)
@@ -443,6 +470,15 @@ class DR2SPExecutorProvider:
             skill_step_offset = len(skill_names) if isinstance(skill_names, list) else 0
 
             def observe_step(message: dict[str, Any], message_index: int) -> None:
+                if report_role and isinstance(message, dict) and message.get("type") == "tool":
+                    content = str(message.get("content") or "")
+                    task.metadata.setdefault("_report_tool_executions", []).append(
+                        {
+                            "tool": str(message.get("name") or "unknown"),
+                            "ok": not content.strip().lower().startswith("error:"),
+                            "detail": content[:500],
+                        }
+                    )
                 if callable(writer):
                     writer(
                         {
@@ -564,6 +600,9 @@ class _ProgressReportingExecutor:
                     }
                 )
             raise
+        report_executions = task.metadata.pop("_report_tool_executions", None)
+        if task.metadata.get("report_role") and isinstance(report_executions, list):
+            result.artifact_metadata["tool_execution_records"] = report_executions
         if callable(self.writer):
             if result.status == SPSubagentStatus.CANCELLED:
                 event_type = "task_cancelled"
@@ -655,6 +694,11 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
     except (TypeError, ValueError):
         max_central_actions = DEFAULT_SP_ACTION_LIMIT
     max_central_actions = max(2, min(max_central_actions, DEFAULT_SP_ACTION_LIMIT))
+    try:
+        report_max_actions = int(runtime.get("sp_report_max_actions") or 60)
+    except (TypeError, ValueError):
+        report_max_actions = 60
+    report_max_actions = max(max_central_actions, min(report_max_actions, 200))
     metadata = dict(config.get("metadata") or {})
     metadata.update(
         {
@@ -693,6 +737,9 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
         user_id=user_id,
     )
     prompt_sections = [CENTRAL_AGENT_ACTION_PROMPT]
+    from deerflow.sp.report.prompts import REPORT_CENTRAL_PROMPT
+
+    prompt_sections.append(REPORT_CENTRAL_PROMPT)
     prompt_sections.append(
         f"<sp-delegation-limit>\nEmit at most {max_parallel_delegates} sibling sp_delegate calls in one model turn. If more work remains, inspect the first batch and delegate the next batch afterward.\n</sp-delegation-limit>"
     )
@@ -706,6 +753,7 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
     from deerflow.agents.middlewares.subagent_limit_middleware import SubagentLimitMiddleware
     from deerflow.sp.middlewares import TaskMemoryMiddleware
     from deerflow.sp.prompt import PromptContextBuilder
+    from deerflow.sp.report.context import SPReportContextMiddleware
 
     graph = _make_lead_agent(
         sp_config,
@@ -730,9 +778,10 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
             SPTerminalActionMiddleware(),
             SPAcknowledgementMiddleware(),
             SPFinishAvailabilityMiddleware(),
-            SPActionBudgetMiddleware(max_actions=max_central_actions),
+            SPActionBudgetMiddleware(max_actions=max_central_actions, report_max_actions=report_max_actions),
             SPControlActionMiddleware(executor_provider=executor_provider),
             SPThinkLabelMiddleware(),
+            SPReportContextMiddleware(),
             SubagentLimitMiddleware(
                 max_concurrent=max_parallel_delegates,
                 tool_names={"sp_delegate"},

@@ -371,13 +371,20 @@ def sp_backtrack(
 
 
 @tool("sp_replan", parse_docstring=True)
-def sp_replan(task: str, reason: str | None = None, stage: str | None = None) -> str:
+def sp_replan(
+    task: str,
+    reason: str | None = None,
+    stage: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> str:
     """Create a revised StackPlanner plan after new evidence or failure.
 
     Args:
         task: Revised plan or next plan objective.
         reason: Why replanning is needed.
         stage: Current task stage.
+        metadata: Optional structured metadata. For explicit report lifecycle,
+            set metadata.report_action to start, resume, or close.
     """
     return "StackPlanner REPLAN action recorded. Continue with the revised plan."
 
@@ -412,6 +419,7 @@ def sp_ask_human(
     reason: str | None = None,
     interaction_type: str = "clarification",
     options: list[str] | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> str:
     """Interrupt the run and request human feedback.
 
@@ -420,6 +428,8 @@ def sp_ask_human(
         reason: Why human input is required.
         interaction_type: Type of interaction.
         options: Optional choices.
+        metadata: Optional structured metadata. Report questions must include
+            a report_gap_ids list.
     """
     return "StackPlanner ASK_HUMAN action recorded. Wait for the user's response."
 
@@ -886,6 +896,17 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
 
     def _filter_request(self, request: ModelRequest) -> ModelRequest:
         state = request.state if isinstance(request.state, Mapping) else {}
+        try:
+            from deerflow.sp.report import report_context
+
+            report = report_context(state)
+            if report.is_active or report.status == "error":
+                # The legacy report finalization/recovery policy is superseded
+                # by the ledger-driven report path and must not force a reporter
+                # turn or hide the report role actions.
+                return request
+        except Exception:  # noqa: BLE001 - non-report runs keep the legacy policy
+            pass
         previous = state.get("sp_last_handler_result")
         if isinstance(previous, Mapping) and previous.get("policy_checkpoint") == "same_target_requires_intermediate_control_action":
             # The router records a rejected duplicate as an effective THINK
@@ -1370,15 +1391,27 @@ class SPActionBudgetMiddleware(AgentMiddleware[AgentState]):
 
     state_schema = AgentState
 
-    def __init__(self, *, max_actions: int = DEFAULT_SP_ACTION_LIMIT) -> None:
+    def __init__(self, *, max_actions: int = DEFAULT_SP_ACTION_LIMIT, report_max_actions: int = 60) -> None:
         super().__init__()
         if max_actions < 2:
             raise ValueError("SP max_actions must be at least 2")
         self._max_actions = int(max_actions)
+        self._report_max_actions = max(int(report_max_actions), int(max_actions))
+
+    def _effective_max(self, state: Mapping[str, Any]) -> int:
+        try:
+            from deerflow.sp.report import report_context
+
+            context = report_context(state)
+            if context.is_active or context.status == "error":
+                return self._report_max_actions
+        except Exception:  # noqa: BLE001 - budget check must not break non-report runs
+            return self._max_actions
+        return self._max_actions
 
     def before_agent(self, state: AgentState, runtime: Any) -> dict[str, Any] | None:
-        del state, runtime
-        return {"sp_max_loop_iterations": self._max_actions}
+        del runtime
+        return {"sp_max_loop_iterations": self._effective_max(state) if isinstance(state, Mapping) else self._max_actions}
 
     async def abefore_agent(self, state: AgentState, runtime: Any) -> dict[str, Any] | None:
         return self.before_agent(state, runtime)
@@ -1386,15 +1419,17 @@ class SPActionBudgetMiddleware(AgentMiddleware[AgentState]):
     @hook_config(can_jump_to=["end"])
     def before_model(self, state: AgentState, runtime: Any) -> dict[str, Any] | None:
         del runtime
+        max_actions = self._effective_max(state) if isinstance(state, Mapping) else self._max_actions
         iteration = int(state.get("sp_loop_iteration") or 0) if isinstance(state, Mapping) else 0
-        if iteration < self._max_actions:
-            return None
+        if iteration < max_actions:
+            current_max = int(state.get("sp_max_loop_iterations") or 0) if isinstance(state, Mapping) else 0
+            return {"sp_max_loop_iterations": max_actions} if current_max != max_actions else None
         latest = SPFinishAvailabilityMiddleware._latest_visible_human_message(state)
         use_chinese = latest is not None and bool(_CJK_TEXT_PATTERN.search(message_to_text(latest)))
         content = (
-            f"本轮已达到 {self._max_actions} 次中枢动作上限，任务尚未形成可安全交付的已验证结果。我已停止继续循环；请重试，或缩小任务范围后继续。"
+            f"本轮已达到 {max_actions} 次中枢动作上限，任务尚未形成可安全交付的已验证结果。我已停止继续循环；请重试，或缩小任务范围后继续。"
             if use_chinese
-            else (f"This run reached its {self._max_actions}-action CentralAgent limit without a safely deliverable verified result. I stopped the loop; please retry or narrow the task scope.")
+            else (f"This run reached its {max_actions}-action CentralAgent limit without a safely deliverable verified result. I stopped the loop; please retry or narrow the task scope.")
         )
         return {
             "jump_to": "end",
@@ -1404,14 +1439,14 @@ class SPActionBudgetMiddleware(AgentMiddleware[AgentState]):
                     additional_kwargs={
                         "stackplanner": {
                             "status": "action_capped",
-                            "max_actions": self._max_actions,
+                            "max_actions": max_actions,
                         }
                     },
                 )
             ],
             "sp_last_handler_result": {
                 "next_step": "error_fatal",
-                "error": f"SP action budget exhausted: {iteration}/{self._max_actions}",
+                "error": f"SP action budget exhausted: {iteration}/{max_actions}",
                 "loop_iteration": iteration,
             },
         }
@@ -1422,8 +1457,9 @@ class SPActionBudgetMiddleware(AgentMiddleware[AgentState]):
 
     def _filter_request(self, request: ModelRequest) -> ModelRequest:
         state = request.state if isinstance(request.state, Mapping) else {}
+        max_actions = self._effective_max(state)
         iteration = int(state.get("sp_loop_iteration") or 0)
-        if iteration < self._max_actions - 1:
+        if iteration < max_actions - 1:
             return request
 
         # The preceding finish/recovery policy has already narrowed the schema.
@@ -1441,7 +1477,7 @@ class SPActionBudgetMiddleware(AgentMiddleware[AgentState]):
                     name=_SP_ACTION_BUDGET_MESSAGE_NAME,
                     content=(
                         "<sp-action-budget-terminal>\n"
-                        f"This run has used {iteration} of {self._max_actions} CentralAgent actions. "
+                        f"This run has used {iteration} of {max_actions} CentralAgent actions. "
                         "No validated terminal action is currently available. Do not call another action or tool. "
                         "Answer the user once now with an honest concise incomplete-status summary: state what was accomplished, "
                         "what remains unverified, and the smallest useful next step. Never claim that an unverified artifact is ready.\n"
@@ -1839,6 +1875,8 @@ def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: st
             "backtrack_target_id": payload.pop("target_id"),
             "rollback_scope": payload.pop("rollback_scope", "memory_only"),
         }
+    elif tool_name == "sp_replan":
+        payload["metadata"] = _normalize_model_mapping(payload.get("metadata"))
     elif tool_name == "sp_ask_human":
         payload["metadata"] = {
             **dict(payload.get("metadata") or {}),
@@ -1902,6 +1940,33 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
     def _execute_control_tool(self, request: ToolCallRequest) -> Command[Any]:
         tool_name = str(request.tool_call.get("name") or "")
         tool_call_id = str(request.tool_call.get("id") or "sp-tool")
+
+        if tool_name == "sp_delegate":
+            try:
+                from deerflow.sp.report import report_delegate_is_serial
+
+                serial = report_delegate_is_serial(request.state, tool_call_id)
+            except Exception:  # noqa: BLE001 - report gate must not affect ordinary delegation
+                serial = True
+            if not serial:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                content=json.dumps(
+                                    {
+                                        "action_type": "DELEGATE",
+                                        "next_step": "error_recoverable",
+                                        "error": "Report delegations are serial. The first report delegation in this turn is already executing; wait for its result and inspect it before dispatching the next one.",
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                tool_call_id=tool_call_id,
+                                name="sp_delegate",
+                            )
+                        ]
+                    }
+                )
 
         payload = _action_payload(tool_name, request.tool_call.get("args") or {}, tool_call_id=tool_call_id)
         if tool_name == "sp_finish":
@@ -2015,6 +2080,14 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
                 # the matching ToolMessage. This survives history reloads and
                 # lets the subtask card expose every output, not only reports.
                 additional_kwargs[SP_ARTIFACT_PATHS_KEY] = artifact_paths
+
+        if effective_action_type is ActionType.REPLAN and result.memory_entries:
+            report_entry = next(
+                (entry for entry in reversed(result.memory_entries) if isinstance(entry, StackMemoryEntry) and entry.action == "replan"),
+                None,
+            )
+            if report_entry is not None:
+                content_payload["result"] = report_entry.content
 
         content = json.dumps(content_payload, ensure_ascii=False)
         tool_message = ToolMessage(
@@ -2143,6 +2216,12 @@ class SPThinkLabelMiddleware(AgentMiddleware[AgentState]):
             thread_id=_thread_id(runtime),
             run_id=_run_id(runtime),
         )
+        try:
+            from deerflow.sp.report import record_human_feedback_input
+
+            record_human_feedback_input(dict(state), feedback, pending=pending)
+        except Exception:  # noqa: BLE001 - report input bookkeeping must not block HITL resolution
+            pass
         SPControlActionMiddleware._record_events(runtime, result.run_events)
         return result.state_update
 
