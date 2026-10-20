@@ -22,6 +22,7 @@ from deerflow.runtime.user_context import get_effective_user_id
 from deerflow.sandbox.tools import glob_tool, grep_tool, ls_tool, read_file_tool, write_file_tool
 from deerflow.sp.actions.handlers.base import HandlerContext
 from deerflow.sp.actions.handlers.delegate import DelegateHandler
+from deerflow.sp.actions.handlers.finish import FinishHandler
 from deerflow.sp.actions.schema import ActionType, SPAction
 from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.memory import TaskMemoryStack
@@ -476,6 +477,123 @@ def test_real_executor_toolnode_concurrent_material_calls_keep_both(tmp_path, mo
     assert {item["source_id"] for item in ledger.materials()} == {"S1", "S2"}
     assert {item["material_id"] for item in ledger.materials()} == {"m1", "m2"}
     assert ledger.action("a-concurrent-material")["status"] == "completed"
+
+
+def test_real_executor_integration_review_and_first_finish(tmp_path, monkeypatch, real_executor):
+    app_config = _app_config()
+    state = _state(tmp_path)
+    ctx = HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="t-e2e", run_id="run-e2e")
+    report = hooks.report_context(state)
+    assert report.outputs_path and report.report_id
+    paths = report_store.ReportPaths(report.outputs_path, report.report_id)
+    ledger = ReportLedger.load(paths)
+    tree = {
+        "version": 1,
+        "report_title": "示例公司 P3 报告",
+        "requirements": [{"id": "R1", "input_id": "u1", "text": "FY2024 偿付能力", "hard": True}],
+        "nodes": [
+            {"node_id": "n1", "parent_id": None, "kind": "section", "title": "偿付能力"},
+            {
+                "node_id": "n2",
+                "parent_id": "n1",
+                "kind": "writable",
+                "title": "指标",
+                "question": "指标如何？",
+                "argument": ["读取材料"],
+                "conclusion": "待证据",
+                "evidence": [],
+                "constraints": {},
+                "requirement_ids": ["R1"],
+                "relations": [],
+                "gap_ids": [],
+                "status": "planned",
+            },
+        ],
+    }
+    tree_path = paths.tree_file(1)
+    report_store.write_json_atomic(tree_path, tree)
+    ledger.payload["tree"] = {
+        "version": 1,
+        "path": str(tree_path),
+        "virtual_path": paths.virtual(tree_path),
+        "sha256": report_store.sha256_text(tree_path.read_text(encoding="utf-8")),
+        "node_ids": ["n1", "n2"],
+    }
+    draft_path = paths.draft_file("n2", "d1")
+    report_store.write_text_atomic(draft_path, "P3 candidate body.\n")
+    ledger.payload["drafts"] = [
+        {
+            "draft_id": "d1",
+            "node_id": "n2",
+            "write_key": "w1",
+            "path": str(draft_path),
+            "virtual_path": paths.virtual(draft_path),
+            "sha256": report_store.sha256_text("P3 candidate body.\n"),
+            "chars": len("P3 candidate body.\n"),
+            "is_current": True,
+            "review_status": "none",
+            "status": "current",
+            "applicable_fingerprint": "fp",
+        }
+    ]
+    ledger.save()
+
+    action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-integrate-e2e",
+        reason="review",
+        task="review candidate",
+        target_agent="outline",
+        stage="verification",
+        metadata={"report_task": "integrate_review"},
+    )
+    task_meta: dict = {"stage": "verification"}
+    refs: dict = {}
+    hooks.prepare_delegation(action, ctx, task_meta, refs)
+    packet = refs["report_packet"]
+    review_content = json.dumps(
+        {
+            "inputs_digest": packet["inputs_digest"],
+            "reviewed_candidate_sha256": packet["candidate_sha256"],
+            "review": {
+                "status": "ready",
+                "outcome": "deliver",
+                "findings": [],
+                "covered_requirement_ids": ["R1"],
+                "edits": [],
+            },
+        },
+        ensure_ascii=False,
+    )
+    model = FakeToolCallingModel(
+        responses=[
+            AIMessage(
+                content=json.dumps(
+                    {
+                        "summary": "reviewed",
+                        "artifact_content": review_content,
+                        "artifact_type": "integration_review",
+                        "artifact_metadata": {"artifact_type": "integration_review", "report_task": "integrate_review", "status": "ready"},
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        ]
+    )
+    _install_fake_model(monkeypatch, model, real_executor)
+    handler = DelegateHandler(executor=DR2SubagentExecutorAdapter(_executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool], "sp-outline", real_executor)))
+    result = handler.handle(action, ctx)
+    assert result.next_step == "continue", result.error
+    ctx.state.update(result.state_update)
+    ledger = ReportLedger.load(paths)
+    assert ledger.payload["final_report"] is not None
+    final_content = Path(ledger.payload["final_report"]["path"]).read_text(encoding="utf-8")
+    assert "P3 candidate body." in final_content
+    finish = FinishHandler().handle(SPAction.create(ActionType.FINISH, action_id="a-finish-e2e", reason="done", task="done"), ctx)
+    assert finish.next_step == "finish", finish.error
+    ledger = ReportLedger.load(paths)
+    assert ledger.payload["status"] == "delivered"
+    assert ledger.payload["delivered"]["final_path"] == ledger.payload["final_report"]["virtual_path"]
 
 
 def test_real_executor_writer_writes_host_path_and_disables_thinking(tmp_path, monkeypatch, real_executor):
