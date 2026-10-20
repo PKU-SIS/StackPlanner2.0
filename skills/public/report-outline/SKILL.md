@@ -51,7 +51,9 @@ Return the complete tree JSON in `artifact_content`:
 - A first plan may contain `needs_evidence` nodes. Do not fabricate evidence or
   state a conclusion the saved material cannot support.
 - Every previous node that is removed must be listed in `removed_node_ids`.
-- P1 does not write nodes: leave `write_requests` empty.
+- P2/P3 can request trial writing with one writable node per `write_requests` key;
+  choosing no trial is valid. P3 assembly still requires every writable node to
+  have a current draft before integration review.
 
 ## User Inputs
 
@@ -78,3 +80,20 @@ output, judge every such gap:
 
 Never treat the arrival of a result, a summary, or a user answer as automatic
 resolution. A user answer is input to your judgement, not a closure.
+
+## Integration Review
+
+When `report_task="integrate_review"`, do not plan or rewrite the tree. Read the
+candidate, full tree/node intents, requirements, drafts, materials, sources and
+citation map. Return the full review JSON in `artifact_content`, including the
+packet's exact `inputs_digest` and `reviewed_candidate_sha256`.
+
+You may propose only local `bridge|terminology|format|dedupe` edits with one
+current draft, a unique non-empty anchor, a replacement, and a reason. Edits
+must not change facts, conclusions, comparison scope, evidence, citation
+identity, or heading structure. Use `outcome="edit"` and `status="issues"` for
+local edits; the host applies them and a new review is required. Use
+`outcome="revise"` for substantive changes; do not attach edits. Use
+`outcome="deliver"` and `status="ready"` only when no blocking finding or edit
+remains. Keep `artifact_metadata` to the artifact type, `report_task`, and
+summary status; do not duplicate the review there.

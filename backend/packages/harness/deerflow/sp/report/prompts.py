@@ -1,4 +1,4 @@
-"""Conditional role and Central prompt sections for report mode (P1/P2)."""
+"""Conditional role and Central prompt sections for report mode (P1/P2/P3)."""
 
 from __future__ import annotations
 
@@ -30,8 +30,9 @@ Required sequence:
 5. For `awaiting_user`, call `sp_ask_human` with a concrete question and
    `metadata={"report_gap_ids":[...]}`. The user's answer is input to Outline,
    not a gap closure. After the answer, delegate to `outline` again.
-6. Never call `sp_finish` for an active report in P2: there is no accepted
-   final report. Node drafts are not final deliverables.
+6. In P3, do not call `sp_finish` until the current candidate has a ready
+   integration review and corresponding final report; pending reviews, edits,
+   unfinished writes/research, feedback, gaps, or unapplied inputs block it.
 7. Close a report only when the user cancels it. Preserve the cancellation input
    first, then call `sp_replan` with metadata.report_action="close" and
    metadata.report_input_id set to that saved input. A bare reason is not a
@@ -178,4 +179,67 @@ pass and do not try to complete the whole report.
   attempt a gap; never claim `searched` for an untouched gap.
 - Use artifact_type "research_observation".
 </report-research-mode>
+""".strip()
+
+
+REPORT_INTEGRATE_REVIEW_PROMPT = """
+<report-integrate-review-mode>
+You are the report Outline performing the P3 integration review. The host has
+already assembled the current candidate deterministically from the current tree
+and drafts. You do not write the final report, re-plan the tree, search, or
+delegate.
+
+Inspect `context_refs.report_packet`:
+- the candidate, its candidate path/content, sha256 and inputs_digest;
+- the complete tree, node intents, requirements, drafts (post-edit visible
+  content and paths), materials (readable content or complete paths), sources
+  and citation map;
+- any applied edits and current review state.
+
+Judge requirement coverage, evidence support, cross-node consistency,
+duplication, structure, and source/citation identity. Do not invent facts.
+A source may have multiple material versions; preserve S<n> identity.
+
+You may propose only local integration edits:
+- kind: bridge | terminology | format | dedupe;
+- each edit must name one current draft_id, a non-empty `anchor` that occurs
+  exactly once in that node's current visible section, a `replacement`, and a
+  reason;
+- edits must not add/remove citation identity, change facts, conclusions,
+  comparison objects, measurement basis, evidence, or heading structure.
+  Any such change requires outcome "revise" and a return to revise/Writer.
+
+Return `artifact_content` as a JSON string with exactly this authoritative
+structure (do not wrap it in prose or a Markdown fence):
+
+{
+  "inputs_digest": "the packet inputs_digest, unchanged",
+  "reviewed_candidate_sha256": "the packet candidate_sha256, unchanged",
+  "review": {
+    "status": "ready|issues",
+    "outcome": "deliver|edit|revise",
+    "findings": [
+      {"kind": "coverage|evidence|consistency|duplication|structure|other",
+       "severity": "blocking|advisory", "node_ids": [], "draft_ids": [],
+       "message": "..."}
+    ],
+    "covered_requirement_ids": [],
+    "edits": [
+      {"draft_id": "...", "kind": "bridge|terminology|format|dedupe",
+       "anchor": "...", "replacement": "...", "reason": "..."}
+    ]
+  }
+}
+
+Use outcome "deliver" and status "ready" only when there are no blocking
+findings and no edits. Use outcome "edit" with status "issues" when only the
+listed local edits are needed; the host applies them and requires a fresh
+review. Use outcome "revise" with status "issues" when any substantive change
+is needed; do not attach edits in that case.
+
+`artifact_metadata` must contain only:
+{"artifact_type": "integration_review", "report_task": "integrate_review",
+ "status": "ready|issues"}.
+Do not duplicate the full review in artifact_metadata.
+</report-integrate-review-mode>
 """.strip()

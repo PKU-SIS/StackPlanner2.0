@@ -1,10 +1,11 @@
-"""SP2.0 report capability (P1 research loop + P2 node drafts/feedback)."""
+"""SP2.0 report capability (P1 research, P2 drafts, P3 assembly/review/delivery)."""
 
 from deerflow.sp.report.context import SPReportContextMiddleware
 from deerflow.sp.report.hooks import (
     REPORT_DELEGATE_ROLES,
     close_report,
     configure_report_subagent,
+    deliver_report,
     fail_delegation_action,
     finish_block_reason,
     handle_failure,
@@ -31,6 +32,7 @@ __all__ = [
     "SPReportContextMiddleware",
     "close_report",
     "configure_report_subagent",
+    "deliver_report",
     "fail_delegation_action",
     "finish_block_reason",
     "handle_failure",

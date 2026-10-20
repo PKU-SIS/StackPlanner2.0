@@ -7,11 +7,17 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
+from deerflow.sp.report import assembly as report_assembly
 from deerflow.sp.report import store as report_store
 from deerflow.sp.report import tree as report_tree
 from deerflow.sp.report import writing as report_writing
 from deerflow.sp.report.ledger import ReportLedger, ReportValidationError, gap_next_action
-from deerflow.sp.report.prompts import REPORT_OUTLINE_PROMPT, REPORT_RESEARCH_PROMPT, REPORT_WRITER_PROMPT
+from deerflow.sp.report.prompts import (
+    REPORT_INTEGRATE_REVIEW_PROMPT,
+    REPORT_OUTLINE_PROMPT,
+    REPORT_RESEARCH_PROMPT,
+    REPORT_WRITER_PROMPT,
+)
 
 OUTLINE_SUMMARY_MAX_CHARS = 24_000
 OUTLINE_TREE_MAX_CHARS = 80_000
@@ -176,6 +182,77 @@ def build_writer_packet(
         },
         "prior_draft": prior,
         "instructions": REPORT_WRITER_PROMPT,
+    }
+
+
+def build_integrate_review_packet(ledger: ReportLedger) -> dict[str, Any]:
+    inputs_view = report_assembly.review_inputs(ledger)
+    candidate = inputs_view["candidate"]
+    tree = inputs_view["tree"]
+    candidate_text, candidate_error = _read_text(candidate.get("path"))
+    tree_text = json.dumps(tree, ensure_ascii=False, indent=2)
+    inputs = []
+    for item in ledger.inputs():
+        text, error = _read_text(item.get("path"))
+        inputs.append(
+            {
+                "input_id": item.get("input_id"),
+                "source": item.get("source"),
+                "applied": bool(item.get("applied")),
+                "path": item.get("virtual_path"),
+                "text": text,
+                "error": error,
+            }
+        )
+    materials = []
+    for item in inputs_view["materials"]:
+        text, error = _read_text(item.get("path"))
+        materials.append(
+            {
+                **item,
+                "text": text[:OUTLINE_SUMMARY_MAX_CHARS],
+                "content_truncated": len(text) > OUTLINE_SUMMARY_MAX_CHARS,
+                "error": error,
+            }
+        )
+    request_text, request_error = _read_text(ledger.paths.request)
+    return {
+        "report_id": ledger.payload.get("report_id"),
+        "report_task": "integrate_review",
+        "request": {
+            "text": request_text,
+            "path": ledger.paths.virtual(ledger.paths.request),
+            "error": request_error,
+        },
+        "candidate": {
+            "candidate_id": candidate.get("candidate_id"),
+            "status": candidate.get("status"),
+            "path": candidate.get("virtual_path"),
+            "content": candidate_text,
+            "content_error": candidate_error,
+            "sha256": candidate.get("sha256"),
+            "inputs_digest": candidate.get("inputs_digest"),
+            "tree_version": candidate.get("tree_version"),
+            "edits_applied": candidate.get("edits_applied") or [],
+            "source_table": candidate.get("source_table") or [],
+            "citation_map": candidate.get("citation_map") or [],
+        },
+        "candidate_sha256": candidate.get("sha256"),
+        "inputs_digest": candidate.get("inputs_digest"),
+        "base_digest": candidate.get("base_digest"),
+        "tree": {
+            "version": tree.get("version"),
+            "path": (ledger.payload.get("tree") or {}).get("virtual_path"),
+            "content": tree_text,
+            "requirements": tree.get("requirements") or [],
+        },
+        "inputs": inputs,
+        "drafts": inputs_view["drafts"],
+        "materials": materials,
+        "sources": inputs_view["sources"],
+        "citation_map": inputs_view["citation_map"],
+        "current_review": ledger.payload.get("review"),
+        "instructions": REPORT_INTEGRATE_REVIEW_PROMPT,
     }
 
 

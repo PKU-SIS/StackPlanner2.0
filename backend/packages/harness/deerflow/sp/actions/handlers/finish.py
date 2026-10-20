@@ -392,6 +392,28 @@ class FinishHandler:
                 ],
             )
 
+        try:
+            from deerflow.sp.report import deliver_report
+
+            delivered = deliver_report(context, action)
+        except Exception as exc:  # noqa: BLE001 - delivery must fail closed
+            return HandlerResult(
+                next_step="error_recoverable",
+                idempotency_key=action.idempotency_key,
+                error=f"Report delivery failed: {type(exc).__name__}: {exc}",
+                run_events=[
+                    make_sp_event(
+                        "sp.finish.rejected",
+                        action_id=action.action_id,
+                        run_id=context.run_id,
+                        reason="report_delivery_failed",
+                        error=str(exc),
+                    )
+                ],
+            )
+        if delivered is None:
+            delivered = {}
+
         final_artifact_ref = required_ref or _selected_artifact_ref(context, action)
         final_summary, summary_grounded = _grounded_final_summary(
             context,
@@ -412,6 +434,7 @@ class FinishHandler:
                 "sp_active_delegate_id": None,
                 "sp_last_run_summary": final_summary,
                 **({"sp_last_final_artifact_ref": final_artifact_ref} if final_artifact_ref else {}),
+                **({"sp_report_delivery_id": delivered.get("delivery_id")} if delivered else {}),
             },
             memory_entries=[entry],
             idempotency_key=action.idempotency_key,

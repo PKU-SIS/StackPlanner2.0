@@ -11,6 +11,7 @@ import hashlib
 import json
 from collections.abc import Mapping
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -21,6 +22,7 @@ from deerflow.sp.actions.handlers.base import HandlerContext
 from deerflow.sp.actions.schema import HandlerResult, SPAction
 from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.memory import StackMemoryEntry
+from deerflow.sp.report import assembly as report_assembly
 from deerflow.sp.report import packets as report_packets
 from deerflow.sp.report import store as report_store
 from deerflow.sp.report import tree as report_tree
@@ -33,7 +35,12 @@ from deerflow.sp.report.ledger import (
     utc_now_iso,
 )
 from deerflow.sp.report.materials import build_fetch_material_tool
-from deerflow.sp.report.prompts import REPORT_OUTLINE_PROMPT, REPORT_RESEARCH_PROMPT, REPORT_WRITER_PROMPT
+from deerflow.sp.report.prompts import (
+    REPORT_INTEGRATE_REVIEW_PROMPT,
+    REPORT_OUTLINE_PROMPT,
+    REPORT_RESEARCH_PROMPT,
+    REPORT_WRITER_PROMPT,
+)
 from deerflow.sp.report.tools import build_register_research_request_tool
 from deerflow.sp.subagents import SPSubagentResult, SPSubagentTask
 from deerflow.utils.messages import message_to_text
@@ -48,8 +55,11 @@ your model call. Do not edit the ledger by writing files. Use gap ids exactly.
 Follow each gap's next_action: open -> delegate researcher with
 metadata.report_gap_ids; awaiting_outline -> delegate outline; awaiting_user ->
 sp_ask_human with metadata.report_gap_ids; in_flight -> wait. After an Outline
-result, inspect the returned tree version and gap changes. P1/P2 have no final
-report; sp_finish is blocked while a report is active.
+result, inspect the returned tree version and gap changes. In P3, after drafts
+are current, delegate Outline with report_task="integrate_review"; if local
+edits are applied, dispatch another integrate_review rather than finishing.
+sp_finish is allowed only for the current ready final and is blocked by any
+unfinished research/write/feedback/gap/input state.
 </report-control>
 """.strip()
 
@@ -194,11 +204,37 @@ def resume_report(context: HandlerContext, action: SPAction) -> dict[str, Any]:
     with report_store.report_lock(paths):
         ledger = ReportLedger.load(paths)
         if context_info.status == "delivered":
-            ledger.payload.setdefault("delivery_history", []).append(ledger.payload.get("delivered"))
+            delivered = ledger.payload.get("delivered") if isinstance(ledger.payload.get("delivered"), Mapping) else None
+            ledger.payload.setdefault("delivery_history", []).append(dict(delivered) if delivered else None)
             ledger.payload["delivered"] = None
             ledger.payload["status"] = "active"
             ledger.payload["resumed_at"] = utc_now_iso()
-            ledger.payload["review"] = None
+            review = ledger.payload.get("review")
+            if isinstance(review, dict):
+                review["status"] = "stale"
+                review["stale_reason"] = "delivered report resumed for revision"
+                review["stale_at"] = utc_now_iso()
+                for item in ledger.payload.get("reviews") or []:
+                    if isinstance(item, dict) and item.get("review_id") == review.get("review_id"):
+                        item["status"] = "stale"
+                        item["stale_reason"] = "delivered report resumed for revision"
+                        item["stale_at"] = utc_now_iso()
+            final = ledger.payload.get("final_report")
+            if isinstance(final, dict):
+                final["status"] = "historical"
+                final["is_current"] = False
+                final["superseded_reason"] = "delivered report resumed for revision"
+            for item in ledger.payload.get("final_reports") or []:
+                if isinstance(item, dict) and item.get("status") == "current":
+                    item["status"] = "historical"
+                    item["is_current"] = False
+                    item["superseded_reason"] = "delivered report resumed for revision"
+            ledger.payload["final_report"] = None
+            ledger.payload["resume"] = {
+                "resumed_at": ledger.payload["resumed_at"],
+                "resume_of_delivery_id": (delivered or {}).get("delivery_id"),
+                "action_id": action.action_id,
+            }
             ledger.save()
         return {
             "report_id": context_info.report_id,
@@ -319,9 +355,17 @@ def prepare_delegation(
         return
     with report_store.report_lock(paths):
         ledger = ReportLedger.load(paths)
-        packet = report_packets.build_outline_packet(ledger)
+        report_task = str(task_metadata.get("report_task") or action.metadata.get("report_task") or "plan").strip().lower()
+        if report_task not in {"plan", "revise", "integrate_review"}:
+            raise ReportValidationError("report_task must be plan, revise, or integrate_review")
+        if report_task == "integrate_review":
+            report_assembly.ensure_candidate(ledger)
+            packet = report_packets.build_integrate_review_packet(ledger)
+        else:
+            packet = report_packets.build_outline_packet(ledger)
     task_metadata["report_id"] = report.report_id
     task_metadata["report_role"] = role
+    task_metadata["report_task"] = report_task
     task_metadata["report_delegate_action_id"] = action.action_id
     context_refs["report_packet"] = packet
 
@@ -353,18 +397,22 @@ def configure_report_subagent(
     paths = report_store.ReportPaths(report.outputs_path, report.report_id)  # type: ignore[arg-type]
     tools_by_name = {str(getattr(tool, "name", "")): tool for tool in available_tools}
     if role == "outline":
-        register_tool = build_register_research_request_tool(paths=paths, action_id=task.action_id)
+        report_task = str(task.metadata.get("report_task") or "plan").strip().lower()
         selected = [tools_by_name[name] for name in REPORT_READ_TOOLS if name in tools_by_name]
         if "read_file" not in tools_by_name:
             raise ReportValidationError("report outline requires a configured read_file tool to read saved materials")
-        selected.append(register_tool)
+        register_tool = None
+        if report_task != "integrate_review":
+            register_tool = build_register_research_request_tool(paths=paths, action_id=task.action_id)
+            selected.append(register_tool)
+        prompt = REPORT_INTEGRATE_REVIEW_PROMPT if report_task == "integrate_review" else REPORT_OUTLINE_PROMPT
         config = replace(
             subagent_config,
-            system_prompt=_join_prompt(subagent_config.system_prompt, REPORT_OUTLINE_PROMPT),
+            system_prompt=_join_prompt(subagent_config.system_prompt, prompt),
             tools=[str(getattr(tool, "name", "")) for tool in selected],
             skills=["report-outline"],
         )
-        return config, [*available_tools, register_tool], role
+        return config, ([*available_tools, register_tool] if register_tool is not None else list(available_tools)), role
 
     if role == "writer":
         if "write_file" not in tools_by_name:
@@ -416,6 +464,8 @@ def handle_success(
 ) -> HandlerResult | None:
     role = str(task.metadata.get("report_role") or "")
     if role == "outline":
+        if str(task.metadata.get("report_task") or "").strip().lower() == "integrate_review":
+            return _accept_integrate_review(action, context, result, task, artifact_adapter=artifact_adapter, delegate_entry=delegate_entry)
         return _accept_outline(action, context, result, task, artifact_adapter=artifact_adapter, delegate_entry=delegate_entry)
     if role == "researcher":
         return _accept_research(action, context, result, task, artifact_adapter=artifact_adapter, delegate_entry=delegate_entry)
@@ -488,6 +538,395 @@ def fail_delegation_action(state: Mapping[str, Any] | None, action_id: str, erro
             ledger.save()
     except Exception:  # noqa: BLE001 - the original execution error is more useful
         return
+
+
+def _accept_integrate_review(
+    action: SPAction,
+    context: HandlerContext,
+    result: SPSubagentResult,
+    task: SPSubagentTask,
+    *,
+    artifact_adapter: SPArtifactAdapter,
+    delegate_entry: StackMemoryEntry,
+) -> HandlerResult:
+    report = active_report_required(context.state)
+    paths = _paths_for_context(report)
+    with report_store.report_lock(paths):
+        return _accept_integrate_review_locked(
+            action,
+            context,
+            result,
+            task,
+            artifact_adapter=artifact_adapter,
+            delegate_entry=delegate_entry,
+            paths=paths,
+        )
+
+
+def _parse_integration_review(result: SPSubagentResult) -> dict[str, Any]:
+    metadata = result.artifact_metadata if isinstance(result.artifact_metadata, Mapping) else {}
+    if str(metadata.get("report_task") or "") != "integrate_review":
+        raise ReportValidationError("integration review result must declare artifact_metadata.report_task=integrate_review")
+    raw = result.artifact_content
+    if isinstance(raw, str):
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ReportValidationError("integration review artifact_content must be a JSON object") from exc
+    elif isinstance(raw, Mapping):
+        payload = dict(raw)
+    else:
+        raise ReportValidationError("integration review artifact_content must be a JSON object")
+    review = payload.get("review")
+    if not isinstance(review, Mapping):
+        raise ReportValidationError("integration review artifact_content.review is required")
+    status = str(review.get("status") or "").strip().lower()
+    outcome = str(review.get("outcome") or "").strip().lower()
+    if status not in {"ready", "issues"}:
+        raise ReportValidationError("review.status must be ready or issues")
+    if outcome not in {"deliver", "edit", "revise"}:
+        raise ReportValidationError("review.outcome must be deliver, edit, or revise")
+    findings = review.get("findings") or []
+    edits = review.get("edits") or []
+    if not isinstance(findings, list) or not isinstance(edits, list):
+        raise ReportValidationError("review.findings and review.edits must be lists")
+    if any(not isinstance(item, Mapping) for item in findings):
+        raise ReportValidationError("review.findings must contain objects")
+    if any(not isinstance(item, Mapping) for item in edits):
+        raise ReportValidationError("review.edits must contain objects")
+    covered = review.get("covered_requirement_ids") or []
+    if not isinstance(covered, list) or any(not isinstance(item, str) for item in covered):
+        raise ReportValidationError("review.covered_requirement_ids must be a list of strings")
+    if outcome == "deliver":
+        if status != "ready" or edits:
+            raise ReportValidationError("deliver review must be ready and contain no edits")
+        if any(str(item.get("severity") or "").lower() == "blocking" for item in findings):
+            raise ReportValidationError("ready review cannot contain blocking findings")
+    if outcome == "edit":
+        if status != "issues" or not edits:
+            raise ReportValidationError("edit review must be issues with at least one edit")
+    if outcome == "revise" and edits:
+        raise ReportValidationError("revise review cannot carry local edits; return them separately after revision")
+    inputs_digest = payload.get("inputs_digest")
+    candidate_sha = payload.get("reviewed_candidate_sha256")
+    if not isinstance(inputs_digest, str) or not inputs_digest:
+        raise ReportValidationError("integration review must echo inputs_digest")
+    if not isinstance(candidate_sha, str) or not candidate_sha:
+        raise ReportValidationError("integration review must echo reviewed_candidate_sha256")
+    return {
+        "inputs_digest": inputs_digest,
+        "reviewed_candidate_sha256": candidate_sha,
+        "review": {
+            "status": status,
+            "outcome": outcome,
+            "findings": [dict(item) for item in findings],
+            "edits": [dict(item) for item in edits],
+            "covered_requirement_ids": covered,
+        },
+    }
+
+
+def _write_review_record(ledger: ReportLedger, record: dict[str, Any]) -> None:
+    path = ledger.paths.review_file(str(record["review_id"]))
+    ledger.paths.reviews.mkdir(parents=True, exist_ok=True)
+    report_store.write_json_atomic(path, record)
+    record["path"] = str(path)
+    record["virtual_path"] = ledger.paths.virtual(path)
+
+
+def _finalize_integration_review(
+    ledger: ReportLedger,
+    *,
+    candidate: Mapping[str, Any],
+    review: dict[str, Any],
+    artifact_adapter: SPArtifactAdapter,
+    context: HandlerContext,
+    action: SPAction,
+    delegate_entry: StackMemoryEntry,
+) -> tuple[dict[str, Any], Any]:
+    candidate_path = Path(str(candidate.get("path") or ""))
+    try:
+        content = candidate_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ReportValidationError(f"candidate file is unreadable: {exc}") from exc
+    if report_store.sha256_text(content) != str(candidate.get("sha256") or ""):
+        raise ReportValidationError("candidate content hash does not match the ledger")
+    final_reports = ledger.payload.get("final_reports") if isinstance(ledger.payload.get("final_reports"), list) else []
+    for item in final_reports:
+        if isinstance(item, dict) and item.get("status") == "current":
+            item["status"] = "superseded"
+            item["is_current"] = False
+            item["superseded_reason"] = "replaced by a newer reviewed final"
+            item["superseded_at"] = utc_now_iso()
+    versions = [int(item.get("version") or 0) for item in final_reports if isinstance(item, Mapping)]
+    version = max(versions, default=0) + 1
+    final_path = ledger.paths.final_file(version)
+    report_store.write_text_atomic(final_path, content)
+    if report_store.sha256_text(final_path.read_text(encoding="utf-8")) != str(candidate.get("sha256") or ""):
+        raise ReportValidationError("final report file verification failed")
+    virtual_path = ledger.paths.virtual(final_path)
+    artifact = artifact_adapter.register_existing_artifact(
+        virtual_path,
+        artifact_type="final_report",
+        state=context.state,
+        thread_id=context.thread_id,
+        run_id=context.run_id,
+        created_by="outline",
+        stage=action.stage,
+        source_entry_id=delegate_entry.id,
+        summary=f"Reviewed final report v{version}",
+        metadata={
+            "report_id": ledger.paths.report_id,
+            "candidate_id": candidate.get("candidate_id"),
+            "review_id": review.get("review_id"),
+            "inputs_digest": review.get("inputs_digest"),
+            "tree_version": candidate.get("tree_version"),
+        },
+    )
+    final_record = {
+        "version": version,
+        "status": "current",
+        "is_current": True,
+        "path": str(final_path),
+        "virtual_path": virtual_path,
+        "sha256": str(candidate.get("sha256")),
+        "chars": int(candidate.get("chars") or len(content)),
+        "candidate_id": candidate.get("candidate_id"),
+        "review_id": review.get("review_id"),
+        "inputs_digest": review.get("inputs_digest"),
+        "base_digest": review.get("base_digest"),
+        "tree_version": candidate.get("tree_version"),
+        "created_at": utc_now_iso(),
+        "artifact_id": artifact.metadata.artifact_id,
+    }
+    report_store.write_json_atomic(ledger.paths.final_manifest(version), final_record)
+    final_reports.append(final_record)
+    ledger.payload["final_reports"] = final_reports
+    ledger.payload["final_report"] = final_record
+    ledger.payload["candidate"] = dict(candidate)
+    candidate_record = ledger.payload["candidate"]
+    candidate_record["status"] = "finalized"
+    ledger.payload["review"] = review
+    return final_record, artifact
+
+
+def _accept_integrate_review_locked(
+    action: SPAction,
+    context: HandlerContext,
+    result: SPSubagentResult,
+    task: SPSubagentTask,
+    *,
+    artifact_adapter: SPArtifactAdapter,
+    delegate_entry: StackMemoryEntry,
+    paths: report_store.ReportPaths,
+) -> HandlerResult:
+    ledger = ReportLedger.load(paths)
+    candidate = ledger.payload.get("candidate")
+    if not isinstance(candidate, Mapping):
+        return _rejection(action, context, "Integration review rejected: no current assembly candidate.", reason="review_candidate_missing")
+    if candidate.get("status") not in report_assembly.ACTIVE_CANDIDATE_STATUSES:
+        return _rejection(action, context, f"Integration review rejected: candidate is {candidate.get('status')}.", reason="review_candidate_not_current")
+    try:
+        parsed = _parse_integration_review(result)
+    except ReportValidationError as exc:
+        return _rejection(action, context, f"Integration review rejected: {exc}", reason="invalid_integration_review")
+    if parsed["inputs_digest"] != candidate.get("inputs_digest"):
+        return _rejection(
+            action,
+            context,
+            "Integration review rejected: inputs_digest is stale; review the current candidate again.",
+            reason="stale_review_digest",
+        )
+    if parsed["reviewed_candidate_sha256"] != candidate.get("sha256"):
+        return _rejection(
+            action,
+            context,
+            "Integration review rejected: reviewed_candidate_sha256 does not match the current candidate.",
+            reason="stale_review_candidate",
+        )
+    review_body = parsed["review"]
+    reviews = ledger.payload.get("reviews") if isinstance(ledger.payload.get("reviews"), list) else []
+    review_id = report_store.next_identifier("rv", [str(item.get("review_id")) for item in reviews if isinstance(item, Mapping)])
+    review_record = {
+        "review_id": review_id,
+        "candidate_id": candidate.get("candidate_id"),
+        "candidate_sha256": candidate.get("sha256"),
+        "base_digest": candidate.get("base_digest"),
+        "inputs_digest": parsed["inputs_digest"],
+        "reviewed_candidate_sha256": parsed["reviewed_candidate_sha256"],
+        "tree_version": candidate.get("tree_version"),
+        "status": review_body["status"],
+        "outcome": review_body["outcome"],
+        "findings": review_body["findings"],
+        "covered_requirement_ids": review_body["covered_requirement_ids"],
+        "edits": review_body["edits"],
+        "action_id": action.action_id,
+        "created_at": utc_now_iso(),
+    }
+    try:
+        if review_body["edits"]:
+            new_candidate = report_assembly.apply_edits(ledger, review_body["edits"])
+            review_record["status"] = "edits_applied"
+            review_record["result_candidate_id"] = new_candidate.get("candidate_id")
+            _write_review_record(ledger, review_record)
+            reviews.append(review_record)
+            ledger.payload["reviews"] = reviews
+            ledger.payload["review"] = review_record
+            ledger.payload["outline_review_due"] = False
+            ledger.save()
+            observe_content = json.dumps(
+                {
+                    "report_id": ledger.paths.report_id,
+                    "review_id": review_id,
+                    "candidate_id": new_candidate.get("candidate_id"),
+                    "status": "edits_applied",
+                    "pending_review": True,
+                    "edits_applied": len(review_body["edits"]),
+                    "next_action": "delegate_outline_integrate_review",
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            entry = context.stack.append_observe(
+                observe_content,
+                actor="outline",
+                thread_id=context.thread_id,
+                run_id=context.run_id,
+                stage=action.stage,
+                priority="high",
+                metadata={"action_id": action.action_id, "target_agent": "outline", "report_task": "integrate_review", "completion_status": "partial"},
+            )
+            return HandlerResult(
+                next_step="continue",
+                state_update={"sp_active_delegate_id": None, "sp_current_stage": action.stage or "verification"},
+                memory_entries=[delegate_entry, entry],
+                idempotency_key=action.idempotency_key,
+                run_events=[
+                    make_sp_event("sp.delegate.completed", action_id=action.action_id, run_id=context.run_id, target_agent="outline", completion_status="partial"),
+                    make_sp_event(
+                        "sp.report.integration_edits_applied",
+                        action_id=action.action_id,
+                        run_id=context.run_id,
+                        report_id=ledger.paths.report_id,
+                        review_id=review_id,
+                        candidate_id=new_candidate.get("candidate_id"),
+                    ),
+                ],
+            )
+        if review_body["status"] != "ready" or review_body["outcome"] != "deliver":
+            report_assembly.invalidate_review(ledger, "integration review reported issues")
+            _write_review_record(ledger, review_record)
+            reviews.append(review_record)
+            ledger.payload["reviews"] = reviews
+            ledger.payload["review"] = review_record
+            ledger.payload["outline_review_due"] = False
+            ledger.save()
+            entry = context.stack.append_observe(
+                json.dumps(
+                    {
+                        "report_id": ledger.paths.report_id,
+                        "review_id": review_id,
+                        "status": review_body["status"],
+                        "outcome": review_body["outcome"],
+                        "blocking_findings": sum(1 for item in review_body["findings"] if str(item.get("severity") or "").lower() == "blocking"),
+                        "next_action": "revise",
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                actor="outline",
+                thread_id=context.thread_id,
+                run_id=context.run_id,
+                stage=action.stage,
+                priority="high",
+                metadata={"action_id": action.action_id, "target_agent": "outline", "report_task": "integrate_review", "completion_status": "complete"},
+            )
+            return HandlerResult(
+                next_step="continue",
+                state_update={"sp_active_delegate_id": None, "sp_current_stage": action.stage or "revision"},
+                memory_entries=[delegate_entry, entry],
+                idempotency_key=action.idempotency_key,
+                run_events=[
+                    make_sp_event("sp.delegate.completed", action_id=action.action_id, run_id=context.run_id, target_agent="outline", completion_status="complete"),
+                    make_sp_event("sp.report.integration_review_issues", action_id=action.action_id, run_id=context.run_id, report_id=ledger.paths.report_id, review_id=review_id),
+                ],
+            )
+        _write_review_record(ledger, review_record)
+        final_record, artifact = _finalize_integration_review(
+            ledger,
+            candidate=candidate,
+            review=review_record,
+            artifact_adapter=artifact_adapter,
+            context=context,
+            action=action,
+            delegate_entry=delegate_entry,
+        )
+        reviews.append(review_record)
+        ledger.payload["reviews"] = reviews
+        ledger.payload["outline_review_due"] = False
+        ledger.save()
+    except (ReportValidationError, OSError, ValueError) as exc:
+        return _rejection(action, context, f"Integration review could not be applied: {exc}", reason="integration_review_apply_failed")
+    except Exception as exc:  # noqa: BLE001 - acceptance must fail closed
+        return _rejection(action, context, f"Integration review acceptance failed: {type(exc).__name__}: {exc}", reason="integration_review_acceptance_failed")
+
+    entry = context.stack.append_observe(
+        json.dumps(
+            {
+                "report_id": ledger.paths.report_id,
+                "review_id": review_id,
+                "candidate_id": candidate.get("candidate_id"),
+                "final_report": final_record.get("virtual_path"),
+                "inputs_digest": final_record.get("inputs_digest"),
+                "status": "ready",
+                "next_action": "sp_finish",
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
+        actor="outline",
+        thread_id=context.thread_id,
+        run_id=context.run_id,
+        stage=action.stage,
+        priority="high",
+        result_ref=artifact.metadata.artifact_id,
+        metadata={
+            "action_id": action.action_id,
+            "target_agent": "outline",
+            "report_task": "integrate_review",
+            "completion_status": "complete",
+            "final_report": True,
+            "review_id": review_id,
+        },
+    )
+    state_update = _artifact_state_update(artifact.state_update)
+    state_update.update({"sp_active_delegate_id": None, "sp_current_stage": action.stage or "verification"})
+    return HandlerResult(
+        next_step="continue",
+        state_update=state_update,
+        memory_entries=[delegate_entry, entry],
+        artifact_refs=state_update.get("sp_current_artifact_refs") or {},
+        idempotency_key=action.idempotency_key,
+        run_events=[
+            make_sp_event("sp.delegate.completed", action_id=action.action_id, run_id=context.run_id, target_agent="outline", completion_status="complete"),
+            make_sp_event(
+                "sp.report.integration_review_ready",
+                action_id=action.action_id,
+                run_id=context.run_id,
+                report_id=ledger.paths.report_id,
+                review_id=review_id,
+                final_report=final_record.get("virtual_path"),
+            ),
+            make_sp_event(
+                "sp.artifact.created",
+                action_id=action.action_id,
+                run_id=context.run_id,
+                artifact_id=artifact.metadata.artifact_id,
+                artifact_type="final_report",
+                virtual_path=artifact.metadata.virtual_path,
+            ),
+        ],
+    )
 
 
 def _accept_writer(
@@ -625,6 +1064,7 @@ def _accept_writer_locked(
             basis=basis,
             feedback_wanted=bool(report_writing.require_write_request(ledger, key).get("feedback_wanted")),
         )
+        report_assembly.invalidate_review(ledger, "accepted draft changed")
         ledger.save()
     except ReportValidationError as exc:
         report_writing.fail_writer_attempt(ledger, key=key, action_id=action.action_id, error=str(exc))
@@ -762,6 +1202,8 @@ def _accept_outline_locked(
             },
         )
         report_tree.commit_tree(candidate, version=version, path=tree_path, ledger=ledger)
+        report_assembly.invalidate_review(ledger, "accepted tree changed")
+        ledger.save()
     except ReportValidationError as exc:
         return _rejection(action, context, f"Outline result rejected: {exc}", reason="invalid_report_tree")
     except Exception as exc:  # noqa: BLE001 - persistence boundary must surface a technical fault
@@ -1108,9 +1550,60 @@ def finish_block_reason(context: HandlerContext) -> str | None:
     except Exception as exc:  # noqa: BLE001 - delivery must not proceed on unreadable state
         return f"Report ledger cannot be read: {exc}"
     reason = ledger.block_finish_reason()
-    if reason:
-        return f"Active report cannot be delivered in P1/P2: {reason}"
-    return "Active report has no accepted final report path in P1/P2; sp_finish is not available."
+    return f"Active report cannot be delivered in P1/P2/P3: {reason}" if reason else None
+
+
+def deliver_report(context: HandlerContext, action: SPAction) -> dict[str, Any] | None:
+    """Perform the one-way delivery transaction for an active/delivered report."""
+    context_info = report_context(context.state)
+    if context_info.status == "error":
+        raise ReportValidationError(f"report state is unavailable: {context_info.error}")
+    if not context_info.is_enabled:
+        return None
+    paths = _paths_for_context(context_info)
+    with report_store.report_lock(paths):
+        ledger = ReportLedger.load(paths)
+        if ledger.payload.get("status") == "abandoned":
+            raise ReportValidationError("cannot deliver an abandoned report")
+        existing = ledger.payload.get("delivered") if isinstance(ledger.payload.get("delivered"), Mapping) else None
+        final = ledger.payload.get("final_report") if isinstance(ledger.payload.get("final_report"), Mapping) else None
+        if existing is not None:
+            if final is not None and existing.get("final_report_id") == final.get("candidate_id") and existing.get("sha256") == final.get("sha256"):
+                return dict(existing)
+            raise ReportValidationError("report is already delivered with a different final report")
+        reason = ledger.block_finish_reason()
+        if reason:
+            raise ReportValidationError(reason)
+        final_error = report_assembly.final_binding_error(ledger)
+        if final_error:
+            raise ReportValidationError(final_error)
+        if final is None:
+            raise ReportValidationError("no current final report")
+        delivery_id = report_store.next_identifier(
+            "dlv",
+            [str(item.get("delivery_id")) for item in ledger.payload.get("delivery_history") or [] if isinstance(item, Mapping)] + [str((ledger.payload.get("delivered") or {}).get("delivery_id"))],
+        )
+        review = ledger.payload.get("review") if isinstance(ledger.payload.get("review"), Mapping) else {}
+        delivered = {
+            "delivery_id": delivery_id,
+            "status": "delivered",
+            "final_report_id": final.get("candidate_id"),
+            "final_version": final.get("version"),
+            "final_path": final.get("virtual_path"),
+            "review_id": review.get("review_id"),
+            "candidate_id": final.get("candidate_id"),
+            "inputs_digest": final.get("inputs_digest"),
+            "sha256": final.get("sha256"),
+            "delivered_at": utc_now_iso(),
+            "action_id": action.action_id,
+            "run_id": context.run_id,
+        }
+        delivery_path = ledger.paths.delivery_file(delivery_id)
+        report_store.write_json_atomic(delivery_path, delivered)
+        ledger.payload["delivered"] = delivered
+        ledger.payload["status"] = "delivered"
+        ledger.save()
+        return delivered
 
 
 def control_context(state: Mapping[str, Any] | None) -> dict[str, Any] | None:
