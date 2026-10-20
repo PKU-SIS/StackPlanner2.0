@@ -105,6 +105,7 @@
 - `8a27ceb` feat(sp-report): add P3 candidate assembly, citation digest, and local edits
 - `1190c59` feat(sp-report): wire integrate review, final delivery, and delivered resume
 - `7370a63` test(sp-report): cover P3 assembly, edits, delivery, and resume
+- `ff50d57` docs(sp-report): record P3 implementation and verification
 
 ## 6. 未覆盖边界
 
