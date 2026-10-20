@@ -86,18 +86,18 @@ Skill 为 `report-node-writing`，system prompt 为 Writer 专用契约。runtim
 
 测试：
 
-- `backend/tests/test_sp_report_writing.py`：10 项。覆盖 feedback_wanted 成功回看、
+- `backend/tests/test_sp_report_writing.py`：11 项。覆盖 feedback_wanted 成功回看、
   draft content/path、completed request 重交不重跑、feedback-only、needs_research
   阻塞与解除、requirement 正文/父节点变化、keep 保留生成依据且同规格不重复、
-  指纹未变主动 keep、rewrite/drop、技术失败重试、Writer 角色工具/prompt/skill、
-  thinking 辅助。
+  指纹未变主动 keep、rewrite/drop（含旧稿上下文）、技术失败重试、节点删除退出
+  活动请求且不关闭研究缺口、Writer 角色工具/prompt/skill、thinking 辅助。
 - `backend/tests/test_sp_report_executor_e2e.py`：真实 `DelegateHandler` +
   `SubagentExecutor` + ToolNode + 真实 `write_file`/`read_file`（LLM fake）；
   Writer 按 host 虚拟路径写入、host 接受；`create_chat_model` 捕获
   `thinking_enabled=False`（模型 supports_thinking=true 的配置下）。
 - 原 P1 46 项继续通过。
 
-结果：报告组 **57 passed**；原有 SP + 非报告/共享回归 **489 passed**；
+结果：报告组 **58 passed**；原有 SP + 非报告/共享回归 **489 passed**；
 `ruff check` / `ruff format --check` 通过。
 
 ## 4. 未覆盖边界
@@ -112,10 +112,32 @@ Skill 为 `report-node-writing`，system prompt 为 Writer 专用契约。runtim
 6. 需求正文变化只进入 fingerprint 和可见 change summary；程序不做语义影响判断，
    由 Outline 选择 keep/rewrite/drop。
 
-## 5. 提交
+## 5. b1a862f 定点复核修复
+
+1. **重写旧稿上下文**：rewrite disposition 在旧稿记录持久化
+   `rewrite_source`（原因、write key、时间）；下一次 Writer attempt 在无 current
+   draft 时从显式 rewrite 来源取 prior_draft，并写入 `prior_draft_id`。packet
+   提供旧稿路径、正文、状态和修改原因；接受新稿后旧稿保持 `rewritten`/
+   `is_current=false`，记录 `rewrite_source_consumed_by`，新稿记录 `rewrite_of`。
+   `test_rewrite_disposition_retires_old_draft_and_queues_new_write` 覆盖
+   d1 → rewrite → 新 key → packet.prior_draft（路径/正文/原因）→ 新稿接受。
+2. **executor 直接异常释放 Writer 请求**：`DelegateHandler` 异常路径把 task 传给
+   `fail_delegation_action`；该函数按 writer metadata 或 attempt 中的 action_id
+   定位 write request，调用 `fail_writer_attempt`，保存原始异常/attempt，置
+   `technical_failed`，不自动重试。`test_writer_executor_exception_releases_request_and_allows_retry`
+   使用直接 `raise RuntimeError` 的 executor，校验 last_error、attempt 和新 action
+   重试。
+3. **删除节点退出活动请求**：树接受后，对目标节点已不在 accepted tree 的活动
+   write request 置 `superseded` 并记录原因；保留 attempts/feedback 历史，不触碰
+   research gap。`test_removed_node_retires_blocked_feedback_request_without_closing_gap`
+   覆盖 feedback → needs_research → 删除 n2、不再请求写作：request `superseded`、
+   `next_action=none`、feedback `handed_off`、gap 仍 `open`。
+
+## 6. 提交
 
 - `6be0155` feat(sp-report): add P2 draft, feedback, and spec-change state
 - `d3aeb56` feat(sp-report): wire Writer drafts, feedback, and thinking-off role
 - `6b67288` test(sp-report): cover P2 writer, feedback, keeper, and spec-change behavior
 - `8d29b0a` docs(sp-report): record P2 scope, state contract, and verification
 - `8f0ff31` chore(sp-report): align P2 finish wording and module doc
+- `12676a5` fix(sp-report): close P2 rewrite, executor fault, and removed-node gaps
