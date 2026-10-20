@@ -117,3 +117,5 @@ Skill 为 `report-node-writing`，system prompt 为 Writer 专用契约。runtim
 - `6be0155` feat(sp-report): add P2 draft, feedback, and spec-change state
 - `d3aeb56` feat(sp-report): wire Writer drafts, feedback, and thinking-off role
 - `6b67288` test(sp-report): cover P2 writer, feedback, keeper, and spec-change behavior
+- `8d29b0a` docs(sp-report): record P2 scope, state contract, and verification
+- `8f0ff31` chore(sp-report): align P2 finish wording and module doc
