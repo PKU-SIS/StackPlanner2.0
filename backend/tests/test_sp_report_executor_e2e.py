@@ -15,6 +15,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _agent_e2e_helpers import FakeToolCallingModel
 
+import deerflow.config.paths as paths_module
 from deerflow.config.app_config import AppConfig, reset_app_config, set_app_config
 from deerflow.config.paths import get_paths
 from deerflow.runtime.user_context import get_effective_user_id
@@ -61,6 +62,16 @@ def _app_config() -> AppConfig:
             "tool_search": {"enabled": False},
         }
     )
+
+
+@pytest.fixture(autouse=True)
+def _isolated_paths(tmp_path):
+    previous = paths_module._paths
+    paths_module._paths = paths_module.Paths(tmp_path / "deer-flow")
+    try:
+        yield
+    finally:
+        paths_module._paths = previous
 
 
 @pytest.fixture(autouse=True)
