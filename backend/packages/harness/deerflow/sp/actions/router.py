@@ -606,6 +606,17 @@ class ActionRouter:
         """Require a new control decision before repeating the same delegation target."""
         if action.action_type != ActionType.DELEGATE:
             return None
+        try:
+            from deerflow.sp.report import report_context
+
+            report = report_context(state)
+            if report.is_active or report.status == "error":
+                # Report work is serialised and judged by the ledger; the
+                # legacy same-stage collision rule would block legitimate
+                # Outline -> Researcher -> Outline alternation.
+                return None
+        except Exception:  # noqa: BLE001 - non-report behaviour stays unchanged
+            pass
         if action.stage == "perception":
             stack = TaskMemoryStack.from_dict(state.get("sp_task_memory"), run_id=run_id)
             completed_perception = next(

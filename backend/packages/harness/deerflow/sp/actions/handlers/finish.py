@@ -297,6 +297,26 @@ def _has_final_artifact(context: HandlerContext, action: SPAction) -> bool:
 
 class FinishHandler:
     def handle(self, action: SPAction, context: HandlerContext) -> HandlerResult:
+        try:
+            from deerflow.sp.report import finish_block_reason
+
+            report_block = finish_block_reason(context)
+        except Exception as exc:  # noqa: BLE001 - unreadable report state must block delivery
+            report_block = f"Report state could not be evaluated: {type(exc).__name__}: {exc}"
+        if report_block:
+            return HandlerResult(
+                next_step="error_recoverable",
+                idempotency_key=action.idempotency_key,
+                error=report_block,
+                run_events=[
+                    make_sp_event(
+                        "sp.finish.rejected",
+                        action_id=action.action_id,
+                        run_id=context.run_id,
+                        reason="report_not_deliverable",
+                    )
+                ],
+            )
         if action.metadata.get(_PARALLEL_NONTERMINAL_SIBLING_KEY):
             return HandlerResult(
                 next_step="error_recoverable",

@@ -588,6 +588,28 @@ class DelegateHandler:
             if report_requirements:
                 context_refs["report_requirements"] = report_requirements
 
+        try:
+            from deerflow.sp.report import prepare_delegation
+            from deerflow.sp.report.ledger import ReportValidationError
+
+            prepare_delegation(action, context, task_metadata, context_refs)
+        except ReportValidationError as exc:
+            return HandlerResult(
+                next_step="error_recoverable",
+                state_update={"sp_active_delegate_id": None},
+                idempotency_key=action.idempotency_key,
+                error=f"Report delegation rejected: {exc}",
+                run_events=[
+                    make_sp_event(
+                        "sp.report.delegation_rejected",
+                        action_id=action.action_id,
+                        run_id=context.run_id,
+                        target_agent=action.target_agent,
+                        reason=str(exc),
+                    )
+                ],
+            )
+
         latest_uploaded_refs = _latest_uploaded_file_refs(context.state)
         input_refs = list(action.input_refs)
         if action.target_agent in {"perception", "reporter"}:
@@ -636,7 +658,7 @@ class DelegateHandler:
         result = self._executor.execute(task)
         if result.is_success:
             return self._handle_success(action, context, delegate_entry, result, task=task)
-        return self._handle_failure(action, context, delegate_entry, result)
+        return self._handle_failure(action, context, delegate_entry, result, task=task)
 
     def _materialize_stage_artifacts(self, action: SPAction, context: HandlerContext) -> dict[str, Any]:
         candidates = _artifact_candidates_for_role(action, context)
@@ -702,6 +724,37 @@ class DelegateHandler:
         artifact_events: list[dict[str, Any]] = []
         result_ref = result.task_id
         artifact_content = result.artifact_content
+
+        try:
+            from deerflow.sp.report import handle_success as handle_report_success
+
+            report_result = handle_report_success(
+                action,
+                context,
+                result,
+                task,
+                artifact_adapter=self._artifact_adapter,
+                delegate_entry=delegate_entry,
+            )
+        except Exception as exc:  # noqa: BLE001 - report acceptance must fail closed
+            return HandlerResult(
+                next_step="error_recoverable",
+                state_update={"sp_active_delegate_id": None},
+                idempotency_key=action.idempotency_key,
+                error=f"Report result acceptance failed: {type(exc).__name__}: {exc}",
+                run_events=[
+                    make_sp_event(
+                        "sp.report.acceptance_failed",
+                        action_id=action.action_id,
+                        run_id=context.run_id,
+                        target_agent=action.target_agent,
+                        error=str(exc),
+                    )
+                ],
+            )
+        if report_result is not None:
+            return report_result
+
         if action.target_agent == "perception":
             _apply_perception_acceptance_checks(result, task=task)
         if action.target_agent == "reporter":
@@ -961,7 +1014,15 @@ class DelegateHandler:
         context: HandlerContext,
         delegate_entry: StackMemoryEntry,
         result: SPSubagentResult,
+        *,
+        task: SPSubagentTask,
     ) -> HandlerResult:
+        try:
+            from deerflow.sp.report import handle_failure as handle_report_failure
+
+            handle_report_failure(action, context, result, task)
+        except Exception:  # noqa: BLE001 - failure bookkeeping must not replace the real error
+            pass
         error = result.error or f"Subagent {action.target_agent} failed with status {result.status.value}"
         error_entry = context.stack.append(
             StackMemoryEntry(

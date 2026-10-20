@@ -34,6 +34,26 @@ class AskHumanHandler:
             created_by_entry_id=entry.id,
             metadata={"action_id": action.action_id, **action.metadata},
         )
+        try:
+            from deerflow.sp.report import prepare_ask_human
+            from deerflow.sp.report.ledger import ReportValidationError
+
+            prepare_ask_human(action, context, interaction)
+        except ReportValidationError as exc:
+            return HandlerResult(
+                next_step="error_recoverable",
+                idempotency_key=action.idempotency_key,
+                error=f"Report question rejected: {exc}",
+                run_events=[
+                    make_sp_event(
+                        "sp.human.rejected",
+                        action_id=action.action_id,
+                        run_id=context.run_id,
+                        interaction_id=interaction.interaction_id,
+                        reason=str(exc),
+                    )
+                ],
+            )
         state_update = {
             "sp_pending_human_interaction": interaction.to_dict(),
         }
