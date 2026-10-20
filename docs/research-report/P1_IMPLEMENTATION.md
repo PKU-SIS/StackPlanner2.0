@@ -114,10 +114,29 @@ PYTHONPATH=$PWD/packages/harness:$PWD \
   tests/test_sp_report_wiring.py tests/test_sp_report_executor_e2e.py -q
 ```
 
-P1 交付时该组 28 项通过；原有 SP 回归 278 项、非报告/共享回归 211 项通过。
+P1 交付时该组 29 项通过；原有 SP 回归 278 项、非报告/共享回归 211 项通过。
 `ruff check` 与 `ruff format --check` 通过。
 
-## 7. 未覆盖与风险
+## 7. 可追踪轨迹（P1 实测）
+
+同一条 `r1` 轨迹（`outputs/P1_TRACE_20261020.json`）：
+
+| 步骤 | 可观察值 |
+|---|---|
+| 需求保存 | `request_chars=3187`，输入 `u1/u2`，`report/r1/request.md` |
+| 预检索 | 保存 orientation summary，无 gap、无轮次 |
+| Outline 登记 | `report_register_research_request` -> `g1 open rounds=0 allowed=2`，`node_ids=[]` |
+| 树接受 | tree v1，`n2.gap_ids=["g1"]`，账本 gap 关联 `n2` |
+| 材料保存 | `S1/m1`，65 chars/1 line，`sha256=cdc74d…`，路径 `report/r1/materials/S1/…txt`；Outline 按行读取内容一致，`read_truncated=false` |
+| 研究第 1 轮 | summary 保存到 `research/a-r1/summary.md`；`g1 awaiting_outline rounds=1` |
+| Outline 判定 1 | `unresolved` -> `g1 open rounds=1` |
+| 研究第 2 轮 | `g1 awaiting_outline rounds=2` |
+| Outline 判定 2 | `unresolved` -> `g1 awaiting_user rounds=2`，control `next_action=ask_human` |
+| 用户提问 | `sp_ask_human` 绑定 `g1`，HITL `sphitl_trace` |
+| 用户回复 | 入账 `u3`，gap 仅回到 `awaiting_outline`，不自动关闭 |
+| Outline 处置 | tree v4，`g1 resolved`，`u3 applied=true`；`sp_finish` 仍因 P1 无终稿被拒 |
+
+## 8. 未覆盖与风险
 
 1. 真实模型规划质量、工具选择、`report_register_research_request` 参数正确性
    未验证；fake 模型只证明接线。
