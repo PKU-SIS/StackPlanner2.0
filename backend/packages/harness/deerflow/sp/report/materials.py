@@ -48,9 +48,7 @@ def normalize_source_url(url: str) -> str:
     return urlunsplit((scheme, netloc, parts.path or "/", parts.query, ""))
 
 
-def _provider_scope(fetch_tool: Any, text: str) -> tuple[str, Any]:
-    """Return ``(content_scope, upstream_truncation)`` for one fetch return."""
-    module = ""
+def _fetch_module(fetch_tool: Any) -> str:
     for candidate in (
         getattr(fetch_tool, "coroutine", None),
         getattr(fetch_tool, "func", None),
@@ -58,8 +56,13 @@ def _provider_scope(fetch_tool: Any, text: str) -> tuple[str, Any]:
     ):
         candidate_module = getattr(candidate, "__module__", "")
         if isinstance(candidate_module, str) and candidate_module and candidate_module != "langchain_core.tools.structured":
-            module = candidate_module
-            break
+            return candidate_module
+    return ""
+
+
+def _provider_scope(fetch_tool: Any, text: str) -> tuple[str, Any]:
+    """Return ``(content_scope, upstream_truncation)`` for one fetch return."""
+    module = _fetch_module(fetch_tool)
     if "jina_ai" in module:
         return "fetch_tool_return", True
     if "tavily" in module:
@@ -69,6 +72,116 @@ def _provider_scope(fetch_tool: Any, text: str) -> tuple[str, Any]:
     if "<truncated>" in text:
         return "fetch_tool_return", True
     return "fetch_tool_return", "unknown"
+
+
+def _looks_like_html(text: str) -> bool:
+    head = text.lstrip()[:4096].lower()
+    return head.startswith(("<!doctype html", "<html", "<head", "<body")) or "<html" in head
+
+
+def _readability_markdown(raw_html: str) -> tuple[str | None, str | None]:
+    """Extract readable Markdown without registering placeholder text as content."""
+    try:
+        from deerflow.utils.readability import ReadabilityExtractor
+
+        article = ReadabilityExtractor().extract_article(raw_html)
+        markdown = article.to_markdown().strip()
+    except Exception as exc:  # noqa: BLE001 - extraction failure is a material failure
+        return None, f"{type(exc).__name__}: {exc}"
+    lowered = markdown.lower()
+    if not markdown or "no content could be extracted" in lowered or "no content available" in lowered:
+        return None, "readability extraction returned no content"
+    return markdown, None
+
+
+def _direct_fetch_options() -> dict[str, Any]:
+    from deerflow.config import get_app_config
+
+    config = get_app_config().get_tool_config("web_fetch")
+    extra = dict(config.model_extra or {}) if config is not None else {}
+
+    def positive_int(value: Any, default: int) -> int:
+        if isinstance(value, bool):
+            return default
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return default
+        return parsed if parsed > 0 else default
+
+    def positive_float(value: Any, default: float) -> float:
+        if isinstance(value, bool):
+            return default
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return default
+        return parsed if parsed > 0 else default
+
+    def boolean(value: Any, default: bool) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str) and value.strip().lower() in {"1", "true", "yes", "on"}:
+            return True
+        if isinstance(value, str) and value.strip().lower() in {"0", "false", "no", "off"}:
+            return False
+        return default
+
+    return {
+        "timeout": positive_float(extra.get("timeout"), 20.0),
+        "max_bytes": positive_int(extra.get("max_bytes"), 1_048_576),
+        "max_chars": positive_int(extra.get("max_chars"), 20_000),
+        "allow_private_addresses": boolean(extra.get("allow_private_addresses"), False),
+        "trust_env": boolean(extra.get("trust_env"), False),
+    }
+
+
+def _fetch_material_text(fetch_tool: Any, url: str) -> tuple[str | None, str, Any, str | None]:
+    """Fetch raw text, optionally extracting HTML before report-side truncation.
+
+    The ordinary ``web_fetch`` tool keeps its existing behavior.  This report
+    path only uses direct_fetch's public function when that provider is the one
+    configured, inherits its timeout/byte/access options, and extracts readable
+    Markdown before applying the material-save bound.
+    """
+    module = _fetch_module(fetch_tool)
+    if "direct_fetch" not in module:
+        raw = invoke_fetch_tool(fetch_tool, url)
+        error = _is_transport_error(raw)
+        if error is not None:
+            return None, "fetch_tool_return", "unknown", error
+        text = str(raw)
+        content_scope, truncation = _provider_scope(fetch_tool, text)
+        return text, content_scope, truncation, None
+
+    from deerflow.community.direct_fetch.tools import fetch_public_url
+
+    options = _direct_fetch_options()
+    # Fetch the raw payload without the ordinary 20k display cap; the report
+    # extraction below determines the readable body.  max_bytes remains the
+    # authoritative transport bound.
+    raw = _run_coroutine_sync(
+        lambda: fetch_public_url(
+            url,
+            timeout=options["timeout"],
+            max_bytes=options["max_bytes"],
+            max_chars=options["max_bytes"],
+            allow_private_addresses=options["allow_private_addresses"],
+            trust_env=options["trust_env"],
+        )
+    )
+    error = _is_transport_error(raw)
+    if error is not None:
+        return None, "fetch_tool_return", "unknown", error
+    raw_text = str(raw)
+    raw_truncated = "<truncated>" in raw_text
+    if _looks_like_html(raw_text):
+        markdown, extraction_error = _readability_markdown(raw_text)
+        if extraction_error is not None:
+            return None, "extracted_markdown", raw_truncated, f"html_extraction_failed: {extraction_error}"
+        return markdown, "extracted_markdown", raw_truncated, None
+    # JSON/plain text and already-Markdown responses keep their content path.
+    return raw_text, "fetch_tool_return", raw_truncated, None
 
 
 def _is_transport_error(value: Any) -> str | None:
@@ -157,12 +270,15 @@ def build_fetch_material_tool(
 
     @tool("report_fetch_material", parse_docstring=True)
     def report_fetch_material(url: str, title: str | None = None, locator_note: str | None = None) -> str:
-        """Fetch an exact URL with the configured web_fetch tool and save its returned text.
+        """Fetch an exact URL with the configured web_fetch tool and save its content.
 
-        Use this instead of web_fetch for report research. The saved material is
+        Use this instead of web_fetch for report research. HTML pages are
+        extracted to readable Markdown before saving; JSON, plain text, and
+        already-Markdown responses keep their content path. The saved material is
         readable by path by both Researcher and Outline; the returned preview is
-        never a substitute for the saved text. A transport error is reported
-        explicitly and is not registered as evidence.
+        never a substitute for the saved text. A transport, extraction, or
+        truncation failure is reported explicitly and is not registered as a
+        complete source.
 
         Args:
             url: Exact public HTTP(S) URL to retrieve.
@@ -183,7 +299,7 @@ def build_fetch_material_tool(
             return json.dumps({"saved": False, "error": f"research action was not begun: {action_id}"}, ensure_ascii=False)
 
         try:
-            raw = invoke_fetch_tool(fetch_tool, str(url).strip())
+            text, content_scope, upstream_truncation, fetch_error = _fetch_material_text(fetch_tool, str(url).strip())
         except Exception as exc:  # noqa: BLE001 - transport failure is data, not a tool crash
             return _record_material_failure(
                 paths,
@@ -192,11 +308,11 @@ def build_fetch_material_tool(
                 url=str(url).strip(),
             )
 
-        error = _is_transport_error(raw)
-        if error is not None:
-            return _record_material_failure(paths, action_id, f"fetch_failed: {error}", url=str(url).strip())
+        if fetch_error is not None:
+            return _record_material_failure(paths, action_id, f"fetch_failed: {fetch_error}", url=str(url).strip())
 
-        text = str(raw)
+        if text is None or not text.strip():
+            return _record_material_failure(paths, action_id, "fetch_failed: fetch returned no usable content", url=str(url).strip())
         if len(text) > MATERIAL_MAX_CHARS:
             return _record_material_failure(
                 paths,
@@ -237,7 +353,6 @@ def build_fetch_material_tool(
                     raise OSError("material verification failed: file content differs from tool return")
 
                 preview = " ".join(text.split())[:MATERIAL_PREVIEW_CHARS]
-                content_scope, upstream_truncation = _provider_scope(fetch_tool, text)
                 material = {
                     "material_id": material_id,
                     "source_id": source_id,

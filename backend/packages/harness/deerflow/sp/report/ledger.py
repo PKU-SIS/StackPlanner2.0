@@ -375,7 +375,7 @@ class ReportLedger:
     # ------------------------------------------------------------------
     # Research actions and rounds
     # ------------------------------------------------------------------
-    def begin_research_action(self, action_id: str, gap_ids: Iterable[str], *, allow_empty: bool = False, kind: str = "research") -> dict[str, Any]:
+    def begin_research_action(self, action_id: str, gap_ids: Iterable[str], *, allow_empty: bool = False, kind: str = "research", run_id: str | None = None) -> dict[str, Any]:
         existing = self.action(action_id)
         if existing is not None:
             return existing
@@ -395,6 +395,7 @@ class ReportLedger:
         now = utc_now_iso()
         action = {
             "action_id": action_id,
+            "run_id": str(run_id) if run_id else None,
             "kind": kind,
             "gap_ids": normalized_gap_ids,
             "status": "in_flight",
@@ -541,7 +542,7 @@ class ReportLedger:
             )
         return action, changed
 
-    def fail_research_action(self, action_id: str, error: str) -> None:
+    def fail_research_action(self, action_id: str, error: str, *, execution: str = "technical_error") -> None:
         action = self.payload.setdefault("actions", {}).get(action_id)
         if not isinstance(action, dict):
             return
@@ -550,6 +551,7 @@ class ReportLedger:
         action["status"] = "failed"
         action["updated_at"] = utc_now_iso()
         action["error"] = str(error)[:2000]
+        action["stop_reason"] = execution if execution in {"user_stopped", "technical_error"} else "technical_error"
         for gap_id in action.get("gap_ids") or []:
             gap = self.gap(str(gap_id))
             if gap is None or gap.get("status") in {"resolved", "not_needed"}:
@@ -563,7 +565,7 @@ class ReportLedger:
                     "at": gap["updated_at"],
                     "event": "research_failed",
                     "action_id": action_id,
-                    "execution": "technical_error",
+                    "execution": action["stop_reason"],
                     "note": str(error)[:500],
                 }
             )

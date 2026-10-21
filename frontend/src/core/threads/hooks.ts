@@ -39,6 +39,7 @@ import { threadTokenUsageQueryKey } from "./token-usage";
 import type {
   AgentThread,
   AgentThreadState,
+  ReportView,
   RunMessage,
   ThreadTokenUsageResponse,
 } from "./types";
@@ -684,6 +685,9 @@ export function invalidateStoppedThreadCaches(
   void queryClient.invalidateQueries({ queryKey: ["thread", threadId] });
   void queryClient.invalidateQueries({
     queryKey: ["thread", "metadata", threadId, isMock],
+  });
+  void queryClient.invalidateQueries({
+    queryKey: ["thread", "report-view", threadId, isMock],
   });
   void queryClient.invalidateQueries({
     queryKey: threadTokenUsageQueryKey(threadId),
@@ -2038,6 +2042,31 @@ export function useThreadMetadata(
       }
     },
     enabled: enabled && Boolean(threadId),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useThreadReportView(
+  threadId?: string | null,
+  {
+    enabled = true,
+    isMock = false,
+  }: { enabled?: boolean; isMock?: boolean } = {},
+) {
+  const apiClient = getAPIClient(isMock);
+  return useQuery<ReportView | null>({
+    queryKey: ["thread", "report-view", threadId, isMock],
+    queryFn: async () => {
+      if (!threadId) {
+        return null;
+      }
+      const state = await apiClient.threads.getState(threadId);
+      return (
+        (state.values as AgentThreadState | undefined)?.sp_report_view ?? null
+      );
+    },
+    enabled: enabled && Boolean(threadId) && !isMock,
     retry: false,
     refetchOnWindowFocus: false,
   });

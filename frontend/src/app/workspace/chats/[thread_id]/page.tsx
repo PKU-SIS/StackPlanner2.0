@@ -23,6 +23,7 @@ import {
   MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
 } from "@/components/workspace/messages";
 import { ThreadContext } from "@/components/workspace/messages/context";
+import { ReportStatusBanner } from "@/components/workspace/report-status";
 import {
   SidecarProvider,
   SidecarTrigger,
@@ -348,6 +349,13 @@ export default function ChatPage() {
                       : "max-w-(--container-width-md)",
                   )}
                 >
+                  {!isWelcomeMode && (
+                    <ReportStatusBanner
+                      threadId={threadId}
+                      isLoading={thread.isLoading}
+                      isMock={isMock}
+                    />
+                  )}
                   {(hasGoal || hasTodos) && (
                     <div
                       className={cn(

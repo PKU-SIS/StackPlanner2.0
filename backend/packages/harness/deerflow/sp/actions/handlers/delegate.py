@@ -452,6 +452,41 @@ class DelegateHandler:
                 error="DELEGATE requires a SP subagent executor",
             )
 
+        report_action = str(action.metadata.get("report_action") or "").strip().lower()
+        if report_action:
+            if report_action != "start":
+                return HandlerResult(
+                    next_step="error_recoverable",
+                    idempotency_key=action.idempotency_key,
+                    error="DELEGATE metadata.report_action must be 'start'",
+                )
+            if action.target_agent not in {"outline", "researcher"}:
+                return HandlerResult(
+                    next_step="error_recoverable",
+                    idempotency_key=action.idempotency_key,
+                    error="DELEGATE report_action=start requires target_agent outline or researcher",
+                )
+            try:
+                from deerflow.sp.report import start_report
+
+                start_report(context, action)
+            except Exception as exc:  # noqa: BLE001 - report lifecycle failure is recoverable
+                return HandlerResult(
+                    next_step="error_recoverable",
+                    state_update={"sp_active_delegate_id": None},
+                    idempotency_key=action.idempotency_key,
+                    error=f"Report start rejected: {exc}",
+                    run_events=[
+                        make_sp_event(
+                            "sp.report.start_rejected",
+                            action_id=action.action_id,
+                            run_id=context.run_id,
+                            target_agent=action.target_agent,
+                            reason=str(exc),
+                        )
+                    ],
+                )
+
         if action.target_agent == "reporter":
             _prepare_partial_report_retry(action, context.state)
 

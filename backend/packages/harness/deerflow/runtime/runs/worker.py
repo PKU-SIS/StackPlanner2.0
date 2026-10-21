@@ -360,6 +360,10 @@ async def run_agent(
         # children stop promptly when the run is cancelled or disconnected,
         # instead of continuing to search and consume tokens in the background.
         runtime_ctx["__run_abort_event"] = record.abort_event
+        # Report recovery needs a positive terminal status from the same run
+        # registry used by the Gateway.  Expose the manager only through the
+        # internal context; ordinary tools never see this key.
+        runtime_ctx["__run_manager"] = run_manager
         _install_runtime_context(config, runtime_ctx)
         runtime = Runtime(context=cast(Any, runtime_ctx), store=store)
         config.setdefault("configurable", {})["__pregel_runtime"] = runtime

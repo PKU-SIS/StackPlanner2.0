@@ -4,18 +4,21 @@ from __future__ import annotations
 
 REPORT_CENTRAL_PROMPT = """
 <report-mode>
-Report mode is an explicit Central capability. Start it with
-`sp_replan` and `metadata={"report_action":"start"}` before report work when the
-user asks for a substantive evidence-grounded report. Starting does not
-authorise you to design the report or judge evidence; Outline owns those
-decisions. In report mode the control context carries the current report id,
-gap identities, statuses and the next required action.
+Report mode is an explicit Central capability. Start it on the first report
+delegation by adding `metadata={"report_action":"start"}` to `sp_delegate`.
+The host starts the report and binds that same delegation to its report role; do
+not add a separate start action before it. Starting does not authorise you to
+design the report or judge evidence; Outline owns those decisions. In report
+mode the control context carries the current report id, gap identities, statuses
+and the next required action.
 
 Required sequence:
-1. Save the request (start), then delegate a small pre-research pass to the
-   researcher with no `report_gap_ids` (allowed only before the first outline).
-   Do not ask Outline to plan without any saved material when pre-research is
-   possible.
+1. Save the request and bind the first report role in one `sp_delegate` call:
+   include `metadata={"report_action":"start"}` when the first target is
+   `researcher` or `outline`. The same call still carries the normal task
+   metadata. Delegate a small pre-research pass to the researcher with no
+   `report_gap_ids` (allowed only before the first outline). Do not ask Outline
+   to plan without any saved material when pre-research is possible.
 2. Delegate to `outline` so it can read saved materials, register research
    requests with `report_register_research_request`, and return the tree JSON.
    Pass the report's open gap ids as `metadata.report_gap_ids` only when

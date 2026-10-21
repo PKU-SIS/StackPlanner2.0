@@ -298,6 +298,9 @@ def sp_delegate(
         metadata: Optional structured delegation metadata. Use skill_names to
             load matching Skills and tool_names to narrow the specialist Tool
             allowlist; pass source or artifact references through input_refs.
+            For the first report delegation only, set
+            metadata.report_action="start" with target outline/researcher; the
+            host starts the report and binds this same delegation to it.
     """
     return "StackPlanner DELEGATE action recorded. Inspect the specialist result before continuing."
 
@@ -383,8 +386,10 @@ def sp_replan(
         task: Revised plan or next plan objective.
         reason: Why replanning is needed.
         stage: Current task stage.
-        metadata: Optional structured metadata. For explicit report lifecycle,
-            set metadata.report_action to start, resume, or close.
+        metadata: Optional structured metadata. For report lifecycle, use
+            metadata.report_action="resume" or "close". New report mode starts
+            on the first report sp_delegate with metadata.report_action="start";
+            do not use this replan action as a separate report start.
     """
     return "StackPlanner REPLAN action recorded. Continue with the revised plan."
 
@@ -1945,6 +1950,9 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
         if tool_name not in SP_CONTROL_TOOL_NAMES:
             return await handler(request)
 
+        if tool_name in {"sp_delegate", "sp_replan"}:
+            await self._reconcile_report_inflight(request)
+
         # DELEGATE is intentionally synchronous at the handler boundary because
         # DR2's SubagentExecutor exposes a sync compatibility API. Running it
         # directly here blocks the Gateway event loop and also serializes
@@ -1953,6 +1961,21 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
         # actions cost only one thread-pool hop, while delegated execution can
         # now overlap without freezing auth, SSE, or artifact endpoints.
         return await asyncio.to_thread(self._execute_control_tool, request)
+
+    async def _reconcile_report_inflight(self, request: ToolCallRequest) -> None:
+        try:
+            from deerflow.sp.report import reconcile_report_inflight
+
+            runtime = getattr(request, "runtime", None)
+            runtime_context = getattr(runtime, "context", None)
+            run_manager = runtime_context.get("__run_manager") if isinstance(runtime_context, Mapping) else None
+            if run_manager is None:
+                return
+            events = await reconcile_report_inflight(request.state, run_manager)
+            if events:
+                self._record_events(runtime, events)
+        except Exception:  # noqa: BLE001 - recovery must not block the actual action
+            return
 
     def _execute_control_tool(self, request: ToolCallRequest) -> Command[Any]:
         tool_name = str(request.tool_call.get("name") or "")

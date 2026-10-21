@@ -433,6 +433,15 @@ export const zhCN: Translations = {
     startConversation: "开始新的对话以查看消息",
     branchCreated: "已创建分叉对话",
     branchFailed: "创建分叉对话失败。",
+    reportStatus: {
+      title: "报告",
+      running: "报告正在生成",
+      awaiting: "报告已暂停，等待你的输入",
+      incomplete: "报告尚未交付，可以继续",
+      stopped: "报告已停止，可以继续",
+      technical: "报告遇到技术错误，可以重试",
+      delivered: "报告已交付",
+    },
   },
 
   // Chats

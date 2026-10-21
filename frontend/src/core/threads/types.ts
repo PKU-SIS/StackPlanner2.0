@@ -29,12 +29,33 @@ export interface GoalState {
   };
 }
 
+export type ReportViewStatus =
+  | "running"
+  | "incomplete"
+  | "awaiting_user"
+  | "stopped"
+  | "technical_error"
+  | "delivered"
+  | "not_report";
+
+export interface ReportView {
+  status: ReportViewStatus;
+  report_id?: string | null;
+  run_id?: string | null;
+  can_continue?: boolean;
+  reason?: string;
+  final_path?: string;
+  delivery_id?: string;
+  delivered?: boolean;
+}
+
 export interface AgentThreadState extends Record<string, unknown> {
   title: string;
   messages: Message[];
   artifacts?: string[];
   todos?: Todo[];
   goal?: GoalState | null;
+  sp_report_view?: ReportView | null;
   sp_task_memory?: {
     version?: number;
     entries?: Array<Record<string, unknown>>;

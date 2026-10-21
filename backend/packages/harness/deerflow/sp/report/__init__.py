@@ -22,6 +22,8 @@ from deerflow.sp.report.hooks import (
     sync_user_inputs,
 )
 from deerflow.sp.report.ledger import ReportLedger, ReportValidationError
+from deerflow.sp.report.presentation import derive_report_view
+from deerflow.sp.report.recovery import reconcile_report_inflight
 from deerflow.sp.report.store import ReportContext, ReportStoreError, load_report_context
 
 __all__ = [
@@ -34,6 +36,7 @@ __all__ = [
     "close_report",
     "configure_report_subagent",
     "deliver_report",
+    "derive_report_view",
     "fail_delegation_action",
     "finish_block_reason",
     "handle_failure",
@@ -42,6 +45,7 @@ __all__ = [
     "prepare_ask_human",
     "prepare_delegation",
     "record_human_feedback_input",
+    "reconcile_report_inflight",
     "report_context",
     "report_delegate_is_serial",
     "report_finish_target",

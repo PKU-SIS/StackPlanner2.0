@@ -307,7 +307,7 @@ def prepare_delegation(
             node_ids = list(request.get("node_ids") or [])
             if len(node_ids) != 1:
                 raise ReportValidationError(f"write request {key} must target exactly one node")
-            attempt = report_writing.begin_writer_attempt(ledger, key, action_id=action.action_id, node_id=str(node_ids[0]))
+            attempt = report_writing.begin_writer_attempt(ledger, key, action_id=action.action_id, node_id=str(node_ids[0]), run_id=context.run_id)
             basis = report_packets.writer_basis(ledger, str(node_ids[0]))
             packet = report_packets.build_writer_packet(
                 ledger,
@@ -338,12 +338,12 @@ def prepare_delegation(
             if not gap_ids:
                 if ledger.payload.get("tree") or ledger.gaps():
                     raise ReportValidationError("pre-research is only available before the first outline; dispatch each registered gap with metadata.report_gap_ids")
-                ledger.begin_research_action(action.action_id, [], allow_empty=True, kind="pre_research")
+                ledger.begin_research_action(action.action_id, [], allow_empty=True, kind="pre_research", run_id=context.run_id)
                 ledger.save()
                 packet = report_packets.build_pre_research_packet(ledger, action_id=action.action_id)
                 task_metadata["report_pre_research"] = True
             else:
-                ledger.begin_research_action(action.action_id, gap_ids)
+                ledger.begin_research_action(action.action_id, gap_ids, run_id=context.run_id)
                 ledger.save()
                 packet = report_packets.build_researcher_packet(ledger, gap_ids, action_id=action.action_id)
             task_metadata["report_id"] = report.report_id

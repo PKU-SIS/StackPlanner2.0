@@ -1065,6 +1065,22 @@ async def get_thread_state(thread_id: str, request: Request) -> ThreadStateRespo
     tasks = [{"id": getattr(t, "id", ""), "name": getattr(t, "name", "")} for t in tasks_raw]
 
     values = serialize_channel_values_for_api(channel_values)
+    try:
+        from deerflow.sp.report import derive_report_view
+
+        run_manager = get_run_manager(request)
+        runs = await run_manager.list_by_thread(thread_id, user_id=get_effective_user_id(), limit=1)
+        current_run = runs[0] if runs else None
+        report_view = derive_report_view(
+            channel_values,
+            run_status=current_run.status.value if current_run is not None else None,
+            run_id=current_run.run_id if current_run is not None else None,
+            stop_reason=(current_run.error or current_run.abort_action) if current_run is not None else None,
+        )
+        if report_view is not None:
+            values["sp_report_view"] = report_view
+    except Exception:  # noqa: BLE001 - report presentation must not break thread state
+        logger.warning("Unable to derive report view for thread %s", sanitize_log_param(thread_id), exc_info=True)
 
     return ThreadStateResponse(
         values=values,

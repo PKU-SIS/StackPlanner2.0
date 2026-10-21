@@ -69,7 +69,7 @@ def next_action(entry: Mapping[str, Any]) -> str:
     return "none"
 
 
-def begin_writer_attempt(ledger: ReportLedger, key: str, *, action_id: str, node_id: str) -> dict[str, Any]:
+def begin_writer_attempt(ledger: ReportLedger, key: str, *, action_id: str, node_id: str, run_id: str | None = None) -> dict[str, Any]:
     request = require_write_request(ledger, key)
     if list(request.get("node_ids") or []) != [node_id]:
         raise ReportValidationError(f"write request {key} does not target node {node_id}")
@@ -81,9 +81,10 @@ def begin_writer_attempt(ledger: ReportLedger, key: str, *, action_id: str, node
     now = utc_now_iso()
     request["status"] = "in_flight"
     request["last_action_id"] = action_id
+    request["last_run_id"] = str(run_id) if run_id else None
     request["last_draft_id"] = draft_id
     request["updated_at"] = now
-    request.setdefault("attempts", []).append({"action_id": action_id, "status": "in_flight", "draft_id": draft_id, "at": now})
+    request.setdefault("attempts", []).append({"action_id": action_id, "run_id": str(run_id) if run_id else None, "status": "in_flight", "draft_id": draft_id, "at": now})
     _refresh(ledger)
     prior = current_draft(ledger, node_id)
     if prior is None and request.get("last_draft_id"):
@@ -206,7 +207,7 @@ def accept_draft(
     return record
 
 
-def fail_writer_attempt(ledger: ReportLedger, *, key: str, action_id: str, error: str) -> None:
+def fail_writer_attempt(ledger: ReportLedger, *, key: str, action_id: str, error: str, stop_reason: str | None = None) -> None:
     request = write_request(ledger, key)
     if request is None:
         return
@@ -214,8 +215,9 @@ def fail_writer_attempt(ledger: ReportLedger, *, key: str, action_id: str, error
         return
     request["status"] = "technical_failed"
     request["last_error"] = str(error)[:2000]
+    request["last_stop_reason"] = str(stop_reason)[:100] if stop_reason else None
     request["updated_at"] = utc_now_iso()
-    _finish_attempt(request, action_id, "technical_failed")
+    _finish_attempt(request, action_id, "technical_failed", stop_reason=stop_reason)
     _refresh(ledger)
 
 
@@ -489,7 +491,7 @@ def _normalize_feedback(items: Iterable[Mapping[str, Any]], ledger: ReportLedger
     return result
 
 
-def _finish_attempt(request: dict[str, Any], action_id: str, status: str, *, draft_id: str | None = None) -> None:
+def _finish_attempt(request: dict[str, Any], action_id: str, status: str, *, draft_id: str | None = None, stop_reason: str | None = None) -> None:
     attempts = request.setdefault("attempts", [])
     for attempt in reversed(attempts):
         if isinstance(attempt, dict) and attempt.get("action_id") == action_id and attempt.get("status") == "in_flight":
@@ -497,8 +499,18 @@ def _finish_attempt(request: dict[str, Any], action_id: str, status: str, *, dra
             attempt["finished_at"] = utc_now_iso()
             if draft_id:
                 attempt["draft_id"] = draft_id
+            if stop_reason:
+                attempt["stop_reason"] = str(stop_reason)[:100]
             return
-    attempts.append({"action_id": action_id, "status": status, "at": utc_now_iso(), **({"draft_id": draft_id} if draft_id else {})})
+    attempts.append(
+        {
+            "action_id": action_id,
+            "status": status,
+            "at": utc_now_iso(),
+            **({"draft_id": draft_id} if draft_id else {}),
+            **({"stop_reason": str(stop_reason)[:100]} if stop_reason else {}),
+        }
+    )
 
 
 def _refresh(ledger: ReportLedger) -> None:

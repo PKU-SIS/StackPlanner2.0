@@ -450,6 +450,15 @@ export const enUS: Translations = {
     startConversation: "Start a conversation to see messages here",
     branchCreated: "Conversation branch created",
     branchFailed: "Failed to branch conversation.",
+    reportStatus: {
+      title: "Report",
+      running: "Report generation in progress",
+      awaiting: "Report paused — waiting for your input",
+      incomplete: "Report not delivered yet — you can continue",
+      stopped: "Report stopped — you can continue",
+      technical: "Report hit a technical error — you can retry",
+      delivered: "Report delivered",
+    },
   },
 
   // Chats

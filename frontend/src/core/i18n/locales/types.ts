@@ -358,6 +358,15 @@ export interface Translations {
     startConversation: string;
     branchCreated: string;
     branchFailed: string;
+    reportStatus: {
+      title: string;
+      running: string;
+      awaiting: string;
+      incomplete: string;
+      stopped: string;
+      technical: string;
+      delivered: string;
+    };
   };
 
   // Chats
