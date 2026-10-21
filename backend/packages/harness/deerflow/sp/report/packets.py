@@ -342,6 +342,16 @@ def build_outline_packet(ledger: ReportLedger) -> dict[str, Any]:
     ]
     writing_control = report_writing.control_entries(ledger)
 
+    rejected_outline = ledger.payload.get("rejected_outline")
+    if isinstance(rejected_outline, Mapping):
+        rejected_outline = {
+            key: rejected_outline.get(key)
+            for key in ("virtual_path", "sha256", "chars", "action_id", "errors", "created_at")
+            if rejected_outline.get(key) is not None
+        }
+    else:
+        rejected_outline = None
+
     return {
         "report_id": ledger.payload.get("report_id"),
         "request": {
@@ -372,6 +382,7 @@ def build_outline_packet(ledger: ReportLedger) -> dict[str, Any]:
         "feedback": feedback_entries,
         "gaps": [_gap_entry(gap, ledger) for gap in ledger.gaps()],
         "unapplied_input_ids": ledger.unapplied_input_ids(),
+        "rejected_outline": rejected_outline,
         "instructions": REPORT_OUTLINE_PROMPT,
     }
 

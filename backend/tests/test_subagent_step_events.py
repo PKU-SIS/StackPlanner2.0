@@ -71,6 +71,28 @@ def test_long_tool_output_is_truncated_and_flagged():
     assert len(step["text"]) == SUBAGENT_STEP_MAX_CHARS
 
 
+def test_finish_reason_is_passed_through_without_changing_display_truncation():
+    message = {
+        "type": "ai",
+        "content": "z" * (SUBAGENT_STEP_MAX_CHARS + 1),
+        "tool_calls": [],
+        "response_metadata": {"finish_reason": "length"},
+    }
+
+    step = build_subagent_step(message, task_id="t", message_index=1)
+
+    assert step["truncated"] is True
+    assert step["finish_reason"] == "length"
+
+
+def test_missing_finish_reason_is_not_synthesized():
+    message = {"type": "ai", "content": "ok", "tool_calls": []}
+
+    step = build_subagent_step(message, task_id="t", message_index=1)
+
+    assert "finish_reason" not in step
+
+
 def test_list_content_blocks_are_flattened_to_text():
     message = {
         "type": "ai",

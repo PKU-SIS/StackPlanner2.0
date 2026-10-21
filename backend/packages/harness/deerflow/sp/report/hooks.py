@@ -1195,7 +1195,7 @@ def _accept_outline_locked(
         return _replay_result(action, context, "outline", ledger.action(action.action_id))
     try:
         payload = report_tree.parse_tree_payload(result.artifact_content)
-        tree = report_tree.validate_tree(payload, ledger)
+        tree = report_tree.validate_tree_with_diagnostics(payload, ledger)
         user_decisions = ledger.apply_user_decisions(tree.get("user_decisions") or [])
         gap_outcomes = ledger.apply_gap_outcomes(tree.get("gap_outcomes") or [])
         fingerprints = report_tree.node_fingerprints(tree)
@@ -1223,9 +1223,39 @@ def _accept_outline_locked(
         )
         report_tree.commit_tree(candidate, version=version, path=tree_path, ledger=ledger)
         report_assembly.invalidate_review(ledger, "accepted tree changed")
+        ledger.payload.pop("rejected_outline", None)
+        ledger.payload.pop("outline_rejection", None)
         ledger.save()
     except ReportValidationError as exc:
-        return _rejection(action, context, f"Outline result rejected: {exc}", reason="invalid_report_tree")
+        rejected = _store_rejected_outline(ledger, action, result, str(exc))
+        detail = f"Outline result rejected: {exc}"
+        if rejected:
+            detail += (
+                f"\nrejected_candidate: {rejected['virtual_path']}"
+                "\nRead the rejected candidate and correct that same tree; do not replace the schema, "
+                "drop planned nodes, or move evidence preparation to Writer."
+            )
+        state_update = {"sp_active_delegate_id": None}
+        if rejected:
+            state_update["sp_report_protocol_error"] = {
+                "reason": "invalid_report_tree",
+                "rejected_candidate": rejected["virtual_path"],
+                "errors": str(exc),
+            }
+        rejection_state = ledger.payload.get("outline_rejection")
+        if isinstance(rejection_state, Mapping) and int(rejection_state.get("count") or 0) >= 3:
+            return _rejection(
+                action,
+                context,
+                (
+                    "Outline protocol correction made no progress after three identical "
+                    f"contract failures. Technical block; rejected candidate: {rejected['virtual_path'] if rejected else 'unavailable'}."
+                ),
+                reason="outline_protocol_no_progress",
+                state_update=state_update,
+                next_step="error_fatal",
+            )
+        return _rejection(action, context, detail, reason="invalid_report_tree", state_update=state_update)
     except Exception as exc:  # noqa: BLE001 - persistence boundary must surface a technical fault
         return _rejection(action, context, f"Report outline acceptance failed: {type(exc).__name__}: {exc}", reason="report_outline_acceptance_failed")
 
@@ -1493,10 +1523,66 @@ def _replay_result(action: SPAction, context: HandlerContext, role: str, record:
     )
 
 
-def _rejection(action: SPAction, context: HandlerContext, message: str, *, reason: str) -> HandlerResult:
+def _store_rejected_outline(
+    ledger: ReportLedger,
+    action: SPAction,
+    result: SPSubagentResult,
+    error: str,
+) -> dict[str, Any] | None:
+    """Persist an invalid Outline candidate for an in-place correction."""
+    content = result.artifact_content
+    if content is None:
+        content = result.result
+    if isinstance(content, Mapping):
+        text = json.dumps(content, ensure_ascii=False, indent=2)
+    elif isinstance(content, str):
+        text = content
+    else:
+        text = json.dumps(content, ensure_ascii=False, default=str)
+    if not text.strip():
+        return None
+    directory = ledger.paths.directory / "outline"
+    path = directory / f"rejected-{action.action_id}.json"
+    report_store.write_text_atomic(path, text)
+    record = {
+        "path": str(path),
+        "virtual_path": ledger.paths.virtual(path),
+        "sha256": report_store.sha256_text(text),
+        "chars": len(text),
+        "action_id": action.action_id,
+        "errors": str(error)[:4000],
+        "created_at": utc_now_iso(),
+    }
+    ledger.payload["rejected_outline"] = record
+
+    signature = report_store.sha256_text(str(error))
+    previous = ledger.payload.get("outline_rejection") if isinstance(ledger.payload.get("outline_rejection"), Mapping) else {}
+    same = str(previous.get("signature") or "") == signature
+    count = int(previous.get("count") or 0) + 1 if same else 1
+    ledger.payload["outline_rejection"] = {
+        "signature": signature,
+        "count": count,
+        "action_id": action.action_id,
+        "error": str(error)[:4000],
+        "rejected_candidate": record["virtual_path"],
+    }
+    ledger.save()
+    return record
+
+
+def _rejection(
+    action: SPAction,
+    context: HandlerContext,
+    message: str,
+    *,
+    reason: str,
+    state_update: Mapping[str, Any] | None = None,
+    next_step: str = "error_recoverable",
+) -> HandlerResult:
+    update = {"sp_active_delegate_id": None, **dict(state_update or {})}
     return HandlerResult(
-        next_step="error_recoverable",
-        state_update={"sp_active_delegate_id": None},
+        next_step=next_step,
+        state_update=update,
         idempotency_key=action.idempotency_key,
         error=message,
         run_events=[make_sp_event("sp.report.result_rejected", action_id=action.action_id, run_id=context.run_id, reason=reason, error=message)],

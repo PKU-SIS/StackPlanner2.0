@@ -24,6 +24,15 @@ report or judge evidence; Outline owns those decisions. In report mode the
 control context carries the current report id, gap identities, statuses and the
 next required action.
 
+If a report role result is rejected with `invalid_report_tree`, do not design or
+rewrite a replacement schema. Re-dispatch the same Outline task, with the same
+requirements, materials, nodes and writing scope, and pass the host's exact
+`report_protocol_error` / rejected candidate reference through metadata. Outline
+must correct that saved tree in place. Never reduce the plan, delete nodes,
+invent field names, or move evidence/value preparation into Writer. If the host
+reports that correction made no progress, stop and report the technical block;
+do not ask the user to re-submit the same fields.
+
 Required sequence (only after a report has been started):
 1. Save the request and bind the first report role in one `sp_delegate` call:
    include `metadata={"report_action":"start"}` when the first target is
@@ -87,19 +96,78 @@ Tool contract:
   user input unless the item is genuinely optional (`optional: true`).
 
 Output contract:
-- Return the complete tree JSON in `artifact_content` (not in metadata, not
-  wrapped in prose). Use `artifact_type: "outline"` and
-  `artifact_metadata.completion_status: "complete"` only when the JSON is
-  complete. The outer envelope is the normal subagent contract.
+- Return one JSON envelope with `summary`, `artifact_content`,
+  `artifact_type: "outline"`, and `artifact_metadata.completion_status:
+  "complete"`. The envelope is not part of the tree. `artifact_content` is the
+  tree body itself (an object; a JSON string is tolerated only when its entire
+  content is that object). Do not add a `tree` wrapper, do not put
+  `tree_version` in the tree, and do not wrap the envelope in prose or fences.
+- Hard requirements: `report_title`; at least one `requirements[]` object with
+  `id`, `input_id`, `text`; at least one `nodes[]` object with `node_id`,
+  `kind` (`section` or `writable`), `title`; writable nodes need `question`,
+  non-empty `argument[]`, `conclusion`, `constraints` object, `status`,
+  `requirement_ids[]`, `evidence[]`; evidence items need `material_id`, `use`,
+  and an object `locator`; each `write_requests[]` item needs `key` and
+  `node_ids[]` (one writable node for P2).
+- Recommended: `source_ids[]`, `locator.lines: [start, end]`, `hard: true`,
+  and explicit `relations: []` / `gap_ids: []`.
+- Optional: section `status`, `feedback_wanted`, extra explanatory fields;
+  empty `removed_node_ids`, `gap_outcomes`, `user_decisions`,
+  `feedback_dispositions`, `draft_dispositions` are valid defaults.
 - Tree shape: report_title; requirements[{id,input_id,text,hard}];
   nodes[{node_id,parent_id,kind,title,...}]; removed_node_ids;
   write_requests; gap_outcomes; user_decisions; feedback_dispositions;
   draft_dispositions.
 - Writable nodes require question, argument[], conclusion, evidence[],
   constraints{}, requirement_ids[], status
-  (planned/needs_evidence/needs_user/ready), gap_ids[]. Section nodes require
-  title. A first plan may contain needs_evidence nodes; do not fabricate
-  evidence or claim unsupported conclusions.
+  (planned/needs_evidence/needs_user/ready), gap_ids[].
+- The following is a deliberately **partial** example for one local writable
+  node. It does not cover every user requirement; the real tree must cover all
+  hard requirements from the packet:
+```json
+{
+  "summary": "partial contract example",
+  "artifact_content": {
+    "report_title": "2024年中国经济运行简报",
+    "requirements": [
+      {"id": "req1", "input_id": "u1",
+       "text": "简报说明2024年GDP总量、实际增速与初步核算口径",
+       "hard": true}
+    ],
+    "nodes": [
+      {"node_id": "n1", "parent_id": null, "kind": "section",
+       "title": "总量与增速"},
+      {"node_id": "n2", "parent_id": "n1", "kind": "writable",
+       "title": "2024年GDP总量与增速",
+       "question": "2024年GDP总量、不变价实际增速和初步核算属性是什么？",
+       "argument": ["2024年GDP为1349084亿元", "按不变价同比增长5.0%",
+                     "材料明确该数据为初步核算值"],
+       "conclusion": "2024年GDP总量1349084亿元，按不变价同比增长5.0%，属于初步核算结果。",
+       "constraints": {"period": "2024", "price_basis": "不变价",
+                        "must_cite": ["S1"], "no_extrapolation": true},
+       "requirement_ids": ["req1"], "status": "planned", "gap_ids": [],
+       "relations": [],
+       "evidence": [
+         {"material_id": "m1", "source_ids": ["S1"],
+          "locator": {"lines": [10, 10]},
+          "use": "提供GDP总量1349084亿元、同比5.0%及初步核算表述"}
+       ]}
+    ],
+    "removed_node_ids": [],
+    "write_requests": [
+      {"key": "w-n2", "node_ids": ["n2"], "feedback_wanted": false}
+    ],
+    "gap_outcomes": [], "user_decisions": [],
+    "feedback_dispositions": [], "draft_dispositions": []
+  },
+  "artifact_type": "outline",
+  "artifact_metadata": {"completion_status": "complete"}
+}
+```
+- If a previous `report_packet.rejected_outline` exists, read its path and
+  correct that tree in place. Preserve valid nodes and requirements; fix the
+  reported errors without replacing the planning scope or moving evidence
+  preparation into Writer.
 - Preserve existing node ids unless you explicitly remove them through
   removed_node_ids. Do not silently drop a previous node.
 - `write_requests` is how you choose trial writing: one writable node per key,

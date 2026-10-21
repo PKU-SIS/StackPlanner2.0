@@ -45,7 +45,11 @@ def parse_tree_payload(value: Any) -> dict[str, Any]:
             continue
         if isinstance(payload, dict):
             return payload
-    raise ReportValidationError("Outline artifact_content is not a JSON object")
+    raise ReportValidationError(
+        f"Outline artifact_content JSON parse failed ({len(text)} chars); "
+        "this is a parse/framing failure, not a structural rejection. "
+        "If the model finished because of an output cap, report that separately."
+    )
 
 
 def _as_list(value: Any, field_name: str) -> list[Any]:
@@ -76,6 +80,166 @@ def _validate_lines(value: Any, total_lines: int, field_name: str) -> list[int]:
 def _previous_nodes(ledger: ReportLedger) -> dict[str, dict[str, Any]]:
     previous = ledger.payload.get("nodes")
     return {str(key): dict(value) for key, value in previous.items() if isinstance(value, Mapping)} if isinstance(previous, Mapping) else {}
+
+
+def validate_tree_with_diagnostics(payload: Mapping[str, Any], ledger: ReportLedger) -> dict[str, Any]:
+    """Bounded diagnostic overlay; ``validate_tree`` remains authoritative.
+
+    The overlay reports independently checkable structural errors so Outline can
+    correct several fields in one pass.  It never repairs or accepts a tree.
+    """
+    errors = _diagnose_tree_contract(payload, ledger)
+    if errors:
+        raise ReportValidationError("Outline tree contract errors:\n- " + "\n- ".join(errors))
+    return validate_tree(payload, ledger)
+
+
+def _diagnose_tree_contract(payload: Mapping[str, Any], ledger: ReportLedger) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(payload, Mapping):
+        return ["artifact_content must be a tree object"]
+
+    def text(value: Any, path: str) -> None:
+        try:
+            _as_text(value, path)
+        except ReportValidationError as exc:
+            errors.append(str(exc))
+
+    def list_value(value: Any, path: str) -> list[Any]:
+        try:
+            return _as_list(value, path)
+        except ReportValidationError as exc:
+            errors.append(str(exc))
+            return []
+
+    if "tree" in payload:
+        errors.append("artifact_content must be the tree body; remove the top-level 'tree' wrapper")
+    if "tree_version" in payload:
+        errors.append("tree.tree_version is not part of the tree; remove it (host assigns version)")
+    text(payload.get("report_title"), "tree.report_title")
+
+    requirements = list_value(payload.get("requirements"), "tree.requirements") if "requirements" in payload else None
+    if "requirements" not in payload:
+        errors.append("tree.requirements is required")
+    elif requirements is not None:
+        if not requirements:
+            errors.append("tree.requirements must contain at least one original user requirement")
+        seen_requirements: set[str] = set()
+        for index, raw in enumerate(requirements):
+            if not isinstance(raw, Mapping):
+                errors.append(f"tree.requirements[{index}] must be an object")
+                continue
+            rid = raw.get("id")
+            if not isinstance(rid, str) or not rid.strip():
+                errors.append(f"tree.requirements[{index}].id must be a non-empty string")
+            elif rid.strip() in seen_requirements:
+                errors.append(f"duplicate requirement id: {rid.strip()}")
+            else:
+                seen_requirements.add(rid.strip())
+            text(raw.get("input_id"), f"tree.requirements[{index}].input_id")
+            text(raw.get("text"), f"tree.requirements[{index}].text")
+
+    nodes = list_value(payload.get("nodes"), "tree.nodes") if "nodes" in payload else None
+    node_map: dict[str, Mapping[str, Any]] = {}
+    if "nodes" not in payload:
+        errors.append("tree.nodes is required")
+    elif nodes is not None:
+        if not nodes:
+            errors.append("tree.nodes must contain at least one node")
+        seen_nodes: set[str] = set()
+        for index, raw in enumerate(nodes):
+            if not isinstance(raw, Mapping):
+                errors.append(f"tree.nodes[{index}] must be an object")
+                continue
+            node_id = raw.get("node_id")
+            if not isinstance(node_id, str) or not node_id.strip():
+                errors.append(f"tree.nodes[{index}].node_id must be a non-empty string")
+                continue
+            node_id = node_id.strip()
+            if node_id in seen_nodes:
+                errors.append(f"duplicate node_id: {node_id}")
+            else:
+                seen_nodes.add(node_id)
+                node_map[node_id] = raw
+            text(raw.get("title"), f"tree.nodes[{node_id}].title")
+            kind = str(raw.get("kind") or "").strip().lower()
+            if kind not in NODE_KINDS:
+                errors.append(f"tree.nodes[{node_id}].kind must be section or writable")
+                continue
+            if kind == "section":
+                continue
+            text(raw.get("question"), f"tree.nodes[{node_id}].question")
+            arguments = list_value(raw.get("argument"), f"tree.nodes[{node_id}].argument")
+            if not arguments:
+                errors.append(f"tree.nodes[{node_id}].argument must contain at least one step")
+            else:
+                for arg_index, argument in enumerate(arguments):
+                    text(argument, f"tree.nodes[{node_id}].argument[{arg_index}]")
+            text(raw.get("conclusion"), f"tree.nodes[{node_id}].conclusion")
+            constraints = raw.get("constraints")
+            if constraints is not None and not isinstance(constraints, Mapping):
+                errors.append(f"tree.nodes[{node_id}].constraints must be an object")
+            status = str(raw.get("status") or "").strip().lower()
+            if status not in NODE_STATUSES:
+                errors.append(f"tree.nodes[{node_id}].status must be one of {sorted(NODE_STATUSES)}")
+            requirement_ids = list_value(raw.get("requirement_ids"), f"tree.nodes[{node_id}].requirement_ids")
+            if not requirement_ids:
+                errors.append(f"tree.nodes[{node_id}].requirement_ids must not be empty")
+            for req_index, req_id in enumerate(requirement_ids):
+                text(req_id, f"tree.nodes[{node_id}].requirement_ids[{req_index}]")
+            evidence = list_value(raw.get("evidence"), f"tree.nodes[{node_id}].evidence")
+            for ev_index, item in enumerate(evidence):
+                if not isinstance(item, Mapping):
+                    errors.append(f"tree.nodes[{node_id}].evidence[{ev_index}] must be an object")
+                    continue
+                material_id = item.get("material_id")
+                if not isinstance(material_id, str) or not material_id.strip():
+                    errors.append(f"tree.nodes[{node_id}].evidence[{ev_index}].material_id must be a non-empty string")
+                    material = None
+                else:
+                    material = ledger.material(material_id.strip())
+                    if material is None:
+                        errors.append(f"tree.nodes[{node_id}] references unknown material: {material_id.strip()}")
+                text(item.get("use"), f"tree.nodes[{node_id}].evidence[{ev_index}].use")
+                locator = item.get("locator")
+                if locator is not None and not isinstance(locator, Mapping):
+                    errors.append(f"tree.nodes[{node_id}].evidence[{ev_index}].locator must be an object")
+                elif isinstance(locator, Mapping) and locator.get("lines") is not None:
+                    try:
+                        _validate_lines(
+                            locator.get("lines"),
+                            int((material or {}).get("lines") or 0),
+                            f"tree.nodes[{node_id}].evidence[{ev_index}].locator.lines",
+                        )
+                    except ReportValidationError as exc:
+                        errors.append(str(exc))
+
+    requests = list_value(payload.get("write_requests"), "tree.write_requests") if "write_requests" in payload else None
+    if requests is not None:
+        for index, raw in enumerate(requests):
+            if not isinstance(raw, Mapping):
+                errors.append(f"tree.write_requests[{index}] must be an object")
+                continue
+            key = raw.get("key")
+            if not isinstance(key, str) or not key.strip():
+                errors.append(f"tree.write_requests[{index}].key must be a non-empty string")
+            node_ids = list_value(raw.get("node_ids"), f"tree.write_requests[{index}].node_ids")
+            if not node_ids:
+                errors.append(f"tree.write_requests[{index}].node_ids must contain at least one node id")
+            for node_id in node_ids:
+                if not isinstance(node_id, str) or not node_id.strip():
+                    errors.append(f"tree.write_requests[{index}].node_ids[] must be a non-empty string")
+                    continue
+                node = node_map.get(node_id.strip())
+                if node is not None and str(node.get("kind") or "").lower() != "writable":
+                    errors.append(f"tree.write_requests[{index}] targets a non-writable node: {node_id.strip()}")
+
+    if "removed_node_ids" in payload:
+        list_value(payload.get("removed_node_ids"), "tree.removed_node_ids")
+    for key in ("gap_outcomes", "user_decisions", "feedback_dispositions", "draft_dispositions"):
+        if key in payload:
+            list_value(payload.get(key), f"tree.{key}")
+    return errors
 
 
 def validate_tree(payload: Mapping[str, Any], ledger: ReportLedger) -> dict[str, Any]:

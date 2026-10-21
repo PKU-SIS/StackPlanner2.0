@@ -55,6 +55,86 @@ Return the complete tree JSON in `artifact_content`:
   choosing no trial is valid. P3 assembly still requires every writable node to
   have a current draft before integration review.
 
+### Envelope and body
+
+Return one JSON envelope:
+
+```json
+{"summary": "compact dispatch summary",
+ "artifact_content": {"report_title": "...", "requirements": [], "nodes": []},
+ "artifact_type": "outline",
+ "artifact_metadata": {"completion_status": "complete"}}
+```
+
+`artifact_content` is the tree body itself. Do not add a `tree` wrapper, do not
+put `tree_version` in the tree, and do not wrap the envelope in prose or a
+fenced block. `summary`, `artifact_type`, and `artifact_metadata` stay outside
+the tree. A serialized `artifact_content` string is tolerated only when its
+entire content is the tree JSON object.
+
+### Required, recommended, optional
+
+- Hard: `report_title`; at least one `requirements[]` object with `id`,
+  `input_id`, `text`; at least one `nodes[]` object with `node_id`, `kind`
+  (`section` or `writable`), `title`; writable `question`, non-empty
+  `argument[]`, `conclusion`, `constraints` object, `status`,
+  `requirement_ids[]`, `evidence[]`; evidence `material_id`, `use`, and object
+  `locator`; `write_requests[]` `key`, `node_ids[]` (one writable node for P2).
+- Recommended: `source_ids[]`, `locator.lines: [start, end]`, `hard: true`,
+  explicit `relations: []` / `gap_ids: []`.
+- Optional: section `status`, `feedback_wanted`, extra explanatory fields;
+  empty `removed_node_ids`, `gap_outcomes`, `user_decisions`,
+  `feedback_dispositions`, and `draft_dispositions`.
+
+### Partial local example
+
+This is intentionally **one node**, not a complete report plan. The real tree
+must cover every hard user requirement.
+
+```json
+{
+  "summary": "partial contract example",
+  "artifact_content": {
+    "report_title": "2024年中国经济运行简报",
+    "requirements": [
+      {"id": "req1", "input_id": "u1",
+       "text": "说明2024年GDP总量、实际增速与初步核算口径", "hard": true}
+    ],
+    "nodes": [
+      {"node_id": "n1", "parent_id": null, "kind": "section",
+       "title": "总量与增速"},
+      {"node_id": "n2", "parent_id": "n1", "kind": "writable",
+       "title": "2024年GDP总量与增速",
+       "question": "2024年GDP总量、不变价实际增速和初步核算属性是什么？",
+       "argument": ["2024年GDP为1349084亿元", "按不变价同比增长5.0%",
+                     "材料明确该数据为初步核算值"],
+       "conclusion": "2024年GDP总量1349084亿元，按不变价同比增长5.0%，属于初步核算结果。",
+       "constraints": {"period": "2024", "price_basis": "不变价",
+                        "must_cite": ["S1"], "no_extrapolation": true},
+       "requirement_ids": ["req1"], "status": "planned", "gap_ids": [],
+       "relations": [],
+       "evidence": [
+         {"material_id": "m1", "source_ids": ["S1"],
+          "locator": {"lines": [10, 10]},
+          "use": "提供GDP总量1349084亿元、同比5.0%及初步核算表述"}
+       ]}
+    ],
+    "removed_node_ids": [],
+    "write_requests": [
+      {"key": "w-n2", "node_ids": ["n2"], "feedback_wanted": false}
+    ],
+    "gap_outcomes": [], "user_decisions": [],
+    "feedback_dispositions": [], "draft_dispositions": []
+  },
+  "artifact_type": "outline",
+  "artifact_metadata": {"completion_status": "complete"}
+}
+```
+
+If `report_packet.rejected_outline` is present, read that saved candidate and
+correct the same tree; preserve valid nodes and requirements, and do not let a
+dispatch message redefine this schema or move evidence preparation to Writer.
+
 ## User Inputs
 
 A normal supplement such as "add a comparison table" or "reorder sections" is

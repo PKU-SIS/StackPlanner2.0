@@ -19,6 +19,7 @@ the streaming and persistence call sites share one definition of a "step".
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
@@ -143,8 +144,9 @@ def build_subagent_step(
     ``kind`` is ``"tool"`` for a ToolMessage (``type == "tool"``) and ``"ai"``
     otherwise. AI steps carry their ``tool_calls`` (name + args only, with large
     args capped to ``max_chars`` — see ``_bounded_tool_call``); tool steps carry
-    the originating ``tool_name``. ``text`` is truncated to ``max_chars`` with the
-    ``truncated`` flag set accordingly.
+    the originating ``tool_name``. ``text`` is truncated to ``max_chars`` with
+    the ``truncated`` flag set accordingly; ``finish_reason`` is copied from the
+    model response when present and is independent of this display/storage cap.
     """
     kind = "tool" if message.get("type") == "tool" else "ai"
     # ``... or ""`` keeps a tool-call-only turn's content=None rendering as ""
@@ -158,6 +160,11 @@ def build_subagent_step(
         "text": text,
         "truncated": truncated,
     }
+    response_metadata = message.get("response_metadata")
+    if isinstance(response_metadata, Mapping):
+        finish_reason = response_metadata.get("finish_reason")
+        if finish_reason:
+            step["finish_reason"] = str(finish_reason)
 
     if kind == "tool":
         step["tool_name"] = message.get("name")
