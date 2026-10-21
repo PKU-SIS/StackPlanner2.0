@@ -29,9 +29,9 @@ rewrite a replacement schema. Re-dispatch the same Outline task, with the same
 requirements, materials, nodes and writing scope, and pass the host's exact
 `report_protocol_error` / rejected candidate reference through metadata. Outline
 must correct that saved tree in place. Never reduce the plan, delete nodes,
-invent field names, or move evidence/value preparation into Writer. If the host
-reports that correction made no progress, stop and report the technical block;
-do not ask the user to re-submit the same fields.
+invent field names, or move evidence/value preparation into Writer. If the
+existing execution budget is exhausted, report the technical block; do not ask
+the user to re-submit the same fields.
 
 Required sequence (only after a report has been started):
 1. Save the request and bind the first report role in one `sp_delegate` call:

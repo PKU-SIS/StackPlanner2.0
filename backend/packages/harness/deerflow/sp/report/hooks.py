@@ -1193,16 +1193,20 @@ def _accept_outline_locked(
     ledger = ledger_for_state(context.state)
     if ledger.action(action.action_id) is not None and ledger.action(action.action_id).get("status") == "completed":
         return _replay_result(action, context, "outline", ledger.action(action.action_id))
+    committed = ledger
     try:
+        # Validate and apply against a private working copy.  The committed
+        # ledger is only replaced after every business mutation succeeds.
+        working = ReportLedger.load(ledger.paths)
         payload = report_tree.parse_tree_payload(result.artifact_content)
-        tree = report_tree.validate_tree_with_diagnostics(payload, ledger)
-        user_decisions = ledger.apply_user_decisions(tree.get("user_decisions") or [])
-        gap_outcomes = ledger.apply_gap_outcomes(tree.get("gap_outcomes") or [])
+        tree = report_tree.validate_tree_with_diagnostics(payload, working)
+        user_decisions = working.apply_user_decisions(tree.get("user_decisions") or [])
+        gap_outcomes = working.apply_gap_outcomes(tree.get("gap_outcomes") or [])
         fingerprints = report_tree.node_fingerprints(tree)
-        feedback_disposed = report_writing.apply_feedback_dispositions(ledger, tree)
-        draft_disposed = report_writing.apply_draft_dispositions(ledger, tree, fingerprints)
-        write_requests = report_writing.apply_write_requests(ledger, tree)
-        candidate, version, tree_path = report_tree.write_tree_candidate(tree, ledger)
+        feedback_disposed = report_writing.apply_feedback_dispositions(working, tree)
+        draft_disposed = report_writing.apply_draft_dispositions(working, tree, fingerprints)
+        write_requests = report_writing.apply_write_requests(working, tree)
+        candidate, version, tree_path = report_tree.write_tree_candidate(tree, working)
         artifact = artifact_adapter.write_text_artifact(
             json.dumps(candidate, ensure_ascii=False, indent=2),
             artifact_type="outline",
@@ -1212,22 +1216,22 @@ def _accept_outline_locked(
             created_by="outline",
             stage=action.stage,
             source_entry_id=delegate_entry.id,
-            filename_hint=f"report-{ledger.paths.report_id}-outline-v{version}.json",
+            filename_hint=f"report-{working.paths.report_id}-outline-v{version}.json",
             summary=f"Report outline v{version}: {candidate.get('report_title')}",
             metadata={
-                "report_id": ledger.paths.report_id,
+                "report_id": working.paths.report_id,
                 "tree_version": version,
                 "tree_path": str(tree_path),
                 "report_delegate_action_id": action.action_id,
             },
         )
-        report_tree.commit_tree(candidate, version=version, path=tree_path, ledger=ledger)
-        report_assembly.invalidate_review(ledger, "accepted tree changed")
-        ledger.payload.pop("rejected_outline", None)
-        ledger.payload.pop("outline_rejection", None)
-        ledger.save()
+        report_tree.commit_tree(candidate, version=version, path=tree_path, ledger=working)
+        report_assembly.invalidate_review(working, "accepted tree changed")
+        working.payload.pop("rejected_outline", None)
+        working.save()
+        ledger = working
     except ReportValidationError as exc:
-        rejected = _store_rejected_outline(ledger, action, result, str(exc))
+        rejected = _store_rejected_outline(committed, action, result, str(exc))
         detail = f"Outline result rejected: {exc}"
         if rejected:
             detail += (
@@ -1242,19 +1246,6 @@ def _accept_outline_locked(
                 "rejected_candidate": rejected["virtual_path"],
                 "errors": str(exc),
             }
-        rejection_state = ledger.payload.get("outline_rejection")
-        if isinstance(rejection_state, Mapping) and int(rejection_state.get("count") or 0) >= 3:
-            return _rejection(
-                action,
-                context,
-                (
-                    "Outline protocol correction made no progress after three identical "
-                    f"contract failures. Technical block; rejected candidate: {rejected['virtual_path'] if rejected else 'unavailable'}."
-                ),
-                reason="outline_protocol_no_progress",
-                state_update=state_update,
-                next_step="error_fatal",
-            )
         return _rejection(action, context, detail, reason="invalid_report_tree", state_update=state_update)
     except Exception as exc:  # noqa: BLE001 - persistence boundary must surface a technical fault
         return _rejection(action, context, f"Report outline acceptance failed: {type(exc).__name__}: {exc}", reason="report_outline_acceptance_failed")
@@ -1554,18 +1545,6 @@ def _store_rejected_outline(
         "created_at": utc_now_iso(),
     }
     ledger.payload["rejected_outline"] = record
-
-    signature = report_store.sha256_text(str(error))
-    previous = ledger.payload.get("outline_rejection") if isinstance(ledger.payload.get("outline_rejection"), Mapping) else {}
-    same = str(previous.get("signature") or "") == signature
-    count = int(previous.get("count") or 0) + 1 if same else 1
-    ledger.payload["outline_rejection"] = {
-        "signature": signature,
-        "count": count,
-        "action_id": action.action_id,
-        "error": str(error)[:4000],
-        "rejected_candidate": record["virtual_path"],
-    }
     ledger.save()
     return record
 
@@ -1577,11 +1556,10 @@ def _rejection(
     *,
     reason: str,
     state_update: Mapping[str, Any] | None = None,
-    next_step: str = "error_recoverable",
 ) -> HandlerResult:
     update = {"sp_active_delegate_id": None, **dict(state_update or {})}
     return HandlerResult(
-        next_step=next_step,
+        next_step="error_recoverable",
         state_update=update,
         idempotency_key=action.idempotency_key,
         error=message,

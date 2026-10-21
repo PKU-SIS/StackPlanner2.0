@@ -83,15 +83,19 @@ def _previous_nodes(ledger: ReportLedger) -> dict[str, dict[str, Any]]:
 
 
 def validate_tree_with_diagnostics(payload: Mapping[str, Any], ledger: ReportLedger) -> dict[str, Any]:
-    """Bounded diagnostic overlay; ``validate_tree`` remains authoritative.
+    """Use the authoritative validator; add diagnostics only after it rejects.
 
-    The overlay reports independently checkable structural errors so Outline can
-    correct several fields in one pass.  It never repairs or accepts a tree.
+    A valid tree is returned exactly as ``validate_tree`` accepts it, including
+    extra fields such as ``tree_version``.  Diagnostics never add an acceptance
+    threshold; they only help explain a rejection that already happened.
     """
-    errors = _diagnose_tree_contract(payload, ledger)
-    if errors:
-        raise ReportValidationError("Outline tree contract errors:\n- " + "\n- ".join(errors))
-    return validate_tree(payload, ledger)
+    try:
+        return validate_tree(payload, ledger)
+    except ReportValidationError as exc:
+        errors = _diagnose_tree_contract(payload, ledger)
+        if errors:
+            raise ReportValidationError(f"{exc}\nDiagnostic context:\n- " + "\n- ".join(errors)) from exc
+        raise
 
 
 def _diagnose_tree_contract(payload: Mapping[str, Any], ledger: ReportLedger) -> list[str]:
@@ -113,9 +117,15 @@ def _diagnose_tree_contract(payload: Mapping[str, Any], ledger: ReportLedger) ->
             return []
 
     if "tree" in payload:
-        errors.append("artifact_content must be the tree body; remove the top-level 'tree' wrapper")
+        errors.append(
+            "artifact_content has an extra top-level 'tree' field; if the tree body is nested there, "
+            "return that body directly (the field itself is not an acceptance requirement)"
+        )
     if "tree_version" in payload:
-        errors.append("tree.tree_version is not part of the tree; remove it (host assigns version)")
+        errors.append(
+            "artifact_content has an extra 'tree_version' field; it is not required, and any nested "
+            "tree body still needs the normal required fields"
+        )
     text(payload.get("report_title"), "tree.report_title")
 
     requirements = list_value(payload.get("requirements"), "tree.requirements") if "requirements" in payload else None
