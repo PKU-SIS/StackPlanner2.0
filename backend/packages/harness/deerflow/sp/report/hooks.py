@@ -303,6 +303,14 @@ def prepare_delegation(
         # must start a new report or explicitly resume the delivered one first.
         return
     paths = _paths_for_context(report)
+    # Any report-bound delegation belongs to the current run, including an
+    # Outline revision/integrate-review that continues an active report without
+    # an explicit resume.  Register once here so role branches do not each need
+    # a run-scoping patch.
+    with report_store.report_lock(paths):
+        ledger = ReportLedger.load(paths)
+        ledger.register_run(context.run_id)
+        ledger.save()
     if role == "reporter":
         key = str(task_metadata.get("report_write_key") or action.metadata.get("report_write_key") or "").strip()
         if not key:

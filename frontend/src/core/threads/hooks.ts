@@ -723,6 +723,54 @@ export async function stopThreadAndInvalidateCaches(
   }
 }
 
+function invalidateThreadReportView(
+  queryClient: QueryClient,
+  threadId: string | null | undefined,
+  isMock = false,
+) {
+  if (!threadId || isMock) {
+    return;
+  }
+  void queryClient.invalidateQueries({
+    queryKey: ["thread", "report-view", threadId, isMock],
+  });
+}
+
+export function shouldRefreshReportViewFromUpdate(data: unknown): boolean {
+  if (typeof data !== "object" || data === null) {
+    return false;
+  }
+  for (const update of Object.values(data)) {
+    if (typeof update !== "object" || update === null) {
+      continue;
+    }
+    if (
+      "sp_last_handler_result" in update ||
+      "sp_current_stage" in update ||
+      "sp_current_report_version" in update ||
+      "sp_pending_human_interaction" in update
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function shouldRefreshReportViewFromCustomEvent(
+  event: unknown,
+): boolean {
+  if (typeof event !== "object" || event === null || !("type" in event)) {
+    return false;
+  }
+  return (
+    event.type === "task_started" ||
+    event.type === "task_completed" ||
+    event.type === "task_failed" ||
+    event.type === "task_cancelled" ||
+    event.type === "task_timed_out"
+  );
+}
+
 function getStreamErrorMessage(error: unknown): string {
   if (typeof error === "string" && error.trim()) {
     return error;
@@ -943,9 +991,15 @@ export function useThreadStream({
           name: event.name,
           data: event.data,
         });
+        if (event.name === "sp_delegate" || event.name === "sp_replan") {
+          invalidateThreadReportView(queryClient, threadIdRef.current, isMock);
+        }
       }
     },
     onUpdateEvent(data) {
+      if (shouldRefreshReportViewFromUpdate(data)) {
+        invalidateThreadReportView(queryClient, threadIdRef.current, isMock);
+      }
       const _messages = getSummarizationMiddlewareMessages(data);
       if (_messages && _messages.length >= 2) {
         for (const m of _messages) {
@@ -1023,6 +1077,9 @@ export function useThreadStream({
       }
     },
     onCustomEvent(event: unknown) {
+      if (shouldRefreshReportViewFromCustomEvent(event)) {
+        invalidateThreadReportView(queryClient, threadIdRef.current, isMock);
+      }
       if (
         typeof event === "object" &&
         event !== null &&

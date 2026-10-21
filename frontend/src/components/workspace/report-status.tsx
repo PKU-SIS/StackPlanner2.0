@@ -1,7 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
-
 import { useI18n } from "@/core/i18n/hooks";
 import { useThreadReportView } from "@/core/threads/hooks";
 import { cn } from "@/lib/utils";
@@ -25,25 +23,11 @@ export function ReportStatusBanner({
 }: ReportStatusBannerProps) {
   const { t } = useI18n();
   const report = t.conversation.reportStatus;
-  const { data: view, refetch } = useThreadReportView(threadId, {
+  const { data: view } = useThreadReportView(threadId, {
     enabled: Boolean(threadId) && !isMock,
     isMock,
     isLoading,
   });
-
-  // One delayed lookup catches a report that starts after the initial mount.
-  // Finished/stopped/HITL transitions are already covered by the existing
-  // thread-cache invalidation; do not issue a duplicate request on every idle
-  // render.
-  useEffect(() => {
-    if (!threadId || isMock || !isLoading) {
-      return;
-    }
-    const timer = globalThis.setTimeout(() => {
-      void refetch();
-    }, 1500);
-    return () => globalThis.clearTimeout(timer);
-  }, [isLoading, isMock, refetch, threadId]);
 
   if (!view || view.status === "not_report") {
     return null;

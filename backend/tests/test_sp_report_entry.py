@@ -12,6 +12,8 @@ from deerflow.sp.actions.schema import ActionType, SPAction
 from deerflow.sp.memory import TaskMemoryStack
 from deerflow.sp.report import report_context
 from deerflow.sp.report import store as report_store
+from deerflow.sp.report.ledger import ReportLedger
+from deerflow.sp.report.presentation import derive_report_view
 from deerflow.sp.subagents import SPSubagentResult, SPSubagentStatus, SPSubagentTask
 
 
@@ -87,3 +89,45 @@ def test_start_metadata_rejects_non_report_target(tmp_path):
     assert result.next_step == "error_recoverable"
     assert "outline or researcher" in (result.error or "")
     assert report_context(ctx.state).status == "disabled"
+
+
+def test_report_outline_continuation_registers_current_run_without_resume(tmp_path):
+    ctx = HandlerContext(state=_state(tmp_path), stack=TaskMemoryStack(), thread_id="t1", run_id="run-start")
+    start = DelegateHandler(executor=_CapturingExecutor()).handle(
+        _action(metadata={"report_action": "start"}),
+        ctx,
+    )
+    assert start.next_step == "continue"
+    assert report_context(ctx.state).is_active
+
+    continuation = HandlerContext(
+        state=ctx.state,
+        stack=TaskMemoryStack(),
+        thread_id="t1",
+        run_id="run-outline-continuation",
+    )
+    from deerflow.sp.report import hooks
+
+    action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-outline",
+        reason="continue outline",
+        task="Revise the outline.",
+        target_agent="outline",
+        stage="planning",
+        metadata={"report_task": "revise"},
+    )
+    task_metadata: dict = {"report_task": "revise"}
+    hooks.prepare_delegation(action, continuation, task_metadata, {})
+
+    active = report_context(ctx.state)
+    ledger = ReportLedger.load_for_context(active)
+    assert "run-outline-continuation" in ledger.payload["run_ids"]
+    view = derive_report_view(
+        ctx.state,
+        run_status="success",
+        run_id="run-outline-continuation",
+    )
+    assert view is not None and view["status"] != "not_report"
+    ordinary = derive_report_view(ctx.state, run_status="success", run_id="run-ordinary")
+    assert ordinary is not None and ordinary["status"] == "not_report"
