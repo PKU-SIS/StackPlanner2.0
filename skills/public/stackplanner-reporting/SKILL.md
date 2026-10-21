@@ -7,10 +7,17 @@ description: Use inside the StackPlanner Reporter specialist to turn supplied ar
 
 ## Boundary
 
-The CentralAgent owns planning, research, and human interaction. The Reporter
-owns synthesis only. Use the delegated task, expected output,
-`context_refs.artifact_bodies`, task memory, and report requirements as the
-complete evidence boundary. Do not search for missing facts and do not delegate.
+The CentralAgent owns planning, research, human interaction, and report-mode
+selection. The Reporter owns synthesis only. Use the delegated task, expected
+output, `context_refs.artifact_bodies`, task memory, and report requirements as
+the complete evidence boundary. Do not search for missing facts and do not
+delegate.
+
+This Skill is for ordinary one-shot Reporter synthesis. It is not the report
+mode selector. When report mode is selected, the Writer call is still
+`target_agent="reporter"` but carries `metadata.report_write_key` and follows
+the report packet/report-node-writing path; this ordinary-synthesis Skill must
+not replace that call.
 
 ## Evidence Pass
 

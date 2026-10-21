@@ -4,25 +4,35 @@ from __future__ import annotations
 
 REPORT_CENTRAL_PROMPT = """
 <report-mode>
-This section is present in the Central prompt, but it applies only when the
-latest visible user request semantically calls for the report capability: a
-substantive, evidence-grounded report deliverable, an explicit report revision,
-or continuation of an already active report. Central makes that semantic
-decision; there is no keyword rule and no global report-mode switch.
+Report mode is selected from the semantic intent of the current visible
+request. Saving a file or producing a structured artifact is not, by itself, a
+reason to select report mode.
 
-For ordinary question answering, explanations, small bounded research, coding,
-file/data work, and other non-report tasks, keep the normal SP workflow and do
-not start a report or execute the Required sequence below. A request for a
-short direct answer or an ordinary research summary is not a report task unless
-the user asks for a report deliverable.
+Select REPORT when the request is for a report or analytical briefing: a
+delivered analysis/report whose structure, argument, evidence, review, or
+revision matters. Short reports and single-source reports still qualify.
+Select ORDINARY for direct answers/explanations, bounded retrieval,
+coding/file/data work, and emails, translations, rewrites, summaries,
+formatting, or other one-shot text transformations. Saving an email,
+translation, or summary as a file does not make it a report.
 
-When the report capability does apply, start it on the first report delegation
-by adding `metadata={"report_action":"start"}` to `sp_delegate`. The host starts
-the report and binds that same delegation to its report role; do not add a
-separate start action before it. Starting does not authorise you to design the
-report or judge evidence; Outline owns those decisions. In report mode the
-control context carries the current report id, gap identities, statuses and the
-next required action.
+The current visible request, current conversation, and report ledger jointly
+determine whether this is a new report, a continuation, or a revision:
+- no active report + REPORT intent: start a new report on the first report
+  delegation. That delegation must target researcher (pre-research) or outline
+  and include metadata.report_action="start". Do not make an ordinary
+  researcher call first.
+- active report: continue or revise the existing report; do not start another.
+  A HITL answer continues the active report.
+- delivered report + user asks to revise it: resume/revise that report. A
+  distinct new report request starts a new report.
+- ORDINARY: no report_action, no report ledger, no "none" declaration.
+
+`target_agent="reporter"` is the single target for both ordinary one-shot
+synthesis and report Writer. When the call carries metadata.report_write_key,
+it is the report Writer; without it, it is ordinary Reporter synthesis. There
+is no separate `writer` target. In report mode, do not use ordinary Reporter
+synthesis in place of a Writer call.
 
 If a report role result is rejected with `invalid_report_tree`, do not design or
 rewrite a replacement schema. Re-dispatch the same Outline task, with the same
@@ -54,9 +64,12 @@ Required sequence (only after a report has been started):
 5. For `awaiting_user`, call `sp_ask_human` with a concrete question and
    `metadata={"report_gap_ids":[...]}`. The user's answer is input to Outline,
    not a gap closure. After the answer, delegate to `outline` again.
-6. In P3, do not call `sp_finish` until the current candidate has a ready
-   integration review and corresponding final report; pending reviews, edits,
-   unfinished writes/research, feedback, gaps, or unapplied inputs block it.
+6. In P3, invoke each write through `reporter` with
+   `metadata.report_write_key`; this is the report Writer call, not ordinary
+   Reporter synthesis. Do not call `sp_finish` until the current candidate has
+   a ready integration review and corresponding final report; pending reviews,
+   edits, unfinished writes/research, feedback, gaps, or unapplied inputs block
+   it.
 7. Close a report only when the user cancels it. Preserve the cancellation input
    first, then call `sp_replan` with metadata.report_action="close" and
    metadata.report_input_id set to that saved input. A bare reason is not a

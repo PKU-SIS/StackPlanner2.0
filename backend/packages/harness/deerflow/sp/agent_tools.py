@@ -285,10 +285,14 @@ def sp_delegate(
     """Delegate a separable task to a StackPlanner specialist.
 
     Args:
-        target_agent: Specialist role to invoke. Use reporter for report,
-            Markdown-document, or prose synthesis; use researcher for read-only
+        target_agent: Specialist role to invoke. Use researcher for read-only
             external HTTP/API retrieval; use coder only for code, local
-            shell/data processing, or executable/generated-file work.
+            shell/data processing, or executable/generated-file work. Use
+            researcher/outline with report_action="start" for a new report or
+            analytical briefing. `reporter` is one target for ordinary
+            one-shot synthesis and for report Writer calls; a report Writer
+            call carries metadata.report_write_key. There is no separate
+            writer target.
         task: Concrete delegated task.
         reason: Why delegation is needed.
         stage: Current task stage.
@@ -298,9 +302,11 @@ def sp_delegate(
         metadata: Optional structured delegation metadata. Use skill_names to
             load matching Skills and tool_names to narrow the specialist Tool
             allowlist; pass source or artifact references through input_refs.
-            For the first report delegation only, set
-            metadata.report_action="start" with target outline/researcher; the
-            host starts the report and binds this same delegation to it.
+            For a new report only, set metadata.report_action="start" on the
+            first researcher/outline delegation. For report Writer calls, set
+            metadata.report_write_key; do not add a writer target. Active
+            reports, HITL continuations, and delivered-report revisions use
+            the existing report lifecycle and do not start again.
     """
     return "StackPlanner DELEGATE action recorded. Inspect the specialist result before continuing."
 

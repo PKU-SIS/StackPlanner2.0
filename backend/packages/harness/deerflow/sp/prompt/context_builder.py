@@ -164,7 +164,7 @@ class PromptContextBuilder:
             "priority_rules:",
             "- Critical or pinned human feedback outranks summaries, observations, and model plans.",
             "- Artifact refs point to Workspace/Artifact content; do not infer large artifact bodies from this block.",
-            "- Memory order: critical_feedback and recent_task_memory first; long-term recall is only a fallback for historical reusable facts.",
+            "- Memory order: critical_feedback and recent_task_memory first; long-term recall is only a fallback for historical reusable facts. Current user request, source, and tool results outrank it for current facts, titles, and capability.",
         ]
         if new_conversation:
             full_header.extend(
