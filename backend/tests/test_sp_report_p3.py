@@ -15,7 +15,7 @@ from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.memory import TaskMemoryStack
 from deerflow.sp.report import hooks
 from deerflow.sp.report import store as report_store
-from deerflow.sp.report.ledger import ReportLedger
+from deerflow.sp.report.ledger import ReportLedger, ReportValidationError
 from deerflow.sp.subagents import SPSubagentResult, SPSubagentStatus, SPSubagentTask
 
 
@@ -104,9 +104,29 @@ def _seed(tmp_path: Path, *, write_status: str | None = None, body: str = "Seed 
         ]
     if with_sources:
         ledger.payload["sources"] = [{"source_id": "S1", "url": "https://example.com/source", "title": "示例来源", "normalized_url": "https://example.com/source"}]
+        material_paths = [tmp_path / "m1.txt", tmp_path / "m2.txt"]
+        material_texts = ["material one\n", "material two\n"]
+        for path, text in zip(material_paths, material_texts, strict=True):
+            report_store.write_text_atomic(path, text)
         ledger.payload["materials"] = [
-            {"material_id": "m1", "source_id": "S1", "sha256": "a" * 64, "chars": 10, "lines": 1, "virtual_path": "/mnt/user-data/outputs/m1.txt"},
-            {"material_id": "m2", "source_id": "S1", "sha256": "b" * 64, "chars": 12, "lines": 1, "virtual_path": "/mnt/user-data/outputs/m2.txt"},
+            {
+                "material_id": "m1",
+                "source_id": "S1",
+                "path": str(material_paths[0]),
+                "sha256": report_store.sha256_text(material_texts[0]),
+                "chars": len(material_texts[0]),
+                "lines": 1,
+                "virtual_path": "/mnt/user-data/outputs/m1.txt",
+            },
+            {
+                "material_id": "m2",
+                "source_id": "S1",
+                "path": str(material_paths[1]),
+                "sha256": report_store.sha256_text(material_texts[1]),
+                "chars": len(material_texts[1]),
+                "lines": 1,
+                "virtual_path": "/mnt/user-data/outputs/m2.txt",
+            },
         ]
     ledger.save()
     return ctx, ledger
@@ -183,6 +203,176 @@ def _finish(ctx: HandlerContext) -> object:
 
 def _ledger(ctx: HandlerContext) -> ReportLedger:
     return ReportLedger.load_for_context(hooks.report_context(ctx.state))
+
+
+def test_dedupe_edit_can_delete_redundant_sentence(tmp_path):
+    ctx, _ = _seed(tmp_path, body="Keep this sentence. Redundant sentence.\n")
+    reviewed = _send_review(
+        ctx,
+        status="issues",
+        outcome="edit",
+        edits=[{"draft_id": "d1", "kind": "dedupe", "anchor": " Redundant sentence.", "replacement": "", "reason": "删除重复句"}],
+        action_id="a-dedupe",
+    )
+    assert reviewed.next_step == "continue", reviewed.error
+    ledger = _ledger(ctx)
+    candidate = ledger.payload["candidate"]
+    content = Path(candidate["path"]).read_text(encoding="utf-8")
+    assert "Keep this sentence." in content
+    assert "Redundant sentence" not in content
+    assert "Keep this sentence. Redundant sentence." in Path(ledger.payload["drafts"][0]["path"]).read_text(encoding="utf-8")
+
+
+def test_assembly_follows_parent_child_order_not_array_order(tmp_path):
+    ctx = _context(tmp_path)
+    paths = _paths(ctx)
+    ledger = ReportLedger.load(paths)
+    tree = {
+        "version": 1,
+        "report_title": "Order report",
+        "requirements": [],
+        "nodes": [
+            {"node_id": "A", "parent_id": None, "kind": "section", "title": "A"},
+            {"node_id": "B", "parent_id": None, "kind": "section", "title": "B"},
+            {"node_id": "A_child", "parent_id": "A", "kind": "section", "title": "A child"},
+            {"node_id": "B_child", "parent_id": "B", "kind": "section", "title": "B child"},
+        ],
+    }
+    tree_path = paths.tree_file(1)
+    report_store.write_json_atomic(tree_path, tree)
+    ledger.payload["tree"] = {
+        "version": 1,
+        "path": str(tree_path),
+        "virtual_path": paths.virtual(tree_path),
+        "sha256": report_store.sha256_text(tree_path.read_text(encoding="utf-8")),
+        "node_ids": ["A", "B", "A_child", "B_child"],
+    }
+    ledger.save()
+    _action, task, _entry = _prepare_review(ctx, action_id="a-order-review")
+    content = task.context_refs["report_packet"]["candidate"]["content"]
+    assert content.index("## A\n") < content.index("### A child") < content.index("## B\n") < content.index("### B child")
+
+
+def test_draft_file_change_after_review_blocks_reuse_and_delivery(tmp_path):
+    ctx, _ = _seed(tmp_path)
+    assert _send_review(ctx, status="ready", outcome="deliver", action_id="a-review-file").next_step == "continue"
+    ledger = _ledger(ctx)
+    draft_path = Path(ledger.payload["drafts"][0]["path"])
+    draft_path.write_text("Changed outside the ledger.\n", encoding="utf-8")
+    blocked = _finish(ctx)
+    assert blocked.next_step == "error_recoverable"
+    assert "content hash does not match the ledger" in blocked.error
+    assert _ledger(ctx).payload["delivered"] is None
+    with pytest.raises(ReportValidationError):
+        _prepare_review(ctx, action_id="a-review-file")
+
+
+def test_review_acceptance_rejects_changed_input_files(tmp_path):
+    ctx, _ = _seed(tmp_path)
+    action, task, entry = _prepare_review(ctx, action_id="a-review-stale")
+    packet = task.context_refs["report_packet"]
+    review_content = json.dumps(
+        {
+            "inputs_digest": packet["inputs_digest"],
+            "reviewed_candidate_sha256": packet["candidate_sha256"],
+            "review": {"status": "ready", "outcome": "deliver", "findings": [], "edits": [], "covered_requirement_ids": ["R1"]},
+        }
+    )
+    Path(_ledger(ctx).payload["drafts"][0]["path"]).write_text("Changed during review.\n", encoding="utf-8")
+    result = SPSubagentResult(
+        status=SPSubagentStatus.COMPLETED,
+        result="review",
+        artifact_content=review_content,
+        artifact_type="integration_review",
+        artifact_metadata={"artifact_type": "integration_review", "report_task": "integrate_review", "status": "ready"},
+    )
+    rejected = hooks.handle_success(action, ctx, result, task, artifact_adapter=SPArtifactAdapter(), delegate_entry=entry)
+    assert rejected.next_step == "error_recoverable"
+    assert "content hash does not match the ledger" in rejected.error
+    assert _ledger(ctx).payload["final_report"] is None
+
+
+def test_finish_rejects_old_final_ref_and_returns_current_final(tmp_path):
+    ctx, _ = _seed(tmp_path)
+    assert _send_review(ctx, status="ready", outcome="deliver", action_id="a-review-v1").next_step == "continue"
+    ledger = _ledger(ctx)
+    v1 = ledger.payload["final_report"]
+    v1_content = Path(v1["path"]).read_text(encoding="utf-8")
+    edited = _send_review(
+        ctx,
+        status="issues",
+        outcome="edit",
+        edits=[{"draft_id": "d1", "kind": "format", "anchor": "Seed body", "replacement": "Changed final wording", "reason": "措辞调整"}],
+        action_id="a-review-edit-v2",
+    )
+    assert edited.next_step == "continue", edited.error
+    assert _send_review(ctx, status="ready", outcome="deliver", action_id="a-review-v2").next_step == "continue"
+    ledger = _ledger(ctx)
+    v2 = ledger.payload["final_report"]
+    v2_content = Path(v2["path"]).read_text(encoding="utf-8")
+    assert v1_content != v2_content
+    assert v1["artifact_id"] != v2["artifact_id"]
+
+    rejected = FinishHandler().handle(
+        SPAction.create(
+            ActionType.FINISH,
+            action_id="a-finish-old",
+            reason="done",
+            task="done",
+            metadata={"final_artifact_ref": v1["artifact_id"]},
+        ),
+        ctx,
+    )
+    assert rejected.next_step == "error_recoverable"
+    assert "does not match the current reviewed report final" in rejected.error
+    assert _ledger(ctx).payload["delivered"] is None
+
+    finished = _finish(ctx)
+    assert finished.next_step == "finish", finished.error
+    assert finished.state_update["sp_last_final_artifact_ref"] == v2["artifact_id"]
+    ledger = _ledger(ctx)
+    assert ledger.payload["delivered"]["final_path"] == v2["virtual_path"]
+    assert ledger.payload["delivered"]["final_artifact_id"] == v2["artifact_id"]
+    assert Path(v2["path"]).read_text(encoding="utf-8") == v2_content
+
+
+def test_cancelled_or_delivered_report_does_not_take_over_ordinary_finish(tmp_path):
+    ctx, _ = _seed(tmp_path)
+    closed = hooks.close_report(
+        ctx,
+        SPAction.create(ActionType.REPLAN, reason="cancel", task="cancel", metadata={"report_action": "close", "report_input_id": "u1"}),
+        reason="用户取消",
+    )
+    assert closed["status"] == "abandoned"
+    ordinary = FinishHandler().handle(
+        SPAction.create(ActionType.FINISH, action_id="a-ordinary-cancelled", reason="done", task="done", metadata={"allow_without_artifact": True}),
+        ctx,
+    )
+    assert ordinary.next_step == "finish", ordinary.error
+
+    # A delivered report is also historical; a later ordinary finish is not a replay.
+    ctx2, _ = _seed(tmp_path / "delivered")
+    assert _send_review(ctx2, status="ready", outcome="deliver", action_id="a-review-delivered").next_step == "continue"
+    ledger2 = _ledger(ctx2)
+    historical_artifact = ledger2.payload["final_report"]["artifact_id"]
+    assert _finish(ctx2).next_step == "finish"
+    explicit = FinishHandler().handle(
+        SPAction.create(
+            ActionType.FINISH,
+            action_id="a-historical-explicit",
+            reason="done",
+            task="done",
+            metadata={"final_artifact_ref": historical_artifact, "allow_without_artifact": True},
+        ),
+        ctx2,
+    )
+    assert explicit.next_step == "error_recoverable"
+    assert "historical delivered report final" in explicit.error
+    ordinary2 = FinishHandler().handle(
+        SPAction.create(ActionType.FINISH, action_id="a-ordinary-delivered", reason="done", task="done", metadata={"allow_without_artifact": True}),
+        ctx2,
+    )
+    assert ordinary2.next_step == "finish", ordinary2.error
 
 
 def test_same_candidate_can_be_proactively_re_reviewed(tmp_path):
