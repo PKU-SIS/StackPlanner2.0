@@ -26,14 +26,23 @@ function renderBanner(isLoading = false) {
 }
 
 describe("ReportStatusBanner", () => {
-  it("renders running while the stream is active even with a stale incomplete view", () => {
+  it("renders running when the report view is associated with an active run", () => {
     (globalThis as { __reportView?: unknown }).__reportView = {
-      status: "incomplete",
+      status: "running",
       can_continue: true,
     };
     const html = renderBanner(true);
     expect(html).toContain('data-report-status="running"');
     expect(html).toContain("Report generation in progress");
+  });
+
+  it("does not turn an old incomplete report into running because a new run is active", () => {
+    (globalThis as { __reportView?: unknown }).__reportView = {
+      status: "incomplete",
+      can_continue: true,
+    };
+    expect(renderBanner(true)).toBe("");
+    expect(renderBanner(false)).toContain('data-report-status="incomplete"');
   });
 
   it("renders awaiting, stopped, technical, and delivered views", () => {

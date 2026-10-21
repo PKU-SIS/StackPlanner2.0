@@ -154,6 +154,17 @@ class ReportLedger:
         report_store.write_json_atomic(self.paths.ledger, self.payload)
         report_store.write_catalog(self.paths, self.payload)
 
+    def register_run(self, run_id: str | None) -> None:
+        """Record a run that owns/continues this report for read-side scoping."""
+        if not isinstance(run_id, str) or not run_id.strip():
+            return
+        runs = self.payload.setdefault("run_ids", [])
+        if not isinstance(runs, list):
+            runs = []
+            self.payload["run_ids"] = runs
+        if run_id not in runs:
+            runs.append(run_id)
+
     # ------------------------------------------------------------------
     # Identity and lookups
     # ------------------------------------------------------------------

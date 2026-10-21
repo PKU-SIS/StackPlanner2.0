@@ -2052,29 +2052,36 @@ export function useThreadReportView(
   {
     enabled = true,
     isMock = false,
-    refetchInterval = false,
+    isLoading = false,
   }: {
     enabled?: boolean;
     isMock?: boolean;
-    refetchInterval?: number | false;
+    isLoading?: boolean;
   } = {},
 ) {
-  const apiClient = getAPIClient(isMock);
   return useQuery<ReportView | null>({
     queryKey: ["thread", "report-view", threadId, isMock],
     queryFn: async () => {
       if (!threadId) {
         return null;
       }
-      const state = await apiClient.threads.getState(threadId);
-      return (
-        (state.values as AgentThreadState | undefined)?.sp_report_view ?? null
+      const response = await fetch(
+        `${getBackendBaseURL()}/api/threads/${encodeURIComponent(threadId)}/report-view`,
+        { credentials: "include" },
       );
+      if (!response.ok) {
+        return null;
+      }
+      const payload = (await response.json()) as {
+        report_view?: ReportView | null;
+      };
+      return payload.report_view ?? null;
     },
     enabled: enabled && Boolean(threadId) && !isMock,
     retry: false,
     refetchOnWindowFocus: false,
-    refetchInterval,
+    refetchInterval: (query) =>
+      isLoading && query.state.data?.status === "running" ? 2000 : false,
   });
 }
 

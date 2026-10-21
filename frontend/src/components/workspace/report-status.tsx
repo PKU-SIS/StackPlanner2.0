@@ -28,20 +28,34 @@ export function ReportStatusBanner({
   const { data: view, refetch } = useThreadReportView(threadId, {
     enabled: Boolean(threadId) && !isMock,
     isMock,
-    refetchInterval: isLoading ? 2000 : false,
+    isLoading,
   });
 
-  // The state endpoint is the source for the derived view. A finished, stopped,
-  // or HITL-ended stream does not carry a persisted report status, so refresh
-  // the read-side projection when the active stream transitions to idle.
+  // One delayed lookup catches a report that starts after the initial mount.
+  // Finished/stopped/HITL transitions are already covered by the existing
+  // thread-cache invalidation; do not issue a duplicate request on every idle
+  // render.
   useEffect(() => {
-    if (!threadId || isMock || isLoading) {
+    if (!threadId || isMock || !isLoading) {
       return;
     }
-    void refetch();
+    const timer = globalThis.setTimeout(() => {
+      void refetch();
+    }, 1500);
+    return () => globalThis.clearTimeout(timer);
   }, [isLoading, isMock, refetch, threadId]);
 
   if (!view || view.status === "not_report") {
+    return null;
+  }
+  // A new run is visible; do not project a prior report's incomplete/stopped
+  // state onto it. Only a run-associated running view (or an explicit pending
+  // human request) is safe to show while the stream is active.
+  if (
+    isLoading &&
+    view.status !== "running" &&
+    view.status !== "awaiting_user"
+  ) {
     return null;
   }
   // While a new run is active, a delivered view belongs to the previous task;
@@ -50,7 +64,7 @@ export function ReportStatusBanner({
     return null;
   }
 
-  const status = isLoading ? "running" : view.status;
+  const status = view.status;
   const label =
     status === "running"
       ? report.running

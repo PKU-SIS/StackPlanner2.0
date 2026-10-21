@@ -181,6 +181,8 @@ def start_report(context: HandlerContext, action: SPAction) -> dict[str, Any]:
         report_id = report_store.allocate_report_id(outputs_path)
         paths = report_store.ReportPaths(outputs_path, report_id)
         ledger = ReportLedger.create(paths, request_text=request_text, inputs=inputs)
+        ledger.register_run(context.run_id)
+        ledger.save()
         report_store.write_json_atomic(report_store.pointer_path(outputs_path), {"report_id": report_id})
         return {
             "report_id": report_id,
@@ -203,6 +205,7 @@ def resume_report(context: HandlerContext, action: SPAction) -> dict[str, Any]:
     paths = _paths_for_context(context_info)
     with report_store.report_lock(paths):
         ledger = ReportLedger.load(paths)
+        ledger.register_run(context.run_id)
         if context_info.status == "delivered":
             delivered = ledger.payload.get("delivered") if isinstance(ledger.payload.get("delivered"), Mapping) else None
             ledger.payload.setdefault("delivery_history", []).append(dict(delivered) if delivered else None)
@@ -234,7 +237,10 @@ def resume_report(context: HandlerContext, action: SPAction) -> dict[str, Any]:
                 "resumed_at": ledger.payload["resumed_at"],
                 "resume_of_delivery_id": (delivered or {}).get("delivery_id"),
                 "action_id": action.action_id,
+                "run_id": context.run_id,
             }
+            ledger.save()
+        else:
             ledger.save()
         return {
             "report_id": context_info.report_id,
@@ -1509,6 +1515,7 @@ def record_human_feedback_input(
     *,
     pending: Mapping[str, Any] | None,
     source_message_id: str | None = None,
+    run_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Persist a HITL answer and return related gaps to awaiting_outline."""
     context = report_context(state)
@@ -1517,6 +1524,7 @@ def record_human_feedback_input(
     paths = _paths_for_context(context)
     with report_store.report_lock(paths):
         ledger = ReportLedger.load(paths)
+        ledger.register_run(run_id)
         pending = pending or {}
         interaction_id = str(pending.get("interaction_id") or "") or None
         metadata = pending.get("metadata") if isinstance(pending.get("metadata"), Mapping) else {}

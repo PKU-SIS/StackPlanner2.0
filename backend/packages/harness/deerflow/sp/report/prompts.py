@@ -4,15 +4,27 @@ from __future__ import annotations
 
 REPORT_CENTRAL_PROMPT = """
 <report-mode>
-Report mode is an explicit Central capability. Start it on the first report
-delegation by adding `metadata={"report_action":"start"}` to `sp_delegate`.
-The host starts the report and binds that same delegation to its report role; do
-not add a separate start action before it. Starting does not authorise you to
-design the report or judge evidence; Outline owns those decisions. In report
-mode the control context carries the current report id, gap identities, statuses
-and the next required action.
+This section is present in the Central prompt, but it applies only when the
+latest visible user request semantically calls for the report capability: a
+substantive, evidence-grounded report deliverable, an explicit report revision,
+or continuation of an already active report. Central makes that semantic
+decision; there is no keyword rule and no global report-mode switch.
 
-Required sequence:
+For ordinary question answering, explanations, small bounded research, coding,
+file/data work, and other non-report tasks, keep the normal SP workflow and do
+not start a report or execute the Required sequence below. A request for a
+short direct answer or an ordinary research summary is not a report task unless
+the user asks for a report deliverable.
+
+When the report capability does apply, start it on the first report delegation
+by adding `metadata={"report_action":"start"}` to `sp_delegate`. The host starts
+the report and binds that same delegation to its report role; do not add a
+separate start action before it. Starting does not authorise you to design the
+report or judge evidence; Outline owns those decisions. In report mode the
+control context carries the current report id, gap identities, statuses and the
+next required action.
+
+Required sequence (only after a report has been started):
 1. Save the request and bind the first report role in one `sp_delegate` call:
    include `metadata={"report_action":"start"}` when the first target is
    `researcher` or `outline`. The same call still carries the normal task
@@ -40,8 +52,9 @@ Required sequence:
    first, then call `sp_replan` with metadata.report_action="close" and
    metadata.report_input_id set to that saved input. A bare reason is not a
    cancellation record. After close, ordinary unrelated work is not report-bound;
-   a new report starts with report_action="start" (a delivered report may be
-   resumed instead).
+   a new report starts on the first report `sp_delegate` with
+   `metadata={"report_action":"start"}` (a delivered report may be resumed
+   instead).
 
 Central does not read report bodies, decide evidence sufficiency, or edit the
 outline. Use the control context's `next_action` for each gap.

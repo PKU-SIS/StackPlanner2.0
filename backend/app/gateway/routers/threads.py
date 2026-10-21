@@ -435,6 +435,12 @@ class ThreadStateResponse(BaseModel):
     tasks: list[dict[str, Any]] = Field(default_factory=list, description="Interrupted task details")
 
 
+class ReportViewResponse(BaseModel):
+    """Small read-side report status without transferring the full thread state."""
+
+    report_view: dict[str, Any] | None = Field(default=None, description="Current report view, if any")
+
+
 class ThreadPatchRequest(BaseModel):
     """Request body for patching thread metadata."""
 
@@ -568,6 +574,29 @@ def _derive_thread_status(checkpoint_tuple) -> str:
         return "interrupted"
 
     return "idle"
+
+
+async def _derive_thread_report_view(
+    request: Request,
+    thread_id: str,
+    channel_values: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Derive the small report view from the current run and report ledger."""
+    try:
+        from deerflow.sp.report import derive_report_view
+
+        run_manager = get_run_manager(request)
+        runs = await run_manager.list_by_thread(thread_id, user_id=get_effective_user_id(), limit=1)
+        current_run = runs[0] if runs else None
+        return derive_report_view(
+            channel_values,
+            run_status=current_run.status.value if current_run is not None else None,
+            run_id=current_run.run_id if current_run is not None else None,
+            stop_reason=(current_run.error or current_run.abort_action) if current_run is not None else None,
+        )
+    except Exception:  # noqa: BLE001 - report presentation must not break thread state
+        logger.warning("Unable to derive report view for thread %s", sanitize_log_param(thread_id), exc_info=True)
+        return None
 
 
 async def _ensure_thread_for_goal(thread_id: str, request: Request) -> None:
@@ -1025,6 +1054,25 @@ async def compact_thread(thread_id: str, body: ThreadCompactRequest, request: Re
     return _thread_compact_response(result)
 
 
+@router.get("/{thread_id}/report-view", response_model=ReportViewResponse)
+@require_permission("threads", "read", owner_check=True)
+async def get_thread_report_view(thread_id: str, request: Request) -> ReportViewResponse:
+    """Return only the derived report status for status polling."""
+    checkpointer = get_checkpointer(request)
+    try:
+        checkpoint_tuple = await checkpointer.aget_tuple(
+            {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
+        )
+    except Exception:
+        logger.exception("Failed to get report view for thread %s", sanitize_log_param(thread_id))
+        raise HTTPException(status_code=500, detail="Failed to get report view") from None
+    if checkpoint_tuple is None:
+        return ReportViewResponse(report_view=None)
+    checkpoint = getattr(checkpoint_tuple, "checkpoint", {}) or {}
+    channel_values = checkpoint.get("channel_values", {}) or {}
+    return ReportViewResponse(report_view=await _derive_thread_report_view(request, thread_id, channel_values))
+
+
 # ---------------------------------------------------------------------------
 @router.get("/{thread_id}/state", response_model=ThreadStateResponse)
 @require_permission("threads", "read", owner_check=True)
@@ -1065,22 +1113,9 @@ async def get_thread_state(thread_id: str, request: Request) -> ThreadStateRespo
     tasks = [{"id": getattr(t, "id", ""), "name": getattr(t, "name", "")} for t in tasks_raw]
 
     values = serialize_channel_values_for_api(channel_values)
-    try:
-        from deerflow.sp.report import derive_report_view
-
-        run_manager = get_run_manager(request)
-        runs = await run_manager.list_by_thread(thread_id, user_id=get_effective_user_id(), limit=1)
-        current_run = runs[0] if runs else None
-        report_view = derive_report_view(
-            channel_values,
-            run_status=current_run.status.value if current_run is not None else None,
-            run_id=current_run.run_id if current_run is not None else None,
-            stop_reason=(current_run.error or current_run.abort_action) if current_run is not None else None,
-        )
-        if report_view is not None:
-            values["sp_report_view"] = report_view
-    except Exception:  # noqa: BLE001 - report presentation must not break thread state
-        logger.warning("Unable to derive report view for thread %s", sanitize_log_param(thread_id), exc_info=True)
+    report_view = await _derive_thread_report_view(request, thread_id, channel_values)
+    if report_view is not None:
+        values["sp_report_view"] = report_view
 
     return ThreadStateResponse(
         values=values,

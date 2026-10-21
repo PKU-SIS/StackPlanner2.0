@@ -102,6 +102,14 @@ def derive_report_view(
     if status == "abandoned":
         return _not_report_view(context)
 
+    # Active report work must belong to the current run.  A new ordinary chat
+    # run can share the thread with an old active report; it must not inherit
+    # that report's "running"/"incomplete" presentation.  When the association
+    # is unknown, fail closed to not_report instead of guessing.
+    known_runs = _report_run_ids(ledger)
+    if not run_id or run_id not in known_runs:
+        return _not_report_view(context)
+
     if isinstance(pending, Mapping):
         return _view(context, "awaiting_user", run_id=run_id, can_continue=True, reason=_pending_reason(pending))
 
@@ -182,3 +190,44 @@ def _safe_blockers(ledger: ReportLedger) -> str | None:
     except Exception:  # noqa: BLE001 - presentation must remain available
         return None
     return str(reason)[:1000] if reason else None
+
+
+def _report_run_ids(ledger: ReportLedger) -> set[str]:
+    """Return run identities already associated with this report."""
+    payload = ledger.payload
+    runs: set[str] = set()
+    raw_runs = payload.get("run_ids")
+    if isinstance(raw_runs, list):
+        runs.update(str(value) for value in raw_runs if isinstance(value, str) and value)
+    for key in ("started_run_id",):
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            runs.add(value)
+    resume = payload.get("resume")
+    if isinstance(resume, Mapping):
+        value = resume.get("run_id")
+        if isinstance(value, str) and value:
+            runs.add(value)
+    actions = payload.get("actions")
+    if isinstance(actions, Mapping):
+        for action in actions.values():
+            if isinstance(action, Mapping):
+                value = action.get("run_id")
+                if isinstance(value, str) and value:
+                    runs.add(value)
+    requests = payload.get("write_requests")
+    if isinstance(requests, list):
+        for request in requests:
+            if not isinstance(request, Mapping):
+                continue
+            value = request.get("last_run_id")
+            if isinstance(value, str) and value:
+                runs.add(value)
+            attempts = request.get("attempts")
+            if isinstance(attempts, list):
+                for attempt in attempts:
+                    if isinstance(attempt, Mapping):
+                        attempt_run = attempt.get("run_id")
+                        if isinstance(attempt_run, str) and attempt_run:
+                            runs.add(attempt_run)
+    return runs

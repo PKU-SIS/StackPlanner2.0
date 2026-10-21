@@ -2257,6 +2257,7 @@ class SPThinkLabelMiddleware(AgentMiddleware[AgentState]):
             feedback,
             pending=pending,
             source_message_id=feedback_message_id,
+            run_id=_run_id(runtime),
         )
         result = record_human_feedback(
             dict(state),

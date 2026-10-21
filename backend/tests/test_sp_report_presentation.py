@@ -16,6 +16,8 @@ def _state(tmp_path: Path) -> dict:
 def _ledger(tmp_path: Path) -> tuple[dict, ReportLedger]:
     paths = report_store.ReportPaths(tmp_path, "r1")
     ledger = ReportLedger.create(paths, request_text="report request")
+    ledger.register_run("run1")
+    ledger.save()
     report_store.write_json_atomic(report_store.pointer_path(tmp_path), {"report_id": "r1"})
     return _state(tmp_path), ledger
 
@@ -69,3 +71,17 @@ def test_historical_technical_attempt_does_not_override_current_active(tmp_path)
     view = derive_report_view(state, run_status="success", run_id="run1")
     assert view["status"] == "incomplete"
     assert view["status"] != "technical_error"
+
+
+def test_unrelated_run_does_not_inherit_active_report_view(tmp_path):
+    state, _ = _ledger(tmp_path)
+    view = derive_report_view(state, run_status="running", run_id="ordinary-run")
+    assert view["status"] == "not_report"
+
+
+def test_known_report_run_gets_active_view(tmp_path):
+    state, ledger = _ledger(tmp_path)
+    ledger.begin_research_action("a1", [], allow_empty=True, run_id="report-run")
+    ledger.save()
+    view = derive_report_view(state, run_status="running", run_id="report-run")
+    assert view["status"] == "running"
