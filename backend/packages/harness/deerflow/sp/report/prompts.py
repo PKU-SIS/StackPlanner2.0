@@ -29,10 +29,11 @@ determine whether this is a new report, a continuation, or a revision:
 - ORDINARY: no report_action, no report ledger, no "none" declaration.
 
 `target_agent="reporter"` is the single target for both ordinary one-shot
-synthesis and report Writer. When the call carries metadata.report_write_key,
-it is the report Writer; without it, it is ordinary Reporter synthesis. There
-is no separate `writer` target. In report mode, do not use ordinary Reporter
-synthesis in place of a Writer call.
+synthesis and report Writer. Ordinary synthesis applies only when report mode
+is not enabled. When a report is active, a Reporter call must carry a valid
+`metadata.report_write_key` and is the report Writer; a missing or invalid key
+is a call error, not an implicit fallback to ordinary synthesis. There is no
+separate `writer` target.
 
 If a report role result is rejected with `invalid_report_tree`, do not design or
 rewrite a replacement schema. Re-dispatch the same Outline task, with the same
