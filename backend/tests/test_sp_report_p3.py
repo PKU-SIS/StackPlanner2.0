@@ -292,6 +292,58 @@ def test_review_acceptance_rejects_changed_input_files(tmp_path):
     assert _ledger(ctx).payload["final_report"] is None
 
 
+def test_finish_replay_returns_same_delivery_and_final_ref_without_outer_state(tmp_path):
+    ctx, _ = _seed(tmp_path)
+    assert _send_review(ctx, status="ready", outcome="deliver", action_id="a-review-replay").next_step == "continue"
+    ledger = _ledger(ctx)
+    final = ledger.payload["final_report"]
+    first_action = SPAction.create(ActionType.FINISH, action_id="a-finish-replay", reason="done", task="done")
+    first = FinishHandler().handle(first_action, ctx)
+    assert first.next_step == "finish", first.error
+    delivery = _ledger(ctx).payload["delivered"]
+    assert delivery is not None
+    # Deliberately do not apply first.state_update: the outer state is stale.
+    replay = FinishHandler().handle(first_action, ctx)
+    assert replay.next_step == "finish", replay.error
+    assert replay.state_update["sp_last_final_artifact_ref"] == final["artifact_id"]
+    assert replay.state_update["sp_report_delivery_id"] == delivery["delivery_id"]
+    assert _ledger(ctx).payload["delivered"]["delivery_id"] == delivery["delivery_id"]
+
+    replay_with_ref = FinishHandler().handle(
+        SPAction.create(
+            ActionType.FINISH,
+            action_id="a-finish-replay",
+            reason="done",
+            task="done",
+            metadata={"final_artifact_ref": final["artifact_id"]},
+        ),
+        ctx,
+    )
+    assert replay_with_ref.next_step == "finish", replay_with_ref.error
+    assert replay_with_ref.state_update["sp_last_final_artifact_ref"] == final["artifact_id"]
+    assert replay_with_ref.state_update["sp_report_delivery_id"] == delivery["delivery_id"]
+
+    ordinary = FinishHandler().handle(
+        SPAction.create(ActionType.FINISH, action_id="a-ordinary-after-delivery", reason="next", task="next", metadata={"allow_without_artifact": True}),
+        ctx,
+    )
+    assert ordinary.next_step == "finish", ordinary.error
+    assert "sp_report_delivery_id" not in ordinary.state_update
+
+    old_ref = FinishHandler().handle(
+        SPAction.create(
+            ActionType.FINISH,
+            action_id="a-new-old-ref",
+            reason="bad",
+            task="bad",
+            metadata={"final_artifact_ref": final["artifact_id"], "allow_without_artifact": True},
+        ),
+        ctx,
+    )
+    assert old_ref.next_step == "error_recoverable"
+    assert "historical delivered report final" in old_ref.error
+
+
 def test_finish_rejects_old_final_ref_and_returns_current_final(tmp_path):
     ctx, _ = _seed(tmp_path)
     assert _send_review(ctx, status="ready", outcome="deliver", action_id="a-review-v1").next_step == "continue"

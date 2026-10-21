@@ -85,10 +85,10 @@
 
 ## 4. 验证
 
-- 报告组：**75 passed**（含 P1/P2 回归与 P3）。
+- 报告组：**76 passed**（含 P1/P2 回归与 P3）。
 - 原有 SP/非报告/共享回归：**489 passed**。
 - `ruff check` / `ruff format --check`：通过。
-- P3 定点测试 `backend/tests/test_sp_report_p3.py`（16 项）：
+- P3 定点测试 `backend/tests/test_sp_report_p3.py`（17 项）：
   - 正常候选 → ready → final → 首次 finish；校验 delivered 之前 final 已存在。
   - 连续两轮局部编辑：复用 c2/c3，第二/第一编辑保留，final 内容与审查绑定，
     交付后内容一致。
@@ -129,6 +129,12 @@
 - **R5 dedupe 空 replacement**：仅 `kind=dedupe` 允许空 replacement；anchor 唯一、
   引用集合、heading 结构、节点剩余非空仍校验。`test_dedupe_edit_can_delete_redundant_sentence`
   验证删除重复句且原 draft 不变。
+- **交付重放**：delivered 记录携带原 finish 的 `action_id`/`run_id`/final artifact。
+  同一 host action/run 重放时直接返回同一 delivery id 和 final artifact，不再次写
+  delivery；不带显式引用、带当前 final 引用两种形式都覆盖。新的普通任务不匹配
+  action/run，继续走原 finish；新请求显式引用历史 final 仍拒绝。
+  `test_finish_replay_returns_same_delivery_and_final_ref_without_outer_state`
+  故意不应用第一次 `state_update`，证明依赖账本而不是外层缓存。
 
 ## 6. 提交
 
