@@ -76,12 +76,19 @@
 - 保留 tree/drafts；当前候选可复用，未受影响草稿无需重写。
 - 必须重新 ready review + 新 final + 新 delivery；旧 delivered 不满足新 finish。
 
+### 3.5 语义职责边界
+
+程序只校验编辑的允许 kind、当前候选区段唯一 anchor、节点剩余非空、引用身份和
+标题/结构形式；它不判断一句话是否改变了事实、结论、口径或证据支持。不得把上述
+校验描述成程序“保证事实边界不变”。事实/结论/证据是否仍成立，是 Outline 的编辑
+约束和 findings/复审职责；实质变化必须按契约返回 revise/Writer。
+
 ## 4. 验证
 
-- 报告组：**69 passed**（含 P1/P2 回归与 P3）。
+- 报告组：**75 passed**（含 P1/P2 回归与 P3）。
 - 原有 SP/非报告/共享回归：**489 passed**。
 - `ruff check` / `ruff format --check`：通过。
-- P3 定点测试 `backend/tests/test_sp_report_p3.py`：
+- P3 定点测试 `backend/tests/test_sp_report_p3.py`（16 项）：
   - 正常候选 → ready → final → 首次 finish；校验 delivered 之前 final 已存在。
   - 连续两轮局部编辑：复用 c2/c3，第二/第一编辑保留，final 内容与审查绑定，
     交付后内容一致。
@@ -100,14 +107,39 @@
   和真实 Outline 角色装配；fake LLM 返回权威 review JSON，host 完成 final 和
   首次 finish。
 
-## 5. 提交
+## 5. 独立复核修复 R1-R5
+
+- **R1 终稿引用一致性**：活动报告 finish 从账本当前 `final_report` 取 artifact id；
+  显式旧/其他 ref 明确拒绝，不写 delivery；成功返回、`sp_last_final_artifact_ref`
+  和 delivery 均指向同一当前 final。`test_finish_rejects_old_final_ref_and_returns_current_final`
+  使用内容不同的 v1/v2，旧 ref 被拒，新 ref 与 delivery 一致。
+- **R2 历史报告不接管普通 finish**：`deliver_report` 只处理 active 报告；
+  abandoned/delivered 报告仅在显式引用其历史 final 时拒绝，普通 finish 继续走原
+  路径。`test_cancelled_or_delivered_report_does_not_take_over_ordinary_finish`
+  通过真实 `FinishHandler` 验证取消后、交付后的普通任务均可结束，并验证显式历史
+  ref 被拒。
+- **R3 父子顺序装配**：按 parent_id 建立 children，按节点数组中的相对顺序做确定性
+  前序遍历，不把 nodes 数组直接当章节顺序。`test_assembly_follows_parent_child_order_not_array_order`
+  使用 `[A, B, A_child, B_child]` 验证输出 A→A_child→B→B_child。
+- **R4 实际文件绑定**：候选复用、审查接受、交付的 digest/binding 读取实际
+  tree/draft/input/material 文件并校验 ledger hash；候选/final 文件自身也按实际
+  hash 校验。`test_draft_file_change_after_review_blocks_reuse_and_delivery`、
+  `test_review_acceptance_rejects_changed_input_files` 验证修改草稿后不能再复用旧
+  candidate/ready 或交付。
+- **R5 dedupe 空 replacement**：仅 `kind=dedupe` 允许空 replacement；anchor 唯一、
+  引用集合、heading 结构、节点剩余非空仍校验。`test_dedupe_edit_can_delete_redundant_sentence`
+  验证删除重复句且原 draft 不变。
+
+## 6. 提交
 
 - `8a27ceb` feat(sp-report): add P3 candidate assembly, citation digest, and local edits
 - `1190c59` feat(sp-report): wire integrate review, final delivery, and delivered resume
 - `7370a63` test(sp-report): cover P3 assembly, edits, delivery, and resume
 - `ff50d57` docs(sp-report): record P3 implementation and verification
+- `93051a4` fix(sp-report): bind P3 finish refs, file hashes, and tree order
+- `a161099` test(sp-report): cover P3 review findings R1-R5
 
-## 6. 未覆盖边界
+## 7. 未覆盖边界
 
 1. 真实模型对 integration review、局部编辑、findings 的判断质量未验证；fake LLM
    只验证 host 契约和状态转换。
