@@ -345,6 +345,64 @@ class FinishHandler:
                     )
                 ],
             )
+        requested_refs = {str(value) for value in action.input_refs if value}
+        explicit_ref = action.metadata.get("final_artifact_ref")
+        if isinstance(explicit_ref, str) and explicit_ref.strip():
+            requested_refs.add(explicit_ref.strip())
+        report_target = None
+        try:
+            from deerflow.sp.report import report_finish_target
+
+            report_target = report_finish_target(context)
+        except Exception as exc:  # noqa: BLE001 - report finish must fail closed
+            return HandlerResult(
+                next_step="error_recoverable",
+                idempotency_key=action.idempotency_key,
+                error=f"Report finish target could not be evaluated: {type(exc).__name__}: {exc}",
+                run_events=[
+                    make_sp_event(
+                        "sp.finish.rejected",
+                        action_id=action.action_id,
+                        run_id=context.run_id,
+                        reason="report_finish_target_unreadable",
+                    )
+                ],
+            )
+        forced_report_ref = None
+        if report_target is not None and report_target.get("status") == "active":
+            current_refs = set(report_target.get("refs") or set())
+            if requested_refs and not (requested_refs & current_refs):
+                return HandlerResult(
+                    next_step="error_recoverable",
+                    idempotency_key=action.idempotency_key,
+                    error="FINISH final_artifact_ref does not match the current reviewed report final",
+                    run_events=[
+                        make_sp_event(
+                            "sp.finish.rejected",
+                            action_id=action.action_id,
+                            run_id=context.run_id,
+                            reason="report_final_ref_mismatch",
+                        )
+                    ],
+                )
+            forced_report_ref = str(report_target.get("final_artifact_id") or report_target.get("final_virtual_path") or "") or None
+        elif report_target is not None and report_target.get("status") in {"abandoned", "delivered"}:
+            historical_refs = set(report_target.get("refs") or set())
+            if requested_refs and requested_refs & historical_refs:
+                return HandlerResult(
+                    next_step="error_recoverable",
+                    idempotency_key=action.idempotency_key,
+                    error=f"FINISH cannot deliver a historical {report_target.get('status')} report final",
+                    run_events=[
+                        make_sp_event(
+                            "sp.finish.rejected",
+                            action_id=action.action_id,
+                            run_id=context.run_id,
+                            reason="historical_report_final_rejected",
+                        )
+                    ],
+                )
+
         type_normalization = _normalize_required_artifact_type(context, action)
         if _requires_current_run_revision_artifact(context) and not _has_current_run_revision_artifact(context, action):
             return HandlerResult(
@@ -414,7 +472,12 @@ class FinishHandler:
         if delivered is None:
             delivered = {}
 
-        final_artifact_ref = required_ref or _selected_artifact_ref(context, action)
+        if forced_report_ref:
+            final_artifact_ref = forced_report_ref
+        elif delivered.get("final_artifact_id"):
+            final_artifact_ref = str(delivered["final_artifact_id"])
+        else:
+            final_artifact_ref = required_ref or _selected_artifact_ref(context, action)
         final_summary, summary_grounded = _grounded_final_summary(
             context,
             action,

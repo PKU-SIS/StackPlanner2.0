@@ -43,6 +43,15 @@ def _json_digest(value: Any) -> str:
     return report_store.sha256_text(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
 
 
+def _bound_text(record: Mapping[str, Any], label: str, *, strip_trailing_newline: bool = False) -> str:
+    content = _read_text(record.get("path"), label)
+    bound = content.rstrip("\n") if strip_trailing_newline else content
+    expected = record.get("sha256")
+    if expected and report_store.sha256_text(bound) != str(expected):
+        raise ReportValidationError(f"{label} content hash does not match the ledger")
+    return bound
+
+
 def _draft_for_node(ledger: ReportLedger, node_id: str) -> dict[str, Any] | None:
     raw = ledger.payload.get("drafts")
     items = [item for item in raw if isinstance(item, dict)] if isinstance(raw, list) else []
@@ -50,7 +59,33 @@ def _draft_for_node(ledger: ReportLedger, node_id: str) -> dict[str, Any] | None
 
 
 def _node_order(tree: Mapping[str, Any]) -> list[Mapping[str, Any]]:
-    return [node for node in tree.get("nodes") or [] if isinstance(node, Mapping)]
+    nodes = [node for node in tree.get("nodes") or [] if isinstance(node, Mapping)]
+    by_id = {str(node.get("node_id")): node for node in nodes}
+    children: dict[str, list[Mapping[str, Any]]] = {}
+    roots: list[Mapping[str, Any]] = []
+    for node in nodes:
+        parent_id = str(node.get("parent_id") or "")
+        if parent_id and parent_id in by_id:
+            children.setdefault(parent_id, []).append(node)
+        else:
+            roots.append(node)
+    ordered: list[Mapping[str, Any]] = []
+    visited: set[str] = set()
+
+    def walk(node: Mapping[str, Any]) -> None:
+        node_id = str(node.get("node_id") or "")
+        if node_id in visited:
+            raise ReportValidationError(f"accepted tree contains a cycle at node {node_id}")
+        visited.add(node_id)
+        ordered.append(node)
+        for child in children.get(node_id, []):
+            walk(child)
+
+    for root in roots:
+        walk(root)
+    if len(visited) != len(nodes):
+        raise ReportValidationError("accepted tree contains nodes unreachable from a root")
+    return ordered
 
 
 def _node_depth(node: Mapping[str, Any], nodes: Mapping[str, Mapping[str, Any]]) -> int:
@@ -190,11 +225,12 @@ def _draft_binding(ledger: ReportLedger, tree: Mapping[str, Any]) -> list[dict[s
         draft = _draft_for_node(ledger, node_id)
         if draft is None:
             raise ReportValidationError(f"assembly blocked: writable node {node_id} has no current draft")
+        content = _bound_text(draft, f"draft {draft.get('draft_id')}")
         result.append(
             {
                 "node_id": node_id,
                 "draft_id": draft.get("draft_id"),
-                "sha256": draft.get("sha256"),
+                "sha256": report_store.sha256_text(content),
                 "applicable_fingerprint": draft.get("applicable_fingerprint"),
             }
         )
@@ -207,7 +243,7 @@ def base_inputs_digest(ledger: ReportLedger) -> str:
     tree_content = _read_text(tree_ref.get("path"), "accepted tree")
     inputs: list[dict[str, Any]] = []
     for item in ledger.inputs():
-        text = _read_text(item.get("path"), f"user input {item.get('input_id')}")
+        text = _bound_text(item, f"user input {item.get('input_id')}", strip_trailing_newline=True)
         inputs.append(
             {
                 "input_id": item.get("input_id"),
@@ -215,15 +251,17 @@ def base_inputs_digest(ledger: ReportLedger) -> str:
                 "applied": bool(item.get("applied")),
             }
         )
-    materials = [
-        {
-            "material_id": item.get("material_id"),
-            "source_id": item.get("source_id"),
-            "sha256": item.get("sha256"),
-            "chars": item.get("chars"),
-        }
-        for item in ledger.materials()
-    ]
+    materials = []
+    for item in ledger.materials():
+        content = _bound_text(item, f"material {item.get('material_id')}")
+        materials.append(
+            {
+                "material_id": item.get("material_id"),
+                "source_id": item.get("source_id"),
+                "sha256": report_store.sha256_text(content),
+                "chars": len(content),
+            }
+        )
     materials.sort(key=lambda item: str(item.get("material_id") or ""))
     payload = {
         "tree_version": tree_ref.get("version"),
@@ -272,6 +310,13 @@ def _write_candidate_files(ledger: ReportLedger, record: dict[str, Any], tree: M
     report_store.write_json_atomic(Path(str(record["manifest_path"])), manifest)
     if len(encoded) > CANDIDATE_MANIFEST_MAX_CHARS:
         raise ReportValidationError("candidate manifest exceeds the P3 size bound")
+
+
+def candidate_file_content(candidate: Mapping[str, Any]) -> str:
+    content = _read_text(candidate.get("path"), f"candidate {candidate.get('candidate_id')}")
+    if report_store.sha256_text(content) != str(candidate.get("sha256") or ""):
+        raise ReportValidationError(f"candidate {candidate.get('candidate_id')} content hash does not match the ledger")
+    return content
 
 
 def _new_candidate(
@@ -352,12 +397,11 @@ def ensure_candidate(ledger: ReportLedger) -> dict[str, Any]:
     base_digest = base_inputs_digest(ledger)
     current = ledger.payload.get("candidate")
     if isinstance(current, dict) and current.get("base_digest") == base_digest and current.get("status") in ACTIVE_CANDIDATE_STATUSES:
-        path = Path(str(current.get("path") or ""))
         try:
-            content = path.read_text(encoding="utf-8")
-        except OSError:
-            content = ""
-        if content and report_store.sha256_text(content) == str(current.get("sha256") or ""):
+            candidate_file_content(current)
+        except ReportValidationError:
+            pass
+        else:
             return current
 
     reason = "assembly inputs changed"
@@ -397,6 +441,10 @@ def review_binding_error(ledger: ReportLedger, *, require_ready: bool = True) ->
         return "review candidate hash does not match the current candidate"
     if review.get("inputs_digest") != candidate.get("inputs_digest"):
         return "review inputs_digest does not match the current candidate"
+    try:
+        candidate_file_content(candidate)
+    except ReportValidationError as exc:
+        return str(exc)
     try:
         current_base = base_inputs_digest(ledger)
     except ReportValidationError as exc:
@@ -445,6 +493,9 @@ def _citation_ids(text: str) -> set[str]:
 
 def apply_edits(ledger: ReportLedger, edits: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     current = require_current_candidate(ledger)
+    candidate_file_content(current)
+    if base_inputs_digest(ledger) != current.get("base_digest"):
+        raise ReportValidationError("candidate inputs changed; reassemble and review before applying edits")
     tree = _tree_document(ledger)
     sections = copy.deepcopy(list(current.get("sections") or []))
     applied: list[dict[str, Any]] = []
@@ -463,8 +514,8 @@ def apply_edits(ledger: ReportLedger, edits: Iterable[Mapping[str, Any]]) -> dic
             raise ReportValidationError(f"edits[{index}].kind is not an allowed local edit")
         if not isinstance(anchor, str) or not anchor:
             raise ReportValidationError(f"edits[{index}].anchor must be a non-empty string")
-        if not isinstance(replacement, str) or not replacement.strip():
-            raise ReportValidationError(f"edits[{index}].replacement must be a non-empty string")
+        if not isinstance(replacement, str) or (not replacement.strip() and kind != "dedupe"):
+            raise ReportValidationError(f"edits[{index}].replacement must be non-empty unless this is a dedupe deletion")
         if not reason:
             raise ReportValidationError(f"edits[{index}].reason is required")
         if HEADING_RE.search(replacement):

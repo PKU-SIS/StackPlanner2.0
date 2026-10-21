@@ -744,6 +744,12 @@ def _accept_integrate_review_locked(
             "Integration review rejected: reviewed_candidate_sha256 does not match the current candidate.",
             reason="stale_review_candidate",
         )
+    try:
+        report_assembly.candidate_file_content(candidate)
+        if report_assembly.base_inputs_digest(ledger) != candidate.get("base_digest"):
+            raise ReportValidationError("candidate inputs changed after assembly")
+    except ReportValidationError as exc:
+        return _rejection(action, context, f"Integration review rejected: {exc}", reason="stale_review_inputs")
     review_body = parsed["review"]
     reviews = ledger.payload.get("reviews") if isinstance(ledger.payload.get("reviews"), list) else []
     review_id = report_store.next_identifier("rv", [str(item.get("review_id")) for item in reviews if isinstance(item, Mapping)])
@@ -1553,18 +1559,48 @@ def finish_block_reason(context: HandlerContext) -> str | None:
     return f"Active report cannot be delivered in P1/P2/P3: {reason}" if reason else None
 
 
+def report_finish_target(context: HandlerContext) -> dict[str, Any] | None:
+    """Return the ledger's current final refs or a historical report's refs."""
+    context_info = report_context(context.state)
+    if not context_info.is_enabled:
+        return None
+    try:
+        ledger = ReportLedger.load_for_context(context_info)
+    except Exception as exc:  # noqa: BLE001 - finish will surface the state error separately
+        return {"status": "error", "error": str(exc), "refs": []}
+    status = str(ledger.payload.get("status") or context_info.status)
+    final = ledger.payload.get("final_report") if isinstance(ledger.payload.get("final_report"), Mapping) else None
+    if status == "active" and final is not None:
+        refs = {str(value) for value in (final.get("artifact_id"), final.get("virtual_path"), final.get("path")) if value}
+        return {
+            "status": "active",
+            "final_artifact_id": final.get("artifact_id"),
+            "final_virtual_path": final.get("virtual_path"),
+            "final_path": final.get("path"),
+            "refs": refs,
+        }
+    historical_refs: set[str] = set()
+    for item in ledger.payload.get("final_reports") or []:
+        if isinstance(item, Mapping):
+            historical_refs.update(str(value) for value in (item.get("artifact_id"), item.get("virtual_path"), item.get("path")) if value)
+    for item in [ledger.payload.get("final_report"), ledger.payload.get("delivered"), *(ledger.payload.get("delivery_history") or [])]:
+        if isinstance(item, Mapping):
+            historical_refs.update(str(value) for value in (item.get("artifact_id"), item.get("final_path"), item.get("virtual_path"), item.get("path")) if value)
+    return {"status": status, "refs": historical_refs}
+
+
 def deliver_report(context: HandlerContext, action: SPAction) -> dict[str, Any] | None:
-    """Perform the one-way delivery transaction for an active/delivered report."""
+    """Perform the one-way delivery transaction only for the active report."""
     context_info = report_context(context.state)
     if context_info.status == "error":
         raise ReportValidationError(f"report state is unavailable: {context_info.error}")
-    if not context_info.is_enabled:
+    if not context_info.is_enabled or context_info.status != "active":
         return None
     paths = _paths_for_context(context_info)
     with report_store.report_lock(paths):
         ledger = ReportLedger.load(paths)
-        if ledger.payload.get("status") == "abandoned":
-            raise ReportValidationError("cannot deliver an abandoned report")
+        if ledger.payload.get("status") != "active":
+            return None
         existing = ledger.payload.get("delivered") if isinstance(ledger.payload.get("delivered"), Mapping) else None
         final = ledger.payload.get("final_report") if isinstance(ledger.payload.get("final_report"), Mapping) else None
         if existing is not None:
@@ -1590,6 +1626,7 @@ def deliver_report(context: HandlerContext, action: SPAction) -> dict[str, Any] 
             "final_report_id": final.get("candidate_id"),
             "final_version": final.get("version"),
             "final_path": final.get("virtual_path"),
+            "final_artifact_id": final.get("artifact_id"),
             "review_id": review.get("review_id"),
             "candidate_id": final.get("candidate_id"),
             "inputs_digest": final.get("inputs_digest"),
