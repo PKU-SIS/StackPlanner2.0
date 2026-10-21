@@ -1583,10 +1583,23 @@ def report_finish_target(context: HandlerContext) -> dict[str, Any] | None:
     for item in ledger.payload.get("final_reports") or []:
         if isinstance(item, Mapping):
             historical_refs.update(str(value) for value in (item.get("artifact_id"), item.get("virtual_path"), item.get("path")) if value)
-    for item in [ledger.payload.get("final_report"), ledger.payload.get("delivered"), *(ledger.payload.get("delivery_history") or [])]:
+    delivered = ledger.payload.get("delivered") if isinstance(ledger.payload.get("delivered"), Mapping) else None
+    for item in [ledger.payload.get("final_report"), delivered, *(ledger.payload.get("delivery_history") or [])]:
         if isinstance(item, Mapping):
-            historical_refs.update(str(value) for value in (item.get("artifact_id"), item.get("final_path"), item.get("virtual_path"), item.get("path")) if value)
-    return {"status": status, "refs": historical_refs}
+            historical_refs.update(str(value) for value in (item.get("artifact_id"), item.get("final_artifact_id"), item.get("final_path"), item.get("virtual_path"), item.get("path")) if value)
+    target = {"status": status, "refs": historical_refs}
+    if status == "delivered" and delivered is not None:
+        target.update(
+            {
+                "delivered": dict(delivered),
+                "delivery_id": delivered.get("delivery_id"),
+                "action_id": delivered.get("action_id"),
+                "run_id": delivered.get("run_id"),
+                "final_artifact_id": delivered.get("final_artifact_id") or (final or {}).get("artifact_id"),
+                "final_virtual_path": delivered.get("final_path") or (final or {}).get("virtual_path"),
+            }
+        )
+    return target
 
 
 def deliver_report(context: HandlerContext, action: SPAction) -> dict[str, Any] | None:

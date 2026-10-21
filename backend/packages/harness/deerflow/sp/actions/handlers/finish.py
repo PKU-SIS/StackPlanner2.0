@@ -386,13 +386,69 @@ class FinishHandler:
                     ],
                 )
             forced_report_ref = str(report_target.get("final_artifact_id") or report_target.get("final_virtual_path") or "") or None
-        elif report_target is not None and report_target.get("status") in {"abandoned", "delivered"}:
+        elif report_target is not None and report_target.get("status") == "delivered":
+            delivered = report_target.get("delivered") if isinstance(report_target.get("delivered"), dict) else {}
+            replay = delivered.get("action_id") == action.action_id and delivered.get("run_id") == context.run_id
+            delivery_refs = {str(value) for value in (report_target.get("final_artifact_id"), report_target.get("final_virtual_path")) if value}
+            if replay:
+                if requested_refs and not (requested_refs & delivery_refs):
+                    return HandlerResult(
+                        next_step="error_recoverable",
+                        idempotency_key=action.idempotency_key,
+                        error="FINISH replay final_artifact_ref does not match the delivered final",
+                        run_events=[
+                            make_sp_event(
+                                "sp.finish.rejected",
+                                action_id=action.action_id,
+                                run_id=context.run_id,
+                                reason="report_finish_replay_ref_mismatch",
+                            )
+                        ],
+                    )
+                replay_ref = report_target.get("final_artifact_id") or report_target.get("final_virtual_path")
+                return HandlerResult(
+                    next_step="finish",
+                    state_update={
+                        "sp_current_stage": "finished",
+                        "sp_active_delegate_id": None,
+                        "sp_last_run_summary": action.task or action.reason or "Report delivery replayed",
+                        **({"sp_last_final_artifact_ref": replay_ref} if replay_ref else {}),
+                        "sp_report_delivery_id": delivered.get("delivery_id"),
+                    },
+                    memory_entries=[],
+                    idempotency_key=action.idempotency_key,
+                    run_events=[
+                        make_sp_event(
+                            "sp.finish.replayed",
+                            action_id=action.action_id,
+                            run_id=context.run_id,
+                            delivery_id=delivered.get("delivery_id"),
+                            final_artifact_ref=replay_ref,
+                        )
+                    ],
+                )
             historical_refs = set(report_target.get("refs") or set())
             if requested_refs and requested_refs & historical_refs:
                 return HandlerResult(
                     next_step="error_recoverable",
                     idempotency_key=action.idempotency_key,
-                    error=f"FINISH cannot deliver a historical {report_target.get('status')} report final",
+                    error="FINISH cannot deliver a historical delivered report final",
+                    run_events=[
+                        make_sp_event(
+                            "sp.finish.rejected",
+                            action_id=action.action_id,
+                            run_id=context.run_id,
+                            reason="historical_report_final_rejected",
+                        )
+                    ],
+                )
+        elif report_target is not None and report_target.get("status") == "abandoned":
+            historical_refs = set(report_target.get("refs") or set())
+            if requested_refs and requested_refs & historical_refs:
+                return HandlerResult(
+                    next_step="error_recoverable",
+                    idempotency_key=action.idempotency_key,
+                    error="FINISH cannot deliver a historical abandoned report final",
                     run_events=[
                         make_sp_event(
                             "sp.finish.rejected",
