@@ -144,6 +144,8 @@
 - `ff50d57` docs(sp-report): record P3 implementation and verification
 - `93051a4` fix(sp-report): bind P3 finish refs, file hashes, and tree order
 - `a161099` test(sp-report): cover P3 review findings R1-R5
+- `71ec4ed` fix(sp-report): replay delivered finish by host action and final identity
+- `8170066` test(sp-report): verify delivered finish replay and ordinary finish
 
 ## 7. 未覆盖边界
 
