@@ -28,6 +28,7 @@ export function ReportStatusBanner({
   const { data: view, refetch } = useThreadReportView(threadId, {
     enabled: Boolean(threadId) && !isMock,
     isMock,
+    refetchInterval: isLoading ? 2000 : false,
   });
 
   // The state endpoint is the source for the derived view. A finished, stopped,

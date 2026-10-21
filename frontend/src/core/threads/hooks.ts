@@ -2052,7 +2052,12 @@ export function useThreadReportView(
   {
     enabled = true,
     isMock = false,
-  }: { enabled?: boolean; isMock?: boolean } = {},
+    refetchInterval = false,
+  }: {
+    enabled?: boolean;
+    isMock?: boolean;
+    refetchInterval?: number | false;
+  } = {},
 ) {
   const apiClient = getAPIClient(isMock);
   return useQuery<ReportView | null>({
@@ -2069,6 +2074,7 @@ export function useThreadReportView(
     enabled: enabled && Boolean(threadId) && !isMock,
     retry: false,
     refetchOnWindowFocus: false,
+    refetchInterval,
   });
 }
 
