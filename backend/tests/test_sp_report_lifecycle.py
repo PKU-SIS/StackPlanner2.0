@@ -21,6 +21,7 @@ from deerflow.sp.report import hooks
 from deerflow.sp.report import store as report_store
 from deerflow.sp.report.ledger import ReportLedger
 from deerflow.sp.report.materials import build_fetch_material_tool
+from deerflow.sp.report.packets import build_outline_packet
 from deerflow.sp.report.tools import build_register_research_request_tool
 from deerflow.sp.subagents import SPSubagentResult, SPSubagentStatus, SPSubagentTask
 
@@ -681,3 +682,79 @@ def test_concurrent_gap_registration_keeps_both_gaps(tmp_path):
     assert {item["registered"][0]["gap_id"] for item in results} == {"g1", "g2"}
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
     assert {gap["gap_id"] for gap in ledger.gaps()} == {"g1", "g2"}
+
+
+def test_rejected_outline_does_not_commit_partial_business_mutations(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    registered = _register_gap(ctx, "a-gap")
+    gap_id = registered["registered"][0]["gap_id"]
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    ledger.add_user_input("Add a comparison table", source="user_message", source_message_id="m2")
+    ledger.payload["write_requests"] = [
+        {
+            "key": "w-existing",
+            "node_ids": ["n2"],
+            "feedback_wanted": False,
+            "status": "pending",
+            "round": 1,
+            "created_tree_version": 0,
+            "attempts": [],
+            "last_action_id": None,
+            "last_draft_id": None,
+            "draft_id": None,
+            "last_error": None,
+        }
+    ]
+    ledger.save()
+    baseline = {
+        "user_decisions": json.loads(json.dumps(ledger.payload.get("user_decisions") or [])),
+        "gap_status": ledger.require_gap(gap_id)["status"],
+        "input_applied": ledger.input("u2")["applied"],
+        "write_keys": [item["key"] for item in ledger.payload["write_requests"]],
+        "tree": ledger.payload.get("tree"),
+    }
+
+    action, task = _delegate(ctx, "a-outline-atomic", "outline", {})
+    tree = _tree(
+        gap_ids=[gap_id],
+        outcomes=[{"gap_id": gap_id, "outcome": "resolved", "reason": "evidence suffices"}],
+        decisions=[{"input_id": "u2", "gap_ids": [], "action": "apply_to_plan", "reason": "add table"}],
+    )
+    tree["nodes"].append(
+        {
+            "node_id": "n3",
+            "parent_id": "n1",
+            "kind": "writable",
+            "title": "Comparison",
+            "question": "How do the figures compare?",
+            "argument": ["compare the saved figures"],
+            "conclusion": "The comparison follows the saved figures.",
+            "evidence": [],
+            "constraints": {},
+            "requirement_ids": ["R1"],
+            "relations": [],
+            "gap_ids": [],
+            "status": "planned",
+        }
+    )
+    tree["write_requests"] = [
+        {"key": "w-new", "node_ids": ["n2"], "feedback_wanted": False},
+        {"key": "w-existing", "node_ids": ["n3"], "feedback_wanted": False},
+    ]
+
+    response = _accept_outline(ctx, action, task, tree)
+
+    assert response.next_step == "error_recoverable"
+    assert "w-existing changed node/feedback_wanted" in (response.error or "")
+    after = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert after.payload.get("user_decisions") == baseline["user_decisions"]
+    assert after.require_gap(gap_id)["status"] == baseline["gap_status"] == "open"
+    assert after.input("u2")["applied"] is baseline["input_applied"] is False
+    assert [item["key"] for item in after.payload["write_requests"]] == baseline["write_keys"] == ["w-existing"]
+    assert after.payload.get("tree") == baseline["tree"]
+    assert after.payload.get("rejected_outline")
+    assert after.payload.get("outline_rejection") is None
+    packet = build_outline_packet(after)
+    assert packet["rejected_outline"]["virtual_path"] == after.payload["rejected_outline"]["virtual_path"]
+

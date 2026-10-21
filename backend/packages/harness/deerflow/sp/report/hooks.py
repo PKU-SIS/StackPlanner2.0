@@ -1197,6 +1197,9 @@ def _accept_outline_locked(
     try:
         # Validate and apply against a private working copy.  The committed
         # ledger is only replaced after every business mutation succeeds.
+        # Scope: this isolates business-validation rejection; commit_tree still
+        # writes/saves internally, so this is not a cross-file/artifact
+        # transaction guarantee.
         working = ReportLedger.load(ledger.paths)
         payload = report_tree.parse_tree_payload(result.artifact_content)
         tree = report_tree.validate_tree_with_diagnostics(payload, working)
