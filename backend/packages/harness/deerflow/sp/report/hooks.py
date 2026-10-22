@@ -432,6 +432,8 @@ def configure_report_subagent(
     if role == "outline":
         report_task = str(task.metadata.get("report_task") or "plan").strip().lower()
         selected = [tools_by_name[name] for name in [*REPORT_READ_TOOLS, "write_file"] if name in tools_by_name]
+        if "write_file" in tools_by_name and tools_by_name["write_file"] not in selected:
+            selected.append(tools_by_name["write_file"])
         if "read_file" not in tools_by_name:
             raise ReportValidationError("report outline requires a configured read_file tool to read saved materials")
         if report_task != "integrate_review" and "write_file" not in tools_by_name:
@@ -441,10 +443,12 @@ def configure_report_subagent(
             register_tool = build_register_research_request_tool(paths=paths, action_id=task.action_id)
             selected.append(register_tool)
         prompt = REPORT_INTEGRATE_REVIEW_PROMPT if report_task == "integrate_review" else REPORT_OUTLINE_PROMPT
+        disallowed_tools = [name for name in (subagent_config.disallowed_tools or []) if name != "write_file"]
         config = replace(
             subagent_config,
             system_prompt=_join_prompt(subagent_config.system_prompt, prompt),
             tools=[str(getattr(tool, "name", "")) for tool in selected],
+            disallowed_tools=disallowed_tools,
             skills=["report-outline"],
         )
         return config, ([*available_tools, register_tool] if register_tool is not None else list(available_tools)), role
@@ -1230,25 +1234,32 @@ def _accept_outline(
         )
 
 
+def _outline_delivery_text(task: SPSubagentTask) -> str | None:
+    path = Path(str(task.metadata.get("outline_delivery_path") or ""))
+    if not str(path) or not path.is_file():
+        return None
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
 def _outline_payload(result: SPSubagentResult, task: SPSubagentTask) -> tuple[dict[str, Any], str | None]:
     metadata = result.artifact_metadata if isinstance(result.artifact_metadata, Mapping) else {}
-    delivery_path = Path(str(task.metadata.get("outline_delivery_path") or ""))
-    file_exists = bool(str(delivery_path) and delivery_path.is_file())
+    file_text = _outline_delivery_text(task)
     declared_file = (
         str(metadata.get("delivery_mode") or "").strip().lower() == "file"
         or bool(metadata.get("tree_path"))
         or bool(metadata.get("created_paths"))
     )
     if declared_file:
-        if not file_exists:
+        if file_text is None:
             raise ReportValidationError(
                 "Outline declared file delivery but did not create the host-assigned tree file"
             )
-        text = delivery_path.read_text(encoding="utf-8")
-        return report_tree.parse_tree_payload(text), text
-    if file_exists and not result.artifact_content:
-        text = delivery_path.read_text(encoding="utf-8")
-        return report_tree.parse_tree_payload(text), text
+        return report_tree.parse_tree_payload(file_text), file_text
+    if file_text is not None and not result.artifact_content:
+        return report_tree.parse_tree_payload(file_text), file_text
     return report_tree.parse_tree_payload(result.artifact_content), None
 
 
@@ -1264,6 +1275,30 @@ def _accept_outline_locked(
     ledger = ledger_for_state(context.state)
     if ledger.action(action.action_id) is not None and ledger.action(action.action_id).get("status") == "completed":
         return _replay_result(action, context, "outline", ledger.action(action.action_id))
+    execution_stop = str(result.stop_reason or "").strip() or None
+    if execution_stop in {"token_capped", "turn_capped", "loop_capped"}:
+        file_text = _outline_delivery_text(task)
+        source_text = file_text if file_text is not None else (result.artifact_content if result.artifact_content is not None else result.result)
+        completion_status = str(result.completion_status or result.artifact_metadata.get("completion_status") or "partial").strip().lower()
+        error = (
+            "Outline technical abort before acceptance: "
+            f"stop_reason={execution_stop}, finish_reason={result.finish_reason or 'none'}, "
+            f"completion_status={completion_status}; candidate file was retained and no tree, "
+            "write request, or planning disposition was committed."
+        )
+        rejected = _store_rejected_outline(ledger, action, result, error, source_text=source_text)
+        if rejected:
+            error += f" rejected_candidate: {rejected['virtual_path']}"
+        return _rejection(
+            action,
+            context,
+            error,
+            reason="outline_technical_abort",
+            stop_reason=execution_stop,
+            finish_reason=result.finish_reason,
+            completion_status=completion_status,
+            technical=True,
+        )
     committed = ledger
     source_text: str | None = None
     try:
@@ -1662,7 +1697,7 @@ def _rejection(
         if value is not None
     }
     event = make_sp_event("sp.report.result_rejected", action_id=action.action_id, run_id=context.run_id, reason=reason, error=message)
-    event.update(details)
+    event["payload"].update(details)
     return HandlerResult(
         next_step="error_recoverable",
         state_update=update,

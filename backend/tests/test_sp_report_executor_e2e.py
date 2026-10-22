@@ -226,6 +226,114 @@ def test_real_executor_outline_registers_gap_before_tree_is_accepted(tmp_path, m
     assert (outputs / "report" / "r1" / "tree" / "1.json").exists()
 
 
+def test_real_executor_outline_file_toolchain_and_acceptance(tmp_path, monkeypatch, real_executor):
+    app_config = _app_config()
+    state = _state(tmp_path)
+    tree = _tree()
+    tree["nodes"][1]["gap_ids"] = []
+    tree["write_requests"] = [{"key": "w-file-e2e", "node_ids": ["n2"], "feedback_wanted": False}]
+    tree["user_decisions"] = [{"input_id": "u1", "gap_ids": [], "action": "apply_to_plan", "reason": "file delivery decision"}]
+    encoded = json.dumps(tree, ensure_ascii=False)
+    split = len(encoded) // 2
+    path = "/mnt/user-data/outputs/report/r1/outline/delivery-a-outline-file-e2e.json"
+    model = FakeToolCallingModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "write_file",
+                        "args": {"description": "write first outline chunk", "path": path, "content": encoded[:split]},
+                        "id": "call-write-1",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "read_file",
+                        "args": {"description": "read current outline file", "path": path},
+                        "id": "call-read-1",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "write_file",
+                        "args": {"description": "append complete outline", "path": path, "content": encoded[split:], "append": True},
+                        "id": "call-write-2",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "read_file",
+                        "args": {"description": "verify complete outline file", "path": path},
+                        "id": "call-read-2",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(
+                content=json.dumps(
+                    {
+                        "summary": "outline delivered in host file",
+                        "artifact_content": None,
+                        "artifact_type": "outline",
+                        "artifact_metadata": {
+                            "completion_status": "complete",
+                            "delivery_mode": "file",
+                            "tree_path": path,
+                        },
+                    },
+                    ensure_ascii=False,
+                )
+            ),
+        ]
+    )
+    _install_fake_model(monkeypatch, model, real_executor)
+    handler = DelegateHandler(
+        executor=DR2SubagentExecutorAdapter(
+            _executor_factory(
+                state,
+                app_config,
+                [read_file_tool, ls_tool, grep_tool, glob_tool, write_file_tool],
+                "sp-outline",
+                real_executor,
+            )
+        )
+    )
+    action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-outline-file-e2e",
+        reason="plan in file",
+        task="plan the report",
+        target_agent="outline",
+        stage="planning",
+        metadata={"report_task": "plan"},
+    )
+    ctx = HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="t-e2e", run_id="run-e2e")
+    result = handler.handle(action, ctx)
+
+    assert result.next_step == "continue", result.error
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    assert ledger.payload["tree"]["version"] == 1
+    assert ledger.payload["write_requests"][0]["key"] == "w-file-e2e"
+    assert ledger.payload["user_decisions"][0]["input_id"] == "u1"
+    stored = json.loads(Path(ledger.payload["tree"]["path"]).read_text(encoding="utf-8"))
+    assert stored["report_title"] == tree["report_title"]
+    assert stored["write_requests"][0]["key"] == "w-file-e2e"
+    assert stored["user_decisions"][0]["input_id"] == "u1"
+
+
 def test_real_executor_researcher_saves_tool_return_and_charges_one_round(tmp_path, monkeypatch, real_executor):
     app_config = _app_config()
     state = _state(tmp_path)
