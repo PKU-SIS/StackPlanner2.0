@@ -303,7 +303,10 @@ def sp_delegate(
             load matching Skills and tool_names to narrow the specialist Tool
             allowlist; pass source or artifact references through input_refs.
             For a new report only, set metadata.report_action="start" on the
-            first researcher/outline delegation. For report Writer calls, set
+            first researcher/outline delegation. After the first accepted tree,
+            every outline delegation must set metadata.report_task to
+            "plan", "revise", or "integrate_review"; do not infer it from task
+            text or rely on a default. For report Writer calls, set
             metadata.report_write_key; do not add a writer target. Active
             reports, HITL continuations, and delivered-report revisions use
             the existing report lifecycle and do not start again.
@@ -1801,7 +1804,7 @@ def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: st
         requested_stage = payload.get("stage")
         report_bound = False
         raw_target = str(payload.get("target_agent") or "").strip()
-        if state is not None and raw_target in {"outline", "researcher", "reporter"}:
+        if state is not None:
             try:
                 from deerflow.sp.report import report_context
 
@@ -1809,9 +1812,9 @@ def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: st
             except Exception:  # noqa: BLE001 - non-report behavior must stay unchanged
                 report_bound = False
         if report_bound:
-            # A host-bound report action already has an explicit role. The
-            # legacy keyword router must not rewrite researcher/outline into
-            # coder/perception before the report layer sees it.
+            # In an active report the explicit specialist is authoritative. Do
+            # not run the legacy pure-report/coder/inspection rewrite; a coder
+            # local check must not silently become a Writer call.
             target_agent = raw_target
             inference_reason = None
             routing_reason = None

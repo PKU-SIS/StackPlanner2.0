@@ -14,9 +14,7 @@ from deerflow.sp.report import writing as report_writing
 from deerflow.sp.report.ledger import ReportLedger, ReportValidationError, gap_next_action
 from deerflow.sp.report.prompts import (
     REPORT_INTEGRATE_REVIEW_PROMPT,
-    REPORT_OUTLINE_PROMPT,
     REPORT_RESEARCH_PROMPT,
-    REPORT_WRITER_PROMPT,
 )
 
 OUTLINE_SUMMARY_MAX_CHARS = 24_000
@@ -172,7 +170,12 @@ def build_writer_packet(
         "request": {"text": request_text, "path": ledger.paths.virtual(ledger.paths.request), "error": request_error},
         "inputs": inputs,
         "tree_version": tree.get("version"),
-        "node": node,
+        "node": {
+            "node_id": node.get("node_id"),
+            "kind": node.get("kind"),
+            "title": node.get("title"),
+            "status": node.get("status"),
+        },
         "basis": dict(basis),
         "evidence": evidence,
         "context": {
@@ -181,7 +184,6 @@ def build_writer_packet(
             "relations": node.get("relations") or [],
         },
         "prior_draft": prior,
-        "instructions": REPORT_WRITER_PROMPT,
     }
 
 
@@ -383,7 +385,6 @@ def build_outline_packet(ledger: ReportLedger) -> dict[str, Any]:
         "gaps": [_gap_entry(gap, ledger) for gap in ledger.gaps()],
         "unapplied_input_ids": ledger.unapplied_input_ids(),
         "rejected_outline": rejected_outline,
-        "instructions": REPORT_OUTLINE_PROMPT,
     }
 
 

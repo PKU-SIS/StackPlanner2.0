@@ -213,7 +213,7 @@ def test_real_executor_outline_registers_gap_before_tree_is_accepted(tmp_path, m
     app_config = _app_config()
     state = _state(tmp_path)
     _install_fake_model(monkeypatch, _outline_model(), real_executor)
-    handler = DelegateHandler(executor=DR2SubagentExecutorAdapter(_executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool], "sp-outline", real_executor)))
+    handler = DelegateHandler(executor=DR2SubagentExecutorAdapter(_executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool, write_file_tool], "sp-outline", real_executor)))
     action = SPAction.create(ActionType.DELEGATE, action_id="a-outline-e2e", reason="plan", task="plan the report", target_agent="outline", stage="planning")
     ctx = HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="t-e2e", run_id="run-e2e")
     result = handler.handle(action, ctx)
@@ -230,7 +230,7 @@ def test_real_executor_researcher_saves_tool_return_and_charges_one_round(tmp_pa
     app_config = _app_config()
     state = _state(tmp_path)
     _install_fake_model(monkeypatch, _outline_model(), real_executor)
-    outline_handler = DelegateHandler(executor=DR2SubagentExecutorAdapter(_executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool], "sp-outline", real_executor)))
+    outline_handler = DelegateHandler(executor=DR2SubagentExecutorAdapter(_executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool, write_file_tool], "sp-outline", real_executor)))
     outline_action = SPAction.create(ActionType.DELEGATE, action_id="a-outline-e2e", reason="plan", task="plan", target_agent="outline", stage="planning")
     ctx = HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="t-e2e", run_id="run-e2e")
     assert outline_handler.handle(outline_action, ctx).error is None
@@ -389,7 +389,7 @@ def test_real_executor_outline_reads_saved_material_with_read_file(tmp_path, mon
             _executor_factory(
                 state,
                 app_config,
-                [read_file_tool, ls_tool, grep_tool, glob_tool],
+                [read_file_tool, ls_tool, grep_tool, glob_tool, write_file_tool],
                 "sp-outline",
                 real_executor,
                 step_observer=lambda message, index: observer_messages.append(message),
@@ -581,7 +581,7 @@ def test_real_executor_integration_review_and_first_finish(tmp_path, monkeypatch
         ]
     )
     _install_fake_model(monkeypatch, model, real_executor)
-    handler = DelegateHandler(executor=DR2SubagentExecutorAdapter(_executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool], "sp-outline", real_executor)))
+    handler = DelegateHandler(executor=DR2SubagentExecutorAdapter(_executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool, write_file_tool], "sp-outline", real_executor)))
     result = handler.handle(action, ctx)
     assert result.next_step == "continue", result.error
     ctx.state.update(result.state_update)

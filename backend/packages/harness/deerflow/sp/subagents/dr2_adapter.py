@@ -621,6 +621,21 @@ def _recover_created_paths(raw_result: Any, ai_messages: Any) -> list[str]:
     return list(dict.fromkeys(recovered))
 
 
+def _last_model_finish_reason(ai_messages: Any) -> str | None:
+    if not isinstance(ai_messages, list):
+        return None
+    for message in reversed(ai_messages):
+        if not isinstance(message, Mapping):
+            continue
+        metadata = message.get("response_metadata")
+        if not isinstance(metadata, Mapping):
+            continue
+        value = metadata.get("finish_reason")
+        if value:
+            return str(value)
+    return None
+
+
 def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = None) -> SPSubagentResult:
     """Normalize DR2 SubagentResult-like objects into SPSubagentResult."""
     raw_status = getattr(result, "status", None)
@@ -633,6 +648,7 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
     payload = _parse_result_payload(raw_result)
     is_memory_recaller = task is not None and task.subagent_type == "memory_recaller"
     stop_reason = getattr(result, "stop_reason", None)
+    finish_reason = _last_model_finish_reason(getattr(result, "ai_messages", None))
     artifact_content = getattr(result, "artifact_content", None)
     artifact_type = getattr(result, "artifact_type", None)
     artifact_metadata = getattr(result, "artifact_metadata", None)
@@ -761,6 +777,7 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         result=normalized_result,
         error=getattr(result, "error", None),
         stop_reason=stop_reason,
+        finish_reason=finish_reason,
         task_id=getattr(result, "task_id", None),
         artifact_content=artifact_content,
         artifact_type=str(artifact_type) if artifact_type else None,
@@ -852,6 +869,7 @@ def _merge_research_continuations(
         result=_compact_result(" | ".join(summaries)),
         error=failed_tail.error if failed_tail is not None else base.error,
         stop_reason=failed_tail.stop_reason if failed_tail is not None else base.stop_reason,
+        finish_reason=(failed_tail.finish_reason if failed_tail is not None and failed_tail.finish_reason else base.finish_reason),
         task_id=results[0].task_id or base.task_id,
         artifact_content=("# Combined researcher evidence\n\n" + "\n\n---\n\n".join(artifact_sections) if artifact_sections else base.artifact_content),
         artifact_type=base.artifact_type

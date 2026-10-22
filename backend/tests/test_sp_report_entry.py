@@ -10,6 +10,7 @@ from deerflow.sp.actions.handlers.base import HandlerContext
 from deerflow.sp.actions.handlers.delegate import DelegateHandler
 from deerflow.sp.actions.schema import ActionType, SPAction
 from deerflow.sp.memory import TaskMemoryStack
+from deerflow.sp.prompt import PromptContextBuilder
 from deerflow.sp.report import report_context
 from deerflow.sp.report import store as report_store
 from deerflow.sp.report.ledger import ReportLedger
@@ -131,3 +132,25 @@ def test_report_outline_continuation_registers_current_run_without_resume(tmp_pa
     assert view is not None and view["status"] != "not_report"
     ordinary = derive_report_view(ctx.state, run_status="success", run_id="run-ordinary")
     assert ordinary is not None and ordinary["status"] == "not_report"
+
+
+def test_registered_existing_file_is_hidden_only_in_report_context():
+    builder = PromptContextBuilder()
+    refs = {
+        "node_draft": {
+            "artifact_id": "spart_report",
+            "type": "node_draft",
+            "virtual_path": "/mnt/user-data/outputs/report/r1/drafts/n1/d1.md",
+            "metadata": {"report_id": "r1", "registered_existing_file": True},
+        },
+        "ordinary": {
+            "artifact_id": "spart_ordinary",
+            "type": "generated_file",
+            "virtual_path": "/mnt/user-data/outputs/ordinary.txt",
+            "metadata": {"registered_existing_file": True},
+        },
+    }
+    context = builder.build(TaskMemoryStack(), artifact_refs=refs, current_run_id="run1")
+    assert "spart_report" in context
+    assert "spart_ordinary" in context
+    assert context.count("registered_existing_file") == 1

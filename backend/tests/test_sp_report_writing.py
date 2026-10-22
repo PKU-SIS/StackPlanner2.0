@@ -14,7 +14,7 @@ from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.memory import TaskMemoryStack
 from deerflow.sp.report import hooks, packets, writing
 from deerflow.sp.report import store as report_store
-from deerflow.sp.report.ledger import ReportLedger
+from deerflow.sp.report.ledger import ReportLedger, ReportValidationError
 from deerflow.sp.report.tools import build_register_research_request_tool
 from deerflow.sp.subagents import SPSubagentResult, SPSubagentStatus, SPSubagentTask
 
@@ -99,7 +99,7 @@ def _delegate(ctx: HandlerContext, action_id: str, target: str, metadata: dict |
 
 
 def _outline(ctx: HandlerContext, tree: dict, *, action_id: str = "a-outline") -> object:
-    action, task = _delegate(ctx, action_id, "outline")
+    action, task = _delegate(ctx, action_id, "outline", {"report_task": "plan"})
     entry = ctx.stack.append_delegate("outline", thread_id="t1", run_id="run1", stage="planning")
     result = SPSubagentResult(
         status=SPSubagentStatus.COMPLETED,
@@ -560,3 +560,99 @@ def test_writer_executor_exception_releases_request_and_allows_retry(tmp_path):
     assert [item["action_id"] for item in request["attempts"]] == ["a-write-explode", "a-write-retry"]
     assert request["attempts"][1]["status"] == "in_flight"
     del retry_action, retry_task
+
+
+def test_writer_token_cap_is_technical_and_existing_draft_is_not_accepted(tmp_path):
+    ctx = _context(tmp_path)
+    assert _outline(ctx, _tree(write_requests=[{"key": "w-tech", "node_ids": ["n2"], "feedback_wanted": False}])).next_step == "continue"
+    action, task, host = _writer_action(ctx, "w-tech", action_id="a-writer-tech")
+
+    report_store.write_text_atomic(host, "Draft exists but the writer was capped.\n")
+    result = _writer_result(None, task)
+    result.stop_reason = "token_capped"
+    result.finish_reason = "length"
+    result.artifact_metadata["completion_status"] = "partial"
+
+    response = _accept_writer(ctx, action, task, result, action_id="a-writer-tech")
+
+    assert response.next_step == "error_recoverable"
+    assert "token_capped" in (response.error or "")
+    assert "completion_status=partial" in (response.error or "")
+    assert "draft_exists=True" in (response.error or "")
+    assert "node_feedback" in (response.error or "")
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert writing.drafts(ledger) == []
+    request = ledger.payload["write_requests"][0]
+    assert request["status"] == "technical_failed"
+    assert "token_capped" in (request.get("last_error") or "")
+
+
+def test_outline_requires_explicit_report_task_after_initial_plan(tmp_path):
+    ctx = _context(tmp_path)
+    assert _outline(ctx, _tree()).next_step == "continue"
+    with pytest.raises(ReportValidationError, match="report_task metadata is required"):
+        _delegate(ctx, "a-outline-missing-task", "outline")
+
+
+def test_outline_file_delivery_accepts_complete_tree_from_host_path(tmp_path):
+    ctx = _context(tmp_path)
+    action, task = _delegate(ctx, "a-outline-file", "outline", {"report_task": "plan"})
+    tree = _tree(write_requests=[{"key": "w-file", "node_ids": ["n2"], "feedback_wanted": False}])
+    delivery_path = Path(task.metadata["outline_delivery_path"])
+    encoded = json.dumps(tree, ensure_ascii=False)
+    split = len(encoded) // 2
+    report_store.write_text_atomic(delivery_path, encoded[:split])
+    with delivery_path.open("a", encoding="utf-8") as handle:
+        handle.write(encoded[split:])
+    entry = ctx.stack.append_delegate("outline", thread_id="t1", run_id="run1", stage="planning")
+    result = SPSubagentResult(
+        status=SPSubagentStatus.COMPLETED,
+        result="tree in host file",
+        artifact_content=None,
+        artifact_type="outline",
+        finish_reason="length",
+        artifact_metadata={
+            "completion_status": "complete",
+            "delivery_mode": "file",
+            "tree_path": str(delivery_path),
+        },
+    )
+
+    accepted = hooks.handle_success(action, ctx, result, task, artifact_adapter=SPArtifactAdapter(), delegate_entry=entry)
+
+    assert accepted.next_step == "continue", accepted.error
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.payload["tree"]["version"] == 1
+    accepted_tree = json.loads(Path(ledger.payload["tree"]["path"]).read_text(encoding="utf-8"))
+    assert accepted_tree["write_requests"][0]["key"] == "w-file"
+    for key in ("gap_outcomes", "user_decisions", "feedback_dispositions", "draft_dispositions"):
+        assert key in accepted_tree
+    assert not ledger.payload.get("rejected_outline")
+
+
+def test_outline_declared_file_failure_does_not_fallback_to_inline(tmp_path):
+    ctx = _context(tmp_path)
+    action, task = _delegate(ctx, "a-outline-bad-file", "outline", {"report_task": "plan"})
+    delivery_path = Path(task.metadata["outline_delivery_path"])
+    report_store.write_text_atomic(delivery_path, '{"report_title": "incomplete"')
+    entry = ctx.stack.append_delegate("outline", thread_id="t1", run_id="run1", stage="planning")
+    result = SPSubagentResult(
+        status=SPSubagentStatus.COMPLETED,
+        result="inline tree must not be used",
+        artifact_content=json.dumps(_tree(), ensure_ascii=False),
+        artifact_type="outline",
+        finish_reason="length",
+        artifact_metadata={
+            "completion_status": "complete",
+            "delivery_mode": "file",
+            "tree_path": str(delivery_path),
+        },
+    )
+
+    rejected = hooks.handle_success(action, ctx, result, task, artifact_adapter=SPArtifactAdapter(), delegate_entry=entry)
+
+    assert rejected.next_step == "error_recoverable"
+    assert "finish_reason=length" in (rejected.error or "")
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.payload.get("tree") is None
+    assert ledger.payload.get("rejected_outline")

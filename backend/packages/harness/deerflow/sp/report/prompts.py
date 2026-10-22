@@ -54,7 +54,13 @@ Required sequence (only after a report has been started):
 2. Delegate to `outline` so it can read saved materials, register research
    requests with `report_register_research_request`, and return the tree JSON.
    Pass the report's open gap ids as `metadata.report_gap_ids` only when
-   dispatching already-registered research; do not invent gap ids.
+   dispatching already-registered research; do not invent gap ids. After the
+   first accepted tree, every Outline call must carry an explicit
+   `metadata.report_task` (`plan`, `revise`, or `integrate_review`); do not rely
+   on task wording or a default. Use `revise` for local tree/Writer-feedback
+   corrections. Use `integrate_review` only for final assembly review; it invokes
+   the existing `ensure_candidate` generation/reuse path, so report the concrete
+   blocker it returns rather than pre-checking or redirecting uniformly.
 3. Dispatch each `open` gap to the researcher with `metadata.report_gap_ids`.
    A gap in `awaiting_outline`, `in_flight`, or `awaiting_user` must not be
    dispatched; wait or ask the user. Do not dispatch the same gap twice before
@@ -67,10 +73,11 @@ Required sequence (only after a report has been started):
    not a gap closure. After the answer, delegate to `outline` again.
 6. In P3, invoke each write through `reporter` with
    `metadata.report_write_key`; this is the report Writer call, not ordinary
-   Reporter synthesis. Do not call `sp_finish` until the current candidate has
-   a ready integration review and corresponding final report; pending reviews,
-   edits, unfinished writes/research, feedback, gaps, or unapplied inputs block
-   it.
+   Reporter synthesis. A Writer `node_feedback` goes back to Outline for
+   `revise`; it is not a final integration review. Do not call `sp_finish` until
+   the current candidate has a ready integration review and corresponding final
+   report; pending reviews, edits, unfinished writes/research, feedback, gaps,
+   or unapplied inputs block it.
 7. Close a report only when the user cancels it. Preserve the cancellation input
    first, then call `sp_replan` with metadata.report_action="close" and
    metadata.report_input_id set to that saved input. A bare reason is not a
@@ -116,6 +123,19 @@ Output contract:
   tree body itself (an object; a JSON string is tolerated only when its entire
   content is that object). Do not add a `tree` wrapper, do not put
   `tree_version` in the tree, and do not wrap the envelope in prose or fences.
+- File delivery: if `report_packet.delivery.mode` is `optional_file`, write the
+  complete tree JSON to `report_packet.delivery.path` with `write_file`. The file
+  is the full `artifact_content` object, including `report_title`,
+  `requirements`, `nodes`, `removed_node_ids`, `write_requests`, `gap_outcomes`,
+  `user_decisions`, `feedback_dispositions`, and `draft_dispositions`; do not
+  write only `nodes`. For a file larger than one model output, write the first
+  chunk with `append=False`, then use `append=True` for later chunks after
+  `read_file` of the current file. Then return a compact envelope with
+  `artifact_content=null`, `artifact_type="outline"`, and
+  `artifact_metadata.delivery_mode="file"` plus `tree_path`/`created_paths`.
+  Do not silently fall back to a different inline body after declaring file
+  delivery. If no file delivery is requested, use inline `artifact_content` as
+  before.
 - Hard requirements: `report_title`; at least one `requirements[]` object with
   `id`, `input_id`, `text`; at least one `nodes[]` object with `node_id`,
   `kind` (`section` or `writable`), `title`; writable nodes need `question`,

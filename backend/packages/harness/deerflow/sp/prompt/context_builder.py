@@ -122,6 +122,33 @@ def _workflow_status(
     return status
 
 
+def _prompt_artifact_refs(value: Any) -> Any:
+    """Keep report storage flags out of Central's view; ordinary refs unchanged."""
+    if not isinstance(value, Mapping):
+        return value
+    found_report = False
+    projected: dict[str, Any] = {}
+    for key, ref in value.items():
+        if key == "_history" and isinstance(ref, list):
+            history: list[Any] = []
+            for item in ref:
+                if isinstance(item, Mapping) and isinstance(item.get("metadata"), Mapping) and item["metadata"].get("report_id"):
+                    found_report = True
+                    metadata = {name: val for name, val in item["metadata"].items() if name != "registered_existing_file"}
+                    history.append({**item, "metadata": metadata})
+                else:
+                    history.append(item)
+            projected[key] = history
+            continue
+        if isinstance(ref, Mapping) and isinstance(ref.get("metadata"), Mapping) and ref["metadata"].get("report_id"):
+            found_report = True
+            metadata = {name: val for name, val in ref["metadata"].items() if name != "registered_existing_file"}
+            projected[key] = {**ref, "metadata": metadata}
+        else:
+            projected[key] = ref
+    return projected if found_report else value
+
+
 @dataclass(slots=True)
 class PromptContextBuilder:
     """Render SP short-term memory into a bounded CentralAgent context block."""
@@ -233,7 +260,7 @@ class PromptContextBuilder:
         footer.extend(
             [
                 f"active_delegate_id: {active_delegate_id or 'none'}",
-                f"current_artifact_refs: {_json_ref(artifact_refs, max_chars=artifact_ref_chars)}",
+                f"current_artifact_refs: {_json_ref(_prompt_artifact_refs(artifact_refs), max_chars=artifact_ref_chars)}",
                 f"current_report_version: {report_version or 'none'}",
                 "</sp-task-context>",
             ]

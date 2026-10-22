@@ -72,6 +72,22 @@ fenced block. `summary`, `artifact_type`, and `artifact_metadata` stay outside
 the tree. A serialized `artifact_content` string is tolerated only when its
 entire content is the tree JSON object.
 
+### File delivery
+
+If `report_packet.delivery.mode` is `optional_file`, write the **complete tree
+object** to `report_packet.delivery.path` with `write_file`. The file contains
+all tree fields, including `report_title`, `requirements`, `nodes`,
+`removed_node_ids`, `write_requests`, `gap_outcomes`, `user_decisions`,
+`feedback_dispositions`, and `draft_dispositions`; do not write only `nodes`.
+For a tree larger than one model output, write the first chunk with
+`append=False`, then use `append=True` for later chunks after reading the
+current file with `read_file` (the normal read-after-write contract). Finish
+with valid full JSON in the file, then return `artifact_content=null` and
+`artifact_metadata.delivery_mode="file"` with the `tree_path`/`created_paths`
+reference. Once file delivery is declared, do not silently use a different
+inline body; inline `artifact_content` remains the compatibility path when no
+file delivery is requested.
+
 ### Required, recommended, optional
 
 - Hard: `report_title`; at least one `requirements[]` object with `id`,

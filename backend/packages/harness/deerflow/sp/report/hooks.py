@@ -143,6 +143,11 @@ def _paths_for_context(context: report_store.ReportContext) -> report_store.Repo
     return report_store.ReportPaths(context.outputs_path, context.report_id)
 
 
+def _outline_delivery_path(paths: report_store.ReportPaths, action_id: str) -> Path:
+    directory = paths.directory / "outline"
+    return directory / f"delivery-{action_id}.json"
+
+
 def start_report(context: HandlerContext, action: SPAction) -> dict[str, Any]:
     existing = report_context(context.state)
     if existing.status == "error":
@@ -369,7 +374,10 @@ def prepare_delegation(
         return
     with report_store.report_lock(paths):
         ledger = ReportLedger.load(paths)
-        report_task = str(task_metadata.get("report_task") or action.metadata.get("report_task") or "plan").strip().lower()
+        raw_report_task = task_metadata.get("report_task") or action.metadata.get("report_task")
+        if raw_report_task is None and ledger.payload.get("tree"):
+            raise ReportValidationError("outline report_task metadata is required after the initial plan")
+        report_task = str(raw_report_task or "plan").strip().lower()
         if report_task not in {"plan", "revise", "integrate_review"}:
             raise ReportValidationError("report_task must be plan, revise, or integrate_review")
         if report_task == "integrate_review":
@@ -377,6 +385,17 @@ def prepare_delegation(
             packet = report_packets.build_integrate_review_packet(ledger)
         else:
             packet = report_packets.build_outline_packet(ledger)
+            delivery_path = _outline_delivery_path(ledger.paths, action.action_id)
+            packet["delivery"] = {
+                "mode": "optional_file",
+                "path": ledger.paths.virtual(delivery_path),
+                "instruction": (
+                    "For a complete tree, write the full JSON to this host-assigned path using "
+                    "write_file; use append=True for later chunks and read_file before appending. "
+                    "Return artifact_content=null and this path in artifact_metadata."
+                ),
+            }
+            task_metadata["outline_delivery_path"] = str(delivery_path)
     task_metadata["report_id"] = report.report_id
     task_metadata["report_role"] = role
     task_metadata["report_task"] = report_task
@@ -412,9 +431,11 @@ def configure_report_subagent(
     tools_by_name = {str(getattr(tool, "name", "")): tool for tool in available_tools}
     if role == "outline":
         report_task = str(task.metadata.get("report_task") or "plan").strip().lower()
-        selected = [tools_by_name[name] for name in REPORT_READ_TOOLS if name in tools_by_name]
+        selected = [tools_by_name[name] for name in [*REPORT_READ_TOOLS, "write_file"] if name in tools_by_name]
         if "read_file" not in tools_by_name:
             raise ReportValidationError("report outline requires a configured read_file tool to read saved materials")
+        if report_task != "integrate_review" and "write_file" not in tools_by_name:
+            raise ReportValidationError("report outline requires write_file for file delivery")
         register_tool = None
         if report_task != "integrate_review":
             register_tool = build_register_research_request_tool(paths=paths, action_id=task.action_id)
@@ -990,6 +1011,36 @@ def _accept_writer_locked(
         return _rejection(action, context, "Writer delegation is missing host draft identity.", reason="writer_binding_missing")
     feedback_items = result.artifact_metadata.get("node_feedback")
     try:
+        host_path = ledger.paths.draft_file(node_id, draft_id)
+        draft_exists = host_path.exists()
+        completion_status = str(result.completion_status or result.artifact_metadata.get("completion_status") or "complete").strip().lower()
+        stop_reason = str(result.stop_reason or "").strip() or None
+        finish_reason = str(result.finish_reason or "").strip() or None
+        technical_reason = stop_reason
+        if technical_reason is None and finish_reason == "length" and completion_status != "complete" and not feedback_items:
+            technical_reason = "output_length"
+        if technical_reason is not None:
+            error = (
+                "Writer technical abort: "
+                f"stop_reason={stop_reason or 'none'}, "
+                f"finish_reason={finish_reason or 'none'}, "
+                f"completion_status={completion_status}, "
+                f"draft_exists={draft_exists}; "
+                "no node_feedback is required for this technical result and the draft was not accepted."
+            )
+            report_writing.fail_writer_attempt(ledger, key=key, action_id=action.action_id, error=error)
+            ledger.save()
+            return _rejection(
+                action,
+                context,
+                error,
+                reason="writer_technical_abort",
+                stop_reason=stop_reason,
+                finish_reason=finish_reason,
+                completion_status=completion_status,
+                draft_exists=draft_exists,
+                technical=True,
+            )
         if feedback_items:
             if not isinstance(feedback_items, list):
                 raise ReportValidationError("node_feedback must be a list")
@@ -1040,14 +1091,12 @@ def _accept_writer_locked(
                 ],
             )
 
-        completion_status = str(result.artifact_metadata.get("completion_status") or "complete").strip().lower()
         if completion_status != "complete":
             raise ReportValidationError(f"Writer returned completion_status={completion_status} without node_feedback")
         declared_path = str(result.artifact_metadata.get("draft_path") or "").strip()
         if declared_path and declared_path != virtual_path:
             raise ReportValidationError("Writer returned a draft_path that does not match the host-assigned path")
-        host_path = ledger.paths.draft_file(node_id, draft_id)
-        if not host_path.exists():
+        if not draft_exists:
             raise ReportValidationError(f"Writer did not create the host-assigned draft: {virtual_path}")
         content = host_path.read_text(encoding="utf-8")
         if not content.strip():
@@ -1181,6 +1230,28 @@ def _accept_outline(
         )
 
 
+def _outline_payload(result: SPSubagentResult, task: SPSubagentTask) -> tuple[dict[str, Any], str | None]:
+    metadata = result.artifact_metadata if isinstance(result.artifact_metadata, Mapping) else {}
+    delivery_path = Path(str(task.metadata.get("outline_delivery_path") or ""))
+    file_exists = bool(str(delivery_path) and delivery_path.is_file())
+    declared_file = (
+        str(metadata.get("delivery_mode") or "").strip().lower() == "file"
+        or bool(metadata.get("tree_path"))
+        or bool(metadata.get("created_paths"))
+    )
+    if declared_file:
+        if not file_exists:
+            raise ReportValidationError(
+                "Outline declared file delivery but did not create the host-assigned tree file"
+            )
+        text = delivery_path.read_text(encoding="utf-8")
+        return report_tree.parse_tree_payload(text), text
+    if file_exists and not result.artifact_content:
+        text = delivery_path.read_text(encoding="utf-8")
+        return report_tree.parse_tree_payload(text), text
+    return report_tree.parse_tree_payload(result.artifact_content), None
+
+
 def _accept_outline_locked(
     action: SPAction,
     context: HandlerContext,
@@ -1194,6 +1265,7 @@ def _accept_outline_locked(
     if ledger.action(action.action_id) is not None and ledger.action(action.action_id).get("status") == "completed":
         return _replay_result(action, context, "outline", ledger.action(action.action_id))
     committed = ledger
+    source_text: str | None = None
     try:
         # Validate and apply against a private working copy.  The committed
         # ledger is only replaced after every business mutation succeeds.
@@ -1201,7 +1273,7 @@ def _accept_outline_locked(
         # writes/saves internally, so this is not a cross-file/artifact
         # transaction guarantee.
         working = ReportLedger.load(ledger.paths)
-        payload = report_tree.parse_tree_payload(result.artifact_content)
+        payload, source_text = _outline_payload(result, task)
         tree = report_tree.validate_tree_with_diagnostics(payload, working)
         user_decisions = working.apply_user_decisions(tree.get("user_decisions") or [])
         gap_outcomes = working.apply_gap_outcomes(tree.get("gap_outcomes") or [])
@@ -1234,8 +1306,18 @@ def _accept_outline_locked(
         working.save()
         ledger = working
     except ReportValidationError as exc:
-        rejected = _store_rejected_outline(committed, action, result, str(exc))
+        candidate_source = source_text
+        if candidate_source is None:
+            delivery_path = Path(str(task.metadata.get("outline_delivery_path") or ""))
+            if str(delivery_path) and delivery_path.is_file():
+                try:
+                    candidate_source = delivery_path.read_text(encoding="utf-8")
+                except OSError:
+                    candidate_source = None
+        rejected = _store_rejected_outline(committed, action, result, str(exc), source_text=candidate_source)
         detail = f"Outline result rejected: {exc}"
+        if result.finish_reason == "length":
+            detail += "\nfinish_reason=length: the model output was incomplete; the host file/raw candidate was retained."
         if rejected:
             detail += (
                 f"\nrejected_candidate: {rejected['virtual_path']}"
@@ -1522,9 +1604,11 @@ def _store_rejected_outline(
     action: SPAction,
     result: SPSubagentResult,
     error: str,
+    *,
+    source_text: str | None = None,
 ) -> dict[str, Any] | None:
     """Persist an invalid Outline candidate for an in-place correction."""
-    content = result.artifact_content
+    content = source_text if source_text is not None else result.artifact_content
     if content is None:
         content = result.result
     if isinstance(content, Mapping):
@@ -1559,14 +1643,32 @@ def _rejection(
     *,
     reason: str,
     state_update: Mapping[str, Any] | None = None,
+    stop_reason: str | None = None,
+    finish_reason: str | None = None,
+    completion_status: str | None = None,
+    draft_exists: bool | None = None,
+    technical: bool = False,
 ) -> HandlerResult:
     update = {"sp_active_delegate_id": None, **dict(state_update or {})}
+    details = {
+        key: value
+        for key, value in {
+            "stop_reason": stop_reason,
+            "finish_reason": finish_reason,
+            "completion_status": completion_status,
+            "draft_exists": draft_exists,
+            "technical": technical,
+        }.items()
+        if value is not None
+    }
+    event = make_sp_event("sp.report.result_rejected", action_id=action.action_id, run_id=context.run_id, reason=reason, error=message)
+    event.update(details)
     return HandlerResult(
         next_step="error_recoverable",
         state_update=update,
         idempotency_key=action.idempotency_key,
         error=message,
-        run_events=[make_sp_event("sp.report.result_rejected", action_id=action.action_id, run_id=context.run_id, reason=reason, error=message)],
+        run_events=[event],
     )
 
 

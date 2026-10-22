@@ -110,6 +110,7 @@ class SPSubagentResult:
     result: str | None = None
     error: str | None = None
     stop_reason: str | None = None
+    finish_reason: str | None = None
     task_id: str | None = None
     artifact_content: Any | None = None
     artifact_type: str | None = None
@@ -147,6 +148,7 @@ class SPSubagentResult:
             "summary": self.result,
             "error": self.error,
             "stop_reason": self.stop_reason,
+            "finish_reason": self.finish_reason,
             "retryable": bool(self.retryable),
             "recommended_action": self.recommended_action,
             "changed_files": list(self.changed_files),
