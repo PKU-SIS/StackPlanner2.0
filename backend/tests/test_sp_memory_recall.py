@@ -2,8 +2,38 @@
 
 import json
 
-from deerflow.sp.memory import normalize_memory_recall_result
+from deerflow.sp.actions.handlers.base import HandlerContext
+from deerflow.sp.actions.handlers.memory_recall import MemoryRecallHandler
+from deerflow.sp.actions.schema import ActionType, SPAction
+from deerflow.sp.memory import TaskMemoryStack, normalize_memory_recall_result
 from deerflow.sp.subagents import DR2SubagentExecutorAdapter, SPSubagentResult, SPSubagentStatus, SPSubagentTask
+
+
+def test_memory_recall_bypass_returns_empty_recall_without_subagent(monkeypatch):
+    monkeypatch.setenv("SP_DISABLE_MEMORY_RECALL", "1")
+
+    class _ExplodingExecutor:
+        def execute(self, task):
+            raise AssertionError("bypass must not call the memory_recaller subagent")
+
+    ctx = HandlerContext(state={}, stack=TaskMemoryStack(), thread_id="t-bypass", run_id="r-bypass")
+    action = SPAction.create(
+        ActionType.RECALL_MEMORY,
+        action_id="a-recall-bypass",
+        reason="test bypass",
+        task="recall memory",
+        stage="perception",
+        metadata={"memory_query": "test preferences"},
+    )
+
+    result = MemoryRecallHandler(executor=_ExplodingExecutor()).handle(action, ctx)
+
+    assert result.next_step == "continue"
+    assert result.error is None
+    assert result.memory_entries
+    assert any(entry.actor == "memory_recaller" for entry in result.memory_entries)
+    assert any(event["event_type"] == "sp.memory.recall.completed" for event in result.run_events)
+
 
 
 def test_normalize_memory_recall_result_accepts_plain_text():

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import os
 from typing import Any
 
 from deerflow.sp.actions.events import make_sp_event
@@ -9,9 +11,14 @@ from deerflow.sp.actions.handlers.base import HandlerContext
 from deerflow.sp.actions.handlers.context import build_handler_context_refs
 from deerflow.sp.actions.schema import HandlerResult, SPAction
 from deerflow.sp.memory import StackMemoryEntry, normalize_memory_recall_result
-from deerflow.sp.subagents import SPSubagentExecutorProtocol, SPSubagentResult, SPSubagentTask
+from deerflow.sp.subagents import SPSubagentExecutorProtocol, SPSubagentResult, SPSubagentStatus, SPSubagentTask
 
 MEMORY_RECALLER_AGENT = "memory_recaller"
+_MEMORY_RECALL_BYPASS_ENV = "SP_DISABLE_MEMORY_RECALL"
+
+
+def _memory_recall_bypassed() -> bool:
+    return os.environ.get(_MEMORY_RECALL_BYPASS_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _build_recall_task(query: str, action: SPAction) -> str:
@@ -56,6 +63,24 @@ class MemoryRecallHandler:
                 **action.metadata,
             },
         )
+        if _memory_recall_bypassed():
+            # Test-only escape hatch: keep the existing recall action/state
+            # contract, but avoid a subagent call that may hang on provider
+            # connectivity. Unset SP_DISABLE_MEMORY_RECALL to restore the
+            # normal memory_recaller path.
+            bypass = SPSubagentResult(
+                status=SPSubagentStatus.COMPLETED,
+                result=json.dumps(
+                    {
+                        "summary": "Long-term memory recall bypassed for this test run.",
+                        "items": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                task_id=f"memory-bypass-{action.action_id}",
+                artifact_metadata={"completion_status": "complete"},
+            )
+            return self._handle_success(action, context, request_entry, query, bypass)
         task = SPSubagentTask(
             action_id=action.action_id,
             subagent_type=self._subagent_type,
