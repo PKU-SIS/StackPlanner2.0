@@ -376,15 +376,10 @@ def apply_write_requests(ledger: ReportLedger, tree: Mapping[str, Any]) -> list[
     nodes = {str(node.get("node_id")): node for node in tree.get("nodes") or [] if isinstance(node, Mapping)}
     incoming_raw = tree.get("write_requests")
     incoming = [item for item in incoming_raw if isinstance(item, Mapping)] if isinstance(incoming_raw, list) else []
-    incoming_keys_by_node: dict[str, set[str]] = {}
-    for item in incoming:
-        raw_key = str(item.get("key") or "").strip()
-        raw_nodes = [str(value) for value in item.get("node_ids") or []]
-        if raw_key and len(raw_nodes) == 1:
-            incoming_keys_by_node.setdefault(raw_nodes[0], set()).add(raw_key)
     existing = {str(item.get("key")): item for item in write_requests(ledger)}
     seen: set[str] = set()
     applied: list[dict[str, Any]] = []
+    completed_incoming_by_node: dict[str, set[str]] = {}
     for raw in incoming:
         key = str(raw.get("key") or "").strip()
         node_ids = [str(item) for item in raw.get("node_ids") or []]
@@ -420,28 +415,7 @@ def apply_write_requests(ledger: ReportLedger, tree: Mapping[str, Any]) -> list[
             raise ReportValidationError(f"write request {key} changed node/feedback_wanted; use a new key for a new request")
         status = str(current.get("status") or "")
         if status == "completed":
-            node_id = node_ids[0]
-            current_draft = next(
-                (
-                    item
-                    for item in drafts(ledger)
-                    if item.get("is_current") is True and str(item.get("node_id")) == node_id
-                ),
-                None,
-            )
-            if current_draft is None or str(current_draft.get("write_key") or "") != key:
-                other_keys = incoming_keys_by_node.get(node_id, set()) - {key}
-                other_active = any(
-                    other_key != key
-                    and node_id in [str(value) for value in record.get("node_ids") or []]
-                    and str(record.get("status") or "") not in {"completed", "superseded"}
-                    for other_key, record in existing.items()
-                )
-                if not other_keys and not other_active:
-                    raise ReportValidationError(
-                        f"write request {key} is completed but node {node_id} has no current draft for this key; "
-                        "this tree requires new writing, so issue a new write key"
-                    )
+            completed_incoming_by_node.setdefault(node_ids[0], set()).add(key)
             applied.append(current)
             continue
         if status == "superseded":
@@ -480,6 +454,32 @@ def apply_write_requests(ledger: ReportLedger, tree: Mapping[str, Any]) -> list[
             record["status"] = "superseded"
             record["superseded_reason"] = "node removed from the accepted tree"
             record["updated_at"] = utc_now_iso()
+    for node_id, historical_keys in completed_incoming_by_node.items():
+        current_draft = next(
+            (
+                item
+                for item in drafts(ledger)
+                if item.get("is_current") is True and str(item.get("node_id")) == node_id
+            ),
+            None,
+        )
+        if current_draft is not None:
+            # A current draft from any key is valid; a historical completed key
+            # must not force another writing round merely because its own key
+            # no longer owns the draft.
+            continue
+        effective_followup = any(
+            node_id in [str(value) for value in record.get("node_ids") or []]
+            and str(record.get("key") or "") not in historical_keys
+            and str(record.get("status") or "") in {"pending", "in_flight", "technical_failed", "blocked", "feedback_pending"}
+            for record in write_requests(ledger)
+        )
+        if not effective_followup:
+            keys = ", ".join(sorted(historical_keys))
+            raise ReportValidationError(
+                f"completed write request(s) {keys} for node {node_id} have no current draft and no effective "
+                "follow-up request after this revision; issue a new write key if new writing is required"
+            )
     _refresh(ledger)
     return applied
 

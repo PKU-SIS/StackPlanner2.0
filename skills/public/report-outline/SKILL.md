@@ -54,9 +54,11 @@ Return the complete tree JSON in `artifact_content`:
 - P2/P3 can request trial writing with one writable node per `write_requests` key;
   choosing no trial is valid. P3 assembly still requires every writable node to
   have a current draft before integration review.
-- Citation identity is `[S<n>]`, matching `sources` and evidence `source_ids`.
-  Do not emit `citation_map` or numeric-only aliases such as `[1]`. A `[1]` in
-  quoted user text is not a source id and must not become `must_cite`.
+- Citation identity is `[S<n>]` from the host-registered material catalog/packet
+  `source_id` and evidence `source_ids`. Do not register sources through a new
+  tree field, do not emit `citation_map`, and do not use numeric-only aliases
+  such as `[1]`. A `[1]` in quoted user text is not a source id and must not
+  become `must_cite`.
 - You own each node `title` and its hierarchy. Writer writes the body only; the
   host renders the title once, so do not add `emit_heading` or ask Writer to
   repeat the title.

@@ -605,6 +605,119 @@ def test_outline_citation_map_is_rejected_at_binding_boundary(tmp_path):
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
     assert ledger.payload.get("tree") is None
     assert ledger.payload.get("rejected_outline")
+
+
+def test_two_completed_keys_do_not_satisfy_each_other_after_rewrite(tmp_path):
+    ctx = _context(tmp_path)
+    assert _outline(ctx, _tree(write_requests=[{"key": "w-c1", "node_ids": ["n2"], "feedback_wanted": False}])).next_step == "continue"
+    action, task, host = _writer_action(ctx, "w-c1")
+    report_store.write_text_atomic(host, "First completed body.\n")
+    assert _accept_writer(ctx, action, task, _writer_result("First completed body.\n", task)).next_step == "continue"
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    first_draft = writing.current_draft(ledger, "n2")
+    assert _outline(
+        ctx,
+        _tree(
+            write_requests=[{"key": "w-c2", "node_ids": ["n2"], "feedback_wanted": False}],
+            draft_dispositions=[{"draft_id": first_draft["draft_id"], "node_id": "n2", "action": "rewrite", "reason": "new round"}],
+        ),
+        action_id="a-outline-c2",
+    ).next_step == "continue"
+    action, task, host = _writer_action(ctx, "w-c2", action_id="a-w-c2")
+    report_store.write_text_atomic(host, "Second completed body.\n")
+    assert _accept_writer(ctx, action, task, _writer_result("Second completed body.\n", task), action_id="a-w-c2").next_step == "continue"
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    second_draft = writing.current_draft(ledger, "n2")
+    assert [item["status"] for item in ledger.payload["write_requests"]] == ["completed", "completed"]
+
+    rejected = _outline(
+        ctx,
+        _tree(
+            write_requests=[
+                {"key": "w-c1", "node_ids": ["n2"], "feedback_wanted": False},
+                {"key": "w-c2", "node_ids": ["n2"], "feedback_wanted": False},
+            ],
+            draft_dispositions=[{"draft_id": second_draft["draft_id"], "node_id": "n2", "action": "rewrite", "reason": "retire current"}],
+        ),
+        action_id="a-outline-two-completed",
+    )
+    assert rejected.next_step == "error_recoverable"
+    assert "no current draft and no effective follow-up request" in (rejected.error or "")
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert writing.current_draft(ledger, "n2")["draft_id"] == second_draft["draft_id"]
+
+
+def test_omitted_pending_request_cannot_satisfy_completed_key(tmp_path):
+    ctx = _context(tmp_path)
+    assert _outline(ctx, _tree(write_requests=[{"key": "w-p1", "node_ids": ["n2"], "feedback_wanted": False}])).next_step == "continue"
+    action, task, host = _writer_action(ctx, "w-p1")
+    report_store.write_text_atomic(host, "Completed body.\n")
+    assert _accept_writer(ctx, action, task, _writer_result("Completed body.\n", task)).next_step == "continue"
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    draft = writing.current_draft(ledger, "n2")
+
+    assert _outline(
+        ctx,
+        _tree(
+            write_requests=[
+                {"key": "w-p1", "node_ids": ["n2"], "feedback_wanted": False},
+                {"key": "w-p2", "node_ids": ["n2"], "feedback_wanted": False},
+            ],
+        ),
+        action_id="a-outline-p2",
+    ).next_step == "continue"
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.payload["writes_pending"] == ["w-p2"]
+
+    rejected = _outline(
+        ctx,
+        _tree(
+            write_requests=[{"key": "w-p1", "node_ids": ["n2"], "feedback_wanted": False}],
+            draft_dispositions=[{"draft_id": draft["draft_id"], "node_id": "n2", "action": "rewrite", "reason": "retire current"}],
+        ),
+        action_id="a-outline-omitted-pending",
+    )
+    assert rejected.next_step == "error_recoverable"
+    assert "no current draft and no effective follow-up request" in (rejected.error or "")
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert writing.current_draft(ledger, "n2")["draft_id"] == draft["draft_id"]
+    assert ledger.payload["writes_pending"] == ["w-p2"]
+
+
+def test_historical_completed_key_is_allowed_when_new_current_draft_exists(tmp_path):
+    ctx = _context(tmp_path)
+    assert _outline(ctx, _tree(write_requests=[{"key": "w-h1", "node_ids": ["n2"], "feedback_wanted": False}])).next_step == "continue"
+    action, task, host = _writer_action(ctx, "w-h1")
+    report_store.write_text_atomic(host, "Old body.\n")
+    assert _accept_writer(ctx, action, task, _writer_result("Old body.\n", task)).next_step == "continue"
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    old_draft = writing.current_draft(ledger, "n2")
+
+    assert _outline(
+        ctx,
+        _tree(
+            write_requests=[{"key": "w-h2", "node_ids": ["n2"], "feedback_wanted": False}],
+            draft_dispositions=[{"draft_id": old_draft["draft_id"], "node_id": "n2", "action": "rewrite", "reason": "new round"}],
+        ),
+        action_id="a-outline-h2",
+    ).next_step == "continue"
+    action, task, host = _writer_action(ctx, "w-h2", action_id="a-w-h2")
+    report_store.write_text_atomic(host, "New current body.\n")
+    assert _accept_writer(ctx, action, task, _writer_result("New current body.\n", task), action_id="a-w-h2").next_step == "continue"
+
+    accepted = _outline(
+        ctx,
+        _tree(write_requests=[{"key": "w-h1", "node_ids": ["n2"], "feedback_wanted": False}]),
+        action_id="a-outline-historical",
+    )
+    assert accepted.next_step == "continue", accepted.error
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert writing.current_draft(ledger, "n2")["write_key"] == "w-h2"
+    assert ledger.payload["writes_pending"] == []
+
+
+def test_writer_role_assembles_read_write_tools_prompt_and_skill(tmp_path):
     from types import SimpleNamespace
 
     from deerflow.sp.report.hooks import configure_report_subagent

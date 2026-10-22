@@ -155,11 +155,7 @@ Output contract:
   `requirement_ids[]`, `evidence[]`; evidence items need `material_id`, `use`,
   and an object `locator`; each `write_requests[]` item needs `key` and
   `node_ids[]` (one writable node for P2).
-- Citation identity is canonical `[S<n>]`, matching the tree's `sources` and
-  evidence `source_ids`. Do not emit `citation_map`, and do not introduce
-  numeric-only aliases such as `[1]`. A quoted `[1]` in user/original text is
-  not itself a source id; do not copy it into `constraints.must_cite` or ask
-  Writer to follow it.
+- Citation identity is canonical `[S<n>]` from the host-registered material catalog/packet `source_id` and evidence `source_ids`. Do not register sources through a new tree field, do not emit `citation_map`, and do not introduce numeric-only aliases such as `[1]`. A quoted `[1]` in user/original text is not itself a source id; do not copy it into `constraints.must_cite` or ask Writer to follow it.
 - The Outline owns each node `title` and its hierarchy. The host assembly
   emits that title exactly once; Writer receives the node title as context and
   writes only the body. Do not add `emit_heading` or ask Writer to repeat the
