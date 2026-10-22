@@ -484,7 +484,127 @@ def test_keep_can_be_recorded_even_when_fingerprint_is_unchanged(tmp_path):
     assert writing.current_draft(ledger, "n2")["keep_reason"] == "主动确认当前稿"
 
 
-def test_writer_role_assembles_read_write_tools_prompt_and_skill(tmp_path):
+def test_writer_uses_report_packet_only_while_ordinary_reporter_keeps_generic_input(tmp_path):
+    from deerflow.sp.actions.handlers.delegate import DelegateHandler
+
+    class _RecordingExecutor:
+        def __init__(self):
+            self.tasks = []
+
+        def execute(self, task):
+            self.tasks.append(task)
+            return SPSubagentResult(status=SPSubagentStatus.FAILED, error="recorded")
+
+    ctx = _context(tmp_path)
+    assert _outline(ctx, _tree(write_requests=[{"key": "w-input", "node_ids": ["n2"], "feedback_wanted": False}])).next_step == "continue"
+    writer_action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-writer-input",
+        reason="write",
+        task="write n2",
+        target_agent="reporter",
+        stage="reporting",
+        metadata={"report_write_key": "w-input"},
+    )
+    writer_executor = _RecordingExecutor()
+    DelegateHandler(executor=writer_executor).handle(writer_action, ctx)
+    assert len(writer_executor.tasks) == 1
+    writer_refs = writer_executor.tasks[0].context_refs
+    assert set(writer_refs) == {"report_packet"}
+    assert "report_packet" in writer_refs
+
+    ordinary_root = tmp_path / "ordinary"
+    ordinary_root.mkdir()
+    ordinary_ctx = HandlerContext(
+        state={
+            "thread_data": {"outputs_path": str(ordinary_root)},
+            "messages": [HumanMessage(content="写一段普通说明。", id="m2")],
+        },
+        stack=TaskMemoryStack(),
+        thread_id="t-ordinary",
+        run_id="run-ordinary",
+    )
+    ordinary_action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-ordinary-reporter",
+        reason="ordinary synthesis",
+        task="write ordinary text",
+        target_agent="reporter",
+        stage="reporting",
+    )
+    ordinary_executor = _RecordingExecutor()
+    ordinary_response = DelegateHandler(executor=ordinary_executor).handle(ordinary_action, ordinary_ctx)
+    assert ordinary_executor.tasks, ordinary_response.error
+    ordinary_refs = ordinary_executor.tasks[0].context_refs
+    assert "report_packet" not in ordinary_refs
+    assert "task_memory" in ordinary_refs
+
+
+def test_completed_write_key_without_current_draft_requires_new_key_but_coexists_with_new_one(tmp_path):
+    ctx = _context(tmp_path)
+    assert _outline(ctx, _tree(write_requests=[{"key": "w-old", "node_ids": ["n2"], "feedback_wanted": False}])).next_step == "continue"
+    action, task, host = _writer_action(ctx, "w-old")
+    report_store.write_text_atomic(host, "Old body.\n")
+    assert _accept_writer(ctx, action, task, _writer_result("Old body.\n", task)).next_step == "continue"
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    draft = writing.current_draft(ledger, "n2")
+
+    rejected = _outline(
+        ctx,
+        _tree(
+            write_requests=[{"key": "w-old", "node_ids": ["n2"], "feedback_wanted": False}],
+            draft_dispositions=[{"draft_id": draft["draft_id"], "node_id": "n2", "action": "rewrite", "reason": "new round"}],
+        ),
+        action_id="a-outline-old-only",
+    )
+    assert rejected.next_step == "error_recoverable"
+    assert "new write key" in (rejected.error or "")
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert writing.current_draft(ledger, "n2")["draft_id"] == draft["draft_id"]
+    assert writing.draft(ledger, draft["draft_id"])["status"] == "current"
+
+    new_round = _outline(
+        ctx,
+        _tree(
+            write_requests=[
+                {"key": "w-old", "node_ids": ["n2"], "feedback_wanted": False},
+                {"key": "w-new", "node_ids": ["n2"], "feedback_wanted": False},
+            ],
+            draft_dispositions=[{"draft_id": draft["draft_id"], "node_id": "n2", "action": "rewrite", "reason": "new round"}],
+        ),
+        action_id="a-outline-old-and-new",
+    )
+    assert new_round.next_step == "continue", new_round.error
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert writing.current_draft(ledger, "n2") is None
+    assert [item["key"] for item in ledger.payload["write_requests"]] == ["w-old", "w-new"]
+    assert ledger.payload["write_requests"][0]["status"] == "completed"
+    assert ledger.payload["write_requests"][1]["status"] == "pending"
+    assert ledger.payload["writes_pending"] == ["w-new"]
+
+
+def test_writer_duplicate_node_title_is_rejected_without_retiring_current_draft(tmp_path):
+    ctx = _context(tmp_path)
+    assert _outline(ctx, _tree(write_requests=[{"key": "w-heading", "node_ids": ["n2"], "feedback_wanted": False}])).next_step == "continue"
+    action, task, host = _writer_action(ctx, "w-heading")
+    report_store.write_text_atomic(host, "## FY2024 指标\n\nBody only should follow.\n")
+    response = _accept_writer(ctx, action, task, _writer_result(None, task))
+    assert response.next_step == "error_recoverable"
+    assert "repeats the Outline-owned node title" in (response.error or "")
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert writing.current_draft(ledger, "n2") is None
+
+
+def test_outline_citation_map_is_rejected_at_binding_boundary(tmp_path):
+    ctx = _context(tmp_path)
+    tree = _tree(write_requests=[])
+    tree["citation_map"] = {"[1]": "S1"}
+    rejected = _outline(ctx, tree, action_id="a-outline-citation-map")
+    assert rejected.next_step == "error_recoverable"
+    assert "citation_map is not supported" in (rejected.error or "")
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.payload.get("tree") is None
+    assert ledger.payload.get("rejected_outline")
     from types import SimpleNamespace
 
     from deerflow.sp.report.hooks import configure_report_subagent
@@ -580,6 +700,8 @@ def test_writer_token_cap_is_technical_and_existing_draft_is_not_accepted(tmp_pa
     assert "token_capped" in (response.error or "")
     assert "completion_status=partial" in (response.error or "")
     assert "draft_exists=True" in (response.error or "")
+    assert "cumulative token budget" in (response.error or "")
+    assert "not finish_reason=length" in (response.error or "")
     assert "node_feedback" in (response.error or "")
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
     assert writing.drafts(ledger) == []

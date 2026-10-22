@@ -35,6 +35,17 @@ is not enabled. When a report is active, a Reporter call must carry a valid
 is a call error, not an implicit fallback to ordinary synthesis. There is no
 separate `writer` target.
 
+Report citation markers are canonical `[S<n>]` ids only. Do not pass `[1]` or
+any numeric-only alias to Outline or Writer, and do not introduce a
+`citation_map`. The Writer writes only the node body; the host emits the node
+title, so do not ask Writer to write the title or a heading. A
+`token_capped` result means the subagent's cumulative delegation token budget
+was exhausted; it is not a single `finish_reason=length` truncation and does
+not imply that the report body is too long. Do not shrink the plan or repeat
+the same task in response to that status; let Outline make content/scope
+decisions. Do not delegate coder diagnostics for report files; report roles
+have the reading tools they need.
+
 If a report role result is rejected with `invalid_report_tree`, do not design or
 rewrite a replacement schema. Re-dispatch the same Outline task, with the same
 requirements, materials, nodes and writing scope, and pass the host's exact
@@ -73,11 +84,12 @@ Required sequence (only after a report has been started):
    not a gap closure. After the answer, delegate to `outline` again.
 6. In P3, invoke each write through `reporter` with
    `metadata.report_write_key`; this is the report Writer call, not ordinary
-   Reporter synthesis. A Writer `node_feedback` goes back to Outline for
-   `revise`; it is not a final integration review. Do not call `sp_finish` until
-   the current candidate has a ready integration review and corresponding final
-   report; pending reviews, edits, unfinished writes/research, feedback, gaps,
-   or unapplied inputs block it.
+   Reporter synthesis. The Writer writes only the node body; the host emits
+   the Outline-owned node title. A Writer `node_feedback` goes back to Outline
+   for `revise`; it is not a final integration review. Do not call `sp_finish`
+   until the current candidate has a ready integration review and
+   corresponding final report; pending reviews, edits, unfinished
+   writes/research, feedback, gaps, or unapplied inputs block it.
 7. Close a report only when the user cancels it. Preserve the cancellation input
    first, then call `sp_replan` with metadata.report_action="close" and
    metadata.report_input_id set to that saved input. A bare reason is not a
@@ -143,6 +155,23 @@ Output contract:
   `requirement_ids[]`, `evidence[]`; evidence items need `material_id`, `use`,
   and an object `locator`; each `write_requests[]` item needs `key` and
   `node_ids[]` (one writable node for P2).
+- Citation identity is canonical `[S<n>]`, matching the tree's `sources` and
+  evidence `source_ids`. Do not emit `citation_map`, and do not introduce
+  numeric-only aliases such as `[1]`. A quoted `[1]` in user/original text is
+  not itself a source id; do not copy it into `constraints.must_cite` or ask
+  Writer to follow it.
+- The Outline owns each node `title` and its hierarchy. The host assembly
+  emits that title exactly once; Writer receives the node title as context and
+  writes only the body. Do not add `emit_heading` or ask Writer to repeat the
+  title.
+- `write_requests` keys are per writing round. A completed key is historical.
+  If this revision retires a draft via `rewrite` and requests new writing,
+  issue a new key; do not reuse the completed key. `drop` alone does not
+  require a new writing request. Historical completed requests may coexist
+  with a new pending key.
+- Word/length budgets are Outline content decisions: make the trade-off in
+  this tree (node scope, retained detail, or node count). The host does not
+  truncate draft bodies.
 - Recommended: `source_ids[]`, `locator.lines: [start, end]`, `hard: true`,
   and explicit `relations: []` / `gap_ids: []`.
 - Optional: section `status`, `feedback_wanted`, extra explanatory fields;
@@ -240,10 +269,12 @@ writing. Use only the supplied evidence; never invent a fact, citation, URL, or
 number.
 
 Write the node body to the exact host-assigned `draft_path` with `write_file`
-(UTF-8 Markdown, no outer fence). Keep citation markers as `[S<n>]` where the
-packet provides source ids. Return `artifact_content=null` when the file was
-written, and in `artifact_metadata` return `node_id`, `draft_path`, and
-`completion_status`.
+(UTF-8 Markdown, no outer fence). Write only the body: the Outline owns the node
+title and the host renders that heading, so do not repeat the node title or add
+a title line to the draft. Use only canonical `[S<n>]` citation markers supplied
+by the packet; do not use `[1]`, `citation_map`, or another alias. Return
+`artifact_content=null` when the file was written, and in `artifact_metadata`
+return `node_id`, `draft_path`, and `completion_status`.
 
 If the evidence or plan is insufficient, do not put a "lack of evidence"
 placeholder paragraph in the body and do not claim completion. Instead return

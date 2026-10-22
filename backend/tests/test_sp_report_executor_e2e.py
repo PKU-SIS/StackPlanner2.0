@@ -334,6 +334,356 @@ def test_real_executor_outline_file_toolchain_and_acceptance(tmp_path, monkeypat
     assert stored["user_decisions"][0]["input_id"] == "u1"
 
 
+def test_real_executor_review_revise_new_write_and_reassemble(tmp_path, monkeypatch, real_executor):
+    app_config = _app_config()
+    state = _state(tmp_path)
+    ctx = HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="t-e2e", run_id="run-e2e")
+    outputs = Path(state["thread_data"]["outputs_path"])
+    tree = {
+        "report_title": "示例公司报告",
+        "requirements": [{"id": "R1", "input_id": "u1", "text": "FY2024 指标", "hard": True}],
+        "nodes": [
+            {"node_id": "n1", "parent_id": None, "kind": "section", "title": "偿付能力"},
+            {
+                "node_id": "n2",
+                "parent_id": "n1",
+                "kind": "writable",
+                "title": "指标",
+                "question": "指标如何？",
+                "argument": ["读取材料"],
+                "conclusion": "待证据",
+                "evidence": [],
+                "constraints": {"period": "FY2024"},
+                "requirement_ids": ["R1"],
+                "relations": [],
+                "gap_ids": [],
+                "status": "planned",
+            },
+        ],
+        "removed_node_ids": [],
+        "write_requests": [{"key": "w1", "node_ids": ["n2"], "feedback_wanted": False}],
+        "gap_outcomes": [],
+        "user_decisions": [],
+        "feedback_dispositions": [],
+        "draft_dispositions": [],
+    }
+    delivery_path = "/mnt/user-data/outputs/report/r1/outline/delivery-a-outline-v1.json"
+    outline_model = FakeToolCallingModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "write_file",
+                        "args": {"description": "write outline file", "path": delivery_path, "content": json.dumps(tree, ensure_ascii=False)},
+                        "id": "call-outline-file",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(
+                content=json.dumps(
+                    {
+                        "summary": "outline delivered",
+                        "artifact_content": None,
+                        "artifact_type": "outline",
+                        "artifact_metadata": {
+                            "completion_status": "complete",
+                            "delivery_mode": "file",
+                            "tree_path": delivery_path,
+                        },
+                    },
+                    ensure_ascii=False,
+                )
+            ),
+        ]
+    )
+    _install_fake_model(monkeypatch, outline_model, real_executor)
+    outline_action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-outline-v1",
+        reason="plan",
+        task="plan the report",
+        target_agent="outline",
+        stage="planning",
+        metadata={"report_task": "plan"},
+    )
+    outline_handler = DelegateHandler(
+        executor=DR2SubagentExecutorAdapter(
+            _executor_factory(
+                state,
+                app_config,
+                [read_file_tool, ls_tool, grep_tool, glob_tool, write_file_tool],
+                "sp-outline",
+                real_executor,
+            )
+        )
+    )
+    outline_result = outline_handler.handle(outline_action, ctx)
+    assert outline_result.next_step == "continue", outline_result.error
+    ctx.state.update(outline_result.state_update)
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    assert ledger.payload["tree"]["version"] == 1
+
+    writer_model = FakeToolCallingModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "write_file",
+                        "args": {
+                            "description": "write first draft",
+                            "path": "/mnt/user-data/outputs/report/r1/drafts/n2/d1.md",
+                            "content": "Initial body for n2.\n",
+                        },
+                        "id": "call-w1",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(
+                content=json.dumps(
+                    {
+                        "summary": "draft written",
+                        "artifact_content": None,
+                        "artifact_type": "node_draft",
+                        "artifact_metadata": {"node_id": "n2", "draft_path": "/mnt/user-data/outputs/report/r1/drafts/n2/d1.md", "completion_status": "complete"},
+                    },
+                    ensure_ascii=False,
+                )
+            ),
+        ]
+    )
+    _install_fake_model(monkeypatch, writer_model, real_executor)
+    writer_action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-w1",
+        reason="write",
+        task="write n2",
+        target_agent="reporter",
+        stage="reporting",
+        metadata={"report_write_key": "w1"},
+    )
+    writer_handler = DelegateHandler(
+        executor=DR2SubagentExecutorAdapter(
+            _executor_factory(
+                state,
+                app_config,
+                [read_file_tool, ls_tool, grep_tool, glob_tool, write_file_tool],
+                "sp-reporter",
+                real_executor,
+            )
+        )
+    )
+    writer_result = writer_handler.handle(writer_action, ctx)
+    assert writer_result.next_step == "continue", writer_result.error
+    ctx.state.update(writer_result.state_update)
+
+    review_action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-review-v1",
+        reason="review",
+        task="review candidate",
+        target_agent="outline",
+        stage="verification",
+        metadata={"report_task": "integrate_review"},
+    )
+    review_meta: dict = {"stage": "verification"}
+    review_refs: dict = {}
+    hooks.prepare_delegation(review_action, ctx, review_meta, review_refs)
+    review_packet = review_refs["report_packet"]
+    review_content = json.dumps(
+        {
+            "inputs_digest": review_packet["inputs_digest"],
+            "reviewed_candidate_sha256": review_packet["candidate_sha256"],
+            "review": {
+                "status": "issues",
+                "outcome": "revise",
+                "findings": [{"kind": "content", "severity": "blocking", "node_ids": ["n2"], "draft_ids": ["d1"], "message": "needs revision"}],
+                "covered_requirement_ids": ["R1"],
+                "edits": [],
+            },
+        },
+        ensure_ascii=False,
+    )
+    _install_fake_model(
+        monkeypatch,
+        FakeToolCallingModel(
+            responses=[
+                AIMessage(
+                    content=json.dumps(
+                        {
+                            "summary": "revision required",
+                            "artifact_content": review_content,
+                            "artifact_type": "integration_review",
+                            "artifact_metadata": {"artifact_type": "integration_review", "report_task": "integrate_review", "status": "issues"},
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+            ]
+        ),
+        real_executor,
+    )
+    review_handler = DelegateHandler(
+        executor=DR2SubagentExecutorAdapter(
+            _executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool, write_file_tool], "sp-outline", real_executor)
+        )
+    )
+    review_result = review_handler.handle(review_action, ctx)
+    assert review_result.next_step == "continue", review_result.error
+    ctx.state.update(review_result.state_update)
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    assert ledger.payload["review"]["status"] == "issues"
+
+    revised_tree = dict(tree)
+    revised_tree["write_requests"] = [
+        {"key": "w1", "node_ids": ["n2"], "feedback_wanted": False},
+        {"key": "w2", "node_ids": ["n2"], "feedback_wanted": False},
+    ]
+    revised_tree["draft_dispositions"] = [{"draft_id": "d1", "node_id": "n2", "action": "rewrite", "reason": "review revision"}]
+    revise_model = FakeToolCallingModel(
+        responses=[
+            AIMessage(
+                content=json.dumps(
+                    {
+                        "summary": "revised",
+                        "artifact_content": revised_tree,
+                        "artifact_type": "outline",
+                        "artifact_metadata": {"completion_status": "complete"},
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        ]
+    )
+    _install_fake_model(monkeypatch, revise_model, real_executor)
+    revise_action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-outline-v2",
+        reason="revise",
+        task="revise the report",
+        target_agent="outline",
+        stage="planning",
+        metadata={"report_task": "revise"},
+    )
+    revise_handler = DelegateHandler(
+        executor=DR2SubagentExecutorAdapter(
+            _executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool, write_file_tool], "sp-outline", real_executor)
+        )
+    )
+    revise_result = revise_handler.handle(revise_action, ctx)
+    assert revise_result.next_step == "continue", revise_result.error
+    ctx.state.update(revise_result.state_update)
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    assert ledger.payload["write_requests"][0]["status"] == "completed"
+    assert ledger.payload["write_requests"][-1]["key"] == "w2"
+    assert ledger.payload["write_requests"][-1]["status"] == "pending"
+    assert ledger.payload["writes_pending"] == ["w2"]
+
+    writer_two_model = FakeToolCallingModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "write_file",
+                        "args": {
+                            "description": "write revised draft",
+                            "path": "/mnt/user-data/outputs/report/r1/drafts/n2/d2.md",
+                            "content": "Revised body for n2.\n",
+                        },
+                        "id": "call-w2",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(
+                content=json.dumps(
+                    {
+                        "summary": "revised draft written",
+                        "artifact_content": None,
+                        "artifact_type": "node_draft",
+                        "artifact_metadata": {"node_id": "n2", "draft_path": "/mnt/user-data/outputs/report/r1/drafts/n2/d2.md", "completion_status": "complete"},
+                    },
+                    ensure_ascii=False,
+                )
+            ),
+        ]
+    )
+    _install_fake_model(monkeypatch, writer_two_model, real_executor)
+    writer_two_action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-w2",
+        reason="write revised",
+        task="write revised n2",
+        target_agent="reporter",
+        stage="reporting",
+        metadata={"report_write_key": "w2"},
+    )
+    writer_two_result = writer_handler.handle(writer_two_action, ctx)
+    assert writer_two_result.next_step == "continue", writer_two_result.error
+    ctx.state.update(writer_two_result.state_update)
+
+    review_two_action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-review-v2",
+        reason="review revised",
+        task="review revised candidate",
+        target_agent="outline",
+        stage="verification",
+        metadata={"report_task": "integrate_review"},
+    )
+    review_two_meta: dict = {"stage": "verification"}
+    review_two_refs: dict = {}
+    hooks.prepare_delegation(review_two_action, ctx, review_two_meta, review_two_refs)
+    review_two_packet = review_two_refs["report_packet"]
+    review_two_content = json.dumps(
+        {
+            "inputs_digest": review_two_packet["inputs_digest"],
+            "reviewed_candidate_sha256": review_two_packet["candidate_sha256"],
+            "review": {
+                "status": "ready",
+                "outcome": "deliver",
+                "findings": [],
+                "covered_requirement_ids": ["R1"],
+                "edits": [],
+            },
+        },
+        ensure_ascii=False,
+    )
+    _install_fake_model(
+        monkeypatch,
+        FakeToolCallingModel(
+            responses=[
+                AIMessage(
+                    content=json.dumps(
+                        {
+                            "summary": "ready",
+                            "artifact_content": review_two_content,
+                            "artifact_type": "integration_review",
+                            "artifact_metadata": {"artifact_type": "integration_review", "report_task": "integrate_review", "status": "ready"},
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+            ]
+        ),
+        real_executor,
+    )
+    review_two_result = review_handler.handle(review_two_action, ctx)
+    assert review_two_result.next_step == "continue", review_two_result.error
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    assert ledger.payload["review"]["status"] == "ready"
+    assert ledger.payload["final_report"] is not None
+    final_text = Path(ledger.payload["final_report"]["path"]).read_text(encoding="utf-8")
+    assert final_text.count("## 指标") == 1
+    assert "Initial body for n2." not in final_text
+    assert "Revised body for n2." in final_text
+    assert (outputs / "report" / "r1" / "drafts" / "n2" / "d2.md").is_file()
+
+
 def test_real_executor_researcher_saves_tool_return_and_charges_one_round(tmp_path, monkeypatch, real_executor):
     app_config = _app_config()
     state = _state(tmp_path)

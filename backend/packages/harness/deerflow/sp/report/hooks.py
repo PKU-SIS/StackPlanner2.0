@@ -996,6 +996,19 @@ def _accept_writer(
         )
 
 
+def _writer_repeats_node_title(content: str, basis: Mapping[str, Any]) -> bool:
+    """Detect only the exact Outline-owned heading duplicated by a draft."""
+    node_spec = basis.get("node_spec") if isinstance(basis.get("node_spec"), Mapping) else {}
+    title = " ".join(str(node_spec.get("title") or "").split())
+    if not title:
+        return False
+    first_line = next((line.strip() for line in content.splitlines() if line.strip()), "")
+    if not first_line.startswith("#"):
+        return False
+    heading = " ".join(first_line.lstrip("#").strip().split())
+    return bool(heading) and heading == title
+
+
 def _accept_writer_locked(
     action: SPAction,
     context: HandlerContext,
@@ -1032,6 +1045,12 @@ def _accept_writer_locked(
                 f"draft_exists={draft_exists}; "
                 "no node_feedback is required for this technical result and the draft was not accepted."
             )
+            if stop_reason == "token_capped":
+                error += (
+                    " stop_reason=token_capped means the subagent's cumulative token budget for this "
+                    "delegation was exhausted; it is not finish_reason=length and does not establish that "
+                    "the body was too long. Content and scope decisions remain with Outline."
+                )
             report_writing.fail_writer_attempt(ledger, key=key, action_id=action.action_id, error=error)
             ledger.save()
             return _rejection(
@@ -1105,6 +1124,20 @@ def _accept_writer_locked(
         content = host_path.read_text(encoding="utf-8")
         if not content.strip():
             raise ReportValidationError("Writer draft is empty")
+        if _writer_repeats_node_title(content, basis):
+            error = (
+                "Writer draft repeats the Outline-owned node title; the host generates that heading. "
+                "Write only the node body without the node title."
+            )
+            report_writing.fail_writer_attempt(ledger, key=key, action_id=action.action_id, error=error)
+            ledger.save()
+            return _rejection(
+                action,
+                context,
+                error,
+                reason="writer_duplicate_heading",
+                draft_exists=True,
+            )
         if len(content) > 2_000_000:
             raise ReportValidationError("Writer draft exceeds the P2 draft size bound")
         artifact = artifact_adapter.register_existing_artifact(
@@ -1286,6 +1319,12 @@ def _accept_outline_locked(
             f"completion_status={completion_status}; candidate file was retained and no tree, "
             "write request, or planning disposition was committed."
         )
+        if execution_stop == "token_capped":
+            error += (
+                " stop_reason=token_capped means the subagent's cumulative token budget for this "
+                "delegation was exhausted; it is not finish_reason=length and does not establish that "
+                "the plan or body was too large. Content and scope decisions remain with Outline."
+            )
         rejected = _store_rejected_outline(ledger, action, result, error, source_text=source_text)
         if rejected:
             error += f" rejected_candidate: {rejected['virtual_path']}"
@@ -1309,6 +1348,10 @@ def _accept_outline_locked(
         # transaction guarantee.
         working = ReportLedger.load(ledger.paths)
         payload, source_text = _outline_payload(result, task)
+        if payload.get("citation_map"):
+            raise ReportValidationError(
+                "citation_map is not supported; use canonical [S<n>] citation markers in node constraints and drafts"
+            )
         tree = report_tree.validate_tree_with_diagnostics(payload, working)
         user_decisions = working.apply_user_decisions(tree.get("user_decisions") or [])
         gap_outcomes = working.apply_gap_outcomes(tree.get("gap_outcomes") or [])

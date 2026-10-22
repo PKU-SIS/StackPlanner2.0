@@ -21,8 +21,11 @@ re-plan the whole report, or write any other output file.
 
 ## Draft
 
-Write the body to the exact `draft_path` with `write_file`. Use clean UTF-8
-Markdown; keep `[S<n>]` citation markers where source ids are supplied. Do not
+Write the body to the exact `draft_path` with `write_file`. Write body only:
+the Outline owns the node title and the host renders that heading exactly once,
+so do not repeat the node title or add a title line. Use clean UTF-8 Markdown;
+keep canonical `[S<n>]` citation markers where source ids are supplied. Do not
+use numeric-only aliases such as `[1]`, do not add a `citation_map`, and do not
 include an outer code fence, process narration, or a JSON envelope inside the
 draft.
 

@@ -528,7 +528,7 @@ class DelegateHandler:
             priority=action.priority,
             metadata={"action_id": action.action_id, "target_agent": action.target_agent, **action.metadata},
         )
-        context_refs = build_handler_context_refs(context)
+        context_refs: dict[str, Any] = {}
         # Stage is part of the execution contract, not prompt decoration. It
         # must cross the Delegate -> runtime -> adapter boundary so tool policy
         # and completion validation can enforce read-only vs mutation stages.
@@ -609,24 +609,13 @@ class DelegateHandler:
                     "str_replace",
                     "bash",
                 ]
-        if action.target_agent in _MATERIALIZED_ARTIFACT_ROLES:
-            artifact_bundle = self._materialize_stage_artifacts(action, context)
-            if artifact_bundle["items"]:
-                context_refs["artifact_bodies"] = artifact_bundle
-                task_metadata["source_artifact_ids"] = [item["artifact_id"] for item in artifact_bundle["items"]]
-        if action.target_agent == "reporter":
-            report_requirements = _report_requirements(
-                action,
-                context,
-                context_refs=context_refs,
-            )
-            if report_requirements:
-                context_refs["report_requirements"] = report_requirements
-
         try:
             from deerflow.sp.report import prepare_delegation
             from deerflow.sp.report.ledger import ReportValidationError
 
+            # Report binding, including Writer key validation, is the existing
+            # authority. Bind first so a Writer can use the report packet as its
+            # dedicated input path instead of inheriting generic Reporter input.
             prepare_delegation(action, context, task_metadata, context_refs)
         except ReportValidationError as exc:
             return HandlerResult(
@@ -644,6 +633,25 @@ class DelegateHandler:
                     )
                 ],
             )
+
+        report_role = str(task_metadata.get("report_role") or "")
+        if report_role != "writer":
+            generic_refs = build_handler_context_refs(context)
+            generic_refs.update(context_refs)
+            context_refs = generic_refs
+            if action.target_agent in _MATERIALIZED_ARTIFACT_ROLES:
+                artifact_bundle = self._materialize_stage_artifacts(action, context)
+                if artifact_bundle["items"]:
+                    context_refs["artifact_bodies"] = artifact_bundle
+                    task_metadata["source_artifact_ids"] = [item["artifact_id"] for item in artifact_bundle["items"]]
+            if action.target_agent == "reporter":
+                report_requirements = _report_requirements(
+                    action,
+                    context,
+                    context_refs=context_refs,
+                )
+                if report_requirements:
+                    context_refs["report_requirements"] = report_requirements
 
         latest_uploaded_refs = _latest_uploaded_file_refs(context.state)
         input_refs = list(action.input_refs)

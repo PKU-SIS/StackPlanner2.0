@@ -376,6 +376,12 @@ def apply_write_requests(ledger: ReportLedger, tree: Mapping[str, Any]) -> list[
     nodes = {str(node.get("node_id")): node for node in tree.get("nodes") or [] if isinstance(node, Mapping)}
     incoming_raw = tree.get("write_requests")
     incoming = [item for item in incoming_raw if isinstance(item, Mapping)] if isinstance(incoming_raw, list) else []
+    incoming_keys_by_node: dict[str, set[str]] = {}
+    for item in incoming:
+        raw_key = str(item.get("key") or "").strip()
+        raw_nodes = [str(value) for value in item.get("node_ids") or []]
+        if raw_key and len(raw_nodes) == 1:
+            incoming_keys_by_node.setdefault(raw_nodes[0], set()).add(raw_key)
     existing = {str(item.get("key")): item for item in write_requests(ledger)}
     seen: set[str] = set()
     applied: list[dict[str, Any]] = []
@@ -414,6 +420,28 @@ def apply_write_requests(ledger: ReportLedger, tree: Mapping[str, Any]) -> list[
             raise ReportValidationError(f"write request {key} changed node/feedback_wanted; use a new key for a new request")
         status = str(current.get("status") or "")
         if status == "completed":
+            node_id = node_ids[0]
+            current_draft = next(
+                (
+                    item
+                    for item in drafts(ledger)
+                    if item.get("is_current") is True and str(item.get("node_id")) == node_id
+                ),
+                None,
+            )
+            if current_draft is None or str(current_draft.get("write_key") or "") != key:
+                other_keys = incoming_keys_by_node.get(node_id, set()) - {key}
+                other_active = any(
+                    other_key != key
+                    and node_id in [str(value) for value in record.get("node_ids") or []]
+                    and str(record.get("status") or "") not in {"completed", "superseded"}
+                    for other_key, record in existing.items()
+                )
+                if not other_keys and not other_active:
+                    raise ReportValidationError(
+                        f"write request {key} is completed but node {node_id} has no current draft for this key; "
+                        "this tree requires new writing, so issue a new write key"
+                    )
             applied.append(current)
             continue
         if status == "superseded":

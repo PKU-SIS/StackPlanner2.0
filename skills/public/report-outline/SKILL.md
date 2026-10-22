@@ -54,6 +54,16 @@ Return the complete tree JSON in `artifact_content`:
 - P2/P3 can request trial writing with one writable node per `write_requests` key;
   choosing no trial is valid. P3 assembly still requires every writable node to
   have a current draft before integration review.
+- Citation identity is `[S<n>]`, matching `sources` and evidence `source_ids`.
+  Do not emit `citation_map` or numeric-only aliases such as `[1]`. A `[1]` in
+  quoted user text is not a source id and must not become `must_cite`.
+- You own each node `title` and its hierarchy. Writer writes the body only; the
+  host renders the title once, so do not add `emit_heading` or ask Writer to
+  repeat the title.
+- A completed write key is historical. If a `rewrite` requires new writing, use
+  a new key; do not reuse the completed key. `drop` alone does not require a new
+  writing request, and historical completed requests may coexist with a new
+  pending key.
 
 ### Envelope and body
 
