@@ -35,11 +35,14 @@ class _NoCentralModel:
 
 
 class _FixedExecutor:
-    def __init__(self, review_statuses: list[str]):
+    def __init__(self, review_statuses: list[str], findings: list[dict] | None = None):
         self.review_statuses = list(review_statuses)
+        self.findings = findings
         self.tasks = []
         self.review_action_ids = []
         self.revise_action_ids = []
+        self.revise_task_text = ""
+        self.review_candidate_contents = []
         self.finish_attempts = 0
 
     def execute(self, task):
@@ -47,6 +50,8 @@ class _FixedExecutor:
         report_task = str(task.metadata.get("report_task") or "")
         if report_task == "integrate_review":
             self.review_action_ids.append(task.action_id)
+            packet = task.context_refs["report_packet"]
+            self.review_candidate_contents.append(str(packet.get("candidate", {}).get("content") or ""))
             status = self.review_statuses.pop(0)
             if status == "technical":
                 return SPSubagentResult(
@@ -55,7 +60,13 @@ class _FixedExecutor:
                     error="simulated review timeout",
                     artifact_metadata={"artifact_type": "integration_review", "report_task": "integrate_review"},
                 )
-            packet = task.context_refs["report_packet"]
+            if status == "cancel":
+                return SPSubagentResult(
+                    status=SPSubagentStatus.CANCELLED,
+                    result="",
+                    error="cancelled",
+                    artifact_metadata={"artifact_type": "integration_review", "report_task": "integrate_review"},
+                )
             content = json.dumps(
                 {
                     "inputs_digest": packet["inputs_digest"],
@@ -63,9 +74,9 @@ class _FixedExecutor:
                     "review": {
                         "status": "ready" if status == "ready" else "issues",
                         "outcome": "deliver" if status == "ready" else "revise",
-                        "findings": [] if status == "ready" else [
+                        "findings": [] if status == "ready" else (self.findings or [
                             {"kind": "coverage", "severity": "blocking", "node_ids": ["n2"], "message": "缺少必要内容"}
-                        ],
+                        ]),
                         "covered_requirement_ids": ["R1"],
                         "edits": [],
                     },
@@ -85,6 +96,7 @@ class _FixedExecutor:
             )
         if report_task == "revise":
             self.revise_action_ids.append(task.action_id)
+            self.revise_task_text = str(task.task or "")
             packet = task.context_refs["report_packet"]
             tree = json.loads(packet["tree"]["content"])
             tree["version"] = int(tree.get("version") or 1) + 1
@@ -116,6 +128,57 @@ class _FixedExecutor:
                 artifact_metadata={"report_id": task.metadata.get("report_id"), "tree_version": tree["version"]},
             )
         raise AssertionError(f"unexpected report task: {report_task}")
+
+
+class _RewriteExecutor(_FixedExecutor):
+    def __init__(self, review_statuses: list[str], outputs: Path, new_body: str):
+        super().__init__(review_statuses)
+        self.outputs = outputs
+        self.new_body = new_body
+
+    def execute(self, task):
+        report_task = str(task.metadata.get("report_task") or "")
+        if report_task == "revise":
+            packet = task.context_refs["report_packet"]
+            tree = json.loads(packet["tree"]["content"])
+            tree["version"] = int(tree.get("version") or 1) + 1
+            tree["write_requests"] = [{"key": "w2", "node_ids": ["n2"], "feedback_wanted": False}]
+            tree["draft_dispositions"] = [
+                {
+                    "draft_id": "d1",
+                    "node_id": "n2",
+                    "action": "rewrite",
+                    "reason": "acceptance finding requires a new body",
+                }
+            ]
+            self.revise_action_ids.append(task.action_id)
+            self.tasks.append(task)
+            return SPSubagentResult(
+                status=SPSubagentStatus.COMPLETED,
+                result=json.dumps(tree, ensure_ascii=False),
+                artifact_content=json.dumps(tree, ensure_ascii=False),
+                artifact_type="outline",
+                artifact_metadata={"report_id": task.metadata.get("report_id"), "tree_version": tree["version"]},
+            )
+        if str(task.metadata.get("report_role") or "") == "writer":
+            self.tasks.append(task)
+            virtual = str(task.context_refs["report_packet"]["draft_path"])
+            relative = virtual.removeprefix("/mnt/user-data/outputs/")
+            host_path = self.outputs / relative
+            host_path.parent.mkdir(parents=True, exist_ok=True)
+            host_path.write_text(self.new_body, encoding="utf-8")
+            return SPSubagentResult(
+                status=SPSubagentStatus.COMPLETED,
+                result="draft written",
+                artifact_type="node_draft",
+                artifact_metadata={
+                    "node_id": "n2",
+                    "draft_path": virtual,
+                    "completion_status": "complete",
+                },
+            )
+        return super().execute(task)
+
 
 
 def _outputs():
@@ -178,6 +241,54 @@ def test_review_technical_failure_recovers_same_round(monkeypatch):
     assert ledger.payload["delivered"] is not None
     assert ledger.payload["acceptance"]["technical_failure_count"] == 1
     assert ledger.payload["acceptance"]["review_count"] == 1
+
+
+def test_review_cancel_is_not_auto_redispatched(monkeypatch):
+    state, _ = _state_without_messages()
+    executor = _FixedExecutor(["cancel"])
+    model = FakeToolCallingModel(responses=[AIMessage(content="cancelled")])
+    result = _invoke(monkeypatch, executor=executor, model=model, state=state)
+
+    assert len(executor.review_action_ids) == 1
+    ledger = _ledger(state)
+    assert ledger.payload["acceptance"]["status"] == "cancelled"
+    assert ledger.payload["delivered"] is None
+    assert result["messages"]
+
+
+def test_persistent_review_technical_failures_exit_by_existing_budget(monkeypatch):
+    state, _ = _state_without_messages()
+    executor = _FixedExecutor(["technical"] * 100)
+    result = _invoke(monkeypatch, executor=executor, model=_NoCentralModel(), state=state)
+
+    ledger = _ledger(state)
+    assert ledger.payload["delivered"] is None
+    last = result.get("sp_last_handler_result") or {}
+    assert last.get("next_step") == "error_fatal"
+    assert "budget" in str(last.get("error") or "").lower() or "exhausted" in str(last.get("error") or "").lower()
+    assert len(executor.review_action_ids) > 1
+
+
+def test_revision_receives_all_blocking_findings_without_truncation(monkeypatch):
+    findings = [
+        {
+            "kind": "coverage",
+            "severity": "blocking",
+            "node_ids": ["n2"],
+            "message": f"BLOCKING-{index}-" + ("x" * 700),
+        }
+        for index in range(1, 10)
+    ]
+    state, _ = _state_without_messages()
+    executor = _FixedExecutor(["issues", "ready"], findings=findings)
+    result = _invoke(monkeypatch, executor=executor, model=_NoCentralModel(), state=state)
+
+    assert result["messages"][-1].content
+    assert executor.revise_task_text
+    for item in findings:
+        assert item["message"] in executor.revise_task_text
+    ledger = _ledger(state)
+    assert ledger.payload["delivered"] is not None
 
 
 def test_finish_failure_retries_same_delivery(monkeypatch):
@@ -270,4 +381,48 @@ def test_explicit_new_cycle_uses_new_action_identity(monkeypatch):
     assert len(executor.review_action_ids) > len(old_review_ids)
     assert executor.review_action_ids[-1] not in old_review_ids
     assert executor.review_action_ids[-1].startswith("spact_sp-fixed-c1-review-r1")
+
+
+def test_outline_rewrite_request_is_written_by_central_writer_and_reaccepted(monkeypatch):
+    state, _ = _state_without_messages()
+    outputs = Path(state["thread_data"]["outputs_path"])
+    new_body = "Rewritten body after the acceptance finding.\n"
+    executor = _RewriteExecutor(["issues", "ready"], outputs, new_body)
+
+    writer_call = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "sp_delegate",
+                "args": {
+                    "target_agent": "reporter",
+                    "task": "Write the affected node from the revised write request.",
+                    "reason": "write w2",
+                    "stage": "reporting",
+                    "metadata": {"report_write_key": "w2"},
+                },
+                "id": "call-writer-w2",
+                "type": "tool_call",
+            }
+        ],
+    )
+    model = FakeToolCallingModel(responses=[writer_call, AIMessage(content="done")])
+    result = _invoke(monkeypatch, executor=executor, model=model, state=state)
+
+    assert [task.metadata.get("report_task") for task in executor.tasks if task.metadata.get("report_task")] == [
+        "integrate_review",
+        "revise",
+        "integrate_review",
+    ]
+    assert any(str(task.metadata.get("report_role") or "") == "writer" for task in executor.tasks)
+    assert len(executor.review_candidate_contents) == 2
+    assert "Seed body for n2." not in executor.review_candidate_contents[1]
+    assert new_body.strip() in executor.review_candidate_contents[1]
+
+    ledger = _ledger(result)
+    assert ledger.payload["delivered"] is not None
+    final_text = Path(ledger.payload["final_report"]["path"]).read_text(encoding="utf-8")
+    assert new_body.strip() in final_text
+    assert "Seed body for n2." not in final_text
+
 

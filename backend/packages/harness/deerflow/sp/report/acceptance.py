@@ -200,18 +200,13 @@ def _review_arguments(acceptance: Mapping[str, Any], action_id: str) -> dict[str
 
 def _revise_arguments(review: Mapping[str, Any], acceptance: Mapping[str, Any], action_id: str) -> dict[str, Any]:
     findings = review.get("findings") if isinstance(review.get("findings"), list) else []
-    compact = []
-    for item in findings[:8]:
-        if not isinstance(item, Mapping):
-            continue
-        compact.append(
-            {
-                "kind": item.get("kind"),
-                "severity": item.get("severity"),
-                "node_ids": item.get("node_ids") or [],
-                "message": str(item.get("message") or "")[:600],
-            }
-        )
+    blocking = [
+        dict(item)
+        for item in findings
+        if isinstance(item, Mapping) and str(item.get("severity") or "").strip().lower() == "blocking"
+    ]
+    if not blocking:
+        blocking = [dict(item) for item in findings if isinstance(item, Mapping)]
     round_number = int(acceptance.get("review_round") or 0)
     cycle = int(acceptance.get("cycle_id") or 0)
     return {
@@ -219,8 +214,9 @@ def _revise_arguments(review: Mapping[str, Any], acceptance: Mapping[str, Any], 
         "task": (
             "Revise the accepted report tree only for the blocking findings from the harness minimum acceptance review. "
             "Preserve unaffected content; issue the existing new write requests for affected nodes. "
-            "Review findings: "
-            + str(compact)
+            "The complete blocking findings are below; the full review record is also in "
+            "context_refs.report_packet.current_review. Review findings: "
+            + json.dumps(blocking, ensure_ascii=False)
         ),
         "reason": f"Harness one-round content revision after review round {round_number}",
         "stage": "planning",
@@ -231,6 +227,7 @@ def _revise_arguments(review: Mapping[str, Any], acceptance: Mapping[str, Any], 
             "report_acceptance_action_id": _expected_action_id(action_id),
             "report_acceptance_cycle": cycle,
             "report_acceptance_review_round": round_number,
+            "report_acceptance_review_id": review.get("review_id"),
         },
     }
 
@@ -314,6 +311,11 @@ def next_acceptance_action(state: Mapping[str, Any]) -> AIMessage | None:
             acceptance["pending_action_id"] = None
             acceptance["retry_kind"] = None
             _save(ledger)
+        return None
+
+    if status == "cancelled":
+        # Cancellation is terminal for this acceptance run.  Reuse the
+        # existing run/cancel recovery path; the gate must not redispatch.
         return None
 
     if acceptance.get("blocked_decision_count") is not None:

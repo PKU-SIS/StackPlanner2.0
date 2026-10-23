@@ -547,6 +547,23 @@ def handle_failure(
     report_role = str(task.metadata.get("report_role") or "")
     report_task = str(task.metadata.get("report_task") or "").strip().lower()
     report_origin = str(task.metadata.get("report_acceptance_origin") or action.metadata.get("report_acceptance_origin") or "")
+    if result.status.value == "cancelled" and report_role == "outline" and report_task in {"integrate_review", "revise"} and report_origin == "harness":
+        report = report_context(context.state)
+        if report.is_active:
+            try:
+                paths = _paths_for_context(report)
+                with report_store.report_lock(paths):
+                    ledger = ReportLedger.load(paths)
+                    from deerflow.sp.report import acceptance as report_acceptance
+
+                    acceptance = report_acceptance.acceptance_state(ledger)
+                    acceptance["status"] = "cancelled"
+                    acceptance["pending_action_id"] = None
+                    acceptance["retry_kind"] = None
+                    ledger.save()
+            except Exception:  # noqa: BLE001 - preserve the real cancellation
+                pass
+        return
     if report_role == "outline" and report_task in {"integrate_review", "revise"} and report_origin == "harness":
         report = report_context(context.state)
         if report.is_active:

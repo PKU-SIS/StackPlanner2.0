@@ -111,7 +111,7 @@ def test_fixed_review_edit_outcome_is_rejected(tmp_path):
     assert ledger.payload.get("review") is None
 
 
-def test_fixed_review_cancel_sets_technical_exit_without_review(tmp_path):
+def test_fixed_review_cancel_sets_terminal_cancelled_without_review(tmp_path):
     ctx, _ = _seed(tmp_path)
     action, task, _ = _host_review(ctx)
     task.metadata["report_acceptance_origin"] = "harness"
@@ -125,7 +125,8 @@ def test_fixed_review_cancel_sets_technical_exit_without_review(tmp_path):
     hooks.handle_failure(action, ctx, result, task)
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
     acceptance = ledger.payload["acceptance"]
-    assert acceptance["status"] == "technical_failed"
-    assert acceptance["retry_kind"] == "review"
+    assert acceptance["status"] == "cancelled"
+    assert acceptance["retry_kind"] is None
     assert acceptance["review_count"] == 0
     assert ledger.payload.get("review") is None
+    assert next_acceptance_action(ctx.state) is None
