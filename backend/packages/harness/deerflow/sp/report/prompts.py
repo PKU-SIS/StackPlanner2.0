@@ -67,11 +67,9 @@ Required sequence (only after a report has been started):
    Pass the report's open gap ids as `metadata.report_gap_ids` only when
    dispatching already-registered research; do not invent gap ids. After the
    first accepted tree, every Outline call must carry an explicit
-   `metadata.report_task` (`plan`, `revise`, or `integrate_review`); do not rely
-   on task wording or a default. Use `revise` for local tree/Writer-feedback
-   corrections. Use `integrate_review` only for final assembly review; it invokes
-   the existing `ensure_candidate` generation/reuse path, so report the concrete
-   blocker it returns rather than pre-checking or redirecting uniformly.
+   `metadata.report_task` (`plan` or `revise`); do not rely on task wording or a
+   default. Use `revise` for local tree/Writer-feedback corrections.
+   `integrate_review` is Harness-owned; do not delegate it from Central.
 3. Dispatch each `open` gap to the researcher with `metadata.report_gap_ids`.
    A gap in `awaiting_outline`, `in_flight`, or `awaiting_user` must not be
    dispatched; wait or ask the user. Do not dispatch the same gap twice before
@@ -86,10 +84,11 @@ Required sequence (only after a report has been started):
    `metadata.report_write_key`; this is the report Writer call, not ordinary
    Reporter synthesis. The Writer writes only the node body; the host emits
    the Outline-owned node title. A Writer `node_feedback` goes back to Outline
-   for `revise`; it is not a final integration review. Do not call `sp_finish`
-   until the current candidate has a ready integration review and
-   corresponding final report; pending reviews, edits, unfinished
-   writes/research, feedback, gaps, or unapplied inputs block it.
+   for `revise`; it is not a final integration review. Do not call
+   `integrate_review` or `sp_finish`; after the body is complete the Harness
+   fixed-acceptance gate runs the minimum review and, only when ready, the
+   existing delivery path. Unfinished writes/research, feedback, gaps, or
+   unapplied inputs still block finish.
 7. Close a report only when the user cancels it. Preserve the cancellation input
    first, then call `sp_replan` with metadata.report_action="close" and
    metadata.report_input_id set to that saved input. A bare reason is not a
@@ -341,18 +340,15 @@ Inspect `context_refs.report_packet`:
   and citation map;
 - any applied edits and current review state.
 
-Judge requirement coverage, evidence support, cross-node consistency,
-duplication, structure, and source/citation identity. Do not invent facts.
-A source may have multiple material versions; preserve S<n> identity.
+Judge only the fixed minimum acceptance:
+- Is there an obvious major omission against the current effective requirements?
+- Does a required part rely on a placeholder such as "信息不足" or "待补充" while claiming completion?
+These two classes are blocking. Wording, depth, structure preferences and
+minor repetition are advisory only; record them without requesting another
+round. Do not invent facts. Preserve source identity.
 
-You may propose only local integration edits:
-- kind: bridge | terminology | format | dedupe;
-- each edit must name one current draft_id, a non-empty `anchor` that occurs
-  exactly once in that node's current visible section, a `replacement`, and a
-  reason;
-- edits must not add/remove citation identity, change facts, conclusions,
-  comparison objects, measurement basis, evidence, or heading structure.
-  Any such change requires outcome "revise" and a return to revise/Writer.
+For fixed Harness acceptance, use only outcome "deliver" or "revise"; do not
+return local "edit" operations. A substantive correction is a revise cycle.
 
 Return `artifact_content` as a JSON string with exactly this authoritative
 structure (do not wrap it in prose or a Markdown fence):
@@ -377,10 +373,8 @@ structure (do not wrap it in prose or a Markdown fence):
 }
 
 Use outcome "deliver" and status "ready" only when there are no blocking
-findings and no edits. Use outcome "edit" with status "issues" when only the
-listed local edits are needed; the host applies them and requires a fresh
-review. Use outcome "revise" with status "issues" when any substantive change
-is needed; do not attach edits in that case.
+findings. Use outcome "revise" with status "issues" when a substantive change
+is needed. Do not attach edits in the fixed acceptance path.
 
 `artifact_metadata` must contain only:
 {"artifact_type": "integration_review", "report_task": "integrate_review",

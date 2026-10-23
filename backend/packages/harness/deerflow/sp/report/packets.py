@@ -12,10 +12,7 @@ from deerflow.sp.report import store as report_store
 from deerflow.sp.report import tree as report_tree
 from deerflow.sp.report import writing as report_writing
 from deerflow.sp.report.ledger import ReportLedger, ReportValidationError, gap_next_action
-from deerflow.sp.report.prompts import (
-    REPORT_INTEGRATE_REVIEW_PROMPT,
-    REPORT_RESEARCH_PROMPT,
-)
+from deerflow.sp.report.prompts import REPORT_RESEARCH_PROMPT
 
 OUTLINE_SUMMARY_MAX_CHARS = 24_000
 OUTLINE_TREE_MAX_CHARS = 80_000
@@ -254,7 +251,6 @@ def build_integrate_review_packet(ledger: ReportLedger) -> dict[str, Any]:
         "sources": inputs_view["sources"],
         "citation_map": inputs_view["citation_map"],
         "current_review": ledger.payload.get("review"),
-        "instructions": REPORT_INTEGRATE_REVIEW_PROMPT,
     }
 
 

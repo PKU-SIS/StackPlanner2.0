@@ -487,7 +487,7 @@ def test_real_executor_review_revise_new_write_and_reassemble(tmp_path, monkeypa
         task="review candidate",
         target_agent="outline",
         stage="verification",
-        metadata={"report_task": "integrate_review"},
+        metadata={"report_task": "integrate_review", "report_acceptance_origin": "harness"},
     )
     review_meta: dict = {"stage": "verification"}
     review_refs: dict = {}
@@ -633,7 +633,7 @@ def test_real_executor_review_revise_new_write_and_reassemble(tmp_path, monkeypa
         task="review revised candidate",
         target_agent="outline",
         stage="verification",
-        metadata={"report_task": "integrate_review"},
+        metadata={"report_task": "integrate_review", "report_acceptance_origin": "harness"},
     )
     review_two_meta: dict = {"stage": "verification"}
     review_two_refs: dict = {}
@@ -1003,7 +1003,7 @@ def test_real_executor_integration_review_and_first_finish(tmp_path, monkeypatch
         task="review candidate",
         target_agent="outline",
         stage="verification",
-        metadata={"report_task": "integrate_review"},
+        metadata={"report_task": "integrate_review", "report_acceptance_origin": "harness"},
     )
     task_meta: dict = {"stage": "verification"}
     refs: dict = {}

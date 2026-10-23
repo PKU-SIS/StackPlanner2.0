@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, override
 
 from langchain.agents.middleware import AgentMiddleware
-from langchain.agents.middleware.types import ModelCallResult, ModelRequest, ModelResponse
+from langchain.agents.middleware.types import ModelCallResult, ModelRequest, ModelResponse, hook_config
 from langchain_core.messages import BaseMessage, HumanMessage
 
 from deerflow.agents.thread_state import ThreadState
@@ -34,6 +34,26 @@ class SPReportContextMiddleware(AgentMiddleware[ThreadState]):
     @override
     async def abefore_agent(self, state: ThreadState, runtime: Any) -> dict[str, Any] | None:
         return self.before_agent(state, runtime)
+
+    @hook_config(can_jump_to=["tools"])
+    def before_model(self, state: ThreadState, runtime: Any) -> dict[str, Any] | None:
+        """Let the report gate take over before a Central model call.
+
+        The synthetic message still goes through the existing control-tool
+        middleware; this hook only decides that the next model turn is not
+        needed and a fixed report action is due.
+        """
+        del runtime
+        from deerflow.sp.report.acceptance import next_acceptance_action
+
+        action = next_acceptance_action(state)
+        if action is None:
+            return None
+        return {"jump_to": "tools", "messages": [action]}
+
+    @hook_config(can_jump_to=["tools"])
+    async def abefore_model(self, state: ThreadState, runtime: Any) -> dict[str, Any] | None:
+        return self.before_model(state, runtime)
 
     @override
     def wrap_model_call(

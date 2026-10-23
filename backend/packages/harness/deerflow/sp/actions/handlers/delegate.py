@@ -635,7 +635,8 @@ class DelegateHandler:
             )
 
         report_role = str(task_metadata.get("report_role") or "")
-        if report_role != "writer":
+        integrate_review = report_role == "outline" and str(task_metadata.get("report_task") or "").strip().lower() == "integrate_review"
+        if report_role != "writer" and not integrate_review:
             generic_refs = build_handler_context_refs(context)
             generic_refs.update(context_refs)
             context_refs = generic_refs

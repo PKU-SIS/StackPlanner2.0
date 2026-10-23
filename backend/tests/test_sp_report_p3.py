@@ -140,7 +140,7 @@ def _prepare_review(ctx: HandlerContext, *, action_id: str = "a-review") -> tupl
         task="review candidate",
         target_agent="outline",
         stage="verification",
-        metadata={"report_task": "integrate_review"},
+        metadata={"report_task": "integrate_review", "report_acceptance_origin": "harness"},
     )
     meta: dict = {"stage": "verification"}
     refs: dict = {}

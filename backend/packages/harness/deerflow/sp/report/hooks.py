@@ -55,11 +55,11 @@ your model call. Do not edit the ledger by writing files. Use gap ids exactly.
 Follow each gap's next_action: open -> delegate researcher with
 metadata.report_gap_ids; awaiting_outline -> delegate outline; awaiting_user ->
 sp_ask_human with metadata.report_gap_ids; in_flight -> wait. After an Outline
-result, inspect the returned tree version and gap changes. In P3, after drafts
-are current, delegate Outline with report_task="integrate_review"; if local
-edits are applied, dispatch another integrate_review rather than finishing.
-sp_finish is allowed only for the current ready final and is blocked by any
-unfinished research/write/feedback/gap/input state.
+result, inspect the returned tree version and gap changes. Do not delegate
+integrate_review; the Harness fixed-acceptance gate owns that review. The gate
+uses only ready/revise; local-edit re-review loops are retired. sp_finish is
+allowed only for the current ready final and is blocked by any unfinished
+research/write/feedback/gap/input state.
 </report-control>
 """.strip()
 
@@ -380,6 +380,24 @@ def prepare_delegation(
         report_task = str(raw_report_task or "plan").strip().lower()
         if report_task not in {"plan", "revise", "integrate_review"}:
             raise ReportValidationError("report_task must be plan, revise, or integrate_review")
+        origin = str(task_metadata.get("report_acceptance_origin") or action.metadata.get("report_acceptance_origin") or "")
+        if report_task == "integrate_review" and origin != "harness":
+            raise ReportValidationError(
+                "integration review is harness-owned; Central must not delegate integrate_review"
+            )
+        if origin == "harness":
+            claimed_action_id = str(
+                task_metadata.get("report_acceptance_action_id")
+                or action.metadata.get("report_acceptance_action_id")
+                or ""
+            )
+            if claimed_action_id and claimed_action_id != action.action_id:
+                raise ReportValidationError("fixed acceptance action identity does not match the host action")
+            from deerflow.sp.report import acceptance as report_acceptance
+
+            pending_action_id = str(report_acceptance.acceptance_state(ledger).get("pending_action_id") or "")
+            if pending_action_id and pending_action_id != action.action_id:
+                raise ReportValidationError("fixed acceptance action is not the host-registered pending action")
         if report_task == "integrate_review":
             report_assembly.ensure_candidate(ledger)
             packet = report_packets.build_integrate_review_packet(ledger)
@@ -431,9 +449,12 @@ def configure_report_subagent(
     tools_by_name = {str(getattr(tool, "name", "")): tool for tool in available_tools}
     if role == "outline":
         report_task = str(task.metadata.get("report_task") or "plan").strip().lower()
-        selected = [tools_by_name[name] for name in [*REPORT_READ_TOOLS, "write_file"] if name in tools_by_name]
-        if "write_file" in tools_by_name and tools_by_name["write_file"] not in selected:
-            selected.append(tools_by_name["write_file"])
+        if report_task == "integrate_review":
+            selected = [tools_by_name[name] for name in REPORT_READ_TOOLS if name in tools_by_name]
+        else:
+            selected = [tools_by_name[name] for name in [*REPORT_READ_TOOLS, "write_file"] if name in tools_by_name]
+            if "write_file" in tools_by_name and tools_by_name["write_file"] not in selected:
+                selected.append(tools_by_name["write_file"])
         if "read_file" not in tools_by_name:
             raise ReportValidationError("report outline requires a configured read_file tool to read saved materials")
         if report_task != "integrate_review" and "write_file" not in tools_by_name:
@@ -443,7 +464,11 @@ def configure_report_subagent(
             register_tool = build_register_research_request_tool(paths=paths, action_id=task.action_id)
             selected.append(register_tool)
         prompt = REPORT_INTEGRATE_REVIEW_PROMPT if report_task == "integrate_review" else REPORT_OUTLINE_PROMPT
-        disallowed_tools = [name for name in (subagent_config.disallowed_tools or []) if name != "write_file"]
+        disallowed_tools = list(subagent_config.disallowed_tools or [])
+        if report_task == "integrate_review":
+            disallowed_tools = list(dict.fromkeys([*disallowed_tools, "write_file"]))
+        elif "write_file" in disallowed_tools:
+            disallowed_tools = [name for name in disallowed_tools if name != "write_file"]
         config = replace(
             subagent_config,
             system_prompt=_join_prompt(subagent_config.system_prompt, prompt),
@@ -519,7 +544,26 @@ def handle_failure(
     result: SPSubagentResult,
     task: SPSubagentTask,
 ) -> None:
-    if str(task.metadata.get("report_role") or "") == "writer":
+    report_role = str(task.metadata.get("report_role") or "")
+    report_task = str(task.metadata.get("report_task") or "").strip().lower()
+    report_origin = str(task.metadata.get("report_acceptance_origin") or action.metadata.get("report_acceptance_origin") or "")
+    if report_role == "outline" and report_task in {"integrate_review", "revise"} and report_origin == "harness":
+        report = report_context(context.state)
+        if report.is_active:
+            try:
+                paths = _paths_for_context(report)
+                with report_store.report_lock(paths):
+                    ledger = ReportLedger.load(paths)
+                    from deerflow.sp.report import acceptance as report_acceptance
+
+                    acceptance = report_acceptance.acceptance_state(ledger)
+                    acceptance["status"] = "technical_failed"
+                    acceptance["technical_failure_count"] = int(acceptance.get("technical_failure_count") or 0) + 1
+                    ledger.save()
+            except Exception:  # noqa: BLE001 - preserve the real execution failure
+                pass
+        return
+    if report_role == "writer":
         key = str(task.metadata.get("report_write_key") or "")
         report = report_context(context.state)
         if report.is_active:
@@ -749,6 +793,23 @@ def _finalize_integration_review(
     return final_record, artifact
 
 
+def _integration_review_technical_reason(result: SPSubagentResult) -> str | None:
+    error = str(result.error or "").strip()
+    if error:
+        return error
+    stop_reason = str(result.stop_reason or "").strip()
+    if stop_reason in {"token_capped", "turn_capped", "loop_capped"}:
+        return f"execution stopped by {stop_reason}"
+    finish_reason = str(result.finish_reason or "").strip()
+    has_artifact = bool(result.artifact_content) or bool(result.artifact_metadata.get("created_paths"))
+    if finish_reason == "length" and not has_artifact:
+        return "finish_reason=length without a usable review artifact"
+    completion_status = str(result.completion_status or result.artifact_metadata.get("completion_status") or "").strip().lower()
+    if completion_status and completion_status != "complete" and not has_artifact:
+        return f"completion_status={completion_status} without a usable review artifact"
+    return None
+
+
 def _accept_integrate_review_locked(
     action: SPAction,
     context: HandlerContext,
@@ -760,6 +821,24 @@ def _accept_integrate_review_locked(
     paths: report_store.ReportPaths,
 ) -> HandlerResult:
     ledger = ReportLedger.load(paths)
+    technical_reason = _integration_review_technical_reason(result)
+    if technical_reason is not None:
+        from deerflow.sp.report import acceptance as report_acceptance
+
+        acceptance = report_acceptance.acceptance_state(ledger)
+        acceptance["status"] = "technical_failed"
+        acceptance["technical_failure_count"] = int(acceptance.get("technical_failure_count") or 0) + 1
+        ledger.save()
+        return _rejection(
+            action,
+            context,
+            "Integration review technical abort before business parsing: " + technical_reason,
+            reason="integration_review_technical_abort",
+            stop_reason=result.stop_reason,
+            finish_reason=result.finish_reason,
+            completion_status=result.completion_status,
+            technical=True,
+        )
     candidate = ledger.payload.get("candidate")
     if not isinstance(candidate, Mapping):
         return _rejection(action, context, "Integration review rejected: no current assembly candidate.", reason="review_candidate_missing")
@@ -790,6 +869,13 @@ def _accept_integrate_review_locked(
     except ReportValidationError as exc:
         return _rejection(action, context, f"Integration review rejected: {exc}", reason="stale_review_inputs")
     review_body = parsed["review"]
+    if str(task.metadata.get("report_acceptance_origin") or "") == "harness" and review_body["outcome"] == "edit":
+        return _rejection(
+            action,
+            context,
+            "Integration review rejected: fixed Harness acceptance supports ready/revise only; local edits require a revise cycle.",
+            reason="invalid_integration_review",
+        )
     reviews = ledger.payload.get("reviews") if isinstance(ledger.payload.get("reviews"), list) else []
     review_id = report_store.next_identifier("rv", [str(item.get("review_id")) for item in reviews if isinstance(item, Mapping)])
     review_record = {
@@ -1381,6 +1467,15 @@ def _accept_outline_locked(
         report_tree.commit_tree(candidate, version=version, path=tree_path, ledger=working)
         report_assembly.invalidate_review(working, "accepted tree changed")
         working.payload.pop("rejected_outline", None)
+        if (
+            str(task.metadata.get("report_acceptance_origin") or action.metadata.get("report_acceptance_origin") or "") == "harness"
+            and str(task.metadata.get("report_task") or action.metadata.get("report_task") or "").strip().lower() == "revise"
+        ):
+            from deerflow.sp.report import acceptance as report_acceptance
+
+            acceptance = report_acceptance.acceptance_state(working)
+            acceptance["status"] = "revision_complete"
+            acceptance["pending_action_id"] = None
         working.save()
         ledger = working
     except ReportValidationError as exc:
