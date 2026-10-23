@@ -209,6 +209,25 @@ def _outline_model() -> FakeToolCallingModel:
     )
 
 
+def _host_fixed_action(state):
+    from deerflow.sp.report.acceptance import next_acceptance_action
+
+    message = next_acceptance_action(state)
+    assert message is not None
+    call = message.tool_calls[0]
+    args = dict(call["args"])
+    return SPAction.create(
+        ActionType.DELEGATE,
+        action_id=f"spact_{call['id']}",
+        reason=args["reason"],
+        task=args["task"],
+        target_agent=args["target_agent"],
+        stage=args["stage"],
+        expected_output=args.get("expected_output"),
+        metadata=dict(args["metadata"]),
+    )
+
+
 def test_real_executor_outline_registers_gap_before_tree_is_accepted(tmp_path, monkeypatch, real_executor):
     app_config = _app_config()
     state = _state(tmp_path)
@@ -480,15 +499,7 @@ def test_real_executor_review_revise_new_write_and_reassemble(tmp_path, monkeypa
     assert writer_result.next_step == "continue", writer_result.error
     ctx.state.update(writer_result.state_update)
 
-    review_action = SPAction.create(
-        ActionType.DELEGATE,
-        action_id="a-review-v1",
-        reason="review",
-        task="review candidate",
-        target_agent="outline",
-        stage="verification",
-        metadata={"report_task": "integrate_review", "report_acceptance_origin": "harness"},
-    )
+    review_action = _host_fixed_action(state)
     review_meta: dict = {"stage": "verification"}
     review_refs: dict = {}
     hooks.prepare_delegation(review_action, ctx, review_meta, review_refs)
@@ -559,15 +570,7 @@ def test_real_executor_review_revise_new_write_and_reassemble(tmp_path, monkeypa
         ]
     )
     _install_fake_model(monkeypatch, revise_model, real_executor)
-    revise_action = SPAction.create(
-        ActionType.DELEGATE,
-        action_id="a-outline-v2",
-        reason="revise",
-        task="revise the report",
-        target_agent="outline",
-        stage="planning",
-        metadata={"report_task": "revise"},
-    )
+    revise_action = _host_fixed_action(state)
     revise_handler = DelegateHandler(
         executor=DR2SubagentExecutorAdapter(
             _executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool, write_file_tool], "sp-outline", real_executor)
@@ -626,15 +629,7 @@ def test_real_executor_review_revise_new_write_and_reassemble(tmp_path, monkeypa
     assert writer_two_result.next_step == "continue", writer_two_result.error
     ctx.state.update(writer_two_result.state_update)
 
-    review_two_action = SPAction.create(
-        ActionType.DELEGATE,
-        action_id="a-review-v2",
-        reason="review revised",
-        task="review revised candidate",
-        target_agent="outline",
-        stage="verification",
-        metadata={"report_task": "integrate_review", "report_acceptance_origin": "harness"},
-    )
+    review_two_action = _host_fixed_action(state)
     review_two_meta: dict = {"stage": "verification"}
     review_two_refs: dict = {}
     hooks.prepare_delegation(review_two_action, ctx, review_two_meta, review_two_refs)
@@ -996,15 +991,7 @@ def test_real_executor_integration_review_and_first_finish(tmp_path, monkeypatch
     ]
     ledger.save()
 
-    action = SPAction.create(
-        ActionType.DELEGATE,
-        action_id="a-integrate-e2e",
-        reason="review",
-        task="review candidate",
-        target_agent="outline",
-        stage="verification",
-        metadata={"report_task": "integrate_review", "report_acceptance_origin": "harness"},
-    )
+    action = _host_fixed_action(state)
     task_meta: dict = {"stage": "verification"}
     refs: dict = {}
     hooks.prepare_delegation(action, ctx, task_meta, refs)

@@ -391,13 +391,13 @@ def prepare_delegation(
                 or action.metadata.get("report_acceptance_action_id")
                 or ""
             )
-            if claimed_action_id and claimed_action_id != action.action_id:
-                raise ReportValidationError("fixed acceptance action identity does not match the host action")
             from deerflow.sp.report import acceptance as report_acceptance
 
             pending_action_id = str(report_acceptance.acceptance_state(ledger).get("pending_action_id") or "")
-            if pending_action_id and pending_action_id != action.action_id:
-                raise ReportValidationError("fixed acceptance action is not the host-registered pending action")
+            if not claimed_action_id or not pending_action_id:
+                raise ReportValidationError("fixed acceptance action identity must be registered by the host")
+            if claimed_action_id != action.action_id or pending_action_id != action.action_id:
+                raise ReportValidationError("fixed acceptance action identity does not match the host-registered pending action")
         if report_task == "integrate_review":
             report_assembly.ensure_candidate(ledger)
             packet = report_packets.build_integrate_review_packet(ledger)
@@ -558,6 +558,7 @@ def handle_failure(
 
                     acceptance = report_acceptance.acceptance_state(ledger)
                     acceptance["status"] = "technical_failed"
+                    acceptance["retry_kind"] = "review" if report_task == "integrate_review" else "revise"
                     acceptance["technical_failure_count"] = int(acceptance.get("technical_failure_count") or 0) + 1
                     ledger.save()
             except Exception:  # noqa: BLE001 - preserve the real execution failure
@@ -810,6 +811,19 @@ def _integration_review_technical_reason(result: SPSubagentResult) -> str | None
     return None
 
 
+def _mark_acceptance_review_completed(ledger: ReportLedger, review_id: str) -> None:
+    """Mark a completed review without re-counting a retry of the same review."""
+    from deerflow.sp.report import acceptance as report_acceptance
+
+    acceptance = report_acceptance.acceptance_state(ledger)
+    if str(acceptance.get("last_review_id") or "") != review_id:
+        acceptance["review_count"] = int(acceptance.get("review_count") or 0) + 1
+    acceptance["last_review_id"] = review_id
+    acceptance["status"] = "review_completed"
+    acceptance["pending_action_id"] = None
+    acceptance["retry_kind"] = None
+
+
 def _accept_integrate_review_locked(
     action: SPAction,
     context: HandlerContext,
@@ -827,6 +841,7 @@ def _accept_integrate_review_locked(
 
         acceptance = report_acceptance.acceptance_state(ledger)
         acceptance["status"] = "technical_failed"
+        acceptance["retry_kind"] = "review"
         acceptance["technical_failure_count"] = int(acceptance.get("technical_failure_count") or 0) + 1
         ledger.save()
         return _rejection(
@@ -869,7 +884,7 @@ def _accept_integrate_review_locked(
     except ReportValidationError as exc:
         return _rejection(action, context, f"Integration review rejected: {exc}", reason="stale_review_inputs")
     review_body = parsed["review"]
-    if str(task.metadata.get("report_acceptance_origin") or "") == "harness" and review_body["outcome"] == "edit":
+    if str(task.metadata.get("report_acceptance_origin") or action.metadata.get("report_acceptance_origin") or "") == "harness" and review_body["outcome"] == "edit":
         return _rejection(
             action,
             context,
@@ -951,6 +966,7 @@ def _accept_integrate_review_locked(
             ledger.payload["reviews"] = reviews
             ledger.payload["review"] = review_record
             ledger.payload["outline_review_due"] = False
+            _mark_acceptance_review_completed(ledger, review_id)
             ledger.save()
             entry = context.stack.append_observe(
                 json.dumps(
@@ -995,6 +1011,7 @@ def _accept_integrate_review_locked(
         reviews.append(review_record)
         ledger.payload["reviews"] = reviews
         ledger.payload["outline_review_due"] = False
+        _mark_acceptance_review_completed(ledger, review_id)
         ledger.save()
     except (ReportValidationError, OSError, ValueError) as exc:
         return _rejection(action, context, f"Integration review could not be applied: {exc}", reason="integration_review_apply_failed")
@@ -1414,6 +1431,17 @@ def _accept_outline_locked(
         rejected = _store_rejected_outline(ledger, action, result, error, source_text=source_text)
         if rejected:
             error += f" rejected_candidate: {rejected['virtual_path']}"
+        if (
+            str(task.metadata.get("report_acceptance_origin") or action.metadata.get("report_acceptance_origin") or "") == "harness"
+            and str(task.metadata.get("report_task") or action.metadata.get("report_task") or "").strip().lower() == "revise"
+        ):
+            from deerflow.sp.report import acceptance as report_acceptance
+
+            acceptance = report_acceptance.acceptance_state(ledger)
+            acceptance["status"] = "technical_failed"
+            acceptance["retry_kind"] = "revise"
+            acceptance["technical_failure_count"] = int(acceptance.get("technical_failure_count") or 0) + 1
+            ledger.save()
         return _rejection(
             action,
             context,
@@ -1475,7 +1503,9 @@ def _accept_outline_locked(
 
             acceptance = report_acceptance.acceptance_state(working)
             acceptance["status"] = "revision_complete"
+            acceptance["content_revision_used"] = True
             acceptance["pending_action_id"] = None
+            acceptance["retry_kind"] = None
         working.save()
         ledger = working
     except ReportValidationError as exc:
@@ -2010,6 +2040,12 @@ def deliver_report(context: HandlerContext, action: SPAction) -> dict[str, Any] 
         report_store.write_json_atomic(delivery_path, delivered)
         ledger.payload["delivered"] = delivered
         ledger.payload["status"] = "delivered"
+        from deerflow.sp.report import acceptance as report_acceptance
+
+        acceptance = report_acceptance.acceptance_state(ledger)
+        acceptance["status"] = "delivered"
+        acceptance["pending_action_id"] = None
+        acceptance["retry_kind"] = None
         ledger.save()
         return delivered
 

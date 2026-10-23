@@ -133,6 +133,14 @@ def _seed(tmp_path: Path, *, write_status: str | None = None, body: str = "Seed 
 
 
 def _prepare_review(ctx: HandlerContext, *, action_id: str = "a-review") -> tuple[SPAction, SPSubagentTask, object]:
+    # Lower-level assembly/edit tests intentionally exercise the legacy review
+    # apply path without the fixed host action registry.  Production entry
+    # points are covered separately by test_sp_report_acceptance_*.
+    from deerflow.sp.report import assembly as report_assembly, packets as report_packets
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    report_assembly.ensure_candidate(ledger)
+    packet = report_packets.build_integrate_review_packet(ledger)
     action = SPAction.create(
         ActionType.DELEGATE,
         action_id=action_id,
@@ -140,11 +148,15 @@ def _prepare_review(ctx: HandlerContext, *, action_id: str = "a-review") -> tupl
         task="review candidate",
         target_agent="outline",
         stage="verification",
-        metadata={"report_task": "integrate_review", "report_acceptance_origin": "harness"},
+        metadata={"report_task": "integrate_review"},
     )
-    meta: dict = {"stage": "verification"}
-    refs: dict = {}
-    hooks.prepare_delegation(action, ctx, meta, refs)
+    meta: dict = {
+        "stage": "verification",
+        "report_id": ledger.payload.get("report_id"),
+        "report_role": "outline",
+        "report_task": "integrate_review",
+    }
+    refs: dict = {"report_packet": packet}
     task = SPSubagentTask(
         action_id=action_id,
         subagent_type="outline",
