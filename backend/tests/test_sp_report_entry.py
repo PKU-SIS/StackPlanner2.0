@@ -16,6 +16,7 @@ from deerflow.sp.report import store as report_store
 from deerflow.sp.report.ledger import ReportLedger
 from deerflow.sp.report.presentation import derive_report_view
 from deerflow.sp.subagents import SPSubagentResult, SPSubagentStatus, SPSubagentTask
+from deerflow.sp.subagents.dr2_adapter import _merge_research_continuations
 
 
 class _CapturingExecutor:
@@ -31,6 +32,55 @@ class _CapturingExecutor:
             artifact_type="research_observation",
             artifact_metadata={"completion_status": "complete", "gap_attempts": []},
         )
+
+
+class _MergedResearchExecutor:
+    def __init__(self, result: SPSubagentResult) -> None:
+        self.result = result
+
+    def execute(self, _task: SPSubagentTask) -> SPSubagentResult:
+        return self.result
+
+
+def test_merged_research_latest_state_is_consumed_by_delegate_observe(tmp_path):
+    first = SPSubagentResult(
+        status=SPSubagentStatus.COMPLETED,
+        result="first pass: A2A comparison still missing",
+        artifact_content="first pass body",
+        artifact_type="research_observation",
+        artifact_metadata={
+            "completion_status": "partial",
+            "evidence_gaps": ["A2A comparison still missing"],
+            "central_evidence_preview": "first preview only",
+        },
+    )
+    second = SPSubagentResult(
+        status=SPSubagentStatus.COMPLETED,
+        result="second pass: A2A comparison found",
+        artifact_content="second pass body",
+        artifact_type="research_observation",
+        artifact_metadata={
+            "completion_status": "complete",
+            "evidence_gaps": [],
+            "central_evidence_preview": "second preview with A2A comparison",
+        },
+    )
+    merged = _merge_research_continuations([first, second])
+    assert merged.result == "second pass: A2A comparison found"
+    assert merged.artifact_metadata["evidence_gaps"] == []
+    assert merged.artifact_metadata["central_evidence_preview"] == "second preview with A2A comparison"
+    assert "first pass body" in (merged.artifact_content or "")
+    assert "second pass body" in (merged.artifact_content or "")
+
+    ctx = HandlerContext(state=_state(tmp_path), stack=TaskMemoryStack(), thread_id="t1", run_id="run1")
+    result = DelegateHandler(executor=_MergedResearchExecutor(merged)).handle(_action(), ctx)
+
+    assert result.next_step == "continue"
+    observed = str(ctx.stack.entries[-1].content)
+    assert "second preview with A2A comparison" in observed
+    assert "second pass: A2A comparison found" in observed
+    assert "first preview only" not in observed
+    assert "A2A comparison still missing" not in observed
 
 
 def _state(tmp_path: Path) -> dict:

@@ -830,7 +830,6 @@ def _merge_research_continuations(
 
     successful = [result for result in results if result.status == SPSubagentStatus.COMPLETED]
     base = successful[-1] if successful else results[-1]
-    summaries = list(dict.fromkeys(str(result.result).strip() for result in successful if result.result and str(result.result).strip()))
     artifact_sections: list[str] = []
     remaining_chars = _RESEARCH_CONTINUATION_CONTEXT_MAX_CHARS
     indexed_results = list(enumerate(successful, start=1))
@@ -851,9 +850,9 @@ def _merge_research_continuations(
     metadata = dict(base.artifact_metadata)
     metadata["research_continuation_attempts"] = len(results) - 1
     metadata["research_pass_count"] = len(results)
-    structured_previews = list(dict.fromkeys(preview for result in reversed(successful) if (preview := _structured_evidence_preview(result.artifact_content))))
-    if structured_previews:
-        metadata["central_evidence_preview"] = " | ".join(structured_previews)[:_CENTRAL_STRUCTURED_EVIDENCE_PREVIEW_MAX_CHARS]
+    latest_preview = _structured_evidence_preview(base.artifact_content)
+    if latest_preview:
+        metadata["central_evidence_preview"] = latest_preview[:_CENTRAL_STRUCTURED_EVIDENCE_PREVIEW_MAX_CHARS]
     failed_tail = results[-1] if results[-1].status != SPSubagentStatus.COMPLETED else None
     if failed_tail is not None:
         metadata["completion_status"] = "partial"
@@ -866,7 +865,10 @@ def _merge_research_continuations(
 
     return SPSubagentResult(
         status=base.status,
-        result=_compact_result(" | ".join(summaries)),
+        # The latest successful research pass is the current result. Earlier
+        # passes remain visible in artifact_content/history above; they must
+        # not overwrite the current summary with stale gaps.
+        result=base.result,
         error=failed_tail.error if failed_tail is not None else base.error,
         stop_reason=failed_tail.stop_reason if failed_tail is not None else base.stop_reason,
         finish_reason=(failed_tail.finish_reason if failed_tail is not None and failed_tail.finish_reason else base.finish_reason),
