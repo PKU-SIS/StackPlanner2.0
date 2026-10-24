@@ -11,8 +11,8 @@ from langchain_core.messages import HumanMessage
 from deerflow.sp.actions.handlers.base import HandlerContext
 from deerflow.sp.actions.schema import ActionType, SPAction
 from deerflow.sp.artifacts import SPArtifactAdapter
-from deerflow.sp.memory import TaskMemoryStack
 from deerflow.sp.events.adapter import normalize_sp_event_for_store
+from deerflow.sp.memory import TaskMemoryStack
 from deerflow.sp.report import hooks, packets, writing
 from deerflow.sp.report import store as report_store
 from deerflow.sp.report.ledger import ReportLedger, ReportValidationError
@@ -876,7 +876,7 @@ def test_outline_file_delivery_accepts_complete_tree_from_host_path(tmp_path):
     assert not ledger.payload.get("rejected_outline")
 
 
-def test_outline_complete_file_with_token_cap_is_not_committed(tmp_path):
+def test_outline_complete_file_with_token_cap_is_committed(tmp_path):
     ctx = _context(tmp_path)
     action, task = _delegate(ctx, "a-outline-capped", "outline", {"report_task": "plan"})
     delivery_path = Path(task.metadata["outline_delivery_path"])
@@ -893,16 +893,16 @@ def test_outline_complete_file_with_token_cap_is_not_committed(tmp_path):
         artifact_metadata={"completion_status": "partial", "delivery_mode": "file", "tree_path": str(delivery_path)},
     )
 
-    rejected = hooks.handle_success(action, ctx, result, task, artifact_adapter=SPArtifactAdapter(), delegate_entry=entry)
+    accepted = hooks.handle_success(action, ctx, result, task, artifact_adapter=SPArtifactAdapter(), delegate_entry=entry)
 
-    assert rejected.next_step == "error_recoverable"
-    assert "token_capped" in (rejected.error or "")
-    assert "no tree" in (rejected.error or "")
+    assert accepted.next_step == "continue", accepted.error
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
-    assert ledger.payload.get("tree") is None
-    assert ledger.payload.get("write_requests") == []
+    assert ledger.payload["tree"]["version"] == 1
+    accepted_tree = json.loads(Path(ledger.payload["tree"]["path"]).read_text(encoding="utf-8"))
+    assert accepted_tree["write_requests"][0]["key"] == "w-cap"
+    assert accepted_tree["accepted_with_stop_reason"] == "token_capped"
     assert delivery_path.is_file()
-    assert ledger.payload.get("rejected_outline")
+    assert not ledger.payload.get("rejected_outline")
 
 
 def test_outline_declared_file_failure_does_not_fallback_to_inline(tmp_path):
