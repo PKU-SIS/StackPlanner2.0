@@ -286,6 +286,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             except Exception:
                 logger.exception("Failed to stop scheduled task service")
 
+        # Close loop-owned model clients while the main event loop is still
+        # running. Persistent subagent loops close their own clients in
+        # _shutdown_isolated_subagent_loop; temporary loops close in
+        # SubagentExecutor._aexecute_with_loop_cleanup.
+        try:
+            from deerflow.models.factory import close_loop_async_clients
+
+            await close_loop_async_clients(asyncio.get_running_loop())
+        except Exception:
+            logger.exception("Failed to close main-loop async model clients")
+
     logger.info("Shutting down API Gateway")
 
 

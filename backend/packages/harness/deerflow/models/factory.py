@@ -1,6 +1,10 @@
 import asyncio
 import logging
+import threading
+import weakref
+from typing import Any
 
+import httpx
 from langchain.chat_models import BaseChatModel
 
 from deerflow.config import get_app_config
@@ -9,6 +13,64 @@ from deerflow.reflection import resolve_class
 from deerflow.tracing import build_tracing_callbacks
 
 logger = logging.getLogger(__name__)
+
+# Async clients are bound to the event loop that constructed them.  The
+# upstream langchain-openai default client cache is keyed only by base URL,
+# timeout, and socket options, so Central and isolated subagent loops can
+# accidentally share one HTTP connection pool across loops.  Keep our own
+# loop-owned registry instead; it is deliberately small and local to model
+# construction, not a general resource-management layer.
+_LOOP_ASYNC_CLIENTS: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[tuple[Any, ...], httpx.AsyncClient]]" = weakref.WeakKeyDictionary()
+_LOOP_ASYNC_CLIENTS_LOCK = threading.Lock()
+
+
+def get_loop_async_client(
+    *,
+    timeout: Any = None,
+    base_url: str | None = None,
+) -> httpx.AsyncClient | None:
+    """Return the async client owned by the current event loop, if any.
+
+    ``None`` means the caller is outside an event loop; in that case the
+    normal LangChain construction path remains unchanged.  The same loop and
+    connection settings reuse one client intentionally; different loops never
+    share one.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+    key = (base_url, repr(timeout))
+    with _LOOP_ASYNC_CLIENTS_LOCK:
+        clients = _LOOP_ASYNC_CLIENTS.get(loop)
+        if clients is None:
+            clients = {}
+            _LOOP_ASYNC_CLIENTS[loop] = clients
+        client = clients.get(key)
+        if client is None or client.is_closed:
+            client = httpx.AsyncClient(timeout=timeout)
+            clients[key] = client
+        return client
+
+
+async def close_loop_async_clients(loop: asyncio.AbstractEventLoop | None = None) -> None:
+    """Close all model-created async clients owned by *loop*.
+
+    The caller must invoke this from inside the owning loop (and before
+    stopping that loop).  Clients supplied explicitly by callers are not in
+    this registry and therefore retain their original owner.
+    """
+    if loop is None:
+        loop = asyncio.get_running_loop()
+    with _LOOP_ASYNC_CLIENTS_LOCK:
+        clients = _LOOP_ASYNC_CLIENTS.pop(loop, {})
+    for client in list(clients.values()):
+        if client.is_closed:
+            continue
+        try:
+            await client.aclose()
+        except Exception:  # noqa: BLE001 - shutdown must continue
+            logger.warning("Failed to close loop-owned async client", exc_info=True)
 
 
 def _runtime_identity(model: BaseChatModel) -> str:
@@ -313,6 +375,14 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
     for key, value in kwargs.items():
         if value is not None or key not in model_init_kwargs:
             model_init_kwargs[key] = value
+    model_fields = getattr(model_class, "model_fields", {})
+    if "http_async_client" in model_fields and "http_async_client" not in model_init_kwargs:
+        loop_client = get_loop_async_client(
+            timeout=model_init_kwargs.get("timeout"),
+            base_url=model_init_kwargs.get("base_url") or model_init_kwargs.get("openai_api_base"),
+        )
+        if loop_client is not None:
+            model_init_kwargs["http_async_client"] = loop_client
     model_instance = model_class(**model_init_kwargs)
     logger.info("chat model client created name=%s %s", name, _runtime_identity(model_instance))
 

@@ -26,6 +26,7 @@ from deerflow.agents.thread_state import SandboxState, ThreadDataState, ThreadSt
 from deerflow.config import get_app_config
 from deerflow.config.app_config import AppConfig
 from deerflow.models import create_chat_model
+from deerflow.models.factory import close_loop_async_clients
 from deerflow.runtime.secret_context import ACTIVE_SECRETS_CONTEXT_KEY
 from deerflow.skills.tool_policy import filter_tools_by_skill_allowed_tools
 from deerflow.skills.types import Skill, SkillCategory
@@ -348,7 +349,20 @@ def _shutdown_isolated_subagent_loop() -> None:
         return
 
     if loop.is_running():
+        try:
+            close_future = asyncio.run_coroutine_threadsafe(
+                close_loop_async_clients(loop),
+                loop,
+            )
+            close_future.result(timeout=5)
+        except Exception:
+            logger.warning("Failed to close isolated-loop async clients", exc_info=True)
         loop.call_soon_threadsafe(loop.stop)
+    elif not loop.is_closed():
+        try:
+            loop.run_until_complete(close_loop_async_clients(loop))
+        except Exception:
+            logger.warning("Failed to close stopped-loop async clients", exc_info=True)
 
     if thread is not None and thread.is_alive() and thread is not threading.current_thread():
         thread.join(timeout=1)
@@ -857,6 +871,25 @@ class SubagentExecutor:
 
         return state, final_tools, deferred_setup
 
+    async def _aexecute_with_loop_cleanup(
+        self,
+        task: str,
+        result_holder: SubagentResult | None = None,
+    ) -> SubagentResult:
+        """Run a temporary ``asyncio.run`` execution and clean its loop clients.
+
+        This wrapper is only used by the no-running-loop / temporary-loop
+        branch.  The persistent subagent loop and the main application loop
+        are closed at their own lifecycle boundaries, never here.
+        """
+        try:
+            return await self._aexecute(task, result_holder)
+        finally:
+            try:
+                await close_loop_async_clients(asyncio.get_running_loop())
+            except Exception:
+                logger.warning("Failed to clean temporary subagent loop clients", exc_info=True)
+
     async def _aexecute(self, task: str, result_holder: SubagentResult | None = None) -> SubagentResult:
         """Execute a task asynchronously.
 
@@ -1179,8 +1212,10 @@ class SubagentExecutor:
                 logger.debug(f"[trace={self.trace_id}] Subagent {self.config.name} detected running event loop, using isolated loop")
                 return self._execute_in_isolated_loop(task, result_holder)
 
-            # Standard path: no running event loop, use asyncio.run
-            return asyncio.run(self._aexecute(task, result_holder))
+            # Standard path: no running event loop, use a temporary loop.
+            # The dedicated wrapper cleans loop-owned clients in its finally
+            # while the temporary loop is still running.
+            return asyncio.run(self._aexecute_with_loop_cleanup(task, result_holder))
         except Exception as e:
             logger.exception(f"[trace={self.trace_id}] Subagent {self.config.name} execution failed")
             # Create a result with error if we don't have one
