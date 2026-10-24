@@ -55,6 +55,23 @@ class Article:
         return content
 
 
+def extract_readable_markdown(raw_html: str) -> tuple[str | None, str | None]:
+    """Extract readable Markdown from HTML using the existing extractor.
+
+    Returns ``(markdown, error)``.  A placeholder/empty extraction is a
+    failure, not valid body text.
+    """
+    try:
+        article = ReadabilityExtractor().extract_article(raw_html)
+        markdown = article.to_markdown().strip()
+    except Exception as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+    lowered = markdown.lower()
+    if not markdown or "no content could be extracted" in lowered or "no content available" in lowered:
+        return None, "readability extraction returned no content"
+    return markdown, None
+
+
 class ReadabilityExtractor:
     def extract_article(self, html: str) -> Article:
         try:

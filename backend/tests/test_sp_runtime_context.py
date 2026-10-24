@@ -240,6 +240,117 @@ def test_delegate_tool_policy_applies_validated_requested_allowlist():
     assert config.tools is None
 
 
+def test_ordinary_researcher_gets_read_file_without_losing_requested_tools():
+    config = SubagentConfig(
+        name="sp-researcher",
+        description="research",
+        tools=None,
+        disallowed_tools=["present_files"],
+    )
+    task = SPSubagentTask(
+        action_id="delegate-research",
+        subagent_type="researcher",
+        task="Fetch and read a long page",
+        description="Need web evidence",
+        metadata={"tool_names": ["web_fetch"]},
+    )
+
+    selected = _apply_task_tool_policy(
+        config,
+        task,
+        available_tools=[
+            SimpleNamespace(name="web_fetch"),
+            SimpleNamespace(name="read_file"),
+        ],
+    )
+
+    assert selected.tools == ["web_fetch", "read_file"]
+    assert task.metadata["tool_names"] == ["web_fetch", "read_file"]
+    assert task.allowed_tools == ["web_fetch", "read_file"]
+
+
+def test_ordinary_researcher_respects_explicit_read_file_denial():
+    config = SubagentConfig(
+        name="sp-researcher",
+        description="research",
+        tools=None,
+        disallowed_tools=["read_file"],
+    )
+    task = SPSubagentTask(
+        action_id="delegate-research-denied",
+        subagent_type="researcher",
+        task="Fetch",
+        description="No local reads",
+        metadata={"tool_names": ["web_fetch"]},
+    )
+
+    selected = _apply_task_tool_policy(
+        config,
+        task,
+        available_tools=[
+            SimpleNamespace(name="web_fetch"),
+            SimpleNamespace(name="read_file"),
+        ],
+    )
+
+    assert selected.tools == ["web_fetch"]
+    assert "read_file" not in task.metadata["tool_names"]
+
+
+def test_ordinary_researcher_does_not_add_read_file_outside_role_allowlist():
+    config = SubagentConfig(
+        name="sp-researcher",
+        description="research",
+        tools=["web_fetch"],
+    )
+    task = SPSubagentTask(
+        action_id="delegate-research-role-limited",
+        subagent_type="researcher",
+        task="Fetch",
+        description="Role limit",
+        metadata={"tool_names": ["web_fetch"]},
+    )
+
+    selected = _apply_task_tool_policy(
+        config,
+        task,
+        available_tools=[
+            SimpleNamespace(name="web_fetch"),
+            SimpleNamespace(name="read_file"),
+        ],
+    )
+
+    assert selected.tools == ["web_fetch"]
+    assert "read_file" not in task.metadata["tool_names"]
+
+
+def test_report_researcher_does_not_use_normal_research_tool_augmentation():
+    config = SubagentConfig(
+        name="sp-report-researcher",
+        description="report research",
+        tools=None,
+        disallowed_tools=[],
+    )
+    task = SPSubagentTask(
+        action_id="delegate-report-research",
+        subagent_type="researcher",
+        task="Report research",
+        description="Report path",
+        metadata={"tool_names": ["web_fetch"], "report_role": "researcher"},
+    )
+
+    selected = _apply_task_tool_policy(
+        config,
+        task,
+        available_tools=[
+            SimpleNamespace(name="web_fetch"),
+            SimpleNamespace(name="read_file"),
+        ],
+    )
+
+    assert selected.tools == ["web_fetch"]
+
+
 def test_delegate_tool_policy_ignores_output_formats_misfiled_as_tool_names():
     config = SubagentConfig(
         name="sp-reporter",

@@ -323,12 +323,32 @@ def _apply_task_tool_policy(
         )
         return subagent_config
     available_names = {str(getattr(tool, "name", "")) for tool in available_tools}
+    denied = set(subagent_config.disallowed_tools or [])
+    role_allowlist = set(subagent_config.tools) if subagent_config.tools is not None else None
+
+    # Ordinary web research can externalize a large fetch result to
+    # .tool-results and explicitly ask the model to read it back.  Supply that
+    # read dependency only for the normal researcher path, and only when the
+    # role/user policy still allows read_file.  Report roles have their own
+    # host-bound read tool set.
+    is_report_role = bool(task.metadata.get("report_role"))
+    if (
+        not is_report_role
+        and task.subagent_type == "researcher"
+        and any(name in requested for name in ("web_fetch", "web_search"))
+        and "read_file" in available_names
+        and "read_file" not in denied
+        and (role_allowlist is None or "read_file" in role_allowlist)
+        and "read_file" not in requested
+    ):
+        requested.append("read_file")
+        task.metadata["tool_names"] = requested
+        task.allowed_tools = list(requested)
+
     unavailable = sorted(set(requested) - available_names)
     if unavailable:
         raise ValueError(f"SP action requested unavailable Tools: {unavailable}")
 
-    denied = set(subagent_config.disallowed_tools or [])
-    role_allowlist = set(subagent_config.tools) if subagent_config.tools is not None else None
     forbidden = sorted(name for name in requested if name in denied or (role_allowlist is not None and name not in role_allowlist))
     if forbidden:
         raise ValueError(f"SP action requested Tools forbidden for {subagent_config.name}: {forbidden}")

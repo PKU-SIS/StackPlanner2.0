@@ -11,6 +11,7 @@ from langchain.tools import tool
 
 from deerflow.community.url_safety import validate_public_http_url
 from deerflow.config import get_app_config
+from deerflow.utils.readability import extract_readable_markdown
 
 DEFAULT_TIMEOUT_SECONDS = 20.0
 DEFAULT_MAX_BYTES = 1_048_576
@@ -76,7 +77,13 @@ def _tool_options() -> dict[str, Any]:
     }
 
 
-def _decode_body(response: httpx.Response, body: bytes, *, max_chars: int) -> str:
+def _decode_body(
+    response: httpx.Response,
+    body: bytes,
+    *,
+    max_chars: int,
+    extract_html: bool = False,
+) -> str:
     encoding = response.encoding or "utf-8"
     text = body.decode(encoding, errors="replace")
     content_type = response.headers.get("content-type", "").lower()
@@ -89,6 +96,11 @@ def _decode_body(response: httpx.Response, body: bytes, *, max_chars: int) -> st
             )
         except json.JSONDecodeError:
             pass
+    elif extract_html and "html" in content_type:
+        markdown, extraction_error = extract_readable_markdown(text)
+        if extraction_error is not None:
+            return f"Error: HTML body extraction failed: {extraction_error}"
+        text = markdown
     if len(text) <= max_chars:
         return text
     return f"{text[:max_chars]}\n...<truncated>"
@@ -103,8 +115,15 @@ async def fetch_public_url(
     allow_private_addresses: bool = False,
     trust_env: bool = False,
     transport: httpx.AsyncBaseTransport | None = None,
+    extract_html: bool = False,
 ) -> str:
-    """Fetch one public URL while bounding redirects and response size."""
+    """Fetch one public URL while bounding redirects and response size.
+
+    ``extract_html`` defaults to False to preserve the original raw-body
+    behavior. The ordinary ``web_fetch`` tool explicitly opts into readable
+    HTML extraction; report material capture keeps its existing extraction and
+    source-label path.
+    """
 
     current_url = url
     async with httpx.AsyncClient(
@@ -147,6 +166,7 @@ async def fetch_public_url(
                         response,
                         bytes(body),
                         max_chars=max_chars,
+                        extract_html=extract_html,
                     )
             except httpx.HTTPStatusError as exc:
                 return f"Error: HTTP {exc.response.status_code} while fetching {current_url}"
@@ -173,4 +193,4 @@ async def web_fetch_tool(url: str) -> str:
         url: Exact public http:// or https:// URL to fetch.
     """
 
-    return await fetch_public_url(url, **_tool_options())
+    return await fetch_public_url(url, **_tool_options(), extract_html=True)

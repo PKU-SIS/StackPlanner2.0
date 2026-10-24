@@ -69,6 +69,82 @@ async def test_fetch_public_url_revalidates_redirect_target(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_fetch_public_url_keeps_raw_html_by_default(monkeypatch):
+    monkeypatch.setattr(tools, "validate_public_http_url", lambda *_args, **_kwargs: None)
+    html = "<!doctype html><html><head><title>Raw</title></head><body><p>BODY_MARKER</p></body></html>"
+
+    result = await tools.fetch_public_url(
+        "https://public.example.test/html",
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(200, headers={"content-type": "text/html"}, text=html)
+        ),
+    )
+
+    assert result == html
+    assert "<html" in result
+
+
+@pytest.mark.asyncio
+async def test_fetch_public_url_extracts_html_only_when_requested(monkeypatch):
+    monkeypatch.setattr(tools, "validate_public_http_url", lambda *_args, **_kwargs: None)
+    html = (
+        "<!doctype html><html><head><title>Readable</title>"
+        + "<style>"
+        + ("x" * 30000)
+        + "</style></head><body>"
+        + "<nav>NAV_MARKER</nav><article><h1>Article title</h1><p>BODYAFTERLONGHEAD</p></article>"
+        + "</body></html>"
+    )
+
+    result = await tools.fetch_public_url(
+        "https://public.example.test/html",
+        max_chars=20000,
+        extract_html=True,
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(200, headers={"content-type": "text/html"}, text=html)
+        ),
+    )
+
+    assert "BODYAFTERLONGHEAD" in result
+    assert "NAV_MARKER" not in result
+    assert "<html" not in result.lower()
+
+
+@pytest.mark.asyncio
+async def test_fetch_public_url_does_not_return_raw_html_on_extraction_failure(monkeypatch):
+    monkeypatch.setattr(tools, "validate_public_http_url", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(tools, "extract_readable_markdown", lambda _html: (None, "no readable body"))
+
+    result = await tools.fetch_public_url(
+        "https://public.example.test/empty",
+        extract_html=True,
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(200, headers={"content-type": "text/html"}, text="<html><body></body></html>")
+        ),
+    )
+
+    assert result.startswith("Error: HTML body extraction failed:")
+    assert "<html" not in result
+
+
+@pytest.mark.asyncio
+async def test_web_fetch_tool_explicitly_enables_html_extraction(monkeypatch):
+    captured = {}
+
+    async def fake_fetch(url, **kwargs):
+        captured.update(kwargs)
+        return "readable"
+
+    monkeypatch.setattr(tools, "fetch_public_url", fake_fetch)
+    monkeypatch.setattr(tools, "_tool_options", lambda: {})
+
+    result = await tools.web_fetch_tool.coroutine(url="https://example.test/page")
+
+    assert result == "readable"
+    assert captured["extract_html"] is True
+
+
+@pytest.mark.asyncio
 async def test_fetch_public_url_enforces_response_byte_limit(monkeypatch):
     monkeypatch.setattr(
         tools,

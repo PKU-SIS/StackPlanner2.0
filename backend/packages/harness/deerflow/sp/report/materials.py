@@ -81,17 +81,9 @@ def _looks_like_html(text: str) -> bool:
 
 def _readability_markdown(raw_html: str) -> tuple[str | None, str | None]:
     """Extract readable Markdown without registering placeholder text as content."""
-    try:
-        from deerflow.utils.readability import ReadabilityExtractor
+    from deerflow.utils.readability import extract_readable_markdown
 
-        article = ReadabilityExtractor().extract_article(raw_html)
-        markdown = article.to_markdown().strip()
-    except Exception as exc:  # noqa: BLE001 - extraction failure is a material failure
-        return None, f"{type(exc).__name__}: {exc}"
-    lowered = markdown.lower()
-    if not markdown or "no content could be extracted" in lowered or "no content available" in lowered:
-        return None, "readability extraction returned no content"
-    return markdown, None
+    return extract_readable_markdown(raw_html)
 
 
 def _direct_fetch_options() -> dict[str, Any]:
@@ -137,12 +129,12 @@ def _direct_fetch_options() -> dict[str, Any]:
 
 
 def _fetch_material_text(fetch_tool: Any, url: str) -> tuple[str | None, str, Any, str | None]:
-    """Fetch raw text, optionally extracting HTML before report-side truncation.
+    """Fetch raw text, then extract HTML before report-side truncation.
 
-    The ordinary ``web_fetch`` tool keeps its existing behavior.  This report
-    path only uses direct_fetch's public function when that provider is the one
-    configured, inherits its timeout/byte/access options, and extracts readable
-    Markdown before applying the material-save bound.
+    The ordinary ``web_fetch`` tool enables readable HTML extraction itself.
+    This report path deliberately requests the raw direct-fetch payload, keeps
+    its existing timeout/byte/access settings, and extracts readable Markdown
+    exactly once before applying the material-save bound.
     """
     module = _fetch_module(fetch_tool)
     if "direct_fetch" not in module:
@@ -168,6 +160,7 @@ def _fetch_material_text(fetch_tool: Any, url: str) -> tuple[str | None, str, An
             max_chars=options["max_bytes"],
             allow_private_addresses=options["allow_private_addresses"],
             trust_env=options["trust_env"],
+            extract_html=False,
         )
     )
     error = _is_transport_error(raw)
