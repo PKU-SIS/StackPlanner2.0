@@ -642,6 +642,11 @@ class DelegateHandler:
             context_refs = generic_refs
             if action.target_agent in _MATERIALIZED_ARTIFACT_ROLES:
                 artifact_bundle = self._materialize_stage_artifacts(action, context)
+                if action.target_agent == "outline":
+                    artifact_bundle = _dedupe_outline_artifact_bodies(
+                        artifact_bundle,
+                        context_refs.get("report_packet"),
+                    )
                 if artifact_bundle["items"]:
                     context_refs["artifact_bodies"] = artifact_bundle
                     task_metadata["source_artifact_ids"] = [item["artifact_id"] for item in artifact_bundle["items"]]
@@ -1652,6 +1657,52 @@ def _reporter_artifact_candidates(action: SPAction, context: HandlerContext) -> 
         )
     )
     return selected
+
+
+def _dedupe_outline_artifact_bodies(
+    bundle: dict[str, Any],
+    report_packet: Any,
+) -> dict[str, Any]:
+    """Remove only exact same-content summary/artifact duplicates.
+
+    The Outline packet already carries bounded summary content.  A stage
+    artifact can materialize the same research observation again.  Remove an
+    artifact body only when its artifact id matches a non-truncated packet
+    summary and the normalized body text is identical; different versions and
+    different results remain available.
+    """
+    if not isinstance(report_packet, Mapping):
+        return bundle
+    summaries = report_packet.get("summaries")
+    if not isinstance(summaries, list):
+        return bundle
+    by_artifact: dict[str, str] = {}
+    for summary in summaries:
+        if not isinstance(summary, Mapping) or summary.get("content_truncated"):
+            continue
+        artifact_id = str(summary.get("artifact_id") or "").strip()
+        content = str(summary.get("content") or "").strip()
+        if artifact_id and content:
+            by_artifact[artifact_id] = content
+    if not by_artifact:
+        return bundle
+    items = list(bundle.get("items") or [])
+    retained = [
+        item
+        for item in items
+        if not (
+            str(item.get("artifact_id") or "").strip() in by_artifact
+            and str(item.get("content") or "").strip() == by_artifact[str(item.get("artifact_id") or "").strip()]
+        )
+    ]
+    if len(retained) == len(items):
+        return bundle
+    updated = dict(bundle)
+    updated["items"] = retained
+    updated["materialized_count"] = len(retained)
+    updated["total_content_chars"] = sum(len(str(item.get("content") or "")) for item in retained)
+    updated["truncated"] = bool(bundle.get("truncated")) or any(bool(item.get("truncated")) for item in retained)
+    return updated
 
 
 def _stage_artifact_candidates(action: SPAction, context: HandlerContext) -> list[dict[str, Any]]:

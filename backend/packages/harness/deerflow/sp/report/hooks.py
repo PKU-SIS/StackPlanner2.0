@@ -1433,7 +1433,8 @@ def _accept_outline_locked(
     if ledger.action(action.action_id) is not None and ledger.action(action.action_id).get("status") == "completed":
         return _replay_result(action, context, "outline", ledger.action(action.action_id))
     execution_stop = str(result.stop_reason or "").strip() or None
-    if execution_stop in {"token_capped", "turn_capped", "loop_capped"}:
+    recover_delivered_file = execution_stop == "token_capped" and _outline_delivery_text(task) is not None
+    if execution_stop in {"token_capped", "turn_capped", "loop_capped"} and not recover_delivered_file:
         file_text = _outline_delivery_text(task)
         source_text = file_text if file_text is not None else (result.artifact_content if result.artifact_content is not None else result.result)
         completion_status = str(result.completion_status or result.artifact_metadata.get("completion_status") or "partial").strip().lower()
@@ -1482,12 +1483,27 @@ def _accept_outline_locked(
         # writes/saves internally, so this is not a cross-file/artifact
         # transaction guarantee.
         working = ReportLedger.load(ledger.paths)
-        payload, source_text = _outline_payload(result, task)
+        if recover_delivered_file:
+            # A token cap can fire after the complete host-assigned tree file
+            # was written.  Recover only that exact file, then run the normal
+            # parser, tree validation, disposition, and write-request paths.
+            # The original stop reason remains recorded on the accepted tree.
+            source_text = _outline_delivery_text(task)
+            if source_text is None:
+                raise ReportValidationError(
+                    "token-capped Outline recovery requires the current delegation's host-assigned tree file"
+                )
+            payload = report_tree.parse_tree_payload(source_text)
+        else:
+            payload, source_text = _outline_payload(result, task)
         if payload.get("citation_map"):
             raise ReportValidationError(
                 "citation_map is not supported; use canonical [S<n>] citation markers in node constraints and drafts"
             )
         tree = report_tree.validate_tree_with_diagnostics(payload, working)
+        if recover_delivered_file:
+            tree = dict(tree)
+            tree["accepted_with_stop_reason"] = execution_stop
         user_decisions = working.apply_user_decisions(tree.get("user_decisions") or [])
         gap_outcomes = working.apply_gap_outcomes(tree.get("gap_outcomes") or [])
         fingerprints = report_tree.node_fingerprints(tree)
@@ -1540,6 +1556,13 @@ def _accept_outline_locked(
                     candidate_source = None
         rejected = _store_rejected_outline(committed, action, result, str(exc), source_text=candidate_source)
         detail = f"Outline result rejected: {exc}"
+        if recover_delivered_file:
+            detail += (
+                "\nToken-cap recovery inspected the current delegation's delivery file but it "
+                "failed strict tree validation; no tree was accepted. Retry only this same Outline "
+                "with the rejected candidate path. Do not reduce node count, forbid research, or "
+                "delegate Coder to compress report material."
+            )
         if result.finish_reason == "length":
             detail += "\nfinish_reason=length: the model output was incomplete; the host file/raw candidate was retained."
         if rejected:
@@ -1611,6 +1634,7 @@ def _accept_outline_locked(
                 report_id=ledger.paths.report_id,
                 tree_version=version,
                 artifact_id=artifact.metadata.artifact_id,
+                accepted_with_stop_reason=execution_stop if recover_delivered_file else None,
             ),
             make_sp_event("sp.artifact.created", action_id=action.action_id, run_id=context.run_id, artifact_id=artifact.metadata.artifact_id, artifact_type="outline", virtual_path=artifact.metadata.virtual_path),
         ],

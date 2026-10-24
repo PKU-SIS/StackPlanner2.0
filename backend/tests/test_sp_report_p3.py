@@ -136,7 +136,8 @@ def _prepare_review(ctx: HandlerContext, *, action_id: str = "a-review") -> tupl
     # Lower-level assembly/edit tests intentionally exercise the legacy review
     # apply path without the fixed host action registry.  Production entry
     # points are covered separately by test_sp_report_acceptance_*.
-    from deerflow.sp.report import assembly as report_assembly, packets as report_packets
+    from deerflow.sp.report import assembly as report_assembly
+    from deerflow.sp.report import packets as report_packets
 
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
     report_assembly.ensure_candidate(ledger)
@@ -659,3 +660,16 @@ def test_delivered_resume_keeps_history_and_requires_new_review(tmp_path):
     assert ledger.payload["delivered"]["delivery_id"] != first_delivery["delivery_id"]
     assert len(ledger.payload["delivery_history"]) == 1
     assert len(ledger.payload["final_reports"]) >= 2
+
+
+def test_review_packet_reads_material_by_id_but_keeps_virtual_path(tmp_path):
+    ctx, _ = _seed(tmp_path, with_sources=True)
+    _action, task, _entry = _prepare_review(ctx)
+    packet = task.context_refs["report_packet"]
+    materials = {item["material_id"]: item for item in packet["materials"]}
+
+    assert materials["m1"]["path"] == "/mnt/user-data/outputs/m1.txt"
+    assert materials["m1"]["text"] == "material one\n"
+    assert materials["m1"]["error"] is None
+    assert materials["m2"]["text"] == "material two\n"
+    assert materials["m2"]["error"] is None

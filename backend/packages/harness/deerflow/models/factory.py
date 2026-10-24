@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from langchain.chat_models import BaseChatModel
@@ -8,6 +9,25 @@ from deerflow.reflection import resolve_class
 from deerflow.tracing import build_tracing_callbacks
 
 logger = logging.getLogger(__name__)
+
+
+def _runtime_identity(model: BaseChatModel) -> str:
+    """Return non-secret model/client/loop identities for lifecycle diagnosis."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop_id = "none"
+    else:
+        loop_id = str(id(loop))
+    root = getattr(model, "root_async_client", None)
+    http_client = getattr(root, "_client", None)
+    transport = getattr(http_client, "_transport", None)
+    pool = getattr(transport, "_pool", None)
+    return (
+        f"model={id(model)} loop={loop_id} root_client={id(root) if root is not None else 'none'} "
+        f"httpx_client={id(http_client) if http_client is not None else 'none'} "
+        f"pool={id(pool) if pool is not None else 'none'}"
+    )
 
 
 def _deep_merge_dicts(base: dict | None, override: dict) -> dict:
@@ -294,6 +314,7 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
         if value is not None or key not in model_init_kwargs:
             model_init_kwargs[key] = value
     model_instance = model_class(**model_init_kwargs)
+    logger.info("chat model client created name=%s %s", name, _runtime_identity(model_instance))
 
     if attach_tracing:
         callbacks = build_tracing_callbacks()

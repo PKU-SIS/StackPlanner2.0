@@ -91,6 +91,30 @@ def test_read_file_line_numbers_are_explicit_and_default_stays_unchanged(tmp_pat
     assert default == "beta\ngamma"
     assert numbered == "2: beta\n3: gamma"
 
+    start_only = read_file_tool.func(
+        runtime=runtime,
+        description="read from start",
+        path="/mnt/user-data/uploads/notes.txt",
+        start_line=2,
+    )
+    end_only = read_file_tool.func(
+        runtime=runtime,
+        description="read through end",
+        path="/mnt/user-data/uploads/notes.txt",
+        end_line=2,
+    )
+    numbered_start_only = read_file_tool.func(
+        runtime=runtime,
+        description="read numbered tail",
+        path="/mnt/user-data/uploads/notes.txt",
+        start_line=2,
+        line_numbers=True,
+    )
+
+    assert start_only == "beta\ngamma"
+    assert end_only == "alpha\nbeta"
+    assert numbered_start_only == "2: beta\n3: gamma"
+
 
 def test_read_file_line_numbers_match_async_path(tmp_path, monkeypatch) -> None:
     runtime = _local_runtime(tmp_path)
@@ -117,3 +141,22 @@ def test_read_file_line_numbers_match_async_path(tmp_path, monkeypatch) -> None:
     )
 
     assert result == "1: alpha\n2: beta"
+
+    async_start_only = asyncio.run(
+        read_file_tool.coroutine(
+            runtime=runtime,
+            description="async tail",
+            path="/mnt/user-data/uploads/notes.txt",
+            start_line=2,
+        )
+    )
+    async_end_only = asyncio.run(
+        read_file_tool.coroutine(
+            runtime=runtime,
+            description="async head",
+            path="/mnt/user-data/uploads/notes.txt",
+            end_line=1,
+        )
+    )
+    assert async_start_only == "beta"
+    assert async_end_only == "alpha"

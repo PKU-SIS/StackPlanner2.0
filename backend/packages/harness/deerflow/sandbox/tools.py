@@ -2126,8 +2126,8 @@ def read_file_tool(
     Args:
         description: Explain why you are reading this file in short words. ALWAYS PROVIDE THIS PARAMETER FIRST.
         path: The **absolute** path to the file to read.
-        start_line: Optional starting line number (1-indexed, inclusive). Use with end_line to read a specific range.
-        end_line: Optional ending line number (1-indexed, inclusive). Use with start_line to read a specific range.
+        start_line: Optional starting line number (1-indexed, inclusive). If only start_line is supplied, read from that line through the end.
+        end_line: Optional ending line number (1-indexed, inclusive). If only end_line is supplied, read from the beginning through that line.
         line_numbers: Optional: prefix each returned line with its 1-indexed line number. Default false preserves ordinary read output. Use true when exact evidence locations matter.
     """
     try:
@@ -2140,15 +2140,16 @@ def read_file_tool(
         if not content:
             return "(empty)"
         source_lines = content.splitlines()
-        if start_line is not None and end_line is not None:
-            source_lines = source_lines[start_line - 1 : end_line]
-            first_line = start_line
-        else:
-            first_line = 1
-        if line_numbers:
-            content = "\n".join(f"{number}: {line}" for number, line in enumerate(source_lines, start=first_line))
-        elif start_line is not None and end_line is not None:
-            content = "\n".join(source_lines)
+        if start_line is not None or end_line is not None:
+            first_line = start_line if start_line is not None else 1
+            last_line = end_line if end_line is not None else len(source_lines)
+            source_lines = source_lines[first_line - 1 : last_line]
+            if line_numbers:
+                content = "\n".join(f"{number}: {line}" for number, line in enumerate(source_lines, start=first_line))
+            else:
+                content = "\n".join(source_lines)
+        elif line_numbers:
+            content = "\n".join(f"{number}: {line}" for number, line in enumerate(source_lines, start=1))
         try:
             from deerflow.config.app_config import get_app_config
 

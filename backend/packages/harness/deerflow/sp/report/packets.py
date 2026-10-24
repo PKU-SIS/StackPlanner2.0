@@ -207,7 +207,11 @@ def build_integrate_review_packet(ledger: ReportLedger) -> dict[str, Any]:
         )
     materials = []
     for item in inputs_view["materials"]:
-        text, error = _read_text(item.get("path"))
+        # ``review_inputs`` carries the agent-facing virtual path in ``path``.
+        # Resolve the host path from the ledger material identity instead of
+        # asking Path() to open the virtual path.
+        material = ledger.material(str(item.get("material_id") or ""))
+        text, error = _read_text(material.get("path") if material is not None else None)
         materials.append(
             {
                 **item,

@@ -387,20 +387,22 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
                 if retriable and attempt < max_attempts:
                     wait_ms = self._build_retry_delay_ms(attempt, exc)
                     logger.warning(
-                        "Transient LLM error on attempt %d/%d; retrying in %dms: %s",
+                        "Transient LLM error on attempt %d/%d; retrying in %dms: %s | runtime=%s",
                         attempt,
                         self.retry_max_attempts,
                         wait_ms,
                         _exception_chain_detail(exc),
+                        _request_runtime_identity(request),
                     )
                     self._emit_retry_event(attempt, wait_ms, reason)
                     time.sleep(wait_ms / 1000)
                     attempt += 1
                     continue
                 logger.warning(
-                    "LLM call failed after %d attempt(s): %s",
+                    "LLM call failed after %d attempt(s): %s | runtime=%s",
                     attempt,
                     _extract_error_detail(exc),
+                    _request_runtime_identity(request),
                     exc_info=exc,
                 )
                 if retriable:
@@ -448,20 +450,22 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
                 if retriable and attempt < max_attempts:
                     wait_ms = self._build_retry_delay_ms(attempt, exc)
                     logger.warning(
-                        "Transient LLM error on attempt %d/%d; retrying in %dms: %s",
+                        "Transient LLM error on attempt %d/%d; retrying in %dms: %s | runtime=%s",
                         attempt,
                         self.retry_max_attempts,
                         wait_ms,
                         _exception_chain_detail(exc),
+                        _request_runtime_identity(request),
                     )
                     self._emit_retry_event(attempt, wait_ms, reason)
                     await asyncio.sleep(wait_ms / 1000)
                     attempt += 1
                     continue
                 logger.warning(
-                    "LLM call failed after %d attempt(s): %s",
+                    "LLM call failed after %d attempt(s): %s | runtime=%s",
                     attempt,
                     _extract_error_detail(exc),
+                    _request_runtime_identity(request),
                     exc_info=exc,
                 )
                 if retriable:
@@ -538,6 +542,27 @@ def _extract_retry_after_ms(exc: BaseException) -> int | None:
     if match:
         return max(0, int(float(match.group(1)) * 1000) + 1000)
     return None
+
+
+def _request_runtime_identity(request: ModelRequest) -> str:
+    """Return non-secret model/client/pool/loop identities for one request."""
+    model = getattr(request, "model", None)
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop_id = "none"
+    else:
+        loop_id = str(id(loop))
+    root = getattr(model, "root_async_client", None)
+    http_client = getattr(root, "_client", None)
+    transport = getattr(http_client, "_transport", None)
+    pool = getattr(transport, "_pool", None)
+    return (
+        f"model={id(model) if model is not None else 'none'} loop={loop_id} "
+        f"root_client={id(root) if root is not None else 'none'} "
+        f"httpx_client={id(http_client) if http_client is not None else 'none'} "
+        f"pool={id(pool) if pool is not None else 'none'}"
+    )
 
 
 def _extract_error_detail(exc: BaseException) -> str:
