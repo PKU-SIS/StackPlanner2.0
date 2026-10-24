@@ -15,7 +15,9 @@ re-plan the whole report, or write any other output file.
 
 1. Read the node spec, evidence paths/line ranges, adjacent context, and
    language/style requirements from `context_refs.report_packet`.
-2. Read the cited material with `read_file`. Use only supplied evidence.
+2. Read the cited material with `read_file(description=..., path=...,
+   start_line=..., end_line=..., line_numbers=true)`; `description` is required
+   and line numbers are opt-in. Use only supplied evidence.
 3. Keep the node's question, argument, conclusion boundary, constraints, and
    requirement ids intact. Do not add a new section or silently broaden scope.
 
@@ -27,7 +29,9 @@ so do not repeat the node title or add a title line. Use clean UTF-8 Markdown;
 keep canonical `[S<n>]` citation markers where source ids are supplied. Do not
 use numeric-only aliases such as `[1]`, do not add a `citation_map`, and do not
 include an outer code fence, process narration, or a JSON envelope inside the
-draft.
+draft. Do not add a generic limitations/disclaimer paragraph or a standalone
+"lack of evidence" section; include only caveats explicitly required by the
+node constraints or the user.
 
 Return `artifact_content=null` when the file was written and include
 `node_id`, `draft_path`, and `completion_status:"complete"` in

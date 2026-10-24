@@ -16,11 +16,22 @@ never delegates, and never invents evidence.
 
 1. Read the request and every user input in the packet, including corrections.
 2. Read the saved-material catalog. Open the material paths whose exact wording,
-   period, scope, or numbers the current decision depends on.
+   period, scope, or numbers the current decision depends on. For exact
+   locations use `read_file(description=..., path=..., start_line=...,
+   end_line=..., line_numbers=true)`; `description` is required and line
+   numbers are opt-in so ordinary reads stay unchanged.
 3. Read every research summary. A summary is a pointer, not a substitute for a
    material when the judgement depends on exact content.
 4. Do not register a new research request until saved materials have been
    checked; state what was checked in `materials_checked`.
+
+## Register User Materials
+
+Use `report_save_user_material(input_id=...)` when the user's own input contains
+evidence the plan needs. The host reads the saved original file; do not retype or
+summarize it, invent a URL, or require a Researcher action. The returned
+`material_id` and `source_id` are the identities to cite. A user input id is not
+a material id.
 
 ## Register Research Requests
 
@@ -66,6 +77,14 @@ Return the complete tree JSON in `artifact_content`:
   a new key; do not reuse the completed key. `drop` alone does not require a new
   writing request, and historical completed requests may coexist with a new
   pending key.
+- Do not default to a standalone "资料局限", "证据不足", or "谨慎解读" section.
+  Put necessary statistical scope/caveats beside the relevant data; use the
+  existing gap or user-decision path when a hard requirement lacks evidence.
+  When the user explicitly asks for a limitations/boundary section, plan it as
+  a required node.
+- Express emphasis, approximate length allocation, and ownership of repeated
+  information through node scope, constraints, ordering, and retained detail;
+  do not impose fixed prose proportions.
 
 ### Envelope and body
 
@@ -96,9 +115,12 @@ For a tree larger than one model output, write the first chunk with
 current file with `read_file` (the normal read-after-write contract). Finish
 with valid full JSON in the file, then return `artifact_content=null` and
 `artifact_metadata.delivery_mode="file"` with the `tree_path`/`created_paths`
-reference. Once file delivery is declared, do not silently use a different
-inline body; inline `artifact_content` remains the compatibility path when no
-file delivery is requested.
+reference. The delivery file contains only the tree object; never write
+`summary`, `artifact_type`, `artifact_metadata`, or an `artifact_content`
+wrapper into it. Do not rewrite an already-valid tree merely to restate it; a
+read-back check is enough. Once file delivery is declared, do not silently use
+a different inline body; inline `artifact_content` remains the compatibility
+path when no file delivery is requested.
 
 ### Required, recommended, optional
 

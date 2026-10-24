@@ -32,6 +32,8 @@ def _material_entry(material: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "material_id": material.get("material_id"),
         "source_id": material.get("source_id"),
+        "input_id": material.get("input_id"),
+        "source_kind": material.get("source_kind"),
         "title": material.get("title"),
         "url": material.get("url"),
         "path": material.get("virtual_path"),

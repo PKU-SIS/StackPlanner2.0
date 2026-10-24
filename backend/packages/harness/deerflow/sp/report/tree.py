@@ -17,39 +17,58 @@ TREE_REQUIRED_KEYS = ("report_title", "requirements", "nodes")
 MAX_TREE_JSON_CHARS = 400_000
 
 
+def _outline_envelope_payload(payload: Mapping[str, Any]) -> bool:
+    """Return True only for a response envelope, not a tree with extra fields."""
+    return "artifact_content" in payload and not any(key in payload for key in TREE_REQUIRED_KEYS)
+
+
 def parse_tree_payload(value: Any) -> dict[str, Any]:
-    """Parse the authoritative Outline JSON carried in ``artifact_content``."""
+    """Parse the authoritative Outline JSON carried in ``artifact_content``.
+
+    The delivery is one complete JSON document.  A syntax failure must stay a
+    syntax failure: never scan for a nested object and silently accept it as
+    the tree.  The whole-document fence compatibility remains for inline
+    model output, but there is no partial-object fallback.
+    """
     if isinstance(value, Mapping):
-        return dict(value)
+        payload = dict(value)
+        if _outline_envelope_payload(payload):
+            raise ReportValidationError(
+                "Outline delivery contains a response envelope, not the tree body; "
+                "write only the tree object to the delivery file and keep summary/"
+                "artifact_metadata outside it"
+            )
+        return payload
     if not isinstance(value, str) or not value.strip():
         raise ReportValidationError("Outline result has no artifact_content JSON")
-    text = value.strip()
+    # Keep leading whitespace so json.JSONDecodeError.lineno points at the
+    # actual delivery line instead of being shifted by a strip().
+    text = value
     if len(text) > MAX_TREE_JSON_CHARS:
         raise ReportValidationError(f"Outline tree exceeds the {MAX_TREE_JSON_CHARS}-character acceptance limit")
-    candidates = [text]
-    fenced = re.fullmatch(r"```(?:json)?\s*\n?(.*?)\n?```", text, flags=re.IGNORECASE | re.DOTALL)
-    if fenced is not None:
-        candidates.append(fenced.group(1).strip())
-    for candidate in candidates:
-        try:
-            payload = json.loads(candidate)
-        except (json.JSONDecodeError, TypeError):
-            continue
-        if isinstance(payload, dict):
-            return payload
-    decoder = json.JSONDecoder()
-    for match in re.finditer(r"\{", text):
-        try:
-            payload, _ = decoder.raw_decode(text[match.start() :])
-        except (json.JSONDecodeError, TypeError):
-            continue
-        if isinstance(payload, dict):
-            return payload
-    raise ReportValidationError(
-        f"Outline artifact_content JSON parse failed ({len(text)} chars); "
-        "this is a parse/framing failure, not a structural rejection. "
-        "If the model finished because of an output cap, report that separately."
-    )
+
+    fenced = re.fullmatch(r"```(?:json)?\s*\n?(.*?)\n?```", text.strip(), flags=re.IGNORECASE | re.DOTALL)
+    candidate = fenced.group(1) if fenced is not None else text
+    try:
+        payload = json.loads(candidate)
+    except json.JSONDecodeError as exc:
+        raise ReportValidationError(
+            "Outline tree JSON syntax error at "
+            f"line {exc.lineno}, column {exc.colno}: {exc.msg} "
+            f"(position {exc.pos}); the complete document was not accepted and "
+            "no nested object was extracted"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise ReportValidationError(
+            f"Outline tree JSON must be one object, got {type(payload).__name__}"
+        )
+    if _outline_envelope_payload(payload):
+        raise ReportValidationError(
+            "Outline delivery contains a response envelope, not the tree body; "
+            "write only the tree object to the delivery file and keep summary/"
+            "artifact_metadata outside it"
+        )
+    return payload
 
 
 def _as_list(value: Any, field_name: str) -> list[Any]:

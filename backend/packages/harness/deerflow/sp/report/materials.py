@@ -259,6 +259,166 @@ def _existing_material(ledger: ReportLedger, source_id: str, content_sha: str) -
     return None
 
 
+def _save_material_text(
+    ledger: ReportLedger,
+    paths: report_store.ReportPaths,
+    *,
+    text: str,
+    source_id: str,
+    fields: Mapping[str, Any],
+) -> tuple[dict[str, Any], bool]:
+    """Persist one exact text payload and return (material, reused).
+
+    Shared by URL capture and user-input registration so both paths use the
+    same content identity, file naming, read-back verification, and preview
+    construction. The caller must hold the report lock and save the ledger.
+    """
+    content_sha = report_store.sha256_text(text)
+    existing = _existing_material(ledger, source_id, content_sha)
+    if existing is not None:
+        return existing, True
+
+    material_id = ledger.next_material_id()
+    path = paths.material_file(source_id, content_sha)
+    report_store.write_text_atomic(path, text)
+    read_back = path.read_text(encoding="utf-8")
+    if read_back != text:
+        raise OSError("material verification failed: file content differs from tool return")
+
+    preview = " ".join(text.split())[:MATERIAL_PREVIEW_CHARS]
+    material = {
+        "material_id": material_id,
+        "source_id": source_id,
+        "path": str(path),
+        "virtual_path": paths.virtual(path),
+        "chars": len(text),
+        "lines": report_store.line_count(text),
+        "sha256": content_sha,
+        "preview": preview,
+        **dict(fields),
+    }
+    ledger.payload.setdefault("materials", []).append(material)
+    return material, False
+
+
+def _source_for_user_input(
+    ledger: ReportLedger,
+    input_item: Mapping[str, Any],
+    *,
+    title: str | None,
+) -> dict[str, Any]:
+    """Return the stable source record for one host-saved user input."""
+    input_id = str(input_item.get("input_id") or "").strip()
+    sources = ledger.payload.setdefault("sources", [])
+    for source in sources:
+        if isinstance(source, Mapping) and source.get("source_kind") == "user_input" and source.get("input_id") == input_id:
+            if title:
+                source["title"] = title
+            return dict(source)
+    source_id = ledger.next_source_id()
+    source = {
+        "source_id": source_id,
+        "source_kind": "user_input",
+        "input_id": input_id,
+        "input_path": input_item.get("virtual_path"),
+        "title": title or f"User input {input_id}",
+        "first_seen_at": utc_now_iso(),
+    }
+    sources.append(source)
+    return source
+
+
+def build_register_user_material_tool(*, paths: report_store.ReportPaths):
+    """Create the Outline-bound tool that registers a saved user input."""
+
+    @tool("report_save_user_material", parse_docstring=True)
+    def report_save_user_material(input_id: str, title: str | None = None) -> str:
+        """Register one existing user input as a citable report material.
+
+        Use this only when the user's own input contains evidence needed by the
+        plan. The host reads the already-saved input file; do not retype or
+        summarize the source text, and do not invent a URL. This does not
+        perform research and does not require a Researcher action. The returned
+        material_id and source_id are the only identities to cite.
+
+        Args:
+            input_id: Existing input_id from report_packet.inputs.
+            title: Optional human-readable source title.
+        """
+        try:
+            ledger = ReportLedger.load(paths)
+        except Exception as exc:  # noqa: BLE001 - tool boundary must report, not crash
+            return json.dumps({"saved": False, "error": f"report_ledger_unavailable: {exc}"}, ensure_ascii=False)
+
+        input_item = ledger.input(str(input_id))
+        if input_item is None:
+            return json.dumps(
+                {"saved": False, "error": f"unknown input_id: {input_id}"},
+                ensure_ascii=False,
+            )
+        input_path = Path(str(input_item.get("path") or ""))
+        if not str(input_path) or not input_path.is_file():
+            return json.dumps(
+                {"saved": False, "error": f"user input file is unavailable: {input_id}"},
+                ensure_ascii=False,
+            )
+
+        clean_title = str(title).strip() if isinstance(title, str) and title.strip() else None
+        try:
+            with report_store.report_lock(paths):
+                ledger = ReportLedger.load(paths)
+                input_item = ledger.input(str(input_id))
+                if input_item is None:
+                    return json.dumps(
+                        {"saved": False, "error": f"unknown input_id: {input_id}"},
+                        ensure_ascii=False,
+                    )
+                text = Path(str(input_item.get("path") or "")).read_text(encoding="utf-8")
+                if not text.strip():
+                    return json.dumps(
+                        {"saved": False, "error": f"user input is empty: {input_id}"},
+                        ensure_ascii=False,
+                    )
+                if len(text) > MATERIAL_MAX_CHARS:
+                    return json.dumps(
+                        {"saved": False, "error": "user input exceeded the maximum saveable size"},
+                        ensure_ascii=False,
+                    )
+                source = _source_for_user_input(ledger, input_item, title=clean_title)
+                material, reused = _save_material_text(
+                    ledger,
+                    paths,
+                    text=text,
+                    source_id=str(source["source_id"]),
+                    fields={
+                        "input_id": str(input_id),
+                        "source_kind": "user_input",
+                        "title": clean_title or source.get("title"),
+                        "content_scope": "user_input",
+                        "upstream_truncation": False,
+                        "created_at": utc_now_iso(),
+                    },
+                )
+                ledger.save()
+        except Exception as exc:  # noqa: BLE001 - persistence failure must be explicit
+            return json.dumps(
+                {"saved": False, "error": f"material_save_failed: {type(exc).__name__}: {exc}"},
+                ensure_ascii=False,
+            )
+
+        return json.dumps(
+            _material_payload(
+                material,
+                duplicate_of=str(material.get("material_id")) if reused else None,
+                preview=str(material.get("preview") or ""),
+            ),
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    return report_save_user_material
+
+
 def build_fetch_material_tool(
     *,
     paths: report_store.ReportPaths,
@@ -321,7 +481,6 @@ def build_fetch_material_tool(
                 url=str(url).strip(),
             )
 
-        content_sha = report_store.sha256_text(text)
         try:
             with report_store.report_lock(paths):
                 ledger = ReportLedger.load(paths)
@@ -334,48 +493,35 @@ def build_fetch_material_tool(
                         ensure_ascii=False,
                     )
                 source = _source_for_url(ledger, normalized, url=str(url).strip(), title=str(title).strip() if isinstance(title, str) and title.strip() else None)
-                source_id = str(source["source_id"])
-                existing = _existing_material(ledger, source_id, content_sha)
-                if existing is not None:
-                    ledger.record_tool_execution(action_id, tool="report_fetch_material", ok=True, detail=f"reused {existing.get('material_id')}")
-                    ledger.save()
-                    return json.dumps(
-                        _material_payload(existing, duplicate_of=str(existing.get("material_id")), preview=str(existing.get("preview") or "")),
-                        ensure_ascii=False,
-                        indent=2,
-                    )
-
-                material_id = ledger.next_material_id()
-                path = paths.material_file(source_id, content_sha)
-                report_store.write_text_atomic(path, text)
-                read_back = path.read_text(encoding="utf-8")
-                if read_back != text:
-                    raise OSError("material verification failed: file content differs from tool return")
-
-                preview = " ".join(text.split())[:MATERIAL_PREVIEW_CHARS]
-                material = {
-                    "material_id": material_id,
-                    "source_id": source_id,
-                    "url": str(url).strip(),
-                    "normalized_url": normalized,
-                    "title": str(title).strip() if isinstance(title, str) and title.strip() else source.get("title"),
-                    "locator_note": str(locator_note).strip() if isinstance(locator_note, str) and locator_note.strip() else None,
-                    "path": str(path),
-                    "virtual_path": paths.virtual(path),
-                    "chars": len(text),
-                    "lines": report_store.line_count(text),
-                    "sha256": content_sha,
-                    "content_scope": content_scope,
-                    "upstream_truncation": upstream_truncation,
-                    "preview": preview,
-                    "fetched_at": utc_now_iso(),
-                    "action_id": action_id,
-                    "gap_ids": list(gap_ids),
-                }
-                ledger.payload.setdefault("materials", []).append(material)
-                ledger.record_tool_execution(action_id, tool="report_fetch_material", ok=True, detail=f"saved {material_id}")
+                material, reused = _save_material_text(
+                    ledger,
+                    paths,
+                    text=text,
+                    source_id=str(source["source_id"]),
+                    fields={
+                        "url": str(url).strip(),
+                        "normalized_url": normalized,
+                        "title": str(title).strip() if isinstance(title, str) and title.strip() else source.get("title"),
+                        "locator_note": str(locator_note).strip() if isinstance(locator_note, str) and locator_note.strip() else None,
+                        "content_scope": content_scope,
+                        "upstream_truncation": upstream_truncation,
+                        "fetched_at": utc_now_iso(),
+                        "action_id": action_id,
+                        "gap_ids": list(gap_ids),
+                    },
+                )
+                detail = f"reused {material.get('material_id')}" if reused else f"saved {material.get('material_id')}"
+                ledger.record_tool_execution(action_id, tool="report_fetch_material", ok=True, detail=detail)
                 ledger.save()
-                return json.dumps(_material_payload(material, duplicate_of=None, preview=preview), ensure_ascii=False, indent=2)
+                return json.dumps(
+                    _material_payload(
+                        material,
+                        duplicate_of=str(material.get("material_id")) if reused else None,
+                        preview=str(material.get("preview") or ""),
+                    ),
+                    ensure_ascii=False,
+                    indent=2,
+                )
         except Exception as exc:  # noqa: BLE001 - persistence failure must not look like a research result
             return _record_material_failure(
                 paths,
@@ -407,6 +553,8 @@ def _material_payload(material: Mapping[str, Any], *, duplicate_of: str | None, 
         "saved": True,
         "source_id": material.get("source_id"),
         "material_id": material.get("material_id"),
+        "input_id": material.get("input_id"),
+        "source_kind": material.get("source_kind"),
         "path": material.get("virtual_path"),
         "chars": material.get("chars"),
         "lines": material.get("lines"),

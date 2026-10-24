@@ -34,7 +34,7 @@ from deerflow.sp.report.ledger import (
     gap_next_action,
     utc_now_iso,
 )
-from deerflow.sp.report.materials import build_fetch_material_tool
+from deerflow.sp.report.materials import build_fetch_material_tool, build_register_user_material_tool
 from deerflow.sp.report.prompts import (
     REPORT_INTEGRATE_REVIEW_PROMPT,
     REPORT_OUTLINE_PROMPT,
@@ -460,9 +460,12 @@ def configure_report_subagent(
         if report_task != "integrate_review" and "write_file" not in tools_by_name:
             raise ReportValidationError("report outline requires write_file for file delivery")
         register_tool = None
+        user_material_tool = None
         if report_task != "integrate_review":
             register_tool = build_register_research_request_tool(paths=paths, action_id=task.action_id)
             selected.append(register_tool)
+            user_material_tool = build_register_user_material_tool(paths=paths)
+            selected.append(user_material_tool)
         prompt = REPORT_INTEGRATE_REVIEW_PROMPT if report_task == "integrate_review" else REPORT_OUTLINE_PROMPT
         disallowed_tools = list(subagent_config.disallowed_tools or [])
         if report_task == "integrate_review":
@@ -476,7 +479,8 @@ def configure_report_subagent(
             disallowed_tools=disallowed_tools,
             skills=["report-outline"],
         )
-        return config, ([*available_tools, register_tool] if register_tool is not None else list(available_tools)), role
+        extra_tools = [tool for tool in (register_tool, user_material_tool) if tool is not None]
+        return config, [*available_tools, *extra_tools], role
 
     if role == "writer":
         if "write_file" not in tools_by_name:

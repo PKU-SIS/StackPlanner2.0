@@ -6,6 +6,7 @@ import asyncio
 import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from types import SimpleNamespace
 
 from langchain.tools import tool
 from langchain_core.messages import HumanMessage
@@ -16,7 +17,10 @@ from deerflow.sp.memory import TaskMemoryStack
 from deerflow.sp.report import hooks
 from deerflow.sp.report import store as report_store
 from deerflow.sp.report.ledger import ReportLedger
-from deerflow.sp.report.materials import build_fetch_material_tool
+from deerflow.sp.report.materials import build_fetch_material_tool, build_register_user_material_tool
+from deerflow.sp.report.tree import validate_tree
+from deerflow.sp.subagents import SPSubagentTask
+from deerflow.subagents.config import SubagentConfig
 
 
 def _context(tmp_path: Path) -> HandlerContext:
@@ -249,3 +253,105 @@ def test_concurrent_material_calls_keep_both_identities(tmp_path):
     assert len(ledger.materials()) == 2
     catalog = (tmp_path / "report" / "r1" / "materials" / "catalog.md").read_text(encoding="utf-8")
     assert "m1" in catalog and "m2" in catalog
+
+
+def test_user_input_registration_reuses_saved_original_and_is_citable(tmp_path):
+    ctx = _context(tmp_path)
+    paths = _paths(ctx)
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    input_item = ledger.inputs()[0]
+    input_id = str(input_item["input_id"])
+    original = Path(str(input_item["path"])).read_text(encoding="utf-8")
+    tool = build_register_user_material_tool(paths=paths)
+
+    payload = json.loads(tool.func(input_id=input_id, title="用户提供的示例材料"))
+    assert payload["saved"] is True
+    assert payload["input_id"] == input_id
+    assert payload["source_kind"] == "user_input"
+    assert payload["source_id"] == "S1"
+    assert payload["material_id"] == "m1"
+    assert payload["url"] is None
+    material_path = Path(str(payload["path"]).replace("/mnt/user-data/outputs", str(tmp_path)))
+    assert material_path.read_text(encoding="utf-8") == original
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    source = ledger.payload["sources"][0]
+    assert source["source_kind"] == "user_input"
+    assert source["input_id"] == input_id
+    assert not (ledger.payload.get("actions") or {})
+    assert ledger.materials()[0]["input_id"] == input_id
+
+    tree = {
+        "report_title": "用户材料报告",
+        "requirements": [{"id": "R1", "input_id": input_id, "text": "使用用户提供的原文", "hard": True}],
+        "nodes": [
+            {
+                "node_id": "n1",
+                "parent_id": None,
+                "kind": "writable",
+                "title": "用户提供的材料",
+                "question": "用户原文说明了什么？",
+                "argument": ["读取已登记的用户材料"],
+                "conclusion": "用户原文已登记为可引用材料。",
+                "constraints": {"must_cite": ["S1"]},
+                "requirement_ids": ["R1"],
+                "relations": [],
+                "gap_ids": [],
+                "status": "planned",
+                "evidence": [
+                    {
+                        "material_id": payload["material_id"],
+                        "source_ids": [payload["source_id"]],
+                        "locator": {"lines": [1, 1]},
+                        "use": "提供用户原文",
+                    }
+                ],
+            }
+        ],
+        "removed_node_ids": [],
+        "write_requests": [],
+        "gap_outcomes": [],
+        "user_decisions": [],
+        "feedback_dispositions": [],
+        "draft_dispositions": [],
+    }
+    validate_tree(tree, ledger)
+
+    again = json.loads(tool.func(input_id=input_id, title="用户提供的示例材料"))
+    assert again["material_id"] == "m1"
+    assert again["duplicate_of"] == "m1"
+    assert len(ReportLedger.load_for_context(hooks.report_context(ctx.state)).materials()) == 1
+
+
+def test_outline_subagent_exposes_user_material_registration_tool(tmp_path):
+    ctx = _context(tmp_path)
+    report = hooks.report_context(ctx.state)
+    task = SPSubagentTask(
+        action_id="a-outline-plan",
+        subagent_type="outline",
+        task="plan the report",
+        description="plan",
+        metadata={"report_role": "outline", "report_id": report.report_id, "report_task": "plan"},
+    )
+    tools = [
+        SimpleNamespace(name=name)
+        for name in ("read_file", "write_file", "grep", "glob", "ls")
+    ]
+    config = SubagentConfig(
+        name="sp-outline",
+        description="outline",
+        system_prompt="",
+        disallowed_tools=["write_file"],
+        max_turns=36,
+    )
+
+    returned_config, returned_tools, role = hooks.configure_report_subagent(
+        task,
+        state=ctx.state,
+        available_tools=tools,
+        subagent_config=config,
+    )
+
+    assert role == "outline"
+    assert "report_save_user_material" in returned_config.tools
+    assert any(getattr(tool, "name", "") == "report_save_user_material" for tool in returned_tools)

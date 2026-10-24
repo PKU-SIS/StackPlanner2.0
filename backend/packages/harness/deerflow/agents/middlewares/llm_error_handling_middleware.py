@@ -391,7 +391,7 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
                         attempt,
                         self.retry_max_attempts,
                         wait_ms,
-                        _extract_error_detail(exc),
+                        _exception_chain_detail(exc),
                     )
                     self._emit_retry_event(attempt, wait_ms, reason)
                     time.sleep(wait_ms / 1000)
@@ -452,7 +452,7 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
                         attempt,
                         self.retry_max_attempts,
                         wait_ms,
-                        _extract_error_detail(exc),
+                        _exception_chain_detail(exc),
                     )
                     self._emit_retry_event(attempt, wait_ms, reason)
                     await asyncio.sleep(wait_ms / 1000)
@@ -548,3 +548,43 @@ def _extract_error_detail(exc: BaseException) -> str:
     if isinstance(message, str) and message.strip():
         return message.strip()
     return exc.__class__.__name__
+
+
+_SECRET_LOG_PATTERNS = (
+    re.compile(r"(?i)(authorization:\s*bearer\s+)\S+"),
+    re.compile(r"(?i)((?:api[_-]?key|access[_-]?token|secret)[=:]\s*)\S+"),
+    re.compile(r"\bsk-[A-Za-z0-9_-]{8,}\b"),
+)
+_EXCEPTION_CHAIN_MAX_DEPTH = 4
+_EXCEPTION_CHAIN_MAX_CHARS = 2_000
+
+
+def _redact_exception_text(value: str) -> str:
+    """Redact credential-shaped text before transient errors enter logs."""
+    redacted = str(value)
+    for pattern in _SECRET_LOG_PATTERNS:
+        redacted = pattern.sub(lambda match: f"{match.group(1)}[REDACTED]" if match.groups() else "[REDACTED]", redacted)
+    return redacted
+
+
+def _exception_chain_detail(exc: BaseException) -> str:
+    """Return a bounded exception chain, including the underlying transport cause.
+
+    ``str(APIConnectionError)`` is often only ``Connection error.``.  The
+    cause/context chain is what distinguishes a local async-client lifecycle
+    failure from a provider/network failure, so preserve it in retry logs
+    without enabling a new retry policy.
+    """
+    parts: list[str] = []
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and len(parts) < _EXCEPTION_CHAIN_MAX_DEPTH:
+        marker = id(current)
+        if marker in seen:
+            break
+        seen.add(marker)
+        detail = _extract_error_detail(current).strip()[:800]
+        parts.append(f"{type(current).__name__}: {detail}" if detail else type(current).__name__)
+        current = current.__cause__ or current.__context__
+    chain = " <- ".join(parts) if parts else type(exc).__name__
+    return _redact_exception_text(chain)[:_EXCEPTION_CHAIN_MAX_CHARS]

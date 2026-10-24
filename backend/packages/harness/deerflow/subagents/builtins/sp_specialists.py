@@ -321,7 +321,12 @@ OUTLINE_CONFIG = SubagentConfig(
     disallowed_tools=["task", "ask_clarification", "present_files", "bash", "write_file", "str_replace", "web_search", "web_fetch"],
     skills=[],
     model="inherit",
-    max_turns=30,
+    # One delivery batch can legitimately contain: register user material,
+    # read the source range, write the tree, and read the file back.  The
+    # graph-to-tool-loop conversion reserves six steps per loop, so 30 turns
+    # yields a hard limit of four calls and blocks that fourth call.  Give the
+    # Outline one extra call of headroom without changing the global budget.
+    max_turns=36,
     internal=True,
 )
 

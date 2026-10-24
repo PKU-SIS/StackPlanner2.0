@@ -2119,6 +2119,7 @@ def read_file_tool(
     path: str,
     start_line: int | None = None,
     end_line: int | None = None,
+    line_numbers: bool = False,
 ) -> str:
     """Read the contents of a text file. Use this to examine source code, configuration files, logs, or any text-based file.
 
@@ -2127,6 +2128,7 @@ def read_file_tool(
         path: The **absolute** path to the file to read.
         start_line: Optional starting line number (1-indexed, inclusive). Use with end_line to read a specific range.
         end_line: Optional ending line number (1-indexed, inclusive). Use with start_line to read a specific range.
+        line_numbers: Optional: prefix each returned line with its 1-indexed line number. Default false preserves ordinary read output. Use true when exact evidence locations matter.
     """
     try:
         # Block access to disabled skill files
@@ -2137,8 +2139,16 @@ def read_file_tool(
         content = read_current_file_content(runtime, path)
         if not content:
             return "(empty)"
+        source_lines = content.splitlines()
         if start_line is not None and end_line is not None:
-            content = "\n".join(content.splitlines()[start_line - 1 : end_line])
+            source_lines = source_lines[start_line - 1 : end_line]
+            first_line = start_line
+        else:
+            first_line = 1
+        if line_numbers:
+            content = "\n".join(f"{number}: {line}" for number, line in enumerate(source_lines, start=first_line))
+        elif start_line is not None and end_line is not None:
+            content = "\n".join(source_lines)
         try:
             from deerflow.config.app_config import get_app_config
 
@@ -2171,8 +2181,17 @@ async def _read_file_tool_async(
     path: str,
     start_line: int | None = None,
     end_line: int | None = None,
+    line_numbers: bool = False,
 ) -> str:
-    return await _run_sync_tool_after_async_sandbox_init(read_file_tool.func, runtime, description, path, start_line, end_line)
+    return await _run_sync_tool_after_async_sandbox_init(
+        read_file_tool.func,
+        runtime,
+        description,
+        path,
+        start_line,
+        end_line,
+        line_numbers,
+    )
 
 
 read_file_tool.coroutine = _read_file_tool_async

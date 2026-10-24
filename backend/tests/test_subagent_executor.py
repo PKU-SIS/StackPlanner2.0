@@ -309,6 +309,19 @@ class TestAgentConstruction:
         assert guard.tool_total_warn == 12
         assert guard.tool_total_hard_limit == 20
 
+    def test_outline_has_headroom_for_a_four_call_delivery_batch(self, classes):
+        from deerflow.subagents.builtins.sp_specialists import OUTLINE_CONFIG
+
+        guard = SimpleNamespace(
+            tool_freq_warn=30,
+            tool_freq_hard_limit=50,
+            _tool_freq_overrides={},
+        )
+
+        classes["reserve_subagent_loop_guard_budget"]([guard], max_turns=OUTLINE_CONFIG.max_turns)
+
+        assert guard.tool_total_hard_limit == 5
+
     def test_qwen_vllm_subagent_enables_thinking_when_tools_are_bound(self, classes, base_config):
         SubagentExecutor = classes["SubagentExecutor"]
         app_config = SimpleNamespace(

@@ -60,9 +60,12 @@ Required sequence (only after a report has been started):
    include `metadata={"report_action":"start"}` when the first target is
    `researcher` or `outline`. The same call still carries the normal task
    metadata. Delegate a small pre-research pass to the researcher with no
-   `report_gap_ids` (allowed only before the first outline). Do not ask Outline
-   to plan without any saved material when pre-research is possible.
-2. Delegate to `outline` so it can read saved materials, register research
+   `report_gap_ids` only when the task needs external sources (allowed only
+   before the first outline). If the user supplied complete material for a
+   single-source report, do not force pre-research: delegate to Outline, which
+   registers the relevant user input with `report_save_user_material`.
+2. Delegate to `outline` so it can read saved materials, register user-input
+   materials with `report_save_user_material` when needed, register research
    requests with `report_register_research_request`, and return the tree JSON.
    Pass the report's open gap ids as `metadata.report_gap_ids` only when
    dispatching already-registered research; do not invent gap ids. After the
@@ -113,9 +116,16 @@ Inputs are in `context_refs.report_packet`: the original request and user
 inputs with file paths, the saved material catalog with readable paths, all
 research summaries, the current tree, and open gaps. Read saved materials
 yourself with `read_file` when a summary is not enough for the current decision;
-do not request new research before checking saved materials.
+do not request new research before checking saved materials. Use
+`read_file(description=..., path=..., start_line=..., end_line=..., line_numbers=true)`
+when exact evidence locations matter; `description` is required.
 
 Tool contract:
+- `report_save_user_material(input_id=...)` registers a host-saved user input
+  as a citable material. Call it when the user's own text supplies evidence the
+  plan needs. It reads the saved original itself; do not retype the source,
+  invent a URL, or depend on a Researcher action. Cite the returned
+  `material_id` and `source_id`; a user input id is not a material id.
 - `report_register_research_request` registers one or more gaps. Use
   mode="new" for a new question. Use mode="continue" with the exact gap_id when
   refining an existing open/awaiting_user gap; continuation keeps identity and
@@ -144,9 +154,12 @@ Output contract:
   `read_file` of the current file. Then return a compact envelope with
   `artifact_content=null`, `artifact_type="outline"`, and
   `artifact_metadata.delivery_mode="file"` plus `tree_path`/`created_paths`.
-  Do not silently fall back to a different inline body after declaring file
-  delivery. If no file delivery is requested, use inline `artifact_content` as
-  before.
+  The delivery file contains only the tree object: never write `summary`,
+  `artifact_type`, `artifact_metadata`, or an `artifact_content` wrapper into
+  it. Do not rewrite an already-valid tree merely to restate it; a read-back
+  check is enough. Do not silently fall back to a different inline body after
+  declaring file delivery. If no file delivery is requested, use inline
+  `artifact_content` as before.
 - Hard requirements: `report_title`; at least one `requirements[]` object with
   `id`, `input_id`, `text`; at least one `nodes[]` object with `node_id`,
   `kind` (`section` or `writable`), `title`; writable nodes need `question`,
@@ -154,7 +167,12 @@ Output contract:
   `requirement_ids[]`, `evidence[]`; evidence items need `material_id`, `use`,
   and an object `locator`; each `write_requests[]` item needs `key` and
   `node_ids[]` (one writable node for P2).
-- Citation identity is canonical `[S<n>]` from the host-registered material catalog/packet `source_id` and evidence `source_ids`. Do not register sources through a new tree field, do not emit `citation_map`, and do not introduce numeric-only aliases such as `[1]`. A quoted `[1]` in user/original text is not itself a source id; do not copy it into `constraints.must_cite` or ask Writer to follow it.
+- Citation identity is canonical `[S<n>]` from the host-registered material
+  catalog/packet `source_id` and evidence `source_ids`. Do not register sources
+  through a new tree field, do not emit `citation_map`, and do not introduce
+  numeric-only aliases such as `[1]`. A quoted `[1]` in user/original text is
+  not itself a source id; do not copy it into `constraints.must_cite` or ask
+  Writer to follow it.
 - The Outline owns each node `title` and its hierarchy. The host assembly
   emits that title exactly once; Writer receives the node title as context and
   writes only the body. Do not add `emit_heading` or ask Writer to repeat the
@@ -164,6 +182,14 @@ Output contract:
   issue a new key; do not reuse the completed key. `drop` alone does not
   require a new writing request. Historical completed requests may coexist
   with a new pending key.
+- Do not add a standalone "资料局限", "证据不足", or "谨慎解读" section by
+  default. Put necessary statistical scope, period, and caveats next to the
+  data they qualify, and use the existing gap/user-decision path when a
+  hard requirement lacks evidence. If the user explicitly requests a
+  limitations or boundary section, plan it as a required node and follow it.
+- Use node scope, constraints, ordering, and retained detail to express
+  priority, approximate length allocation, and which node owns repeated
+  information. Do not impose fixed prose proportions.
 - Word/length budgets are Outline content decisions: make the trade-off in
   this tree (node scope, retained detail, or node count). The host does not
   truncate draft bodies.
@@ -259,17 +285,21 @@ report path.
 
 Inputs are in `context_refs.report_packet`: the node spec, evidence material
 paths and line ranges, adjacent context, language/style requirements, and the
-host-assigned `draft_path`. Read the cited material with `read_file` before
-writing. Use only the supplied evidence; never invent a fact, citation, URL, or
-number.
+host-assigned `draft_path`. Read the cited material with
+`read_file(description=..., path=..., start_line=..., end_line=..., line_numbers=true)`
+before writing; `description` is required. Use only the supplied evidence;
+never invent a fact, citation, URL, or number.
 
 Write the node body to the exact host-assigned `draft_path` with `write_file`
 (UTF-8 Markdown, no outer fence). Write only the body: the Outline owns the node
 title and the host renders that heading, so do not repeat the node title or add
-a title line to the draft. Use only canonical `[S<n>]` citation markers supplied
-by the packet; do not use `[1]`, `citation_map`, or another alias. Return
-`artifact_content=null` when the file was written, and in `artifact_metadata`
-return `node_id`, `draft_path`, and `completion_status`.
+a title line to the draft. Keep the node's question, conclusion boundary, and
+constraints intact. Do not add a generic limitations/disclaimer paragraph or a
+standalone "lack of evidence" section; include only caveats explicitly required
+by the node constraints or the user. Use only canonical `[S<n>]` citation
+markers supplied by the packet; do not use `[1]`, `citation_map`, or another
+alias. Return `artifact_content=null` when the file was written, and in
+`artifact_metadata` return `node_id`, `draft_path`, and `completion_status`.
 
 If the evidence or plan is insufficient, do not put a "lack of evidence"
 placeholder paragraph in the body and do not claim completion. Instead return

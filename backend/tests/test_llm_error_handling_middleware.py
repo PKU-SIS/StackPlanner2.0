@@ -10,6 +10,7 @@ from langgraph.errors import GraphBubbleUp
 
 from deerflow.agents.middlewares.llm_error_handling_middleware import (
     LLMErrorHandlingMiddleware,
+    _exception_chain_detail,
 )
 from deerflow.config.app_config import AppConfig
 from deerflow.config.sandbox_config import SandboxConfig
@@ -810,3 +811,16 @@ def test_async_index_error_exhausted_returns_user_fallback(
     assert result.additional_kwargs["error_reason"] == "transient"
     assert result.additional_kwargs["error_type"] == "IndexError"
     assert "temporarily unavailable" in str(result.content)
+
+
+def test_exception_chain_detail_preserves_local_cause_and_redacts_secrets() -> None:
+    cause = RuntimeError("asyncio Event is bound to a different event loop api_key=sk-secret-value")
+    outer = ConnectionError("Connection error.")
+    outer.__cause__ = cause
+
+    detail = _exception_chain_detail(outer)
+
+    assert detail.startswith("ConnectionError: Connection error.")
+    assert "RuntimeError: asyncio Event is bound to a different event loop" in detail
+    assert "sk-secret-value" not in detail
+    assert "[REDACTED]" in detail

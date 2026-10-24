@@ -8,6 +8,7 @@ switching to ``bash`` + pandas/openpyxl — burning LLM round-trips. These tests
 pin the actionable error contract and guard the normal text path.
 """
 
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -63,3 +64,56 @@ def test_read_file_tool_text_file_unaffected(tmp_path, monkeypatch) -> None:
 
     assert "hello 你好" in result, result
     assert "binary" not in result.lower(), result
+
+
+def test_read_file_line_numbers_are_explicit_and_default_stays_unchanged(tmp_path, monkeypatch) -> None:
+    runtime = _local_runtime(tmp_path)
+    (tmp_path / "uploads" / "notes.txt").write_text("alpha\nbeta\ngamma", encoding="utf-8")
+    monkeypatch.setattr("deerflow.sandbox.tools.ensure_sandbox_initialized", lambda runtime: LocalSandbox("t1"))
+    monkeypatch.setattr("deerflow.sandbox.tools.ensure_thread_directories_exist", lambda runtime: None)
+
+    default = read_file_tool.func(
+        runtime=runtime,
+        description="read default",
+        path="/mnt/user-data/uploads/notes.txt",
+        start_line=2,
+        end_line=3,
+    )
+    numbered = read_file_tool.func(
+        runtime=runtime,
+        description="read numbered evidence",
+        path="/mnt/user-data/uploads/notes.txt",
+        start_line=2,
+        end_line=3,
+        line_numbers=True,
+    )
+
+    assert default == "beta\ngamma"
+    assert numbered == "2: beta\n3: gamma"
+
+
+def test_read_file_line_numbers_match_async_path(tmp_path, monkeypatch) -> None:
+    runtime = _local_runtime(tmp_path)
+    (tmp_path / "uploads" / "notes.txt").write_text("alpha\nbeta", encoding="utf-8")
+    monkeypatch.setattr("deerflow.sandbox.tools.ensure_sandbox_initialized", lambda runtime: LocalSandbox("t1"))
+    monkeypatch.setattr("deerflow.sandbox.tools.ensure_thread_directories_exist", lambda runtime: None)
+    async def _direct_async(func, runtime, *args):
+        return func(runtime, *args)
+
+    monkeypatch.setattr(
+        "deerflow.sandbox.tools._run_sync_tool_after_async_sandbox_init",
+        _direct_async,
+    )
+
+    result = asyncio.run(
+        read_file_tool.coroutine(
+            runtime=runtime,
+            description="read numbered evidence async",
+            path="/mnt/user-data/uploads/notes.txt",
+            start_line=1,
+            end_line=2,
+            line_numbers=True,
+        )
+    )
+
+    assert result == "1: alpha\n2: beta"
