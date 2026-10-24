@@ -505,7 +505,10 @@ def test_researcher_automatically_continues_bounded_multi_item_fetches():
     assert result.artifact_metadata["research_continuation_attempts"] == 2
     assert result.artifact_metadata["research_pass_count"] == 3
     assert result.result == "Fetched BRA=10377.5892792557."
-    assert "10377.5892792557" in result.artifact_metadata["central_evidence_preview"]
+    assert all(
+        value in result.artifact_metadata["central_evidence_preview"]
+        for value in ("12951.1782397043", "2434.45111237626", "10377.5892792557")
+    )
     assert result.artifact_content is not None
     assert all(expected in result.artifact_content for expected in ("12951.1782397043", "2434.45111237626", "10377.5892792557"))
     assert result.artifact_content.index("10377.5892792557") < (result.artifact_content.index("12951.1782397043"))

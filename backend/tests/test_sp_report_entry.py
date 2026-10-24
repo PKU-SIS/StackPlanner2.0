@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from langchain_core.messages import HumanMessage
@@ -81,6 +82,38 @@ def test_merged_research_latest_state_is_consumed_by_delegate_observe(tmp_path):
     assert "second pass: A2A comparison found" in observed
     assert "first preview only" not in observed
     assert "A2A comparison still missing" not in observed
+
+
+def test_downstream_observe_keeps_all_research_evidence_and_drops_old_gap(tmp_path):
+    passes = [
+        ("CHN", 12951.1782397043, "IND and BRA remain."),
+        ("IND", 2434.45111237626, "BRA remains."),
+        ("BRA", 10377.5892792557, None),
+    ]
+    results = [
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result=f"Fetched {country}={value}.",
+            artifact_content=json.dumps({"country": country, "value": value}),
+            artifact_type="research_observation",
+            artifact_metadata={
+                "completion_status": "complete" if gap is None else "partial",
+                "evidence_gaps": [] if gap is None else [gap],
+            },
+        )
+        for country, value, gap in passes
+    ]
+    merged = _merge_research_continuations(results)
+    ctx = HandlerContext(state=_state(tmp_path), stack=TaskMemoryStack(), thread_id="t1", run_id="run1")
+
+    result = DelegateHandler(executor=_MergedResearchExecutor(merged)).handle(_action(), ctx)
+
+    assert result.next_step == "continue"
+    observed = str(ctx.stack.entries[-1].content)
+    for value in ("12951.1782397043", "2434.45111237626", "10377.5892792557"):
+        assert value in observed
+    assert "IND and BRA remain." not in observed
+    assert "BRA remains." not in observed
 
 
 def _state(tmp_path: Path) -> dict:

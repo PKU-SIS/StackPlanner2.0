@@ -850,9 +850,19 @@ def _merge_research_continuations(
     metadata = dict(base.artifact_metadata)
     metadata["research_continuation_attempts"] = len(results) - 1
     metadata["research_pass_count"] = len(results)
-    latest_preview = _structured_evidence_preview(base.artifact_content)
-    if latest_preview:
-        metadata["central_evidence_preview"] = latest_preview[:_CENTRAL_STRUCTURED_EVIDENCE_PREVIEW_MAX_CHARS]
+    # Preview is a compact evidence excerpt, not a status summary. Keep every
+    # successful pass's structured evidence so downstream context retains
+    # prior still-valid evidence; the latest summary/gaps above remain the
+    # current state.
+    structured_previews = list(
+        dict.fromkeys(
+            preview
+            for result in reversed(successful)
+            if (preview := _structured_evidence_preview(result.artifact_content))
+        )
+    )
+    if structured_previews:
+        metadata["central_evidence_preview"] = " | ".join(structured_previews)[:_CENTRAL_STRUCTURED_EVIDENCE_PREVIEW_MAX_CHARS]
     failed_tail = results[-1] if results[-1].status != SPSubagentStatus.COMPLETED else None
     if failed_tail is not None:
         metadata["completion_status"] = "partial"
