@@ -24,10 +24,28 @@ _LOOP_ASYNC_CLIENTS: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[
 _LOOP_ASYNC_CLIENTS_LOCK = threading.Lock()
 
 
+def _sdk_socket_options(value: Any) -> Any:
+    """Resolve socket options through the SDK's own default semantics."""
+    from langchain_openai.chat_models._client_utils import _resolve_socket_options
+
+    return _resolve_socket_options(value)
+
+
+def _register_loop_async_client(
+    loop: asyncio.AbstractEventLoop,
+    key: tuple[Any, ...],
+    client: httpx.AsyncClient,
+) -> None:
+    with _LOOP_ASYNC_CLIENTS_LOCK:
+        clients = _LOOP_ASYNC_CLIENTS.setdefault(loop, {})
+        clients[key] = client
+
+
 def get_loop_async_client(
     *,
     timeout: Any = None,
     base_url: str | None = None,
+    socket_options: Any = None,
 ) -> httpx.AsyncClient | None:
     """Return the async client owned by the current event loop, if any.
 
@@ -40,7 +58,8 @@ def get_loop_async_client(
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return None
-    key = (base_url, repr(timeout))
+    resolved_socket_options = _sdk_socket_options(socket_options)
+    key = (base_url, repr(timeout), resolved_socket_options)
     with _LOOP_ASYNC_CLIENTS_LOCK:
         clients = _LOOP_ASYNC_CLIENTS.get(loop)
         if clients is None:
@@ -48,9 +67,62 @@ def get_loop_async_client(
             _LOOP_ASYNC_CLIENTS[loop] = clients
         client = clients.get(key)
         if client is None or client.is_closed:
-            client = httpx.AsyncClient(timeout=timeout)
+            # Use the SDK builder rather than a bare httpx.AsyncClient so
+            # base_url, timeout, socket options and connection limits keep
+            # the same defaults as the original client path.
+            from langchain_openai.chat_models._client_utils import _build_async_httpx_client
+
+            client = _build_async_httpx_client(base_url, timeout, resolved_socket_options)
             clients[key] = client
         return client
+
+
+def get_loop_proxy_clients(
+    *,
+    proxy: str,
+    timeout: Any = None,
+    socket_options: Any = None,
+) -> tuple[httpx.Client, httpx.AsyncClient] | None:
+    """Build proxy-aware sync/async clients for an explicit proxy config.
+
+    The upstream SDK rejects ``openai_proxy`` together with either explicit
+    HTTP client.  We therefore construct both clients with the SDK's proxy
+    builders, preserving proxy, TLS, socket-option and timeout behavior, and
+    hand them to ChatOpenAI instead of the mutually exclusive field.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+    resolved_socket_options = _sdk_socket_options(socket_options)
+    from langchain_openai.chat_models._client_utils import (
+        _build_proxied_async_httpx_client,
+        _build_proxied_sync_httpx_client,
+    )
+
+    try:
+        from langchain_openai.chat_models.base import global_ssl_context
+    except Exception:  # pragma: no cover - older SDK compatibility
+        import ssl
+
+        global_ssl_context = ssl.create_default_context()
+
+    sync_client = _build_proxied_sync_httpx_client(
+        proxy=proxy,
+        verify=global_ssl_context,
+        socket_options=resolved_socket_options,
+    )
+    async_client = _build_proxied_async_httpx_client(
+        proxy=proxy,
+        verify=global_ssl_context,
+        socket_options=resolved_socket_options,
+    )
+    _register_loop_async_client(
+        loop,
+        ("proxy", proxy, repr(timeout), resolved_socket_options),
+        async_client,
+    )
+    return sync_client, async_client
 
 
 async def close_loop_async_clients(loop: asyncio.AbstractEventLoop | None = None) -> None:
@@ -377,12 +449,30 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
             model_init_kwargs[key] = value
     model_fields = getattr(model_class, "model_fields", {})
     if "http_async_client" in model_fields and "http_async_client" not in model_init_kwargs:
-        loop_client = get_loop_async_client(
-            timeout=model_init_kwargs.get("timeout"),
-            base_url=model_init_kwargs.get("base_url") or model_init_kwargs.get("openai_api_base"),
-        )
-        if loop_client is not None:
-            model_init_kwargs["http_async_client"] = loop_client
+        proxy = model_init_kwargs.get("openai_proxy")
+        if proxy and "http_client" not in model_init_kwargs:
+            # The SDK rejects openai_proxy together with an explicit HTTP
+            # client.  Preserve the proxy by building equivalent sync/async
+            # clients through the SDK's own proxy builders, then pass those
+            # clients instead of the mutually exclusive field.
+            proxy_clients = get_loop_proxy_clients(
+                proxy=str(proxy),
+                timeout=model_init_kwargs.get("timeout"),
+                socket_options=model_init_kwargs.get("http_socket_options"),
+            )
+            if proxy_clients is not None:
+                sync_client, async_client = proxy_clients
+                model_init_kwargs["http_client"] = sync_client
+                model_init_kwargs["http_async_client"] = async_client
+                model_init_kwargs["openai_proxy"] = None
+        elif not proxy:
+            loop_client = get_loop_async_client(
+                timeout=model_init_kwargs.get("timeout"),
+                base_url=model_init_kwargs.get("base_url") or model_init_kwargs.get("openai_api_base"),
+                socket_options=model_init_kwargs.get("http_socket_options"),
+            )
+            if loop_client is not None:
+                model_init_kwargs["http_async_client"] = loop_client
     model_instance = model_class(**model_init_kwargs)
     logger.info("chat model client created name=%s %s", name, _runtime_identity(model_instance))
 

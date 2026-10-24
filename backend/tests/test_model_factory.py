@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+
+import httpx
 import pytest
 from langchain.chat_models import BaseChatModel
 
@@ -10,6 +13,7 @@ from deerflow.config.model_config import ModelConfig
 from deerflow.config.sandbox_config import SandboxConfig
 from deerflow.models import factory as factory_module
 from deerflow.models import openai_codex_provider as codex_provider_module
+from deerflow.models.factory import close_loop_async_clients
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -76,6 +80,52 @@ def _patch_factory(monkeypatch, app_config: AppConfig, model_class=FakeChatModel
     monkeypatch.setattr(factory_module, "get_app_config", lambda: app_config)
     monkeypatch.setattr(factory_module, "resolve_class", lambda path, base: model_class)
     monkeypatch.setattr(factory_module, "build_tracing_callbacks", lambda: [])
+
+
+def test_real_factory_preserves_proxy_without_client_conflict(monkeypatch):
+    cfg = _make_app_config([_make_model(use="langchain_openai:ChatOpenAI")])
+    monkeypatch.setattr(factory_module, "get_app_config", lambda: cfg)
+    monkeypatch.setattr(factory_module, "build_tracing_callbacks", lambda: [])
+
+    async def construct():
+        model = factory_module.create_chat_model(
+            "test-model",
+            app_config=cfg,
+            attach_tracing=False,
+            api_key="test",
+            base_url="http://127.0.0.1:9/v1",
+            openai_proxy="http://127.0.0.1:9",
+        )
+        try:
+            assert model.http_client is not None
+            assert model.http_async_client is not None
+            assert model.openai_proxy is None
+            assert model.root_async_client is not None
+        finally:
+            await close_loop_async_clients(asyncio.get_running_loop())
+
+    asyncio.run(construct())
+
+
+def test_real_factory_keeps_caller_supplied_async_client(monkeypatch):
+    cfg = _make_app_config([_make_model(use="langchain_openai:ChatOpenAI")])
+    monkeypatch.setattr(factory_module, "get_app_config", lambda: cfg)
+    monkeypatch.setattr(factory_module, "build_tracing_callbacks", lambda: [])
+
+    async def construct():
+        supplied = httpx.AsyncClient(timeout=1.0)
+        model = factory_module.create_chat_model(
+            "test-model",
+            app_config=cfg,
+            attach_tracing=False,
+            api_key="test",
+            base_url="http://127.0.0.1:9/v1",
+            http_async_client=supplied,
+        )
+        assert model.http_async_client is supplied
+        await supplied.aclose()
+
+    asyncio.run(construct())
 
 
 # ---------------------------------------------------------------------------
