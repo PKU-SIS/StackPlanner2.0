@@ -9,8 +9,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from langchain.tools import tool
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
+from deerflow.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
+from deerflow.sandbox.local.local_sandbox import LocalSandbox
+from deerflow.sandbox.tools import read_file_tool, write_file_tool
 from deerflow.sp.actions.handlers.base import HandlerContext
 from deerflow.sp.actions.schema import ActionType, SPAction
 from deerflow.sp.memory import TaskMemoryStack
@@ -37,6 +40,21 @@ def _paths(ctx: HandlerContext) -> report_store.ReportPaths:
     context = hooks.report_context(ctx.state)
     assert context.outputs_path and context.report_id
     return report_store.ReportPaths(context.outputs_path, context.report_id)
+
+
+def _local_runtime(tmp_path: Path) -> SimpleNamespace:
+    for sub in ("workspace", "uploads", "outputs"):
+        (tmp_path / sub).mkdir(parents=True, exist_ok=True)
+    thread_data = {
+        "workspace_path": str(tmp_path / "workspace"),
+        "uploads_path": str(tmp_path / "uploads"),
+        # Report output paths are rooted at tmp_path, not a nested outputs dir.
+        "outputs_path": str(tmp_path),
+    }
+    return SimpleNamespace(
+        state={"sandbox": {"sandbox_id": "local:t1"}, "thread_data": thread_data},
+        context={"thread_id": "t1", "run_id": "run1"},
+    )
 
 
 def _begin(ctx: HandlerContext, action_id: str = "a-material") -> None:
@@ -355,3 +373,58 @@ def test_outline_subagent_exposes_user_material_registration_tool(tmp_path):
     assert role == "outline"
     assert "report_save_user_material" in returned_config.tools
     assert any(getattr(tool, "name", "") == "report_save_user_material" for tool in returned_tools)
+
+
+def test_outline_five_call_material_read_write_read_passes_real_loop_guard(tmp_path, monkeypatch):
+    ctx = _context(tmp_path)
+    paths = _paths(ctx)
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    input_id = str(ledger.inputs()[0]["input_id"])
+    material_tool = build_register_user_material_tool(paths=paths)
+
+    runtime = _local_runtime(tmp_path)
+    monkeypatch.setattr("deerflow.sandbox.tools.ensure_sandbox_initialized", lambda runtime: LocalSandbox("t1"))
+    monkeypatch.setattr("deerflow.sandbox.tools.ensure_thread_directories_exist", lambda runtime: None)
+
+    # Same Outline role budget: 78 turns -> hard 12, warn 7.  The role-config
+    # conversion itself is covered by test_subagent_executor; this test exercises
+    # the real middleware and real tool side effects, not just the number.
+    guard = LoopDetectionMiddleware(tool_total_warn=7, tool_total_hard_limit=12)
+
+    material_payload = json.loads(material_tool.func(input_id=input_id, title="用户材料"))
+    material_path = str(material_payload["path"])
+    tree_path = "/mnt/user-data/outputs/report/r1/tree/middleware-roundtrip.json"
+    tree_body = json.dumps(
+        {"report_title": "roundtrip", "requirements": [], "nodes": []},
+        ensure_ascii=False,
+    )
+    actions = [
+        ("report_save_user_material", {"input_id": input_id, "title": "用户材料"}),
+        ("read_file", {"description": "read material first", "path": material_path, "start_line": 1, "end_line": 1, "line_numbers": True}),
+        ("read_file", {"description": "read material second", "path": material_path, "start_line": 1, "end_line": 1, "line_numbers": True}),
+        ("write_file", {"description": "write tree", "path": tree_path, "content": tree_body}),
+        ("read_file", {"description": "read tree back", "path": tree_path}),
+    ]
+
+    for index, (tool_name, args) in enumerate(actions, start=1):
+        ai_message = AIMessage(
+            content="",
+            tool_calls=[{"name": tool_name, "args": args, "id": f"call-{index}", "type": "tool_call"}],
+        )
+        assert guard.after_model({"messages": [ai_message]}, runtime) is None
+
+        if tool_name == "report_save_user_material":
+            material_payload = json.loads(material_tool.func(**args))
+            assert material_payload["saved"] is True
+        elif tool_name == "read_file":
+            result = read_file_tool.func(runtime=runtime, **args)
+            assert not result.startswith("Error:")
+            if args.get("line_numbers"):
+                assert result.startswith("1: ")
+        else:
+            result = write_file_tool.func(runtime=runtime, **args)
+            assert result == "OK"
+
+    assert (tmp_path / "report" / "r1" / "tree" / "middleware-roundtrip.json").read_text(
+        encoding="utf-8"
+    ) == tree_body
