@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import httpx
 import pytest
@@ -86,23 +89,35 @@ def test_real_factory_preserves_proxy_without_client_conflict(monkeypatch):
     cfg = _make_app_config([_make_model(use="langchain_openai:ChatOpenAI")])
     monkeypatch.setattr(factory_module, "get_app_config", lambda: cfg)
     monkeypatch.setattr(factory_module, "build_tracing_callbacks", lambda: [])
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+        monkeypatch.delenv(name, raising=False)
 
     async def construct():
-        model = factory_module.create_chat_model(
+        proxy = "http://127.0.0.1:9"
+        first = factory_module.create_chat_model(
             "test-model",
             app_config=cfg,
             attach_tracing=False,
             api_key="test",
             base_url="http://127.0.0.1:9/v1",
-            openai_proxy="http://127.0.0.1:9",
+            openai_proxy=proxy,
         )
-        try:
-            assert model.http_client is not None
-            assert model.http_async_client is not None
-            assert model.openai_proxy is None
-            assert model.root_async_client is not None
-        finally:
-            await close_loop_async_clients(asyncio.get_running_loop())
+        second = factory_module.create_chat_model(
+            "test-model",
+            app_config=cfg,
+            attach_tracing=False,
+            api_key="test",
+            base_url="http://127.0.0.1:9/v1",
+            openai_proxy=proxy,
+        )
+        assert first.openai_proxy == proxy
+        assert second.openai_proxy == proxy
+        assert first.http_client is not None
+        assert first.http_async_client is not None
+        assert second.http_client is not None
+        assert second.http_async_client is not None
+        assert first.root_async_client is not second.root_async_client
+        await close_loop_async_clients(asyncio.get_running_loop())
 
     asyncio.run(construct())
 
@@ -124,6 +139,95 @@ def test_real_factory_keeps_caller_supplied_async_client(monkeypatch):
         )
         assert model.http_async_client is supplied
         await supplied.aclose()
+
+    asyncio.run(construct())
+
+
+def test_real_factory_no_proxy_uses_owned_loop_client(monkeypatch):
+    cfg = _make_app_config([_make_model(use="langchain_openai:ChatOpenAI")])
+    monkeypatch.setattr(factory_module, "get_app_config", lambda: cfg)
+    monkeypatch.setattr(factory_module, "build_tracing_callbacks", lambda: [])
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+        monkeypatch.delenv(name, raising=False)
+
+    async def construct():
+        model = factory_module.create_chat_model(
+            "test-model",
+            app_config=cfg,
+            attach_tracing=False,
+            api_key="test",
+            base_url="http://127.0.0.1:9/v1",
+        )
+        client = model.http_async_client
+        assert client is not None
+        await close_loop_async_clients(asyncio.get_running_loop())
+        assert client.is_closed
+
+    asyncio.run(construct())
+
+
+def test_real_factory_uses_environment_proxy_without_custom_transport(monkeypatch):
+    class ProxyHandler(BaseHTTPRequestHandler):
+        paths: list[str] = []
+
+        def do_POST(self):  # noqa: N802
+            self.rfile.read(int(self.headers.get("content-length", "0")))
+            ProxyHandler.paths.append(self.path)
+            body = json.dumps(
+                {
+                    "id": "proxy-chat",
+                    "object": "chat.completion",
+                    "created": 1,
+                    "model": "local",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "proxy-ok"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+                }
+            ).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), ProxyHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    proxy = f"http://127.0.0.1:{server.server_port}"
+    cfg = _make_app_config([_make_model(use="langchain_openai:ChatOpenAI")])
+    monkeypatch.setattr(factory_module, "get_app_config", lambda: cfg)
+    monkeypatch.setattr(factory_module, "build_tracing_callbacks", lambda: [])
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+        monkeypatch.setenv(name, proxy)
+    for name in ("NO_PROXY", "no_proxy"):
+        monkeypatch.setenv(name, "")
+    monkeypatch.delenv("LANGCHAIN_OPENAI_TCP_KEEPALIVE", raising=False)
+
+    async def construct():
+        try:
+            model = factory_module.create_chat_model(
+                "test-model",
+                app_config=cfg,
+                attach_tracing=False,
+                api_key="test",
+                base_url="http://127.0.0.1:1/v1",
+                max_retries=0,
+            )
+            response = await model.ainvoke("hello")
+            assert response.content == "proxy-ok"
+            assert ProxyHandler.paths == ["http://127.0.0.1:1/v1/chat/completions"]
+        finally:
+            await close_loop_async_clients(asyncio.get_running_loop())
+            server.shutdown()
+            server.server_close()
 
     asyncio.run(construct())
 

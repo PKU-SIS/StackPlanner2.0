@@ -25,20 +25,26 @@ _LOOP_ASYNC_CLIENTS_LOCK = threading.Lock()
 
 
 def _sdk_socket_options(value: Any) -> Any:
-    """Resolve socket options through the SDK's own default semantics."""
-    from langchain_openai.chat_models._client_utils import _resolve_socket_options
+    """Resolve socket options through the SDK's own default semantics.
 
+    The SDK deliberately skips its custom socket-option transport when the
+    default client shape would otherwise shadow httpx environment-proxy
+    auto-detection.  Reuse that exact decision before building our explicit
+    loop client.
+    """
+    from langchain_openai.chat_models._client_utils import (
+        _resolve_socket_options,
+        _should_bypass_socket_options_for_proxy_env,
+    )
+
+    if _should_bypass_socket_options_for_proxy_env(
+        http_socket_options=value,
+        http_client=None,
+        http_async_client=None,
+        openai_proxy=None,
+    ):
+        return ()
     return _resolve_socket_options(value)
-
-
-def _register_loop_async_client(
-    loop: asyncio.AbstractEventLoop,
-    key: tuple[Any, ...],
-    client: httpx.AsyncClient,
-) -> None:
-    with _LOOP_ASYNC_CLIENTS_LOCK:
-        clients = _LOOP_ASYNC_CLIENTS.setdefault(loop, {})
-        clients[key] = client
 
 
 def get_loop_async_client(
@@ -75,54 +81,6 @@ def get_loop_async_client(
             client = _build_async_httpx_client(base_url, timeout, resolved_socket_options)
             clients[key] = client
         return client
-
-
-def get_loop_proxy_clients(
-    *,
-    proxy: str,
-    timeout: Any = None,
-    socket_options: Any = None,
-) -> tuple[httpx.Client, httpx.AsyncClient] | None:
-    """Build proxy-aware sync/async clients for an explicit proxy config.
-
-    The upstream SDK rejects ``openai_proxy`` together with either explicit
-    HTTP client.  We therefore construct both clients with the SDK's proxy
-    builders, preserving proxy, TLS, socket-option and timeout behavior, and
-    hand them to ChatOpenAI instead of the mutually exclusive field.
-    """
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        return None
-    resolved_socket_options = _sdk_socket_options(socket_options)
-    from langchain_openai.chat_models._client_utils import (
-        _build_proxied_async_httpx_client,
-        _build_proxied_sync_httpx_client,
-    )
-
-    try:
-        from langchain_openai.chat_models.base import global_ssl_context
-    except Exception:  # pragma: no cover - older SDK compatibility
-        import ssl
-
-        global_ssl_context = ssl.create_default_context()
-
-    sync_client = _build_proxied_sync_httpx_client(
-        proxy=proxy,
-        verify=global_ssl_context,
-        socket_options=resolved_socket_options,
-    )
-    async_client = _build_proxied_async_httpx_client(
-        proxy=proxy,
-        verify=global_ssl_context,
-        socket_options=resolved_socket_options,
-    )
-    _register_loop_async_client(
-        loop,
-        ("proxy", proxy, repr(timeout), resolved_socket_options),
-        async_client,
-    )
-    return sync_client, async_client
 
 
 async def close_loop_async_clients(loop: asyncio.AbstractEventLoop | None = None) -> None:
@@ -448,31 +406,28 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
         if value is not None or key not in model_init_kwargs:
             model_init_kwargs[key] = value
     model_fields = getattr(model_class, "model_fields", {})
-    if "http_async_client" in model_fields and "http_async_client" not in model_init_kwargs:
-        proxy = model_init_kwargs.get("openai_proxy")
-        if proxy and "http_client" not in model_init_kwargs:
-            # The SDK rejects openai_proxy together with an explicit HTTP
-            # client.  Preserve the proxy by building equivalent sync/async
-            # clients through the SDK's own proxy builders, then pass those
-            # clients instead of the mutually exclusive field.
-            proxy_clients = get_loop_proxy_clients(
-                proxy=str(proxy),
-                timeout=model_init_kwargs.get("timeout"),
-                socket_options=model_init_kwargs.get("http_socket_options"),
-            )
-            if proxy_clients is not None:
-                sync_client, async_client = proxy_clients
-                model_init_kwargs["http_client"] = sync_client
-                model_init_kwargs["http_async_client"] = async_client
-                model_init_kwargs["openai_proxy"] = None
-        elif not proxy:
-            loop_client = get_loop_async_client(
-                timeout=model_init_kwargs.get("timeout"),
-                base_url=model_init_kwargs.get("base_url") or model_init_kwargs.get("openai_api_base"),
-                socket_options=model_init_kwargs.get("http_socket_options"),
-            )
-            if loop_client is not None:
-                model_init_kwargs["http_async_client"] = loop_client
+    if (
+        "http_socket_options" in model_fields
+        and model_init_kwargs.get("http_socket_options") is None
+        and _sdk_socket_options(None) == ()
+    ):
+        # Match the SDK's environment-proxy bypass for the sync client too.
+        # Passing an explicit async client makes the SDK skip its own bypass
+        # check later; the explicit empty option keeps the same no-custom-
+        # transport behavior without changing proxy selection.
+        model_init_kwargs["http_socket_options"] = ()
+    if (
+        "http_async_client" in model_fields
+        and "http_async_client" not in model_init_kwargs
+        and not model_init_kwargs.get("openai_proxy")
+    ):
+        loop_client = get_loop_async_client(
+            timeout=model_init_kwargs.get("timeout"),
+            base_url=model_init_kwargs.get("base_url") or model_init_kwargs.get("openai_api_base"),
+            socket_options=model_init_kwargs.get("http_socket_options"),
+        )
+        if loop_client is not None:
+            model_init_kwargs["http_async_client"] = loop_client
     model_instance = model_class(**model_init_kwargs)
     logger.info("chat model client created name=%s %s", name, _runtime_identity(model_instance))
 
