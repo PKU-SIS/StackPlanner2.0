@@ -41,4 +41,8 @@ In `artifact_metadata.gap_attempts`, return one item for every assigned gap:
 ```
 
 Use `not_attempted` for untouched gaps; never claim `searched` for work that did
-not happen. Use `artifact_type: "research_observation"`.
+not happen. If the invocation is interrupted after saving material, still return
+the per-gap attempt (for example `technical_error`) with the saved material ids.
+Omitting `gap_attempts` is not evidence that no research happened; the host
+retains actual tool executions and materials for Outline's judgment. Use
+`artifact_type: "research_observation"`.

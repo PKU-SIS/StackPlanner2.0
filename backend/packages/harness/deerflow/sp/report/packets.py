@@ -28,6 +28,30 @@ def _read_text(path: str | Path | None) -> tuple[str, str | None]:
         return "", f"unreadable: {exc}"
 
 
+def _outline_candidate_view(record: Any) -> dict[str, Any] | None:
+    """Expose rejected_outline only when the saved object is a tree candidate."""
+    if not isinstance(record, Mapping):
+        return None
+    kind = record.get("kind")
+    if kind not in {None, "tree_candidate"}:
+        return None
+    if kind is None:
+        path = record.get("path")
+        if not path:
+            return None
+        try:
+            parsed = json.loads(Path(str(path)).read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        if not isinstance(parsed, Mapping) or not any(key in parsed for key in ("nodes", "requirements", "report_title")):
+            return None
+    return {
+        key: record.get(key)
+        for key in ("virtual_path", "sha256", "chars", "action_id", "kind", "parse_error", "errors", "created_at")
+        if record.get(key) is not None
+    }
+
+
 def _material_entry(material: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "material_id": material.get("material_id"),
@@ -347,15 +371,7 @@ def build_outline_packet(ledger: ReportLedger) -> dict[str, Any]:
     ]
     writing_control = report_writing.control_entries(ledger)
 
-    rejected_outline = ledger.payload.get("rejected_outline")
-    if isinstance(rejected_outline, Mapping):
-        rejected_outline = {
-            key: rejected_outline.get(key)
-            for key in ("virtual_path", "sha256", "chars", "action_id", "errors", "created_at")
-            if rejected_outline.get(key) is not None
-        }
-    else:
-        rejected_outline = None
+    rejected_outline = _outline_candidate_view(ledger.payload.get("rejected_outline"))
 
     return {
         "report_id": ledger.payload.get("report_id"),

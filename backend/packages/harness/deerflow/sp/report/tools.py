@@ -41,6 +41,10 @@ def build_register_research_request_tool(
         The host validates references and assigns stable gap ids. Registration
         succeeds even before the first outline tree is accepted.
 
+        Each questions item uses nested objects: requirement_refs is an array of
+        {input_id, quote}; materials_checked is an array of {material_id, lines};
+        constraints is an object; mode="continue" also includes continue_gap_id.
+
         Args:
             questions: Batch of research requests. Each item contains mode,
                 question, constraints, why_insufficient, stop_condition,

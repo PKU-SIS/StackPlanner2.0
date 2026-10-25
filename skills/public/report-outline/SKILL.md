@@ -48,6 +48,30 @@ already satisfied.
 - `node_ids` refers only to nodes in the accepted tree. The first plan may use
   an empty list.
 
+### Complete research-request shape
+
+Use the real nested objects, not strings or prose placeholders:
+
+```json
+{
+  "questions": [{
+    "mode": "new",
+    "question": "What does the official specification say about X?",
+    "constraints": {"must_be_primary": true, "need_locator": true},
+    "why_insufficient": "Saved material m1 covers Y but not X at a locatable range.",
+    "stop_condition": "A first-party source with a URL and line range.",
+    "requirement_refs": [{"input_id": "u1", "quote": "original user text"}],
+    "node_ids": ["n2"],
+    "materials_checked": [{"material_id": "m1", "lines": [10, 32]}]
+  }]
+}
+```
+
+For `mode: "continue"`, include `continue_gap_id: "g1"` and keep the same
+`requirement_refs`/`materials_checked` shapes. `constraints` is an object;
+`requirement_refs` and `materials_checked` are arrays of objects. The same
+shape is described in the `report_register_research_request` tool docstring.
+
 ## Tree Contract
 
 Return the complete tree JSON in `artifact_content`:
@@ -181,9 +205,28 @@ must cover every hard user requirement.
 }
 ```
 
-If `report_packet.rejected_outline` is present, read that saved candidate and
-correct the same tree; preserve valid nodes and requirements, and do not let a
-dispatch message redefine this schema or move evidence preparation to Writer.
+If `report_packet.rejected_outline` is present on a `plan` or `revise` task,
+read that saved candidate first and correct the same tree; preserve valid nodes,
+requirements, evidence locators and completed updates. Do not prefill or reuse
+the current delivery path from the candidate, and do not let a dispatch message
+redefine this schema or move evidence preparation to Writer.
+
+### gap_outcomes shape
+
+When judging returned research, include complete objects, for example:
+
+```json
+"gap_outcomes": [{
+  "gap_id": "g1",
+  "outcome": "resolved",
+  "reason": "The saved primary source states the needed fact at a locatable range.",
+  "evidence_material_ids": ["m1"]
+}]
+```
+
+`outcome` is one of `resolved`, `unresolved`, or `not_needed`; `reason` is a
+non-empty string. `not_needed` needs `user_input_id` unless the item is
+genuinely optional. Do not use bare strings or omit reasons.
 
 ## User Inputs
 

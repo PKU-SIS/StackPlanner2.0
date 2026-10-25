@@ -131,7 +131,7 @@ def test_rejected_candidate_is_referenced_but_not_prefilled(tmp_path):
         task="revise report",
         target_agent="outline",
         stage="planning",
-        metadata={"report_task": "revise"},
+        metadata={"report_task": "plan"},
     )
     task_metadata = {"stage": "planning"}
     refs: dict = {}
@@ -252,6 +252,54 @@ def test_recovery_corrected_delivery_preserves_candidate_updates(tmp_path):
     current = ReportLedger.load_for_context(hooks.report_context(ctx.state))
     accepted_tree = json.loads(Path(current.payload["tree"]["path"]).read_text(encoding="utf-8"))
     assert accepted_tree["nodes"][0]["question"] == "recovered improved question"
+
+
+def test_diagnostic_text_is_not_saved_as_rejected_tree(tmp_path):
+    ctx = _context(tmp_path)
+    action, task = _outline_delegate(ctx)
+    entry = ctx.stack.append_delegate("outline", thread_id="t1", run_id="run1", stage="planning")
+    result = _result()
+    result.result = "[TOKEN BUDGET EXCEEDED] The total token usage has exceeded the safety limit."
+    result.artifact_content = None
+
+    rejected = hooks.handle_success(
+        action,
+        ctx,
+        result,
+        task,
+        artifact_adapter=SPArtifactAdapter(),
+        delegate_entry=entry,
+    )
+
+    assert rejected.next_step == "error_recoverable"
+    assert "No tree candidate" in (rejected.error or "")
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert not ledger.payload.get("rejected_outline")
+
+
+def test_incomplete_tree_is_retained_as_candidate_with_parse_error(tmp_path):
+    ctx = _context(tmp_path)
+    action, task = _outline_delegate(ctx)
+    delivery = Path(str(task.metadata["outline_delivery_path"]))
+    delivery.parent.mkdir(parents=True, exist_ok=True)
+    delivery.write_text('{"report_title":"partial","nodes":[', encoding="utf-8")
+    entry = ctx.stack.append_delegate("outline", thread_id="t1", run_id="run1", stage="planning")
+
+    rejected = hooks.handle_success(
+        action,
+        ctx,
+        _result(),
+        task,
+        artifact_adapter=SPArtifactAdapter(),
+        delegate_entry=entry,
+    )
+
+    assert rejected.next_step == "error_recoverable"
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    record = ledger.payload.get("rejected_outline")
+    assert record is not None
+    assert record["kind"] == "tree_candidate"
+    assert record["parse_error"]
 
 
 def test_token_capped_current_delivery_file_recovers_through_full_acceptance(tmp_path):

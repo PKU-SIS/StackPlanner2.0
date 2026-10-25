@@ -423,9 +423,10 @@ def prepare_delegation(
                 "Return artifact_content=null and this path in artifact_metadata."
             )
             rejected = ledger.payload.get("rejected_outline")
-            if report_task == "revise" and isinstance(rejected, Mapping):
-                candidate_virtual = str(rejected.get("virtual_path") or "").strip()
-                candidate_host = str(rejected.get("path") or "").strip()
+            candidate = report_packets._outline_candidate_view(rejected)
+            if report_task in {"plan", "revise"} and isinstance(candidate, Mapping):
+                candidate_virtual = str(candidate.get("virtual_path") or "").strip()
+                candidate_host = str(rejected.get("path") or "").strip() if isinstance(rejected, Mapping) else ""
                 if candidate_virtual:
                     instruction += (
                         " Recovery basis: before writing this delivery path, read "
@@ -1469,13 +1470,21 @@ def _accept_outline_locked(
     recover_delivered_file = execution_stop == "token_capped" and _outline_delivery_text(task) is not None
     if execution_stop in {"token_capped", "turn_capped", "loop_capped"} and not recover_delivered_file:
         file_text = _outline_delivery_text(task)
-        source_text = file_text if file_text is not None else (result.artifact_content if result.artifact_content is not None else result.result)
+        if file_text is not None:
+            source_text = file_text
+            source_kind = "delivery_file"
+        elif result.artifact_content is not None:
+            source_text = result.artifact_content
+            source_kind = "artifact_content"
+        else:
+            source_text = result.result
+            source_kind = "result"
         completion_status = str(result.completion_status or result.artifact_metadata.get("completion_status") or "partial").strip().lower()
         error = (
             "Outline technical abort before acceptance: "
             f"stop_reason={execution_stop}, finish_reason={result.finish_reason or 'none'}, "
-            f"completion_status={completion_status}; candidate file was retained and no tree, "
-            "write request, or planning disposition was committed."
+            f"completion_status={completion_status}; no tree, write request, or planning "
+            "disposition was committed."
         )
         if execution_stop == "token_capped":
             error += (
@@ -1483,9 +1492,25 @@ def _accept_outline_locked(
                 "delegation was exhausted; it is not finish_reason=length and does not establish that "
                 "the plan or body was too large. Content and scope decisions remain with Outline."
             )
-        rejected = _store_rejected_outline(ledger, action, result, error, source_text=source_text)
+        rejected = _store_rejected_outline(
+            ledger,
+            action,
+            result,
+            error,
+            source_text=source_text,
+            source_kind=source_kind,
+        )
         if rejected:
             error += f" rejected_candidate: {rejected['virtual_path']}"
+        else:
+            diagnostic = str(source_text or "").strip()[:500]
+            error += (
+                " No tree candidate was produced; the diagnostic text is retained in this event only. "
+                "Do not treat it as a tree to repair; retry the planning work from the requirements "
+                "and accepted baseline."
+            )
+            if diagnostic:
+                error += f" Diagnostic: {diagnostic}"
         if (
             str(task.metadata.get("report_acceptance_origin") or action.metadata.get("report_acceptance_origin") or "") == "harness"
             and str(task.metadata.get("report_task") or action.metadata.get("report_task") or "").strip().lower() == "revise"
@@ -1580,14 +1605,26 @@ def _accept_outline_locked(
         ledger = working
     except ReportValidationError as exc:
         candidate_source = source_text
+        candidate_kind = "delivery_file" if candidate_source is not None else "result"
         if candidate_source is None:
             delivery_path = Path(str(task.metadata.get("outline_delivery_path") or ""))
             if str(delivery_path) and delivery_path.is_file():
                 try:
                     candidate_source = delivery_path.read_text(encoding="utf-8")
+                    candidate_kind = "delivery_file"
                 except OSError:
                     candidate_source = None
-        rejected = _store_rejected_outline(committed, action, result, str(exc), source_text=candidate_source)
+            elif result.artifact_content is not None:
+                candidate_source = result.artifact_content
+                candidate_kind = "artifact_content"
+        rejected = _store_rejected_outline(
+            committed,
+            action,
+            result,
+            str(exc),
+            source_text=candidate_source,
+            source_kind=candidate_kind,
+        )
         detail = f"Outline result rejected: {exc}"
         if recover_delivered_file:
             detail += (
@@ -1604,6 +1641,8 @@ def _accept_outline_locked(
                 "\nRead the rejected candidate and correct that same tree; do not replace the schema, "
                 "drop planned nodes, or move evidence preparation to Writer."
             )
+        else:
+            detail += "\nNo tree candidate was available; only diagnostic text was returned."
         state_update = {"sp_active_delegate_id": None}
         if rejected:
             state_update["sp_report_protocol_error"] = {
@@ -1717,8 +1756,14 @@ def _accept_research_locked(
         ledger.save()
         return _rejection(action, context, "Report research returned no usable summary; no round was charged.", reason="empty_research_summary")
     try:
-        gap_attempts = _validate_gap_attempts(result.artifact_metadata.get("gap_attempts"), ledger, task)
+        declared_attempts = _validate_gap_attempts(result.artifact_metadata.get("gap_attempts"), ledger, task)
         host_executions = _validate_host_executions(result.artifact_metadata.get("host_tool_execution_records"))
+        gap_attempts = _infer_missing_gap_attempts(
+            declared_attempts or [],
+            gap_ids=_normalize_report_gap_ids(task.metadata.get("report_gap_ids")),
+            host_executions=host_executions,
+            stop_reason=result.stop_reason,
+        )
         summary_path = report_store.write_research_summary(ledger.paths, action.action_id, summary)
         artifact = artifact_adapter.write_text_artifact(
             summary,
@@ -1803,9 +1848,9 @@ def _accept_research_locked(
     )
 
 
-def _validate_gap_attempts(value: Any, ledger: ReportLedger, task: SPSubagentTask) -> list[dict[str, Any]]:
+def _validate_gap_attempts(value: Any, ledger: ReportLedger, task: SPSubagentTask) -> list[dict[str, Any]] | None:
     if value is None:
-        return []
+        return None
     if not isinstance(value, list):
         raise ReportValidationError("artifact_metadata.gap_attempts must be a list")
     gap_ids = _normalize_report_gap_ids(task.metadata.get("report_gap_ids"))
@@ -1838,6 +1883,85 @@ def _validate_gap_attempts(value: Any, ledger: ReportLedger, task: SPSubagentTas
             }
         )
     return result
+
+
+_HOST_RESEARCH_TOOLS = frozenset({"web_search", "web_fetch", "report_fetch_material"})
+
+
+def _material_ids_from_execution_detail(detail: str) -> list[str]:
+    try:
+        payload = json.loads(detail)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if not isinstance(payload, Mapping):
+        return []
+    value = payload.get("material_id")
+    return [str(value)] if value not in (None, "") else []
+
+
+def _infer_missing_gap_attempts(
+    declared: list[dict[str, Any]],
+    *,
+    gap_ids: list[str],
+    host_executions: list[dict[str, Any]],
+    stop_reason: str | None,
+) -> list[dict[str, Any]]:
+    """Preserve host-observed research without changing the round definition.
+
+    A missing declaration is not proof that no research happened.  When the host
+    saw research tools, record a technical/incomplete attempt rather than
+    ``not_attempted``.  A successful fetch does not by itself charge a round here:
+    the existing round definition counts only an explicit ``searched`` attempt
+    plus host success.  The summary/material records remain available for Outline
+    to judge evidence sufficiency.
+    """
+    by_gap = {str(item.get("gap_id")): item for item in declared}
+    missing = [gap_id for gap_id in gap_ids if gap_id not in by_gap]
+    if not missing:
+        return declared
+    research_executions = [item for item in host_executions if str(item.get("tool") or "") in _HOST_RESEARCH_TOOLS]
+    successful = [item for item in research_executions if bool(item.get("ok"))]
+    inferred: list[dict[str, Any]] = []
+    for gap_id in missing:
+        if research_executions:
+            material_ids: list[str] = []
+            if len(gap_ids) == 1:
+                for item in successful:
+                    material_ids.extend(_material_ids_from_execution_detail(str(item.get("detail") or "")))
+            note = (
+                "Host recorded research tool execution but the result did not declare gap_attempts. "
+                "No effective round is charged under the existing definition; saved materials and "
+                "host execution records are retained for Outline's evidence judgement."
+            )
+            if len(gap_ids) > 1:
+                note += " The execution cannot be attributed to this gap without an explicit per-gap declaration."
+            inferred.append(
+                {
+                    "gap_id": gap_id,
+                    "execution": "technical_error",
+                    "material_ids": list(dict.fromkeys(material_ids)),
+                    "note": note,
+                }
+            )
+        elif stop_reason:
+            inferred.append(
+                {
+                    "gap_id": gap_id,
+                    "execution": "technical_error",
+                    "material_ids": [],
+                    "note": f"Research delegation ended with stop_reason={stop_reason} before an attempt declaration.",
+                }
+            )
+        else:
+            inferred.append(
+                {
+                    "gap_id": gap_id,
+                    "execution": "not_attempted",
+                    "material_ids": [],
+                    "note": "No host research tool execution or declared attempt was recorded.",
+                }
+            )
+    return [*declared, *inferred]
 
 
 def _validate_host_executions(value: Any) -> list[dict[str, Any]]:
@@ -1880,6 +2004,38 @@ def _replay_result(action: SPAction, context: HandlerContext, role: str, record:
     )
 
 
+def _outline_candidate_text(content: Any, *, source_kind: str) -> str | None:
+    """Return candidate text only when the source/structure supports it.
+
+    Delivery files and artifact_content are generated planning artifacts, so a
+    non-empty value is a candidate even when the JSON is incomplete.  A fallback
+    ``result.result`` is candidate text only when it structurally parses as a
+    tree; stop notices and prose diagnostics are not trees.
+    """
+    if isinstance(content, Mapping):
+        text = json.dumps(content, ensure_ascii=False, indent=2)
+    elif isinstance(content, str):
+        text = content
+    elif content is None:
+        return None
+    else:
+        text = json.dumps(content, ensure_ascii=False, default=str)
+    if not text.strip():
+        return None
+    if source_kind in {"delivery_file", "artifact_content"}:
+        return text
+    try:
+        parsed = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        stripped = text.lstrip()
+        if stripped.startswith("{") and any(marker in text for marker in ('"nodes"', '"requirements"', '"report_title"')):
+            return text
+        return None
+    if isinstance(parsed, Mapping) and any(key in parsed for key in ("nodes", "requirements", "report_title")):
+        return text
+    return None
+
+
 def _store_rejected_outline(
     ledger: ReportLedger,
     action: SPAction,
@@ -1887,19 +2043,20 @@ def _store_rejected_outline(
     error: str,
     *,
     source_text: str | None = None,
+    source_kind: str = "result",
 ) -> dict[str, Any] | None:
-    """Persist an invalid Outline candidate for an in-place correction."""
+    """Persist only a real tree candidate, never a diagnostic as a tree."""
     content = source_text if source_text is not None else result.artifact_content
-    if content is None:
+    if source_text is None and content is None:
         content = result.result
-    if isinstance(content, Mapping):
-        text = json.dumps(content, ensure_ascii=False, indent=2)
-    elif isinstance(content, str):
-        text = content
-    else:
-        text = json.dumps(content, ensure_ascii=False, default=str)
-    if not text.strip():
+    text = _outline_candidate_text(content, source_kind=source_kind)
+    if text is None:
         return None
+    parse_error = None
+    try:
+        json.loads(text)
+    except (json.JSONDecodeError, TypeError) as exc:
+        parse_error = str(exc)
     directory = ledger.paths.directory / "outline"
     path = directory / f"rejected-{action.action_id}.json"
     report_store.write_text_atomic(path, text)
@@ -1909,9 +2066,12 @@ def _store_rejected_outline(
         "sha256": report_store.sha256_text(text),
         "chars": len(text),
         "action_id": action.action_id,
+        "kind": "tree_candidate",
         "errors": str(error)[:4000],
         "created_at": utc_now_iso(),
     }
+    if parse_error is not None:
+        record["parse_error"] = parse_error[:1000]
     ledger.payload["rejected_outline"] = record
     ledger.save()
     return record

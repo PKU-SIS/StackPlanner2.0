@@ -150,6 +150,7 @@ def _research(
     save_material: bool = True,
     host_executions: list[dict] | None = None,
     model_executions: bool = True,
+    omit_gap_attempts: bool = False,
     summary: str = "research summary",
 ) -> object:
     action, task = _delegate(ctx, action_id, "researcher", {"report_gap_ids": gap_ids})
@@ -166,17 +167,21 @@ def _research(
         assert material_payload["saved"] is True
         material_id = material_payload["material_id"]
     delegate_entry = ctx.stack.append_delegate("delegate researcher", thread_id="t1", run_id="run1", stage="research")
+    metadata = {
+        "completion_status": "complete",
+        **({"host_tool_execution_records": host_executions} if host_executions is not None else {}),
+        **({"tool_execution_records": [{"tool": "web_search", "ok": tool_ok}]} if model_executions else {}),
+    }
+    if not omit_gap_attempts:
+        metadata["gap_attempts"] = [
+            {"gap_id": gap_ids[0], "execution": execution, "material_ids": [material_id] if material_id else [], "note": "test"}
+        ]
     result = SPSubagentResult(
         status=SPSubagentStatus.COMPLETED,
         result=summary,
         artifact_content=f"# Summary\n\n{summary}",
         artifact_type="research_observation",
-        artifact_metadata={
-            "completion_status": "complete",
-            "gap_attempts": [{"gap_id": gap_ids[0], "execution": execution, "material_ids": [material_id] if material_id else [], "note": "test"}],
-            **({"host_tool_execution_records": host_executions} if host_executions is not None else {}),
-            **({"tool_execution_records": [{"tool": "web_search", "ok": tool_ok}]} if model_executions else {}),
-        },
+        artifact_metadata=metadata,
     )
     return hooks.handle_success(action, ctx, result, task, artifact_adapter=SPArtifactAdapter(), delegate_entry=delegate_entry)
 
@@ -247,6 +252,34 @@ def test_invalid_tree_is_not_committed_and_registered_gap_survives(tmp_path):
     assert ledger.payload["tree"] is None
     assert not list((tmp_path / "report" / "r1" / "tree").glob("*.json")) if (tmp_path / "report" / "r1" / "tree").exists() else True
     assert ledger.gaps()[0]["status"] == "open"
+
+
+def test_missing_gap_attempts_preserves_host_research_without_charging_round(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    _register_gap(ctx, "a-outline")
+    outline_action, outline_task = _delegate(ctx, "a-outline", "outline", {})
+    accepted = _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=["g1"]))
+    assert accepted.next_step == "continue", accepted.error
+
+    result = _research(
+        ctx,
+        "a-r-missing",
+        ["g1"],
+        omit_gap_attempts=True,
+        host_executions=[{"tool": "report_fetch_material", "ok": True, "detail": '{"material_id":"m1"}'}],
+        summary="saved primary material",
+    )
+
+    assert result.next_step == "continue", result.error
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    gap = ledger.require_gap("g1")
+    assert gap["rounds"] == 0
+    assert gap["status"] == "awaiting_outline"
+    assert any(item.get("execution") == "technical_error" for item in gap.get("history") or [])
+    action = ledger.action("a-r-missing")
+    assert action is not None
+    assert action["host_tool_executions"]
 
 
 def test_two_effective_rounds_then_user_question_and_answer_returns_to_outline(tmp_path):

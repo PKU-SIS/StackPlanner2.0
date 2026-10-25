@@ -49,11 +49,20 @@ have the reading tools they need.
 If a report role result is rejected with `invalid_report_tree`, do not design or
 rewrite a replacement schema. Re-dispatch the same Outline task, with the same
 requirements, materials, nodes and writing scope, and pass the host's exact
-`report_protocol_error` / rejected candidate reference through metadata. Outline
-must correct that saved tree in place. Never reduce the plan, delete nodes,
-invent field names, or move evidence/value preparation into Writer. If the
-existing execution budget is exhausted, report the technical block; do not ask
-the user to re-submit the same fields.
+`report_protocol_error` / rejected candidate reference through metadata. If an
+accepted tree exists, use `report_task="revise"`; during the initial plan, the
+host still recognizes a retained candidate. Outline must read the saved
+candidate first and correct that tree in place. Never issue an "administrative
+only" instruction, tell Outline to skip reading materials, or tell it to close
+gaps mechanically. Never reduce the plan, delete nodes, invent field names, or
+move evidence/value preparation into Writer. If the existing execution budget
+is exhausted, report the technical block; do not ask the user to re-submit the
+same fields.
+
+Central does not decide whether a research gap is resolved. Only Outline's
+`gap_outcomes` may close a gap. Model-suggested critiques or extra research
+ideas are optional planning input unless the user's visible request makes them
+hard requirements; do not silently convert them into mandatory prerequisites.
 
 Required sequence (only after a report has been started):
 1. Save the request and bind the first report role in one `sp_delegate` call:
@@ -129,6 +138,10 @@ Tool contract:
 - `grep` takes a **directory** in `path`, not a file path; target files with
   `glob` (for example path=`.../materials/S2`, glob=`**/*.txt`). Use
   `read_file` when the exact line range is already known.
+- Complete research-request shape: `requirement_refs` is an array of objects
+  `{"input_id":"u1","quote":"..."}`; `materials_checked` is an array of objects
+  `{"material_id":"m1","lines":[10,32]}`; `constraints` is an object. Do not
+  pass prose strings where these objects are required.
 - `report_register_research_request` registers one or more gaps. Use
   mode="new" for a new question. Use mode="continue" with the exact gap_id when
   refining an existing open/awaiting_user gap; continuation keeps identity and
@@ -201,7 +214,9 @@ Output contract:
 - Recommended: `source_ids[]`, `locator.lines: [start, end]`, `hard: true`,
   and explicit `relations: []` / `gap_ids: []`. When relations are present,
   use objects such as `[{"node_id": "n2", "type": "supports"}]`; never use bare
-  strings as relation items.
+  strings as relation items. `gap_outcomes` items are complete objects, e.g.
+  `[{"gap_id":"g1","outcome":"resolved","reason":"...",
+  "evidence_material_ids":["m1"]}]`; `reason` is a non-empty string.
 - Optional: section `status`, `feedback_wanted`, extra explanatory fields;
   empty `removed_node_ids`, `gap_outcomes`, `user_decisions`,
   `feedback_dispositions`, `draft_dispositions` are valid defaults.
@@ -255,9 +270,10 @@ Output contract:
   "artifact_metadata": {"completion_status": "complete"}
 }
 ```
-- If `report_packet.rejected_outline` exists and this is a `revise` task, read
-  its `virtual_path` before writing anything. It is the primary working input,
-  not an accepted tree. `report_packet.tree` remains the accepted baseline.
+- If `report_packet.rejected_outline` exists on a recovery task (`plan` or
+  `revise`), read its `virtual_path` before writing anything. It is the primary
+  working input, not an accepted tree. `report_packet.tree` remains the accepted
+  baseline.
   Preserve its valid nodes, requirements, evidence locators, and completed
   updates; fix the reported errors, then write the corrected full tree to the
   current `report_packet.delivery.path`. Do not create a fresh tree from
