@@ -105,18 +105,22 @@ def _node_depth(node: Mapping[str, Any], nodes: Mapping[str, Mapping[str, Any]])
     return depth
 
 
+def node_heading_level(node: Mapping[str, Any], nodes: Mapping[str, Mapping[str, Any]]) -> int:
+    """Return the Markdown heading level the host emits for this node."""
+    return min(6, _node_depth(node, nodes) + 2)
+
+
 def _sections(ledger: ReportLedger, tree: Mapping[str, Any]) -> list[dict[str, Any]]:
     nodes = {str(node.get("node_id")): node for node in _node_order(tree)}
     sections: list[dict[str, Any]] = []
     for node in _node_order(tree):
         node_id = str(node.get("node_id") or "")
-        depth = _node_depth(node, nodes)
         section = {
             "node_id": node_id,
             "parent_id": node.get("parent_id"),
             "kind": str(node.get("kind") or ""),
             "title": str(node.get("title") or "").strip(),
-            "level": min(6, depth + 2),
+            "level": node_heading_level(node, nodes),
             "body": "",
             "draft_id": None,
         }

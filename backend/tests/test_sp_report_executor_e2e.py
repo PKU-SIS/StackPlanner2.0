@@ -1,4 +1,4 @@
-"""E-layer: real DelegateHandler + SubagentExecutor + report tools (fake LLM only)."""
+﻿"""E-layer: real DelegateHandler + SubagentExecutor + report tools (fake LLM only)."""
 
 from __future__ import annotations
 
@@ -376,7 +376,7 @@ def test_real_executor_review_revise_new_write_and_reassemble(tmp_path, monkeypa
                 "requirement_ids": ["R1"],
                 "relations": [],
                 "gap_ids": [],
-                "status": "planned",
+                "status": "ready",
             },
         ],
         "removed_node_ids": [],
@@ -959,7 +959,7 @@ def test_real_executor_integration_review_and_first_finish(tmp_path, monkeypatch
                 "requirement_ids": ["R1"],
                 "relations": [],
                 "gap_ids": [],
-                "status": "planned",
+                "status": "ready",
             },
         ],
     }
@@ -1063,7 +1063,7 @@ def test_real_executor_writer_writes_host_path_and_disables_thinking(tmp_path, m
                 "requirement_ids": ["R1"],
                 "relations": [],
                 "gap_ids": [],
-                "status": "planned",
+                "status": "ready",
             },
         ],
         "removed_node_ids": [],
@@ -1159,3 +1159,4 @@ def test_real_executor_writer_writes_host_path_and_disables_thinking(tmp_path, m
     assert Path(draft["path"]).read_text(encoding="utf-8") == "Node two body from the Writer.\n"
     assert ledger.payload["write_requests"][0]["status"] == "completed"
     assert ledger.payload["write_requests"][0]["attempts"][0]["action_id"] == "a-writer-e2e"
+

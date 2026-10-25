@@ -62,7 +62,7 @@ def _tree(
                 "requirement_ids": ["R1"],
                 "relations": [],
                 "gap_ids": [],
-                "status": "planned",
+                "status": "ready",
             },
         ],
         "removed_node_ids": [],
@@ -140,6 +140,63 @@ def _writer_result(content: str | None, task: SPSubagentTask, *, feedback: list[
 def _accept_writer(ctx: HandlerContext, action: SPAction, task: SPSubagentTask, result: SPSubagentResult, *, action_id: str = "a-writer") -> object:
     entry = ctx.stack.append_delegate("writer", thread_id="t1", run_id="run1", stage="reporting")
     return hooks.handle_success(action, ctx, result, task, artifact_adapter=SPArtifactAdapter(), delegate_entry=entry)
+
+
+def test_writer_dispatch_requires_declared_ready_node(tmp_path):
+    ctx = _context(tmp_path)
+    tree = _tree(write_requests=[{"key": "w-unready", "node_ids": ["n2"], "feedback_wanted": False}])
+    tree["nodes"][1]["status"] = "needs_evidence"
+    assert _outline(ctx, tree, action_id="a-outline-unready").next_step == "continue"
+
+    with pytest.raises(ReportValidationError, match="only a ready node"):
+        _writer_action(ctx, "w-unready", action_id="a-writer-unready")
+
+
+def test_completed_historical_request_survives_revision_with_unready_node(tmp_path):
+    ctx = _context(tmp_path)
+    assert _outline(
+        ctx,
+        _tree(write_requests=[{"key": "w-old", "node_ids": ["n2"], "feedback_wanted": False}]),
+        action_id="a-outline-old",
+    ).next_step == "continue"
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    request = ledger.payload["write_requests"][0]
+    request["status"] = "in_flight"
+    request["last_action_id"] = "a-draft-old"
+    basis = packets.writer_basis(ledger, "n2")
+    draft_id = writing.next_draft_id(ledger)
+    draft_path = ledger.paths.draft_file("n2", draft_id)
+    writing.accept_draft(
+        ledger,
+        key="w-old",
+        action_id="a-draft-old",
+        node_id="n2",
+        draft_id=draft_id,
+        virtual_path=ledger.paths.virtual(draft_path),
+        host_path=str(draft_path),
+        content="旧版正文",
+        basis=basis,
+        feedback_wanted=False,
+    )
+    ledger.save()
+
+    revised = _tree(write_requests=[{"key": "w-old", "node_ids": ["n2"], "feedback_wanted": False}])
+    revised["nodes"][1]["status"] = "needs_evidence"
+    response = _outline(ctx, revised, action_id="a-outline-historical")
+
+    assert response.next_step == "continue", response.error
+
+
+def test_writer_packet_exposes_host_heading_level(tmp_path):
+    ctx = _context(tmp_path)
+    assert _outline(
+        ctx,
+        _tree(write_requests=[{"key": "w-level", "node_ids": ["n2"], "feedback_wanted": False}]),
+        action_id="a-outline-level",
+    ).next_step == "continue"
+    _action, task, _host = _writer_action(ctx, "w-level", action_id="a-writer-level")
+
+    assert task.context_refs["report_packet"]["node"]["level"] == 3
 
 
 def test_feedback_wanted_success_creates_review_and_completed_request_does_not_requeue(tmp_path):

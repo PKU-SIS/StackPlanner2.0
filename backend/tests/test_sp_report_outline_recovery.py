@@ -92,6 +92,88 @@ def _result() -> SPSubagentResult:
     )
 
 
+def test_rejected_candidate_is_referenced_but_not_prefilled(tmp_path):
+    ctx = _context(tmp_path)
+    action, task = _outline_delegate(ctx)
+    accepted = hooks.handle_success(
+        action,
+        ctx,
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="accepted base",
+            artifact_content=json.dumps(_tree(), ensure_ascii=False),
+            artifact_type="outline",
+            artifact_metadata={"completion_status": "complete"},
+        ),
+        task,
+        artifact_adapter=SPArtifactAdapter(),
+        delegate_entry=ctx.stack.append_delegate("outline", thread_id="t1", run_id="run1", stage="planning"),
+    )
+    assert accepted.next_step == "continue"
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    candidate = ledger.paths.directory / "outline" / "rejected-candidate.json"
+    candidate.parent.mkdir(parents=True, exist_ok=True)
+    candidate.write_text(json.dumps(_tree(), ensure_ascii=False), encoding="utf-8")
+    ledger.payload["rejected_outline"] = {
+        "path": str(candidate),
+        "virtual_path": ledger.paths.virtual(candidate),
+        "chars": len(candidate.read_text(encoding="utf-8")),
+        "action_id": "prior-outline",
+        "errors": "token_capped",
+    }
+    ledger.save()
+
+    revise = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-outline-revise",
+        reason="recover retained candidate",
+        task="revise report",
+        target_agent="outline",
+        stage="planning",
+        metadata={"report_task": "revise"},
+    )
+    task_metadata = {"stage": "planning"}
+    refs: dict = {}
+    hooks.prepare_delegation(revise, ctx, task_metadata, refs)
+    packet = refs["report_packet"]
+    delivery_path = Path(str(task_metadata["outline_delivery_path"]))
+
+    assert not delivery_path.exists()
+    assert packet["rejected_outline"]["virtual_path"] == ledger.paths.virtual(candidate)
+    assert "Recovery basis" in packet["delivery"]["instruction"]
+    assert str(packet["delivery"]["path"]) == ledger.paths.virtual(delivery_path)
+    assert task_metadata["rejected_candidate_path"] == str(candidate)
+    assert packet["tree"]["version"] == 1
+
+    revise_task = SPSubagentTask(
+        action_id=revise.action_id,
+        subagent_type="outline",
+        task="revise report",
+        description="revise",
+        metadata=task_metadata,
+        context_refs=refs,
+        stage="planning",
+    )
+    no_output = hooks.handle_success(
+        revise,
+        ctx,
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="no output",
+            artifact_content=None,
+            artifact_type="outline",
+            artifact_metadata={"completion_status": "complete"},
+        ),
+        revise_task,
+        artifact_adapter=SPArtifactAdapter(),
+        delegate_entry=ctx.stack.append_delegate("outline", thread_id="t1", run_id="run1", stage="planning"),
+    )
+    assert no_output.next_step == "error_recoverable"
+    current_ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert current_ledger.payload["tree"]["version"] == 1
+
+
 def test_token_capped_current_delivery_file_recovers_through_full_acceptance(tmp_path):
     ctx = _context(tmp_path)
     action, task = _outline_delegate(ctx)

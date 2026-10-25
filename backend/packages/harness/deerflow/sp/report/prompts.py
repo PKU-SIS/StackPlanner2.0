@@ -126,11 +126,16 @@ Tool contract:
   plan needs. It reads the saved original itself; do not retype the source,
   invent a URL, or depend on a Researcher action. Cite the returned
   `material_id` and `source_id`; a user input id is not a material id.
+- `grep` takes a **directory** in `path`, not a file path; target files with
+  `glob` (for example path=`.../materials/S2`, glob=`**/*.txt`). Use
+  `read_file` when the exact line range is already known.
 - `report_register_research_request` registers one or more gaps. Use
   mode="new" for a new question. Use mode="continue" with the exact gap_id when
   refining an existing open/awaiting_user gap; continuation keeps identity and
-  rounds. `requirement_refs` must quote the original user input. `node_ids` may
-  be empty before the first tree is accepted. Never invent gap ids.
+  rounds. `constraints` must be a JSON object (for example
+  `{"must_be_primary": true, "need_locator": true}`), not a string.
+  `requirement_refs` must quote the original user input. `node_ids` may be
+  empty before the first tree is accepted. Never invent gap ids.
 - Research results return as `awaiting_outline`; you must judge every such gap
   in `gap_outcomes` on your next accepted output. A result is not automatically
   sufficient. Use `resolved` only with a stated basis; `unresolved` returns the
@@ -194,7 +199,9 @@ Output contract:
   this tree (node scope, retained detail, or node count). The host does not
   truncate draft bodies.
 - Recommended: `source_ids[]`, `locator.lines: [start, end]`, `hard: true`,
-  and explicit `relations: []` / `gap_ids: []`.
+  and explicit `relations: []` / `gap_ids: []`. When relations are present,
+  use objects such as `[{"node_id": "n2", "type": "supports"}]`; never use bare
+  strings as relation items.
 - Optional: section `status`, `feedback_wanted`, extra explanatory fields;
   empty `removed_node_ids`, `gap_outcomes`, `user_decisions`,
   `feedback_dispositions`, `draft_dispositions` are valid defaults.
@@ -248,15 +255,22 @@ Output contract:
   "artifact_metadata": {"completion_status": "complete"}
 }
 ```
-- If a previous `report_packet.rejected_outline` exists, read its path and
-  correct that tree in place. Preserve valid nodes and requirements; fix the
-  reported errors without replacing the planning scope or moving evidence
-  preparation into Writer.
+- If `report_packet.rejected_outline` exists and this is a `revise` task, read
+  its `virtual_path` before writing anything. It is the primary working input,
+  not an accepted tree. `report_packet.tree` remains the accepted baseline.
+  Preserve its valid nodes, requirements, evidence locators, and completed
+  updates; fix the reported errors, then write the corrected full tree to the
+  current `report_packet.delivery.path`. Do not create a fresh tree from
+  scratch, do not copy the candidate without validating it, and do not move
+  evidence preparation into Writer.
 - Preserve existing node ids unless you explicitly remove them through
   removed_node_ids. Do not silently drop a previous node.
 - `write_requests` is how you choose trial writing: one writable node per key,
   optional `feedback_wanted`. Omit a node unless you want it written; no
-  per-node trial is mandatory.
+  per-node trial is mandatory. A new or resumed write request may target only
+  a node whose declared status is `ready`: first complete its saved-material
+  evidence locators or register a research gap. `needs_evidence`, `needs_user`,
+  and `planned` nodes must not be dispatched to Writer for evidence discovery.
 - `user_decisions` items use
   {input_id, gap_ids, action, reason, additional_rounds?}. Actions:
   apply_to_plan (gap_ids=[] for a normal supplement such as adding a comparison
@@ -293,8 +307,12 @@ never invent a fact, citation, URL, or number.
 Write the node body to the exact host-assigned `draft_path` with `write_file`
 (UTF-8 Markdown, no outer fence). Write only the body: the Outline owns the node
 title and the host renders that heading, so do not repeat the node title or add
-a title line to the draft. Keep the node's question, conclusion boundary, and
-constraints intact. Do not add a generic limitations/disclaimer paragraph or a
+a title line to the draft. The packet's `node.level` is the host heading level.
+If you use internal Markdown headings, they must be strictly below that level
+(for example `level + 1` or smaller, such as `###` under a level-2 node); never
+use `#`/`##` at or above the host node level. Prefer bold labels when a heading
+would collide. Keep the node's question, conclusion boundary, and constraints
+intact. Do not add a generic limitations/disclaimer paragraph or a
 standalone "lack of evidence" section; include only caveats explicitly required
 by the node constraints or the user. Use only canonical `[S<n>]` citation
 markers supplied by the packet; do not use `[1]`, `citation_map`, or another

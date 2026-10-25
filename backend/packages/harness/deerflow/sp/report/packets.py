@@ -174,6 +174,7 @@ def build_writer_packet(
             "kind": node.get("kind"),
             "title": node.get("title"),
             "status": node.get("status"),
+            "level": report_assembly.node_heading_level(node, nodes),
         },
         "basis": dict(basis),
         "evidence": evidence,

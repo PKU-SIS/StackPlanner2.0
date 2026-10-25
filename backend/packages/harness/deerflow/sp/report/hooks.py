@@ -326,6 +326,19 @@ def prepare_delegation(
             node_ids = list(request.get("node_ids") or [])
             if len(node_ids) != 1:
                 raise ReportValidationError(f"write request {key} must target exactly one node")
+            if str(request.get("status") or "") in {"pending", "technical_failed"}:
+                tree = report_packets.load_current_tree(ledger) or {}
+                nodes = {str(node.get("node_id")): node for node in tree.get("nodes") or [] if isinstance(node, Mapping)}
+                node = nodes.get(str(node_ids[0]))
+                if node is None or node.get("kind") != "writable":
+                    raise ReportValidationError(f"write request {key} targets an unknown/non-writable current node")
+                if node.get("status") != "ready":
+                    raise ReportValidationError(
+                        f"write request {key} targets node {node_ids[0]} with status="
+                        f"{node.get('status') or 'unknown'}; only a ready node may be dispatched "
+                        "for writing. Complete the saved-material evidence locators in Outline or "
+                        "register a research gap first; do not move evidence preparation into Writer."
+                    )
             attempt = report_writing.begin_writer_attempt(ledger, key, action_id=action.action_id, node_id=str(node_ids[0]), run_id=context.run_id)
             basis = report_packets.writer_basis(ledger, str(node_ids[0]))
             packet = report_packets.build_writer_packet(
@@ -404,14 +417,34 @@ def prepare_delegation(
         else:
             packet = report_packets.build_outline_packet(ledger)
             delivery_path = _outline_delivery_path(ledger.paths, action.action_id)
+            instruction = (
+                "For a complete tree, write the full JSON to this host-assigned path using "
+                "write_file; use append=True for later chunks and read_file before appending. "
+                "Return artifact_content=null and this path in artifact_metadata."
+            )
+            rejected = ledger.payload.get("rejected_outline")
+            if report_task == "revise" and isinstance(rejected, Mapping):
+                candidate_virtual = str(rejected.get("virtual_path") or "").strip()
+                candidate_host = str(rejected.get("path") or "").strip()
+                if candidate_virtual:
+                    instruction += (
+                        " Recovery basis: before writing this delivery path, read "
+                        f"report_packet.rejected_outline.virtual_path ({candidate_virtual}) "
+                        "and use it as the primary planning input. The accepted tree in "
+                        "report_packet.tree remains the accepted baseline. Preserve valid nodes, "
+                        "evidence locators, and completed updates in the candidate; correct its "
+                        "reported errors and write the corrected tree only to this independent "
+                        "delivery path. Do not create a fresh tree from scratch."
+                    )
+                if candidate_host:
+                    # Keep the existing recovery metadata name: Central already
+                    # passes this path, and the executor/prompt can use it for
+                    # diagnostics without introducing a second submission protocol.
+                    task_metadata["rejected_candidate_path"] = candidate_host
             packet["delivery"] = {
                 "mode": "optional_file",
                 "path": ledger.paths.virtual(delivery_path),
-                "instruction": (
-                    "For a complete tree, write the full JSON to this host-assigned path using "
-                    "write_file; use append=True for later chunks and read_file before appending. "
-                    "Return artifact_content=null and this path in artifact_metadata."
-                ),
+                "instruction": instruction,
             }
             task_metadata["outline_delivery_path"] = str(delivery_path)
     task_metadata["report_id"] = report.report_id
