@@ -85,6 +85,15 @@ def _patch_factory(monkeypatch, app_config: AppConfig, model_class=FakeChatModel
     monkeypatch.setattr(factory_module, "build_tracing_callbacks", lambda: [])
 
 
+async def _close_native_model_clients(model) -> None:
+    async_client = getattr(model, "http_async_client", None)
+    if async_client is not None and not async_client.is_closed:
+        await async_client.aclose()
+    sync_client = getattr(model, "http_client", None)
+    if sync_client is not None and not sync_client.is_closed:
+        sync_client.close()
+
+
 def test_real_factory_preserves_proxy_without_client_conflict(monkeypatch):
     cfg = _make_app_config([_make_model(use="langchain_openai:ChatOpenAI")])
     monkeypatch.setattr(factory_module, "get_app_config", lambda: cfg)
@@ -117,6 +126,32 @@ def test_real_factory_preserves_proxy_without_client_conflict(monkeypatch):
         assert second.http_client is not None
         assert second.http_async_client is not None
         assert first.root_async_client is not second.root_async_client
+        await _close_native_model_clients(first)
+        await _close_native_model_clients(second)
+        await close_loop_async_clients(asyncio.get_running_loop())
+
+    asyncio.run(construct())
+
+
+def test_real_factory_reads_openai_proxy_environment(monkeypatch):
+    cfg = _make_app_config([_make_model(use="langchain_openai:ChatOpenAI")])
+    monkeypatch.setattr(factory_module, "get_app_config", lambda: cfg)
+    monkeypatch.setattr(factory_module, "build_tracing_callbacks", lambda: [])
+    proxy = "http://127.0.0.1:9"
+    monkeypatch.setenv("OPENAI_PROXY", proxy)
+
+    async def construct():
+        model = factory_module.create_chat_model(
+            "test-model",
+            app_config=cfg,
+            attach_tracing=False,
+            api_key="test",
+            base_url="http://127.0.0.1:9/v1",
+        )
+        assert model.openai_proxy == proxy
+        assert model.http_client is not None
+        assert model.http_async_client is not None
+        await _close_native_model_clients(model)
         await close_loop_async_clients(asyncio.get_running_loop())
 
     asyncio.run(construct())

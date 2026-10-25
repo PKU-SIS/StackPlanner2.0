@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import threading
 import weakref
 from typing import Any
@@ -45,6 +46,18 @@ def _sdk_socket_options(value: Any) -> Any:
     ):
         return ()
     return _resolve_socket_options(value)
+
+
+def _effective_openai_proxy(model_init_kwargs: dict[str, Any]) -> str | None:
+    """Resolve the same explicit/env proxy priority as the SDK field.
+
+    SDK ``ChatOpenAI.openai_proxy`` uses ``from_env("OPENAI_PROXY")`` as its
+    default factory.  An explicit constructor value (including None) wins;
+    otherwise the environment value is effective.
+    """
+    if "openai_proxy" in model_init_kwargs:
+        return model_init_kwargs.get("openai_proxy") or None
+    return os.environ.get("OPENAI_PROXY") or None
 
 
 def get_loop_async_client(
@@ -406,8 +419,10 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
         if value is not None or key not in model_init_kwargs:
             model_init_kwargs[key] = value
     model_fields = getattr(model_class, "model_fields", {})
+    effective_proxy = _effective_openai_proxy(model_init_kwargs)
     if (
-        "http_socket_options" in model_fields
+        not effective_proxy
+        and "http_socket_options" in model_fields
         and model_init_kwargs.get("http_socket_options") is None
         and _sdk_socket_options(None) == ()
     ):
@@ -419,7 +434,7 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
     if (
         "http_async_client" in model_fields
         and "http_async_client" not in model_init_kwargs
-        and not model_init_kwargs.get("openai_proxy")
+        and not effective_proxy
     ):
         loop_client = get_loop_async_client(
             timeout=model_init_kwargs.get("timeout"),
