@@ -277,9 +277,17 @@ def test_missing_gap_attempts_preserves_host_research_without_charging_round(tmp
     assert gap["rounds"] == 0
     assert gap["status"] == "awaiting_outline"
     assert any(item.get("execution") == "technical_error" for item in gap.get("history") or [])
+    material = ledger.materials()[0]
+    material_history = (gap.get("history") or [])[-1]
+    assert material_history["material_ids"] == [material["material_id"]]
+    assert material["material_id"] in material_history["note"]
     action = ledger.action("a-r-missing")
     assert action is not None
     assert action["host_tool_executions"]
+    packet = build_outline_packet(ledger)
+    packet_gap = next(item for item in packet["gaps"] if item["gap_id"] == "g1")
+    assert packet_gap["latest_history"][-1]["material_ids"] == [material["material_id"]]
+    assert material["material_id"] in packet_gap["latest_history"][-1]["note"]
 
 
 def test_two_effective_rounds_then_user_question_and_answer_returns_to_outline(tmp_path):

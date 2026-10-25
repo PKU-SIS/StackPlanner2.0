@@ -1762,6 +1762,8 @@ def _accept_research_locked(
             declared_attempts or [],
             gap_ids=_normalize_report_gap_ids(task.metadata.get("report_gap_ids")),
             host_executions=host_executions,
+            ledger=ledger,
+            action_id=action.action_id,
             stop_reason=result.stop_reason,
         )
         summary_path = report_store.write_research_summary(ledger.paths, action.action_id, summary)
@@ -1888,22 +1890,13 @@ def _validate_gap_attempts(value: Any, ledger: ReportLedger, task: SPSubagentTas
 _HOST_RESEARCH_TOOLS = frozenset({"web_search", "web_fetch", "report_fetch_material"})
 
 
-def _material_ids_from_execution_detail(detail: str) -> list[str]:
-    try:
-        payload = json.loads(detail)
-    except (json.JSONDecodeError, TypeError):
-        return []
-    if not isinstance(payload, Mapping):
-        return []
-    value = payload.get("material_id")
-    return [str(value)] if value not in (None, "") else []
-
-
 def _infer_missing_gap_attempts(
     declared: list[dict[str, Any]],
     *,
     gap_ids: list[str],
     host_executions: list[dict[str, Any]],
+    ledger: ReportLedger,
+    action_id: str,
     stop_reason: str | None,
 ) -> list[dict[str, Any]]:
     """Preserve host-observed research without changing the round definition.
@@ -1920,19 +1913,24 @@ def _infer_missing_gap_attempts(
     if not missing:
         return declared
     research_executions = [item for item in host_executions if str(item.get("tool") or "") in _HOST_RESEARCH_TOOLS]
-    successful = [item for item in research_executions if bool(item.get("ok"))]
     inferred: list[dict[str, Any]] = []
     for gap_id in missing:
         if research_executions:
             material_ids: list[str] = []
             if len(gap_ids) == 1:
-                for item in successful:
-                    material_ids.extend(_material_ids_from_execution_detail(str(item.get("detail") or "")))
+                material_ids = [
+                    str(material.get("material_id"))
+                    for material in ledger.materials()
+                    if str(material.get("action_id") or "") == action_id
+                    and gap_id in {str(value) for value in material.get("gap_ids") or []}
+                ]
             note = (
                 "Host recorded research tool execution but the result did not declare gap_attempts. "
                 "No effective round is charged under the existing definition; saved materials and "
                 "host execution records are retained for Outline's evidence judgement."
             )
+            if material_ids:
+                note += f" Materials saved for this gap: {', '.join(material_ids)}."
             if len(gap_ids) > 1:
                 note += " The execution cannot be attributed to this gap without an explicit per-gap declaration."
             inferred.append(

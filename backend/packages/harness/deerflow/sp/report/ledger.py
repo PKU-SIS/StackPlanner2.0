@@ -481,6 +481,7 @@ class ReportLedger:
             return action, []
         action_gap_ids = [str(item) for item in action.get("gap_ids") or []]
         attempts: dict[str, str] = {}
+        attempt_details: dict[str, dict[str, Any]] = {}
         for raw in gap_attempts:
             if not isinstance(raw, Mapping):
                 raise ReportValidationError("gap_attempts items must be objects")
@@ -491,6 +492,10 @@ class ReportLedger:
             if execution not in GAP_ATTEMPT_EXECUTIONS:
                 raise ReportValidationError(f"invalid gap attempt execution for {gap_id}: {execution!r}")
             attempts[gap_id] = execution
+            attempt_details[gap_id] = {
+                "material_ids": [str(item) for item in raw.get("material_ids") or []],
+                "note": str(raw.get("note") or "").strip(),
+            }
         for gap_id in action_gap_ids:
             attempts.setdefault(gap_id, "not_attempted")
 
@@ -507,8 +512,10 @@ class ReportLedger:
         for gap_id in action_gap_ids:
             gap = self.require_gap(gap_id)
             declared = attempts[gap_id]
+            detail = attempt_details.get(gap_id) or {}
+            material_ids = list(dict.fromkeys(str(item) for item in detail.get("material_ids") or []))
             effective = declared
-            note = ""
+            note = str(detail.get("note") or "").strip()
             if declared == "searched":
                 if has_successful_execution:
                     effective = "searched"
@@ -539,10 +546,20 @@ class ReportLedger:
                     "execution": effective,
                     "declared_execution": declared,
                     "rounds_after": int(gap.get("rounds") or 0),
+                    "material_ids": material_ids,
                     "note": note,
                 }
             )
-            changed.append({"gap_id": gap_id, "execution": effective, "rounds": int(gap.get("rounds") or 0), "status": gap.get("status")})
+            changed.append(
+                {
+                    "gap_id": gap_id,
+                    "execution": effective,
+                    "rounds": int(gap.get("rounds") or 0),
+                    "status": gap.get("status"),
+                    "material_ids": material_ids,
+                    "note": note,
+                }
+            )
         action["status"] = "completed"
         action["updated_at"] = utc_now_iso()
         action["finished_at"] = action["updated_at"]

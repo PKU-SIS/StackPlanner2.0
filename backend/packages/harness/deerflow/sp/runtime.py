@@ -386,6 +386,29 @@ def _apply_sp_stage_tool_policy(subagent_config: Any, task: SPSubagentTask):
     )
 
 
+def app_config_for_report_outline(app_config: AppConfig, task: SPSubagentTask) -> AppConfig:
+    """Return a config copy with a report-outline-only budget override.
+
+    Ordinary Outline, Researcher, Reporter, the global subagent default and the
+    shared ``app_config`` are left untouched. The executor's existing
+    ``app_config.subagents.get_token_budget_for('sp-outline')`` path then picks
+    up the copy when it builds the real TokenBudgetMiddleware.
+    """
+    subagents = getattr(app_config, "subagents", None)
+    budget = getattr(subagents, "report_outline_token_budget", None)
+    if task.metadata.get("report_role") != "outline" or budget is None:
+        return app_config
+    from deerflow.config.subagents_config import SubagentOverrideConfig
+
+    subagents = app_config.subagents.model_copy(deep=True)
+    override = subagents.agents.get("sp-outline") or SubagentOverrideConfig()
+    subagents.agents = {
+        **subagents.agents,
+        "sp-outline": override.model_copy(update={"token_budget": budget}),
+    }
+    return app_config.model_copy(update={"subagents": subagents})
+
+
 @dataclass(slots=True)
 class DR2SPExecutorProvider:
     """Create DR2 SubagentExecutor instances bound to the active graph state."""
@@ -539,10 +562,11 @@ class DR2SPExecutorProvider:
                         }
                     )
 
+            effective_app_config = app_config_for_report_outline(self.app_config, task)
             return SubagentExecutor(
                 config=subagent_config,
                 tools=available_tools,
-                app_config=self.app_config,
+                app_config=effective_app_config,
                 parent_model=self.parent_model,
                 sandbox_state=state.get("sandbox"),
                 thread_data=state.get("thread_data"),

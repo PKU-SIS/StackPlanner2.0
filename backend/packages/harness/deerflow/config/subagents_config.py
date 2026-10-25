@@ -109,6 +109,10 @@ class SubagentsAppConfig(BaseModel):
         default_factory=dict,
         description="Per-agent configuration overrides keyed by agent name",
     )
+    report_outline_token_budget: TokenBudgetConfig | None = Field(
+        default=None,
+        description="Optional token budget applied only to report-bound Outline runs. Ordinary Outline keeps agents.sp-outline/global values.",
+    )
     custom_agents: dict[str, CustomSubagentConfig] = Field(
         default_factory=dict,
         description="User-defined subagent types keyed by agent name",
