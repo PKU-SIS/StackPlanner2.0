@@ -220,6 +220,8 @@ def test_get_memory_context_uses_explicit_app_config_without_global_config(monke
     context = prompt_module._get_memory_context("agent-a", app_config=explicit_config)
 
     assert "<memory>" in context
+    assert "Memory scope:" in context
+    assert "current request always wins" in context
     assert "remember this" in context
     assert captured == {
         "agent_name": "agent-a",

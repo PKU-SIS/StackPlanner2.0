@@ -86,6 +86,17 @@ Memory Section Guidelines:
   * 0.7-0.8: Strongly implied from actions/discussions
   * 0.5-0.6: Inferred patterns (use sparingly, only for clear patterns)
 
+**Task Scope and Stability**:
+- Distinguish durable, cross-task preferences from requirements that belong to one
+  request or task. Source scope, required length, format, citation/table rules,
+  deliverable type, and "write 材料未说明 when the source is silent" are
+  task constraints unless the user explicitly states they are standing defaults.
+- Re-running or repeating the same task is not evidence of a durable preference.
+  Do not promote old task constraints into personalContext or topOfMind.
+- Keep task-specific history explicitly attributed to that task (for example,
+  "for the NBS briefing"). The current request's explicit requirements always
+  take precedence over older task-scoped instructions.
+
 **What Goes Where**:
 - workContext: Current job, active projects, primary tech stack
 - personalContext: Languages, personality, interests outside direct work tasks
@@ -195,6 +206,9 @@ Rules:
 - Only extract clear, specific facts
 - Confidence should reflect certainty (explicit statement = 0.9+, implied = 0.6-0.8)
 - Skip vague or temporary information
+- Keep task-specific source, length, format, citation, table, and delivery
+  requirements attributed to that task; do not turn them into general preferences.
+  The current request explicitly overrides older task-scoped rules.
 
 Return ONLY valid JSON."""
 

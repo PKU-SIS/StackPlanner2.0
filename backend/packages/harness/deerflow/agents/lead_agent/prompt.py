@@ -690,6 +690,10 @@ def _get_memory_context(agent_name: str | None = None, *, app_config: AppConfig 
             return ""
 
         return f"""<memory>
+Memory scope: entries may include task-specific source, length, format, citation,
+table, or delivery requirements. Apply them only when the current request or the
+entry itself makes them standing; the current request always wins. Repeating one
+old task does not turn its constraints into general preferences.
 {memory_content}
 </memory>
 """
