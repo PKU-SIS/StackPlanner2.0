@@ -3,6 +3,7 @@ from becoming a report Outline artifact."""
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 from deerflow.sp.subagents import SPSubagentStatus, SPSubagentTask
@@ -36,6 +37,33 @@ def test_empty_length_tool_evidence_does_not_become_outline_artifact():
     assert normalized.artifact_content is None
     assert normalized.artifact_type is None
     assert normalized.artifact_metadata["result_source"] == "recovered_tool_evidence"
+
+
+def test_recovered_outline_does_not_extract_artifact_from_json_envelope():
+    envelope = json.dumps(
+        {
+            "summary": "tool output",
+            "artifact_content": json.dumps({"report_title": "not a deliverable", "nodes": []}),
+            "artifact_type": "outline",
+            "artifact_metadata": {"completion_status": "complete"},
+        }
+    )
+    raw = SimpleNamespace(
+        status=SPSubagentStatus.COMPLETED,
+        result=envelope,
+        result_source="recovered_tool_evidence",
+        artifact_content=None,
+        artifact_type=None,
+        artifact_metadata={},
+        stop_reason=None,
+        ai_messages=[{"response_metadata": {"finish_reason": "length"}}],
+    )
+    normalized = normalize_dr2_subagent_result(raw, task=_outline_task())
+
+    assert normalized.artifact_content is None
+    assert normalized.artifact_type is None
+    assert normalized.completion_status == "partial"
+    assert any("recovered tool evidence" in item for item in normalized.artifact_metadata["evidence_gaps"])
 
 
 def test_same_recovered_result_still_archives_for_ordinary_long_results():

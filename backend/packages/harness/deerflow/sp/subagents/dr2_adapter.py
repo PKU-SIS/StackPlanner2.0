@@ -650,13 +650,20 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
     stop_reason = getattr(result, "stop_reason", None)
     result_source = getattr(result, "result_source", None)
     finish_reason = _last_model_finish_reason(getattr(result, "ai_messages", None))
+    recovered_outline_evidence = result_source == "recovered_tool_evidence" and task is not None and task.subagent_type == "outline"
     artifact_content = getattr(result, "artifact_content", None)
     artifact_type = getattr(result, "artifact_type", None)
     artifact_metadata = getattr(result, "artifact_metadata", None)
     ai_messages = getattr(result, "ai_messages", None)
     recovered_created_paths = _recover_created_paths(raw_result, ai_messages)
     summary = raw_result
-    if not is_memory_recaller and payload is not None and any(key in payload for key in ("summary", "artifact_content", "artifact_type", "artifact_metadata")):
+    if recovered_outline_evidence:
+        # Recovered tool text is evidence, even when a tool message contains a
+        # complete output-contract envelope. Never extract a formal Outline
+        # artifact from that envelope; a real delivery file is read separately.
+        artifact_content = None
+        artifact_type = None
+    elif not is_memory_recaller and payload is not None and any(key in payload for key in ("summary", "artifact_content", "artifact_type", "artifact_metadata")):
         summary = payload.get("summary") or payload.get("result")
         artifact_content = artifact_content if artifact_content is not None else payload.get("artifact_content")
         artifact_type = artifact_type or payload.get("artifact_type")
@@ -670,7 +677,6 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
     if is_memory_recaller:
         normalized_result = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) if payload is not None else raw_result
 
-    recovered_outline_evidence = result_source == "recovered_tool_evidence" and task is not None and task.subagent_type == "outline"
     if (
         artifact_content is None
         and not recovered_created_paths
@@ -720,6 +726,12 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         if not isinstance(evidence_gaps, list):
             evidence_gaps = []
         artifact_metadata["evidence_gaps"] = [str(item) for item in evidence_gaps if str(item).strip()][:12]
+        if recovered_outline_evidence:
+            if artifact_metadata["completion_status"] == "complete":
+                artifact_metadata["completion_status"] = "partial"
+            recovered_gap = "Report Outline ended without a formal tree; recovered tool evidence is not a deliverable."
+            if recovered_gap not in artifact_metadata["evidence_gaps"]:
+                artifact_metadata["evidence_gaps"].append(recovered_gap)
         if task is not None and task.subagent_type == "coder" and _coder_reported_behavior_failure(raw_result, ai_messages):
             artifact_metadata["completion_status"] = "partial"
             if _BEHAVIOR_FAILURE_GAP not in artifact_metadata["evidence_gaps"]:

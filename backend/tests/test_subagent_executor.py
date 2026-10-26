@@ -3042,3 +3042,49 @@ def test_empty_length_answer_marks_recovered_tool_evidence(classes):
     assert source == "recovered_tool_evidence"
     assert "Recovered tool evidence before safety stop" in text
     assert "material body" in text
+
+def test_recovered_envelope_never_becomes_outline_artifact(classes):
+    import json
+
+    from deerflow.sp.subagents.dr2_adapter import normalize_dr2_subagent_result
+    from deerflow.subagents.executor import _extract_final_result_details
+
+    envelope = json.dumps(
+        {
+            "summary": "tool output",
+            "artifact_content": json.dumps({"report_title": "not a deliverable", "nodes": []}),
+            "artifact_type": "outline",
+            "artifact_metadata": {"completion_status": "complete"},
+        }
+    )
+    messages = [
+        classes["ToolMessage"](content=envelope, name="read_file", tool_call_id="call-read"),
+        classes["AIMessage"](content="", tool_calls=[], response_metadata={"finish_reason": "length"}),
+    ]
+    text, source = _extract_final_result_details(
+        {"messages": messages},
+        trace_id="trace",
+        name="sp-outline",
+    )
+
+    from deerflow.sp.subagents import SPSubagentTask
+
+    task = SPSubagentTask(
+        action_id="a-outline",
+        subagent_type="outline",
+        task="plan",
+        description="plan",
+    )
+    raw = classes["SubagentResult"](
+        task_id="task",
+        trace_id="trace",
+        status=classes["SubagentStatus"].COMPLETED,
+        result=text,
+        result_source=source,
+        ai_messages=[{"response_metadata": {"finish_reason": "length"}}],
+    )
+    normalized = normalize_dr2_subagent_result(raw, task=task)
+
+    assert source == "recovered_tool_evidence"
+    assert normalized.artifact_content is None
+    assert normalized.artifact_type is None

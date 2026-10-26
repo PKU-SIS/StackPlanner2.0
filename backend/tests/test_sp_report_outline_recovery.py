@@ -257,7 +257,15 @@ def test_incomplete_candidate_allows_corrected_delivery(tmp_path):
 def test_recovered_tool_evidence_from_adapter_is_not_an_outline_candidate(tmp_path):
     ctx = _context(tmp_path)
     action, task = _outline_delegate(ctx)
-    recovered = json.dumps(_tree(), ensure_ascii=False)
+    recovered = json.dumps(
+        {
+            "summary": "tool output",
+            "artifact_content": json.dumps(_tree(), ensure_ascii=False),
+            "artifact_type": "outline",
+            "artifact_metadata": {"completion_status": "complete"},
+        },
+        ensure_ascii=False,
+    )
     raw = SimpleNamespace(
         status=SPSubagentStatus.COMPLETED,
         result=recovered,
