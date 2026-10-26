@@ -648,6 +648,7 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
     payload = _parse_result_payload(raw_result)
     is_memory_recaller = task is not None and task.subagent_type == "memory_recaller"
     stop_reason = getattr(result, "stop_reason", None)
+    result_source = getattr(result, "result_source", None)
     finish_reason = _last_model_finish_reason(getattr(result, "ai_messages", None))
     artifact_content = getattr(result, "artifact_content", None)
     artifact_type = getattr(result, "artifact_type", None)
@@ -669,12 +670,23 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
     if is_memory_recaller:
         normalized_result = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) if payload is not None else raw_result
 
-    if artifact_content is None and not recovered_created_paths and isinstance(raw_result, str) and len(raw_result) > DEFAULT_LARGE_RESULT_THRESHOLD and status == SPSubagentStatus.COMPLETED and not is_memory_recaller:
+    recovered_outline_evidence = result_source == "recovered_tool_evidence" and task is not None and task.subagent_type == "outline"
+    if (
+        artifact_content is None
+        and not recovered_created_paths
+        and not recovered_outline_evidence
+        and isinstance(raw_result, str)
+        and len(raw_result) > DEFAULT_LARGE_RESULT_THRESHOLD
+        and status == SPSubagentStatus.COMPLETED
+        and not is_memory_recaller
+    ):
         artifact_content = raw_result
         artifact_type = artifact_type or _default_artifact_type(task.subagent_type if task is not None else None)
 
     if not isinstance(artifact_metadata, dict):
         artifact_metadata = {}
+    if result_source is not None:
+        artifact_metadata["result_source"] = result_source
     if task is not None and task.subagent_type == "researcher" and artifact_content is None:
         recovered_evidence = _recover_research_tool_evidence(ai_messages)
         if recovered_evidence is not None:

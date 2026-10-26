@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from langchain_core.messages import HumanMessage
 
@@ -14,6 +15,7 @@ from deerflow.sp.memory import TaskMemoryStack
 from deerflow.sp.report import hooks
 from deerflow.sp.report.ledger import ReportLedger
 from deerflow.sp.subagents import SPSubagentResult, SPSubagentStatus, SPSubagentTask
+from deerflow.sp.subagents.dr2_adapter import normalize_dr2_subagent_result
 
 
 def _context(tmp_path: Path) -> HandlerContext:
@@ -174,7 +176,7 @@ def test_rejected_candidate_is_referenced_but_not_prefilled(tmp_path):
     assert current_ledger.payload["tree"]["version"] == 1
 
 
-def test_recovery_corrected_delivery_preserves_candidate_updates(tmp_path):
+def test_incomplete_candidate_allows_corrected_delivery(tmp_path):
     ctx = _context(tmp_path)
     action, task = _outline_delegate(ctx)
     accepted = hooks.handle_success(
@@ -196,9 +198,7 @@ def test_recovery_corrected_delivery_preserves_candidate_updates(tmp_path):
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
     candidate = ledger.paths.directory / "outline" / "rejected-candidate.json"
     candidate.parent.mkdir(parents=True, exist_ok=True)
-    candidate_tree = _tree()
-    candidate_tree["nodes"][0]["question"] = "candidate improved question"
-    candidate.write_text(json.dumps(candidate_tree, ensure_ascii=False), encoding="utf-8")
+    candidate.write_text('{"report_title":"partial","nodes":[', encoding="utf-8")
     ledger.payload["rejected_outline"] = {
         "path": str(candidate),
         "virtual_path": ledger.paths.virtual(candidate),
@@ -252,6 +252,38 @@ def test_recovery_corrected_delivery_preserves_candidate_updates(tmp_path):
     current = ReportLedger.load_for_context(hooks.report_context(ctx.state))
     accepted_tree = json.loads(Path(current.payload["tree"]["path"]).read_text(encoding="utf-8"))
     assert accepted_tree["nodes"][0]["question"] == "recovered improved question"
+
+
+def test_recovered_tool_evidence_from_adapter_is_not_an_outline_candidate(tmp_path):
+    ctx = _context(tmp_path)
+    action, task = _outline_delegate(ctx)
+    recovered = json.dumps(_tree(), ensure_ascii=False)
+    raw = SimpleNamespace(
+        status=SPSubagentStatus.COMPLETED,
+        result=recovered,
+        result_source="recovered_tool_evidence",
+        artifact_content=None,
+        artifact_type=None,
+        artifact_metadata={},
+        stop_reason=None,
+        ai_messages=[{"response_metadata": {"finish_reason": "length"}}],
+    )
+    normalized = normalize_dr2_subagent_result(raw, task=task)
+    assert normalized.artifact_content is None
+
+    result = hooks.handle_success(
+        action,
+        ctx,
+        normalized,
+        task,
+        artifact_adapter=SPArtifactAdapter(),
+        delegate_entry=ctx.stack.append_delegate("outline", thread_id="t1", run_id="run1", stage="planning"),
+    )
+
+    assert result.next_step == "error_recoverable"
+    assert "No tree candidate" in (result.error or "")
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert not ledger.payload.get("rejected_outline")
 
 
 def test_diagnostic_text_is_not_saved_as_rejected_tree(tmp_path):

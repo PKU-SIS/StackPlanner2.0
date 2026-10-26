@@ -57,7 +57,9 @@ only" instruction, tell Outline to skip reading materials, or tell it to close
 gaps mechanically. Never reduce the plan, delete nodes, invent field names, or
 move evidence/value preparation into Writer. If the existing execution budget
 is exhausted, report the technical block; do not ask the user to re-submit the
-same fields.
+same fields. If the host reports that no tree candidate was produced, do not
+pass recovered tool evidence or diagnostic text as a tree, and do not ask
+Outline to repair it; re-plan from the requirements and accepted baseline.
 
 Central does not decide whether a research gap is resolved. Only Outline's
 `gap_outcomes` may close a gap. Model-suggested critiques or extra research

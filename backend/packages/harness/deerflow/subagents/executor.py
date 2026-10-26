@@ -151,6 +151,7 @@ class SubagentResult:
     trace_id: str
     status: SubagentStatus
     result: str | None = None
+    result_source: str | None = None
     error: str | None = None
     stop_reason: str | None = None
     started_at: datetime | None = None
@@ -171,6 +172,7 @@ class SubagentResult:
         status: SubagentStatus,
         *,
         result: str | None = None,
+        result_source: str | None = None,
         error: str | None = None,
         stop_reason: str | None = None,
         completed_at: datetime | None = None,
@@ -192,6 +194,8 @@ class SubagentResult:
 
             if result is not None:
                 self.result = result
+            if result_source is not None:
+                self.result_source = result_source
             if error is not None:
                 self.error = error
             if stop_reason is not None:
@@ -252,24 +256,19 @@ def _extract_recent_tool_evidence(messages: list[Any]) -> str | None:
     return "[Recovered tool evidence before safety stop]\n\n" + "\n\n".join(chunks)
 
 
-def _extract_final_result(final_state: Any, *, trace_id: str, name: str) -> str:
-    """Extract a human-readable result string from the streamed subagent state.
+def _extract_final_result_details(final_state: Any, *, trace_id: str, name: str) -> tuple[str, str]:
+    """Extract result text and its source from the streamed subagent state.
 
-    Finds the last ``AIMessage`` in the conversation and stringifies its
-    content via the shared :func:`message_content_to_text` helper; falls back
-    to the last message of any type when no AIMessage is present. Returns a
-    sentinel string (``"No response generated"``) when there is nothing to
-    extract — including when the shared helper yields an empty string — so
-    callers never confuse a missing result with a legitimately empty one.
-
-    Used on both the normal-completion path and the max-turns path
-    (#3875 Phase 2): when ``recursion_limit`` aborts the run mid-flight,
-    ``final_state`` holds the last chunk streamed before the limit fired, so
-    this recovers the partial work instead of dropping it.
+    ``model_output`` means the last assistant answer contained usable text.
+    ``recovered_tool_evidence`` means the assistant answer was empty/interrupted
+    and the text came from preceding tool messages. ``message_fallback`` means
+    no AIMessage was available. This source label is what lets the SP adapter
+    keep ordinary recovery while refusing to treat recovered tool output as a
+    report Outline artifact.
     """
     if final_state is None:
         logger.warning(f"[trace={trace_id}] Subagent {name} no final state")
-        return "No response generated"
+        return "No response generated", "empty"
 
     messages = final_state.get("messages", [])
     logger.info(f"[trace={trace_id}] Subagent {name} final messages count: {len(messages)}")
@@ -285,24 +284,29 @@ def _extract_final_result(final_state: Any, *, trace_id: str, name: str) -> str:
         interrupted_tool_turn = bool(getattr(last_ai_message, "tool_calls", None))
         forced_stop = "[FORCED STOP]" in text
         if text and not interrupted_tool_turn and not forced_stop:
-            return text
+            return text, "model_output"
 
         recovered = _extract_recent_tool_evidence(messages)
         if recovered:
             if text:
-                return f"{text}\n\n{recovered}"
-            return recovered
-        return text or "No response generated"
+                return f"{text}\n\n{recovered}", "recovered_tool_evidence"
+            return recovered, "recovered_tool_evidence"
+        return (text, "model_output") if text else ("No response generated", "empty")
 
     if messages:
         last_message = messages[-1]
         logger.warning(f"[trace={trace_id}] Subagent {name} no AIMessage found, using last message: {type(last_message)}")
         raw_content = last_message.content if hasattr(last_message, "content") else str(last_message)
         text = message_content_to_text(raw_content)
-        return text if text else "No response generated"
+        return (text, "message_fallback") if text else ("No response generated", "empty")
 
     logger.warning(f"[trace={trace_id}] Subagent {name} no messages in final state")
-    return "No response generated"
+    return "No response generated", "empty"
+
+
+def _extract_final_result(final_state: Any, *, trace_id: str, name: str) -> str:
+    """Compatibility wrapper returning only final-result text."""
+    return _extract_final_result_details(final_state, trace_id=trace_id, name=name)[0]
 
 
 # Global storage for background task results
@@ -1056,7 +1060,7 @@ class SubagentExecutor:
 
             logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} completed async execution")
             token_usage_records = collector.snapshot_records()
-            final_result = _extract_final_result(final_state, trace_id=self.trace_id, name=self.config.name)
+            final_result, result_source = _extract_final_result_details(final_state, trace_id=self.trace_id, name=self.config.name)
             # A guard hard-stop (token budget or loop detection) does not raise
             # — it strips tool_calls so the run completes with a final answer.
             # ``consume_stop_reason`` on each guard tells us whether that
@@ -1066,6 +1070,7 @@ class SubagentExecutor:
             result.try_set_terminal(
                 SubagentStatus.COMPLETED,
                 result=final_result,
+                result_source=result_source,
                 stop_reason=stop_reason,
                 token_usage_records=token_usage_records,
             )
@@ -1089,7 +1094,7 @@ class SubagentExecutor:
             # consistent and pops the reason so it is not orphaned in the dict.
             max_turns = self.config.max_turns
             logger.warning(f"[trace={self.trace_id}] Subagent {self.config.name} reached max_turns={max_turns} (GraphRecursionError); recovering partial result")
-            usable_partial = _extract_final_result(final_state, trace_id=self.trace_id, name=self.config.name)
+            usable_partial, result_source = _extract_final_result_details(final_state, trace_id=self.trace_id, name=self.config.name)
             if usable_partial == "No response generated":
                 usable_partial = None
             records = collector.snapshot_records() if collector is not None else None
@@ -1098,6 +1103,7 @@ class SubagentExecutor:
                 result.try_set_terminal(
                     SubagentStatus.COMPLETED,
                     result=usable_partial,
+                    result_source=result_source,
                     stop_reason=stop_reason,
                     token_usage_records=records,
                 )

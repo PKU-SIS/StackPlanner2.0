@@ -3024,3 +3024,21 @@ class TestSubagentGuardrailAttribution:
         from langchain_core.messages import HumanMessage
 
         return ({"messages": [HumanMessage(content=task)]}, [], None)
+
+def test_empty_length_answer_marks_recovered_tool_evidence(classes):
+    from deerflow.subagents.executor import _extract_final_result_details
+
+    messages = [
+        classes["ToolMessage"](content="material body", name="read_file", tool_call_id="call-read"),
+        classes["AIMessage"](content="", tool_calls=[], response_metadata={"finish_reason": "length"}),
+    ]
+
+    text, source = _extract_final_result_details(
+        {"messages": messages},
+        trace_id="trace",
+        name="sp-outline",
+    )
+
+    assert source == "recovered_tool_evidence"
+    assert "Recovered tool evidence before safety stop" in text
+    assert "material body" in text

@@ -2044,6 +2044,9 @@ def _store_rejected_outline(
     source_kind: str = "result",
 ) -> dict[str, Any] | None:
     """Persist only a real tree candidate, never a diagnostic as a tree."""
+    result_source = str((result.artifact_metadata or {}).get("result_source") or "")
+    if source_kind != "delivery_file" and result_source == "recovered_tool_evidence":
+        return None
     content = source_text if source_text is not None else result.artifact_content
     if source_text is None and content is None:
         content = result.result

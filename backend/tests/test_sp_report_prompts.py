@@ -31,6 +31,7 @@ def test_central_prompt_keeps_gap_closure_and_recovery_with_outline():
     assert "Central does not decide whether a research gap is resolved" in REPORT_CENTRAL_PROMPT
     assert 'use `report_task="revise"`' in REPORT_CENTRAL_PROMPT
     assert "administrative" in REPORT_CENTRAL_PROMPT
+    assert "no tree candidate was produced" in REPORT_CENTRAL_PROMPT
 
 
 def test_writer_prompt_uses_host_node_level_for_internal_headings():
