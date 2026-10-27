@@ -81,19 +81,22 @@ When a marked section and one of its writable children both depend on the
 research, associate both, for example:
 
 ```json
-{
-  "node_ids": ["n6", "n7"],
-  "_comment": "n6 is a section with needs_richer_research=true; n7 is its writable child that needs the evidence"
-}
+{"node_ids": ["n6", "n7"]}
 ```
 
-`n6` carries the section-level depth signal; `n7` records the concrete evidence
-dependency. Do not associate only the child when the section itself is marked,
-or the Researcher loses the deeper-research context. If the section is not yet
-accepted, register with `node_ids=[]`, then write the returned gap id into the
-section's `gap_ids` in the next tree (and the child's `gap_ids` when it also
-depends on that evidence). The host associates nodes after acceptance; no
-parent auto-inheritance or separate research queue is added.
+Here `n6` is a section with `needs_richer_research=true`; `n7` is its writable
+child that needs the evidence. `n6` carries the section-level depth signal;
+`n7` records the concrete evidence dependency. Do not associate only the child
+when the section itself is marked, or the Researcher loses the deeper-research
+context. If the section is not yet accepted, register with `node_ids=[]`, then
+write the returned gap id into the section's `gap_ids` in the next tree (and the
+child's `gap_ids` when it also depends on that evidence). The host associates
+nodes after acceptance; no parent auto-inheritance or separate research queue is
+added.
+
+Research `node_ids` may contain a section and its child together. This is
+different from `write_requests`: each writing entry targets exactly one
+writable node.
 
 ## Tree Contract
 
@@ -118,10 +121,12 @@ Return the complete tree JSON in `artifact_content`:
   state a conclusion the saved material cannot support.
 - Every previous node that is removed must be listed in `removed_node_ids`.
 - `write_requests` is the existing interface for formal report writing and
-  optional trial writing, not a trial-only queue. For a normal report, arrange
-  writing for every retained writable node that is currently `ready` and has no
-  current valid draft. You may batch requests or deliberately trial a small
-  batch; completing a batch does not mean the whole report is complete. Later,
+  optional trial writing, not a trial-only queue. Each entry must target exactly
+  one writable node in `node_ids`; batch scheduling means multiple entries, each
+  with its own `key`. For a normal report, arrange writing for every retained
+  writable node that is currently `ready` and has no current valid draft. You
+  may batch requests or deliberately trial a small batch; completing a batch
+  does not mean the whole report is complete. Later,
   after Central returns with the queue exhausted, re-check the tree, existing
   requests and current drafts, then add missing ready nodes while reusing valid
   work. `feedback_wanted` requests local feedback only; it never gates other
@@ -194,7 +199,8 @@ path when no file delivery is requested.
   (`section` or `writable`), `title`; writable `question`, non-empty
   `argument[]`, `conclusion`, `constraints` object, `status`,
   `requirement_ids[]`, `evidence[]`; evidence `material_id`, `use`, and object
-  `locator`; `write_requests[]` `key`, `node_ids[]` (writable targets only).
+  `locator`; `write_requests[]` own `key`, exactly one writable node in
+  `node_ids[]`.
 - Recommended: `source_ids[]`, `locator.lines: [start, end]`, `hard: true`,
   explicit `relations: []` / `gap_ids: []`.
 - Optional: section `status`, `feedback_wanted`, extra explanatory fields;

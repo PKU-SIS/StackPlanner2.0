@@ -213,15 +213,17 @@ Output contract:
   materials as the starting point. Include the child writable node as well when
   it depends on the evidence, for example `node_ids: ["n6","n7"]` where `n6` is
   the marked section and `n7` is its child; associating only the child loses the
-  section depth signal. Merge related sections into one request when useful; do
-  not create one Researcher call per section mechanically.
+  section depth signal. Research-request `node_ids` may contain a section and
+  its child together. This differs from `write_requests`, where each entry must
+  target exactly one writable node. Merge related sections into one request when
+  useful; do not create one Researcher call per section mechanically.
 - Hard requirements: `report_title`; at least one `requirements[]` object with
   `id`, `input_id`, `text`; at least one `nodes[]` object with `node_id`,
   `kind` (`section` or `writable`), `title`; writable nodes need `question`,
   non-empty `argument[]`, `conclusion`, `constraints` object, `status`,
   `requirement_ids[]`, `evidence[]`; evidence items need `material_id`, `use`,
-  and an object `locator`; each `write_requests[]` item needs `key` and
-  `node_ids[]` (writable targets only).
+  and an object `locator`; each `write_requests[]` item needs its own `key` and
+  exactly one writable node in `node_ids[]`.
 - Citation identity is canonical `[S<n>]` from the host-registered material
   catalog/packet `source_id` and evidence `source_ids`. Do not register sources
   through a new tree field, do not emit `citation_map`, and do not introduce
@@ -320,11 +322,12 @@ Output contract:
 - Preserve existing node ids unless you explicitly remove them through
   removed_node_ids. Do not silently drop a previous node.
 - `write_requests` is the existing scheduling interface for both formal report
-  writing and optional trial writing, not a trial-only queue. For a normal
-  report, arrange writing for every retained writable node that is currently
-  `ready` and has no current valid draft; you may batch requests or deliberately
-  trial a small batch, but completing a batch never means the whole report is
-  finished. Later, when Central returns after the current queue is exhausted,
+  writing and optional trial writing, not a trial-only queue. Each entry must
+  target exactly one writable node; batch scheduling means multiple entries,
+  each with its own `key`. For a normal report, arrange writing for every
+  retained writable node that is currently `ready` and has no current valid
+  draft; you may batch requests or deliberately trial a small batch, but
+  completing a batch never means the whole report is finished. Later, when Central returns after the current queue is exhausted,
   audit the current tree, existing requests, and current drafts, then add the
   missing ready nodes while reusing valid requests and drafts. Do not rewrite a
   completed body without a content reason. `feedback_wanted` only requests local

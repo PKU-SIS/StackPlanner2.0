@@ -8,10 +8,13 @@ from deerflow.sp.report.tools import build_register_research_request_tool
 
 
 def test_outline_prompt_treats_write_requests_as_formal_scheduling():
-    assert "not a trial-only queue" in REPORT_OUTLINE_PROMPT
-    assert "every retained writable node" in REPORT_OUTLINE_PROMPT
-    assert "feedback_wanted" in REPORT_OUTLINE_PROMPT
-    assert "never determines whether other nodes continue writing" in REPORT_OUTLINE_PROMPT
+    normalized_prompt = " ".join(REPORT_OUTLINE_PROMPT.split())
+    assert "not a trial-only queue" in normalized_prompt
+    assert "every retained writable node" in normalized_prompt
+    assert "feedback_wanted" in normalized_prompt
+    assert "never determines whether other nodes continue writing" in normalized_prompt
+    assert "Each entry must target exactly one writable node" in normalized_prompt
+    assert "multiple entries, each with its own `key`" in normalized_prompt
 
 
 def test_central_prompt_handles_exhausted_write_queue():
@@ -26,16 +29,20 @@ def test_outline_skill_research_example_links_section_and_child():
     skill = Path(__file__).resolve().parents[2] / "skills/public/report-outline/SKILL.md"
     text = skill.read_text(encoding="utf-8")
     assert '"node_ids": ["n6", "n7"]' in text
-    assert "section-level depth signal" in text
-    assert "Do not associate only the child" in text
+    assert "_comment" not in text
+    normalized_skill = " ".join(text.split())
+    assert "section-level depth signal" in normalized_skill
+    assert "Do not associate only the child" in normalized_skill
+    assert "Each entry must target exactly" in normalized_skill
 
 
 def test_outline_prompt_has_directory_grep_and_structured_tool_examples():
     assert "grep` takes a **directory**" in REPORT_OUTLINE_PROMPT
     assert "must be a JSON object" in REPORT_OUTLINE_PROMPT
     assert '{"node_id": "n2", "type": "supports"}' in REPORT_OUTLINE_PROMPT
-    assert "arrange writing for every retained writable node" in REPORT_OUTLINE_PROMPT
-    assert "`ready` and has no current valid draft" in REPORT_OUTLINE_PROMPT
+    normalized_prompt = " ".join(REPORT_OUTLINE_PROMPT.split())
+    assert "arrange writing for every retained writable node" in normalized_prompt
+    assert "`ready` and has no current valid draft" in normalized_prompt
     assert '{"input_id":"u1","quote":"..."}' in REPORT_OUTLINE_PROMPT
     assert '{"material_id":"m1","lines":[10,32]}' in REPORT_OUTLINE_PROMPT
     assert '"evidence_material_ids":["m1"]' in REPORT_OUTLINE_PROMPT
@@ -53,6 +60,8 @@ def test_research_request_tool_description_exposes_nested_contract(tmp_path):
     assert "materials_checked" in tool.description
     assert "input_id" in tool.description
     assert "material_id" in tool.description
+    normalized_description = " ".join(tool.description.split())
+    assert "exactly one writable node" in normalized_description
 
 
 def test_central_prompt_keeps_gap_closure_and_recovery_with_outline():

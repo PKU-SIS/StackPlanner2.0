@@ -48,7 +48,9 @@ def build_register_research_request_tool(
         node_ids and state the deeper themes, dimensions, or source directions
         in the request. If a child writable also depends on that evidence,
         include both (for example node_ids=["n6","n7"]: n6 marked section, n7
-        child); the child alone loses the section depth signal. Before the first
+        child); the child alone loses the section depth signal. This research
+        association differs from write_requests, where each item targets exactly
+        one writable node. Before the first
         tree is accepted, or for a newly added section not yet accepted, use
         node_ids=[] and then write the returned gap_id into that section's
         gap_ids in the next tree. Only accepted tree nodes may be passed as
