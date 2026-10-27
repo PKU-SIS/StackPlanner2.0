@@ -14,7 +14,10 @@ report, and do not decide whether evidence is sufficient; the Outline judges.
 ## Work
 
 1. Read the gap briefs, their constraints and stop conditions, and the saved
-   material catalog. Reuse saved material instead of re-fetching a source.
+   material catalog. Reuse saved material instead of re-fetching a source. If a
+   gap's `nodes[]` marks a section `needs_richer_research: true`, cover the
+   request's deeper themes, dimensions, or source directions; this is not a
+   demand for a fixed source count or a reason to repeat an exhausted search.
 2. Search with `web_search` to find candidate sources.
 3. Retrieve exact URLs with `report_fetch_material(url=...)`. It invokes the
    deployment's configured fetch tool and saves the returned text before any

@@ -44,6 +44,8 @@ def build_register_research_request_tool(
         Each questions item uses nested objects: requirement_refs is an array of
         {input_id, quote}; materials_checked is an array of {material_id, lines};
         constraints is an object; mode="continue" also includes continue_gap_id.
+        For section nodes marked needs_richer_research, pass their node_ids and
+        state the deeper themes, dimensions, or source directions in the request.
 
         Args:
             questions: Batch of research requests. Each item contains mode,

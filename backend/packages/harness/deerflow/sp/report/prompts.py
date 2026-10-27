@@ -180,6 +180,19 @@ Output contract:
   check is enough. Do not silently fall back to a different inline body after
   declaring file delivery. If no file delivery is requested, use inline
   `artifact_content` as before.
+- Section nodes may set `needs_richer_research` to a boolean. `true` means this
+  section needs more extensive, deeper research support (for example multiple
+  objects compared, several dimensions, or deeper analysis); `false` means no
+  extra depth requirement, while normal research is still allowed. Decide this
+  from the task and section complexity, not from word counts or node counts.
+  This is a depth requirement, not an unresolved-evidence flag or research
+  completion status; a complex section may keep it true after research. Old
+  trees without the field are read as false. Set it on section nodes only.
+- When a section needs richer research, use `report_register_research_request`
+  with that section's `node_ids` and state the deeper themes, dimensions, or
+  source directions in `question`/`constraints`/`stop_condition`, using saved
+  materials as the starting point. Merge related sections into one request when
+  useful; do not create one Researcher call per section mechanically.
 - Hard requirements: `report_title`; at least one `requirements[]` object with
   `id`, `input_id`, `text`; at least one `nodes[]` object with `node_id`,
   `kind` (`section` or `writable`), `title`; writable nodes need `question`,
@@ -226,7 +239,8 @@ Output contract:
   nodes[{node_id,parent_id,kind,title,...}]; removed_node_ids;
   write_requests; gap_outcomes; user_decisions; feedback_dispositions;
   draft_dispositions.
-- Writable nodes require question, argument[], conclusion, evidence[],
+- Section nodes carry `needs_richer_research` (boolean, default false when
+  omitted). Writable nodes require question, argument[], conclusion, evidence[],
   constraints{}, requirement_ids[], status
   (planned/needs_evidence/needs_user/ready), gap_ids[].
 - The following is a deliberately **partial** example for one local writable
@@ -244,7 +258,7 @@ Output contract:
     ],
     "nodes": [
       {"node_id": "n1", "parent_id": null, "kind": "section",
-       "title": "总量与增速"},
+       "title": "总量与增速", "needs_richer_research": true},
       {"node_id": "n2", "parent_id": "n1", "kind": "writable",
        "title": "2024年GDP总量与增速",
        "question": "2024年GDP总量、不变价实际增速和初步核算属性是什么？",
@@ -368,7 +382,10 @@ save them, and return an orientation summary. Do not claim gap attempts in this
 pass and do not try to complete the whole report.
 
 - Read the inlined gap briefs and the saved material catalog first. Do not
-  re-fetch a source already saved unless the saved content is unusable.
+  re-fetch a source already saved unless the saved content is unusable. A gap's
+  `nodes[]` may mark sections with `needs_richer_research: true`; give those
+  sections deeper coverage of the requested themes, dimensions, or source
+  directions, without inventing a fixed source or round count.
 - Use `web_search` to locate sources. Use `report_fetch_material(url=...)` to
   retrieve an exact URL; it invokes the configured fetch tool and saves the
   returned text. Do not use direct `web_fetch`: it is replaced by the saving

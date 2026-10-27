@@ -79,6 +79,14 @@ Return the complete tree JSON in `artifact_content`:
 - `report_title`, `requirements`, `nodes`, `removed_node_ids`,
   `write_requests`, `gap_outcomes`, `user_decisions`,
   `feedback_dispositions`, `draft_dispositions`.
+- Section nodes carry `needs_richer_research` as a boolean. `true` means the
+  section needs deeper, broader retrieval support; it is not an unresolved-gap
+  or completion flag. Omit it or use `false` when ordinary retrieval is enough;
+  old trees without it default to `false`. Judge from task complexity, not word
+  or node counts. When true, register the section's research need with its
+  `node_ids` and describe the deeper themes, dimensions, or source directions in
+  the existing request fields; merge related sections when useful. Research
+  completion does not automatically reset the flag.
 - Writable nodes carry `question`, `argument`, `conclusion`, `evidence`,
   `constraints`, `requirement_ids`, `status`, `gap_ids`.
 - Evidence cites saved `material_id`s and locatable line ranges. Do not cite a

@@ -1,6 +1,6 @@
 """Report role prompts encode the write and tool boundaries the host enforces."""
 
-from deerflow.sp.report.prompts import REPORT_CENTRAL_PROMPT, REPORT_OUTLINE_PROMPT, REPORT_WRITER_PROMPT
+from deerflow.sp.report.prompts import REPORT_CENTRAL_PROMPT, REPORT_OUTLINE_PROMPT, REPORT_RESEARCH_PROMPT, REPORT_WRITER_PROMPT
 from deerflow.sp.report.store import ReportPaths
 from deerflow.sp.report.tools import build_register_research_request_tool
 
@@ -13,6 +13,8 @@ def test_outline_prompt_has_directory_grep_and_structured_tool_examples():
     assert '{"input_id":"u1","quote":"..."}' in REPORT_OUTLINE_PROMPT
     assert '{"material_id":"m1","lines":[10,32]}' in REPORT_OUTLINE_PROMPT
     assert '"evidence_material_ids":["m1"]' in REPORT_OUTLINE_PROMPT
+    assert "needs_richer_research" in REPORT_OUTLINE_PROMPT
+    assert "needs_richer_research" in REPORT_RESEARCH_PROMPT
 
 
 def test_research_request_tool_description_exposes_nested_contract(tmp_path):

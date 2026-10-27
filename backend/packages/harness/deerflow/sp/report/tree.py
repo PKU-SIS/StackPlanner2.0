@@ -196,6 +196,8 @@ def _diagnose_tree_contract(payload: Mapping[str, Any], ledger: ReportLedger) ->
                 errors.append(f"tree.nodes[{node_id}].kind must be section or writable")
                 continue
             if kind == "section":
+                if "needs_richer_research" in raw and not isinstance(raw.get("needs_richer_research"), bool):
+                    errors.append(f"tree.nodes[{node_id}].needs_richer_research must be a boolean")
                 continue
             text(raw.get("question"), f"tree.nodes[{node_id}].question")
             arguments = list_value(raw.get("argument"), f"tree.nodes[{node_id}].argument")
@@ -364,6 +366,10 @@ def validate_tree(payload: Mapping[str, Any], ledger: ReportLedger) -> dict[str,
             node["evidence"] = _validate_evidence(raw.get("evidence"), ledger, node_id)
             node["relations"] = normalized_relations
         else:
+            needs_richer = raw.get("needs_richer_research", False)
+            if not isinstance(needs_richer, bool):
+                raise ReportValidationError(f"tree.nodes[{node_id}].needs_richer_research must be a boolean")
+            node["needs_richer_research"] = needs_richer
             node["relations"] = normalized_relations
             if raw.get("status") is not None:
                 node["status"] = str(raw.get("status")).strip().lower()
@@ -638,6 +644,7 @@ def commit_tree(
             "kind": node.get("kind"),
             "title": node.get("title"),
             "status": node.get("status"),
+            "needs_richer_research": bool(node.get("needs_richer_research")),
         }
         for node in candidate["nodes"]
     }

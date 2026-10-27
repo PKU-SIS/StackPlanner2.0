@@ -54,7 +54,7 @@ def _paths(ctx: HandlerContext) -> report_store.ReportPaths:
     return report_store.ReportPaths(context.outputs_path, context.report_id)
 
 
-def _register_gap(ctx: HandlerContext, action_id: str, *, question: str = "示例公司 FY2024 偿付能力", mode: str = "new", continue_gap_id: str | None = None) -> dict:
+def _register_gap(ctx: HandlerContext, action_id: str, *, question: str = "示例公司 FY2024 偿付能力", mode: str = "new", continue_gap_id: str | None = None, node_ids: list[str] | None = None) -> dict:
     tool = build_register_research_request_tool(paths=_paths(ctx), action_id=action_id)
     request: dict = {
         "mode": mode,
@@ -63,7 +63,7 @@ def _register_gap(ctx: HandlerContext, action_id: str, *, question: str = "示�
         "why_insufficient": "saved materials do not contain the metric",
         "stop_condition": "official annual report note",
         "requirement_refs": [{"input_id": "u1", "quote": "示例公司"}],
-        "node_ids": [],
+        "node_ids": node_ids or [],
         "materials_checked": [],
     }
     if continue_gap_id:
@@ -97,12 +97,15 @@ def _delegate(ctx: HandlerContext, action_id: str, target: str, metadata: dict) 
     return action, task
 
 
-def _tree(*, gap_ids: list[str], outcomes: list[dict] | None = None, decisions: list[dict] | None = None, title: str = "示例公司报告") -> dict:
+def _tree(*, gap_ids: list[str], outcomes: list[dict] | None = None, decisions: list[dict] | None = None, title: str = "示例公司报告", section_needs_richer: bool | None = None) -> dict:
+    section = {"node_id": "n1", "parent_id": None, "kind": "section", "title": "偿付能力"}
+    if section_needs_richer is not None:
+        section["needs_richer_research"] = section_needs_richer
     return {
         "report_title": title,
         "requirements": [{"id": "R1", "input_id": "u1", "text": "示例公司 FY2024 偿付能力", "hard": True}],
         "nodes": [
-            {"node_id": "n1", "parent_id": None, "kind": "section", "title": "偿付能力"},
+            section,
             {
                 "node_id": "n2",
                 "parent_id": "n1",
@@ -184,6 +187,90 @@ def _research(
         artifact_metadata=metadata,
     )
     return hooks.handle_success(action, ctx, result, task, artifact_adapter=SPArtifactAdapter(), delegate_entry=delegate_entry)
+
+
+def test_section_richer_research_flag_is_saved_and_reaches_researcher_packet(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    outline_action, outline_task = _delegate(ctx, "a-outline", "outline", {"report_task": "plan"})
+    accepted = _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=[], section_needs_richer=True))
+    assert accepted.next_step == "continue", accepted.error
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.payload["nodes"]["n1"]["needs_richer_research"] is True
+    assert not [item for item in (ledger.payload.get("actions") or {}).values() if item.get("kind") == "research"]
+
+    registered = _register_gap(ctx, "a-outline", node_ids=["n1"])
+    assert registered["registered"][0]["gap_id"] == "g1"
+
+    action, task = _delegate(ctx, "a-r1", "researcher", {"report_gap_ids": ["g1"]})
+    assert action.action_id == "a-r1"
+    packet = task.context_refs["report_packet"]
+    assert packet["gaps"][0]["node_ids"] == ["n1"]
+    assert packet["gaps"][0]["nodes"] == [
+        {
+            "node_id": "n1",
+            "title": "偿付能力",
+            "kind": "section",
+            "needs_richer_research": True,
+        }
+    ]
+
+
+def test_true_richer_research_flag_does_not_auto_repeat_research(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    outline_action, outline_task = _delegate(ctx, "a-outline", "outline", {"report_task": "plan"})
+    accepted = _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=[], section_needs_richer=True))
+    assert accepted.next_step == "continue", accepted.error
+    _register_gap(ctx, "a-outline", node_ids=["n1"])
+
+    result = _research(ctx, "a-r1", ["g1"], tool_ok=True)
+    assert result.next_step == "continue", result.error
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    gap = ledger.require_gap("g1")
+    assert gap["rounds"] == 1
+    assert ledger.payload["nodes"]["n1"]["needs_richer_research"] is True
+    research_actions = [item for item in (ledger.payload.get("actions") or {}).values() if item.get("kind") == "research"]
+    assert len(research_actions) == 1
+
+
+def test_false_richer_research_flag_does_not_block_normal_research(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    outline_action, outline_task = _delegate(ctx, "a-outline", "outline", {"report_task": "plan"})
+    accepted = _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=[], section_needs_richer=False))
+    assert accepted.next_step == "continue", accepted.error
+    _register_gap(ctx, "a-outline", node_ids=["n1"])
+
+    _action, task = _delegate(ctx, "a-r1", "researcher", {"report_gap_ids": ["g1"]})
+    assert task.context_refs["report_packet"]["gaps"][0]["nodes"][0]["needs_richer_research"] is False
+
+
+def test_missing_richer_research_flag_defaults_false_for_old_trees(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    outline_action, outline_task = _delegate(ctx, "a-outline", "outline", {"report_task": "plan"})
+    accepted = _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=[]))
+    assert accepted.next_step == "continue", accepted.error
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.payload["nodes"]["n1"]["needs_richer_research"] is False
+
+
+def test_non_boolean_richer_research_flag_is_rejected(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    outline_action, outline_task = _delegate(ctx, "a-outline", "outline", {"report_task": "plan"})
+    tree = _tree(gap_ids=[])
+    tree["nodes"][0]["needs_richer_research"] = "yes"
+
+    rejected = _accept_outline(ctx, outline_action, outline_task, tree)
+
+    assert rejected.next_step == "error_recoverable"
+    assert "needs_richer_research must be a boolean" in (rejected.error or "")
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.payload.get("tree") is None
 
 
 def test_start_preserves_full_request_and_supplements(tmp_path):

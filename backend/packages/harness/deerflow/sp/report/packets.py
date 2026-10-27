@@ -70,6 +70,26 @@ def _material_entry(material: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _gap_nodes(gap: Mapping[str, Any], ledger: ReportLedger) -> list[dict[str, Any]]:
+    nodes = ledger.payload.get("nodes")
+    if not isinstance(nodes, Mapping):
+        return []
+    result: list[dict[str, Any]] = []
+    for node_id in gap.get("node_ids") or []:
+        node = nodes.get(str(node_id))
+        if not isinstance(node, Mapping):
+            continue
+        result.append(
+            {
+                "node_id": node.get("node_id"),
+                "title": node.get("title"),
+                "kind": node.get("kind"),
+                "needs_richer_research": bool(node.get("needs_richer_research")),
+            }
+        )
+    return result
+
+
 def _gap_entry(gap: Mapping[str, Any], ledger: ReportLedger) -> dict[str, Any]:
     return {
         "gap_id": gap.get("gap_id"),
@@ -82,6 +102,7 @@ def _gap_entry(gap: Mapping[str, Any], ledger: ReportLedger) -> dict[str, Any]:
         "stop_condition": gap.get("stop_condition"),
         "requirement_refs": gap.get("requirement_refs") or [],
         "node_ids": gap.get("node_ids") or [],
+        "nodes": _gap_nodes(gap, ledger),
         "materials_checked": gap.get("materials_checked") or [],
         "next_action": gap_next_action(gap),
         "outcome": gap.get("outcome"),
