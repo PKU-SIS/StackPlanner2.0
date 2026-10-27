@@ -235,6 +235,38 @@ def test_true_richer_research_flag_does_not_auto_repeat_research(tmp_path):
     assert len(research_actions) == 1
 
 
+def test_first_plan_registers_with_empty_node_ids_then_links_section_gap(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    registered = _register_gap(ctx, "a-outline", node_ids=[])
+    assert registered["registered"][0]["gap_id"] == "g1"
+
+    outline_action, outline_task = _delegate(ctx, "a-outline", "outline", {"report_task": "plan"})
+    tree = _tree(gap_ids=["g1"], section_needs_richer=True)
+    tree["nodes"][0]["gap_ids"] = ["g1"]
+    accepted = _accept_outline(ctx, outline_action, outline_task, tree)
+    assert accepted.next_step == "continue", accepted.error
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.require_gap("g1")["node_ids"] == ["n1", "n2"]
+    assert ledger.payload["nodes"]["n1"]["needs_richer_research"] is True
+
+    _action, task = _delegate(ctx, "a-r1", "researcher", {"report_gap_ids": ["g1"]})
+    researcher_nodes = task.context_refs["report_packet"]["gaps"][0]["nodes"]
+    assert researcher_nodes[0]["node_id"] == "n1"
+    assert researcher_nodes[0]["needs_richer_research"] is True
+
+
+def test_unaccepted_node_id_is_still_rejected_before_first_plan(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+
+    registered = _register_gap(ctx, "a-outline", node_ids=["n1"])
+
+    assert registered["registered"] == []
+    assert "accepted tree" in registered["error"]
+
+
 def test_false_richer_research_flag_does_not_block_normal_research(tmp_path):
     ctx = _context(_state(tmp_path))
     _start(ctx)

@@ -45,8 +45,13 @@ already satisfied.
 - `requirement_refs` must quote the original user input. `why_insufficient` must
   explain what was checked and what is still missing. `stop_condition` must say
   what evidence would settle the question.
-- `node_ids` refers only to nodes in the accepted tree. The first plan may use
-  an empty list.
+- `node_ids` refers only to nodes in the accepted tree. The first plan, or a
+  newly added section that is not accepted yet, registers with `node_ids: []`
+  and describes the deeper requirement in the existing request fields. After
+  the tool returns a gap id, write it into the corresponding section's
+  `gap_ids` in the next tree; acceptance reuses `attach_nodes_to_gaps`, then
+  research dispatch can proceed. Accepted sections can be passed directly by
+  `node_ids`. Do not invent node or gap ids, and do not relax node validation.
 
 ### Complete research-request shape
 

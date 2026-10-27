@@ -149,8 +149,15 @@ Tool contract:
   refining an existing open/awaiting_user gap; continuation keeps identity and
   rounds. `constraints` must be a JSON object (for example
   `{"must_be_primary": true, "need_locator": true}`), not a string.
-  `requirement_refs` must quote the original user input. `node_ids` may be
-  empty before the first tree is accepted. Never invent gap ids.
+  `requirement_refs` must quote the original user input. `node_ids` may
+  reference only accepted tree nodes. Before the first plan is accepted, or for
+  a newly added section that is not yet accepted, register with `node_ids: []`
+  and describe the deeper requirement in the existing request fields; after
+  the tool returns a gap id, put that id in the corresponding section's
+  `gap_ids` in the next tree. Acceptance reuses the existing host association
+  (`attach_nodes_to_gaps`), and only then does Central dispatch research.
+  Accepted sections can be referenced directly by their `node_ids`. Never
+  invent node ids or gap ids.
 - Research results return as `awaiting_outline`; you must judge every such gap
   in `gap_outcomes` on your next accepted output. A result is not automatically
   sufficient. Use `resolved` only with a stated basis; `unresolved` returns the

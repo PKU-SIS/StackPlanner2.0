@@ -44,8 +44,12 @@ def build_register_research_request_tool(
         Each questions item uses nested objects: requirement_refs is an array of
         {input_id, quote}; materials_checked is an array of {material_id, lines};
         constraints is an object; mode="continue" also includes continue_gap_id.
-        For section nodes marked needs_richer_research, pass their node_ids and
-        state the deeper themes, dimensions, or source directions in the request.
+        For section nodes marked needs_richer_research, pass their accepted
+        node_ids and state the deeper themes, dimensions, or source directions
+        in the request. Before the first tree is accepted, or for a newly added
+        section not yet accepted, use node_ids=[] and then write the returned
+        gap_id into that section's gap_ids in the next tree. Only accepted tree
+        nodes may be passed as node_ids; acceptance reuses attach_nodes_to_gaps.
 
         Args:
             questions: Batch of research requests. Each item contains mode,
