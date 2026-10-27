@@ -200,20 +200,26 @@ def test_section_richer_research_flag_is_saved_and_reaches_researcher_packet(tmp
     assert ledger.payload["nodes"]["n1"]["needs_richer_research"] is True
     assert not [item for item in (ledger.payload.get("actions") or {}).values() if item.get("kind") == "research"]
 
-    registered = _register_gap(ctx, "a-outline", node_ids=["n1"])
+    registered = _register_gap(ctx, "a-outline", node_ids=["n1", "n2"])
     assert registered["registered"][0]["gap_id"] == "g1"
 
     action, task = _delegate(ctx, "a-r1", "researcher", {"report_gap_ids": ["g1"]})
     assert action.action_id == "a-r1"
     packet = task.context_refs["report_packet"]
-    assert packet["gaps"][0]["node_ids"] == ["n1"]
+    assert packet["gaps"][0]["node_ids"] == ["n1", "n2"]
     assert packet["gaps"][0]["nodes"] == [
         {
             "node_id": "n1",
             "title": "偿付能力",
             "kind": "section",
             "needs_richer_research": True,
-        }
+        },
+        {
+            "node_id": "n2",
+            "title": "FY2024 指标",
+            "kind": "writable",
+            "needs_richer_research": False,
+        },
     ]
 
 

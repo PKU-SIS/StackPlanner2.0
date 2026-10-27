@@ -66,7 +66,7 @@ Use the real nested objects, not strings or prose placeholders:
     "why_insufficient": "Saved material m1 covers Y but not X at a locatable range.",
     "stop_condition": "A first-party source with a URL and line range.",
     "requirement_refs": [{"input_id": "u1", "quote": "original user text"}],
-    "node_ids": ["n2"],
+    "node_ids": ["n6", "n7"],
     "materials_checked": [{"material_id": "m1", "lines": [10, 32]}]
   }]
 }
@@ -76,6 +76,24 @@ For `mode: "continue"`, include `continue_gap_id: "g1"` and keep the same
 `requirement_refs`/`materials_checked` shapes. `constraints` is an object;
 `requirement_refs` and `materials_checked` are arrays of objects. The same
 shape is described in the `report_register_research_request` tool docstring.
+
+When a marked section and one of its writable children both depend on the
+research, associate both, for example:
+
+```json
+{
+  "node_ids": ["n6", "n7"],
+  "_comment": "n6 is a section with needs_richer_research=true; n7 is its writable child that needs the evidence"
+}
+```
+
+`n6` carries the section-level depth signal; `n7` records the concrete evidence
+dependency. Do not associate only the child when the section itself is marked,
+or the Researcher loses the deeper-research context. If the section is not yet
+accepted, register with `node_ids=[]`, then write the returned gap id into the
+section's `gap_ids` in the next tree (and the child's `gap_ids` when it also
+depends on that evidence). The host associates nodes after acceptance; no
+parent auto-inheritance or separate research queue is added.
 
 ## Tree Contract
 
@@ -99,9 +117,19 @@ Return the complete tree JSON in `artifact_content`:
 - A first plan may contain `needs_evidence` nodes. Do not fabricate evidence or
   state a conclusion the saved material cannot support.
 - Every previous node that is removed must be listed in `removed_node_ids`.
-- P2/P3 can request trial writing with one writable node per `write_requests` key;
-  choosing no trial is valid. P3 assembly still requires every writable node to
-  have a current draft before integration review.
+- `write_requests` is the existing interface for formal report writing and
+  optional trial writing, not a trial-only queue. For a normal report, arrange
+  writing for every retained writable node that is currently `ready` and has no
+  current valid draft. You may batch requests or deliberately trial a small
+  batch; completing a batch does not mean the whole report is complete. Later,
+  after Central returns with the queue exhausted, re-check the tree, existing
+  requests and current drafts, then add missing ready nodes while reusing valid
+  work. `feedback_wanted` requests local feedback only; it never gates other
+  nodes, and you must not force feedback to repair scheduling. Do not rewrite a
+  valid completed body without a content reason. Unready nodes still follow the
+  saved-material, research, or user-input path; Writer is not an evidence
+  discovery tool. The existing fixed acceptance still requires every writable
+  node to have a current draft before delivery.
 - Citation identity is `[S<n>]` from the host-registered material catalog/packet
   `source_id` and evidence `source_ids`. Do not register sources through a new
   tree field, do not emit `citation_map`, and do not use numeric-only aliases
@@ -166,7 +194,7 @@ path when no file delivery is requested.
   (`section` or `writable`), `title`; writable `question`, non-empty
   `argument[]`, `conclusion`, `constraints` object, `status`,
   `requirement_ids[]`, `evidence[]`; evidence `material_id`, `use`, and object
-  `locator`; `write_requests[]` `key`, `node_ids[]` (one writable node for P2).
+  `locator`; `write_requests[]` `key`, `node_ids[]` (writable targets only).
 - Recommended: `source_ids[]`, `locator.lines: [start, end]`, `hard: true`,
   explicit `relations: []` / `gap_ids: []`.
 - Optional: section `status`, `feedback_wanted`, extra explanatory fields;

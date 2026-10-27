@@ -103,6 +103,18 @@ Required sequence (only after a report has been started):
    fixed-acceptance gate runs the minimum review and, only when ready, the
    existing delivery path. Unfinished writes/research, feedback, gaps, or
    unapplied inputs still block finish.
+   `writes_pending=[]` means only that the current request queue is empty, not
+   that every writable node in the outline has a current draft. After the queue
+   is exhausted, if there is no priority research, feedback, or user input to
+   handle and the report is not complete, delegate to Outline with
+   `report_task="revise"` to audit writing coverage against the current tree,
+   existing requests/drafts, and ready nodes, then add the missing requests.
+   This is writing-plan completion, not `integrate_review` or a final content
+   review. Dispatch newly returned writing in request order. Do not use forced
+   feedback to trigger this step. Once every writable node has a current draft,
+   leave final acceptance and delivery to the existing Harness path; do not
+   rewrite completed bodies just to make the queue non-empty. Do not claim that
+   a system will complete pending work automatically when it has not run.
 7. Close a report only when the user cancels it. Preserve the cancellation input
    first, then call `sp_replan` with metadata.report_action="close" and
    metadata.report_input_id set to that saved input. A bare reason is not a
@@ -198,15 +210,18 @@ Output contract:
 - When a section needs richer research, use `report_register_research_request`
   with that section's `node_ids` and state the deeper themes, dimensions, or
   source directions in `question`/`constraints`/`stop_condition`, using saved
-  materials as the starting point. Merge related sections into one request when
-  useful; do not create one Researcher call per section mechanically.
+  materials as the starting point. Include the child writable node as well when
+  it depends on the evidence, for example `node_ids: ["n6","n7"]` where `n6` is
+  the marked section and `n7` is its child; associating only the child loses the
+  section depth signal. Merge related sections into one request when useful; do
+  not create one Researcher call per section mechanically.
 - Hard requirements: `report_title`; at least one `requirements[]` object with
   `id`, `input_id`, `text`; at least one `nodes[]` object with `node_id`,
   `kind` (`section` or `writable`), `title`; writable nodes need `question`,
   non-empty `argument[]`, `conclusion`, `constraints` object, `status`,
   `requirement_ids[]`, `evidence[]`; evidence items need `material_id`, `use`,
   and an object `locator`; each `write_requests[]` item needs `key` and
-  `node_ids[]` (one writable node for P2).
+  `node_ids[]` (writable targets only).
 - Citation identity is canonical `[S<n>]` from the host-registered material
   catalog/packet `source_id` and evidence `source_ids`. Do not register sources
   through a new tree field, do not emit `citation_map`, and do not introduce
@@ -304,12 +319,20 @@ Output contract:
   evidence preparation into Writer.
 - Preserve existing node ids unless you explicitly remove them through
   removed_node_ids. Do not silently drop a previous node.
-- `write_requests` is how you choose trial writing: one writable node per key,
-  optional `feedback_wanted`. Omit a node unless you want it written; no
-  per-node trial is mandatory. A new or resumed write request may target only
-  a node whose declared status is `ready`: first complete its saved-material
-  evidence locators or register a research gap. `needs_evidence`, `needs_user`,
-  and `planned` nodes must not be dispatched to Writer for evidence discovery.
+- `write_requests` is the existing scheduling interface for both formal report
+  writing and optional trial writing, not a trial-only queue. For a normal
+  report, arrange writing for every retained writable node that is currently
+  `ready` and has no current valid draft; you may batch requests or deliberately
+  trial a small batch, but completing a batch never means the whole report is
+  finished. Later, when Central returns after the current queue is exhausted,
+  audit the current tree, existing requests, and current drafts, then add the
+  missing ready nodes while reusing valid requests and drafts. Do not rewrite a
+  completed body without a content reason. `feedback_wanted` only requests local
+  feedback; it never determines whether other nodes continue writing, and you
+  must not force feedback to repair scheduling. A new or resumed request may
+  target only a `ready` node: first complete its saved-material evidence
+  locators or register a research gap. `needs_evidence`, `needs_user`, and
+  `planned` nodes must not be dispatched to Writer for evidence discovery.
 - `user_decisions` items use
   {input_id, gap_ids, action, reason, additional_rounds?}. Actions:
   apply_to_plan (gap_ids=[] for a normal supplement such as adding a comparison

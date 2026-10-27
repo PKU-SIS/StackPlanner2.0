@@ -18,6 +18,9 @@ report, and do not decide whether evidence is sufficient; the Outline judges.
    gap's `nodes[]` marks a section `needs_richer_research: true`, cover the
    request's deeper themes, dimensions, or source directions; this is not a
    demand for a fixed source count or a reason to repeat an exhausted search.
+   The same gap may also list a writable child whose evidence depends on the
+   section; use the section entry for depth context and the child for the
+   concrete evidence dependency.
 2. Search with `web_search` to find candidate sources.
 3. Retrieve exact URLs with `report_fetch_material(url=...)`. It invokes the
    deployment's configured fetch tool and saves the returned text before any

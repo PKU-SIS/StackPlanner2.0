@@ -142,6 +142,33 @@ def _accept_writer(ctx: HandlerContext, action: SPAction, task: SPSubagentTask, 
     return hooks.handle_success(action, ctx, result, task, artifact_adapter=SPArtifactAdapter(), delegate_entry=entry)
 
 
+def test_feedback_false_can_complete_all_ready_write_requests(tmp_path):
+    ctx = _context(tmp_path)
+    tree = _tree(
+        write_requests=[
+            {"key": "w-n2", "node_ids": ["n2"], "feedback_wanted": False},
+            {"key": "w-n3", "node_ids": ["n3"], "feedback_wanted": False},
+        ]
+    )
+    third = dict(tree["nodes"][1])
+    third.update({"node_id": "n3", "title": "补充指标"})
+    tree["nodes"].append(third)
+    result = _outline(ctx, tree, action_id="a-outline-multi")
+    assert result.next_step == "continue", result.error
+
+    for index, key in enumerate(("w-n2", "w-n3"), start=1):
+        action, task, host = _writer_action(ctx, key, action_id=f"a-{key}")
+        host.parent.mkdir(parents=True, exist_ok=True)
+        host.write_text(f"body {index}\n", encoding="utf-8")
+        accepted = _accept_writer(ctx, action, task, _writer_result(None, task), action_id=f"a-{key}")
+        assert accepted.next_step == "continue", accepted.error
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert [item["status"] for item in ledger.payload["write_requests"]] == ["completed", "completed"]
+    assert {draft["node_id"] for draft in ledger.payload["drafts"] if draft["is_current"]} == {"n2", "n3"}
+    assert all(not item["feedback_wanted"] for item in ledger.payload["write_requests"])
+
+
 def test_writer_dispatch_requires_declared_ready_node(tmp_path):
     ctx = _context(tmp_path)
     tree = _tree(write_requests=[{"key": "w-unready", "node_ids": ["n2"], "feedback_wanted": False}])

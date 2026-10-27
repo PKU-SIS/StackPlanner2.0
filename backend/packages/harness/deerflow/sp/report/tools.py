@@ -46,10 +46,13 @@ def build_register_research_request_tool(
         constraints is an object; mode="continue" also includes continue_gap_id.
         For section nodes marked needs_richer_research, pass their accepted
         node_ids and state the deeper themes, dimensions, or source directions
-        in the request. Before the first tree is accepted, or for a newly added
-        section not yet accepted, use node_ids=[] and then write the returned
-        gap_id into that section's gap_ids in the next tree. Only accepted tree
-        nodes may be passed as node_ids; acceptance reuses attach_nodes_to_gaps.
+        in the request. If a child writable also depends on that evidence,
+        include both (for example node_ids=["n6","n7"]: n6 marked section, n7
+        child); the child alone loses the section depth signal. Before the first
+        tree is accepted, or for a newly added section not yet accepted, use
+        node_ids=[] and then write the returned gap_id into that section's
+        gap_ids in the next tree. Only accepted tree nodes may be passed as
+        node_ids; acceptance reuses attach_nodes_to_gaps.
 
         Args:
             questions: Batch of research requests. Each item contains mode,
