@@ -113,6 +113,18 @@ Return the complete tree JSON in `artifact_content`:
   detail you added may be withdrawn through `not_needed` + `optional: true`
   with a reason. Withdrawing your own optional detail is not deleting a user
   requirement. Do not fabricate facts or add a large disclaimer.
+- Central's pre-research examples, and your own examples such as a list of
+  countries, are candidates for comparison, not automatically user
+  requirements. Choose the representative set from the user's goal and saved
+  evidence; put a country or example in `constraints` only when the user
+  specified it or the comparison genuinely requires it. Missing one self-added
+  example must not block the whole section or turn "按代表性国家" into "all four
+  named countries".
+- Judge source nature before using it: first-party policy/spec/dataset,
+  institutional page, personal experience, repost, aggregator snippet, and
+  AI-generated commentary are not interchangeable. A title or organization name
+  does not prove first-party status; use each source only for the claim it can
+  support. Do not add a domain whitelist or citation-count threshold.
 - Section nodes carry `needs_richer_research` as a boolean. `true` means the
   section needs deeper, broader retrieval support; it is not an unresolved-gap
   or completion flag. Omit it or use `false` when ordinary retrieval is enough;

@@ -215,15 +215,29 @@ def _task_stream_id(task: SPSubagentTask) -> str:
 
 
 def _tool_execution_ok(tool_name: str, content: str) -> bool:
-    """Classify one observed tool result as host-observed success/failure."""
+    """Classify one observed tool result as host-observed success/failure.
+
+    Tool envelopes may carry a structured error while the transport itself
+    succeeded. A truthy/ok-looking transport result is not enough for research
+    evidence; inspect the envelope's explicit status fields.
+    """
     text = str(content or "").strip()
-    if tool_name == "report_fetch_material":
-        try:
-            payload = json.loads(text)
-        except (json.JSONDecodeError, TypeError):
+    if text.lower().startswith("error:"):
+        return False
+    try:
+        payload = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return tool_name != "report_fetch_material"
+    if isinstance(payload, Mapping):
+        error = payload.get("error")
+        if error not in (None, "", False):
             return False
-        return isinstance(payload, dict) and payload.get("saved") is True
-    return not text.lower().startswith("error:")
+        if payload.get("saved") is False or payload.get("ok") is False:
+            return False
+        if tool_name == "report_fetch_material":
+            return payload.get("saved") is True
+        return True
+    return tool_name != "report_fetch_material"
 
 
 def _resolve_report_role_thinking(

@@ -24,17 +24,24 @@ create an exclusive source requirement.
    The same gap may also list a writable child whose evidence depends on the
    section; use the section entry for depth context and the child for the
    concrete evidence dependency.
-2. Search with `web_search` to find candidate sources.
-3. Retrieve exact URLs with `report_fetch_material(url=...)`. It invokes the
+2. Report source nature honestly: first-party policy/spec/dataset, institutional
+   page, personal experience, repost, aggregator snippet, and AI-generated
+   commentary are not interchangeable. A title or organization name does not
+   prove first-party status. Use each source only for the claim it can support;
+   do not add a domain whitelist or citation-count threshold.
+3. Search with `web_search` to find candidate sources.
+4. Retrieve exact URLs with `report_fetch_material(url=...)`. It invokes the
    deployment's configured fetch tool and saves the returned text before any
    summary. Direct `web_fetch` is not exposed to this role.
-4. Save every source you rely on, even if the search snippet looks sufficient.
+5. Save every source you rely on, even if the search snippet looks sufficient.
    The saved path and material id are the evidence identity.
-5. Report `upstream_truncation` honestly. A provider's returned text is not
+6. Report `upstream_truncation` honestly. A provider's returned text is not
    necessarily the whole page.
-6. Continue across independent assigned gaps when useful. Do not claim a search
+7. Continue across independent assigned gaps when useful. Do not claim a search
    or fetch that did not execute. A failed fetch is a technical failure, not
-   evidence that the fact does not exist.
+   evidence that the fact does not exist. If materials were saved but the final
+   result is incomplete, mark technical_error, retain the saved ids, and state
+   what remained unfinished.
 
 ## Output
 

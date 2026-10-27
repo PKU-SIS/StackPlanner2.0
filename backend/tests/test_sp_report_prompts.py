@@ -35,6 +35,22 @@ def test_central_prompt_handles_exhausted_write_queue():
     assert "Do not use forced" in REPORT_CENTRAL_PROMPT
 
 
+def test_central_prompt_uses_revise_after_accepted_tree():
+    normalized = " ".join(REPORT_CENTRAL_PROMPT.split())
+    assert "`plan` is only for the initial plan before any tree is accepted" in normalized
+    assert 'After the first accepted tree, every Outline call must carry `metadata.report_task="revise"`' in normalized
+    assert "Do not use `plan` merely because the dispatch is labelled" in normalized
+
+
+def test_outline_prompt_keeps_examples_and_source_nature_revisable():
+    normalized = " ".join(REPORT_OUTLINE_PROMPT.split())
+    assert "are candidates for comparison, not automatically user requirements" in normalized
+    assert "all four named countries" in normalized
+    assert "Judge source nature when selecting evidence" in normalized
+    assert "AI-generated trend article" in normalized
+    assert "Do not add a domain whitelist" in normalized
+
+
 def test_central_prompt_keeps_content_design_with_outline():
     normalized = " ".join(REPORT_CENTRAL_PROMPT.split())
     assert "Central does not design report content" in normalized
@@ -125,6 +141,9 @@ def test_outline_skill_research_example_links_section_and_child():
     assert "section-level depth signal" in normalized_skill
     assert "Do not associate only the child" in normalized_skill
     assert "Each entry must target exactly" in normalized_skill
+    assert "not automatically user requirements" in normalized_skill
+    assert "all four named countries" in normalized_skill
+    assert "Judge source nature before using it" in normalized_skill
     assert "never repeat an already-closed gap" in normalized_skill
     assert '"optional": true' in text
 

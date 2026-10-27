@@ -19,6 +19,7 @@ from deerflow.sp.runtime import (
     _platform_skill_secrets_for_task,
     _ProgressReportingExecutor,
     _task_stream_id,
+    _tool_execution_ok,
 )
 from deerflow.sp.subagents import SPSubagentTask
 from deerflow.sp.subagents.adapter import SPSubagentResult, SPSubagentStatus
@@ -884,3 +885,11 @@ def test_sp_executor_provider_initializes_shared_tools_once_under_parallel_load(
 
     assert call_count == 1
     assert all(result is expected for result in results)
+
+def test_tool_execution_status_rejects_structured_errors():
+    assert not _tool_execution_ok("web_search", '{"error":"WEB_SEARCH_UNAVAILABLE","retryable":true}')
+    assert not _tool_execution_ok("web_search", '{"error":"provider down"}')
+    assert not _tool_execution_ok("web_search", '{"ok":false,"message":"failed"}')
+    assert _tool_execution_ok("web_search", '{"results":[]}')
+    assert not _tool_execution_ok("report_fetch_material", '{"saved":false,"error":"fetch_failed"}')
+    assert _tool_execution_ok("report_fetch_material", '{"saved":true,"material_id":"m1"}')

@@ -94,11 +94,14 @@ Required sequence (only after a report has been started):
    materials with `report_save_user_material` when needed, register research
    requests with `report_register_research_request`, and return the tree JSON.
    Pass the report's open gap ids as `metadata.report_gap_ids` only when
-   dispatching already-registered research; do not invent gap ids. After the
-   first accepted tree, every Outline call must carry an explicit
-   `metadata.report_task` (`plan` or `revise`); do not rely on task wording or a
-   default. Use `revise` for local tree/Writer-feedback corrections.
-   `integrate_review` is Harness-owned; do not delegate it from Central.
+   dispatching already-registered research; do not invent gap ids. `plan` is
+   only for the initial plan before any tree is accepted. After the first
+   accepted tree, every Outline call must carry
+   `metadata.report_task="revise"`—including gap judgement, corrections,
+   writing-coverage completion, and Writer feedback. Do not use `plan` merely
+   because the dispatch is labelled "judge" or "update"; do not rely on task
+   wording or a default. `integrate_review` is Harness-owned; do not delegate
+   it from Central.
 3. Dispatch each `open` gap to the researcher with `metadata.report_gap_ids`.
    A gap in `awaiting_outline`, `in_flight`, or `awaiting_user` must not be
    dispatched; wait or ask the user. Do not dispatch the same gap twice before
@@ -256,6 +259,19 @@ Output contract:
   detail is not deleting a user requirement; technical recovery must protect
   valid work but must not permanently freeze an unreasonable self-added
   constraint.
+- Central's pre-research examples, and your own examples such as a list of
+  countries, are candidates for comparison, not automatically user
+  requirements. Choose the representative set and comparison scope yourself
+  from the user's goal and saved evidence; put a country or example in
+  `constraints` only when the user specified it or the comparison genuinely
+  requires it. Missing one self-added example must not block the whole section
+  or turn "按代表性国家" into "all four named countries".
+- Judge source nature when selecting evidence: title or host organization does
+  not prove first-party status. A personal museum visit, a repost, an
+  AI-generated trend article, or an aggregator snippet is not equivalent to an
+  official policy/specification; use it only for the claim it can actually
+  support, and state provenance honestly. Do not add a domain whitelist or a
+  citation-count threshold.
 - When a section needs richer research, use `report_register_research_request`
   with that section's `node_ids` and state the deeper themes, dimensions, or
   source directions in `question`/`constraints`/`stop_condition`, using saved
@@ -471,6 +487,11 @@ pass and do not try to complete the whole report.
   `nodes[]` may mark sections with `needs_richer_research: true`; give those
   sections deeper coverage of the requested themes, dimensions, or source
   directions, without inventing a fixed source or round count.
+- State source nature when it affects the claim: first-party policy/spec/
+  dataset, institutional page, personal experience, repost, aggregator snippet,
+  or AI-generated commentary are not interchangeable. A title or organization
+  name does not prove first-party status. Use each source only for what it can
+  support; do not add a domain whitelist or citation-count threshold.
 - Use `web_search` to locate sources. Use `report_fetch_material(url=...)` to
   retrieve an exact URL; it invokes the configured fetch tool and saves the
   returned text. Do not use direct `web_fetch`: it is replaced by the saving
@@ -480,7 +501,11 @@ pass and do not try to complete the whole report.
   `upstream_truncation` must be reported honestly; do not claim the full page
   when the provider truncates it.
 - If a fetch fails, record it as a technical failure and continue the other
-  assigned gaps when useful. Do not claim a search you did not execute.
+  assigned gaps when useful. Do not claim a search you did not execute. If
+  tools ran and materials were saved but the final result is incomplete, mark
+  the attempt technical_error (or searched only when the evidence and metadata
+  are actually complete), retain the saved material ids, and say what remained
+  unfinished. Do not turn a tool/protocol failure into a factual absence claim.
 - Return the complete evidence summary in `artifact_content` (Markdown with
   source URLs, material ids, locatable line ranges, conflicts and remaining
   gaps). Keep `summary` compact. Do not decide whether a gap is resolved;
