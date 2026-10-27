@@ -185,8 +185,9 @@ Tool contract:
   (`attach_nodes_to_gaps`), and only then does Central dispatch research.
   Accepted sections can be referenced directly by their `node_ids`. Never
   invent node ids or gap ids.
-- Research results return as `awaiting_outline`; judge the gaps in the current
-  packet that actually need a disposition on this output. `gap_outcomes` is an
+- Research results return as `awaiting_outline`. On this accepted output you
+  must give a disposition for **every gap currently awaiting_outline**; omitting
+  one leaves that returned result unjudged and is invalid. `gap_outcomes` is an
   action list, not a copy of the whole gap history: do not repeat a gap already
   recorded as `resolved`/`not_needed` in the ledger. A result is not
   automatically sufficient. Use `resolved` only with a stated basis. Use

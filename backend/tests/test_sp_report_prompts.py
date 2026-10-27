@@ -9,11 +9,12 @@ from deerflow.sp.actions.handlers.base import HandlerContext
 from deerflow.sp.actions.schema import ActionType, SPAction
 from deerflow.sp.memory import TaskMemoryStack
 from deerflow.sp.report import hooks
+from deerflow.sp.report import store as report_store
 from deerflow.sp.report.ledger import ReportLedger
 from deerflow.sp.report.prompts import REPORT_CENTRAL_PROMPT, REPORT_OUTLINE_PROMPT, REPORT_RESEARCH_PROMPT, REPORT_WRITER_PROMPT
 from deerflow.sp.report.store import ReportPaths
 from deerflow.sp.report.tools import build_register_research_request_tool
-from deerflow.sp.report.tree import validate_tree
+from deerflow.sp.report.tree import accept_tree
 
 
 def test_outline_prompt_treats_write_requests_as_formal_scheduling():
@@ -49,6 +50,7 @@ def test_outline_prompt_limits_scope_and_action_lists():
     assert "not every research direction you add yourself" in normalized
     assert "not permission to expand the user's scope" in normalized
     assert "`gap_outcomes` is an action list" in normalized
+    assert "every gap currently awaiting_outline" in normalized
     assert "`user_decisions` records only decisions actually expressed by a new user input" in normalized
     assert "optional: true" in normalized
     assert "do not invent `user_decisions` or `continue_research`" in normalized
@@ -66,7 +68,9 @@ def test_outline_skill_example_is_valid_tree_protocol(tmp_path):
     }
     ctx = HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="t1", run_id="run1")
     hooks.start_report(ctx, SPAction.create(ActionType.REPLAN, reason="start", task="start", metadata={"report_action": "start"}))
-    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    context = hooks.report_context(ctx.state)
+    paths = ReportPaths(context.outputs_path, context.report_id)
+    ledger = ReportLedger.load_for_context(context)
     for index in range(3):
         ledger.register_gap(
             mode="new",
@@ -78,13 +82,38 @@ def test_outline_skill_example_is_valid_tree_protocol(tmp_path):
             node_ids=[],
             materials_checked=[],
         )
-    validated = validate_tree(example, ledger)
+    material_text = "MCP 负责工具接入。\nA2A 负责代理协作。\n"
+    material_path = paths.material_file("S1", report_store.sha256_text(material_text))
+    report_store.write_text_atomic(material_path, material_text)
+    ledger.payload["materials"].append(
+        {
+            "material_id": "m6",
+            "source_id": "S1",
+            "path": str(material_path),
+            "virtual_path": paths.virtual(material_path),
+            "chars": len(material_text),
+            "lines": 2,
+            "sha256": report_store.sha256_text(material_text),
+        }
+    )
+    ledger.require_gap("g2")["status"] = "resolved"
+    ledger.require_gap("g3")["status"] = "awaiting_outline"
+    ledger.save()
 
-    assert len(validated["nodes"]) == 2
-    assert validated["nodes"][1]["node_id"] == "n2"
-    assert validated["nodes"][0]["needs_richer_research"] is True
-    assert validated["gap_outcomes"][0]["gap_id"] == "g3"
-    assert validated["user_decisions"] == []
+    accepted, outcomes, decisions = accept_tree(example, ledger)
+
+    assert len(accepted["nodes"]) == 2
+    assert accepted["nodes"][1]["node_id"] == "n2"
+    assert accepted["nodes"][0]["needs_richer_research"] is True
+    assert accepted["gap_outcomes"][0]["gap_id"] == "g3"
+    assert accepted["user_decisions"] == []
+    assert [(item["gap_id"], item["status"]) for item in ledger.gaps()] == [
+        ("g1", "open"),
+        ("g2", "resolved"),
+        ("g3", "resolved"),
+    ]
+    assert outcomes[0]["gap_id"] == "g3"
+    assert decisions == []
 
 
 def test_outline_skill_research_example_links_section_and_child():

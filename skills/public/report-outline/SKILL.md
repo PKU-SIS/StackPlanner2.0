@@ -303,9 +303,11 @@ Short example with a complete two-node tree and only the current gap:
      "title": "协议差异", "needs_richer_research": true},
     {"node_id": "n2", "parent_id": "n1", "kind": "writable",
      "title": "差异说明", "question": "差异是什么？", "argument": ["比较层级"],
-     "conclusion": "待写作", "evidence": [], "constraints": {},
-     "requirement_ids": ["req1"], "relations": [], "gap_ids": ["g3"],
-     "status": "ready"}
+     "conclusion": "MCP 负责代理接入工具与数据，A2A 负责代理之间的协作；两者层级互补。",
+     "evidence": [{"material_id": "m6", "locator": {"lines": [1, 2]},
+                   "use": "材料 m6 第 1–2 行给出层级与协作关系的可定位依据"}],
+     "constraints": {"period": "2025"}, "requirement_ids": ["req1"],
+     "relations": [], "gap_ids": ["g3"], "status": "ready"}
   ],
   "removed_node_ids": [],
   "write_requests": [{"key": "w-n2", "node_ids": ["n2"],
@@ -344,9 +346,10 @@ reference an existing `input_id`.
 
 ## Judge Returned Results
 
-Research results arrive as `awaiting_outline`. On the next accepted output,
-judge the gaps in the current packet that actually need a disposition; do not
-re-list a gap already closed in the ledger. The normal transitions are:
+Research results arrive as `awaiting_outline`. On the next accepted output you
+must give a disposition for **every gap currently awaiting_outline**; omitting
+one leaves that returned result unjudged and invalid. Do not re-list a gap
+already closed in the ledger. The normal transitions are:
 
 - `resolved`: the evidence satisfies the question and constraints; state the
   basis.
