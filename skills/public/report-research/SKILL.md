@@ -10,6 +10,9 @@ description: Use inside the StackPlanner report Researcher to answer host-assign
 Execute only the evidence questions assigned by the host. The host binds the
 report id, action id, and gap ids. Do not invent identity, do not design the
 report, and do not decide whether evidence is sufficient; the Outline judges.
+Do not tighten factual precision or add conditions beyond the registered
+question, constraints, and stop condition. Reliable-source guidance does not
+create an exclusive source requirement.
 
 ## Work
 

@@ -105,6 +105,14 @@ Return the complete tree JSON in `artifact_content`:
 - `report_title`, `requirements`, `nodes`, `removed_node_ids`,
   `write_requests`, `gap_outcomes`, `user_decisions`,
   `feedback_dispositions`, `draft_dispositions`.
+- `requirements` express the user's request and what is genuinely necessary to
+  complete it, not every research direction you add yourself. Background,
+  mechanism, and comparison dimensions may expand when they support the core
+  analysis. A missing fact that is required by the user or indispensable to a
+  core conclusion keeps the existing research/two-round/user path; an auxiliary
+  detail you added may be withdrawn through `not_needed` + `optional: true`
+  with a reason. Withdrawing your own optional detail is not deleting a user
+  requirement. Do not fabricate facts or add a large disclaimer.
 - Section nodes carry `needs_richer_research` as a boolean. `true` means the
   section needs deeper, broader retrieval support; it is not an unresolved-gap
   or completion flag. Omit it or use `false` when ordinary retrieval is enough;
@@ -112,7 +120,8 @@ Return the complete tree JSON in `artifact_content`:
   or node counts. When true, register the section's research need with its
   `node_ids` and describe the deeper themes, dimensions, or source directions in
   the existing request fields; merge related sections when useful. Research
-  completion does not automatically reset the flag.
+  completion does not automatically reset the flag. This flag does not expand
+  the user's task or make every discovered issue a delivery prerequisite.
 - Writable nodes carry `question`, `argument`, `conclusion`, `evidence`,
   `constraints`, `requirement_ids`, `status`, `gap_ids`.
 - Evidence cites saved `material_id`s and locatable line ranges. Do not cite a
@@ -275,7 +284,55 @@ When judging returned research, include complete objects, for example:
 non-empty string. `not_needed` needs `user_input_id` unless the item is
 genuinely optional. Do not use bare strings or omit reasons.
 
+`gap_outcomes` and `user_decisions` are actions for this output, not a replay of
+the whole gap ledger. Keep the complete `nodes` (and other tree fields) so valid
+planning and drafts survive, but include only gaps actually returned or decided
+now; never repeat an already-closed gap. If there is no new user input, use
+`"user_decisions":[]`. An intended question is not a user decision.
+
+Short example with a complete two-node tree and only the current gap:
+
+```json
+{
+  "report_title": "示例报告",
+  "requirements": [
+    {"id": "req1", "input_id": "u1", "text": "说明 A2A 与 MCP 的差异", "hard": true}
+  ],
+  "nodes": [
+    {"node_id": "n1", "parent_id": null, "kind": "section",
+     "title": "协议差异", "needs_richer_research": true},
+    {"node_id": "n2", "parent_id": "n1", "kind": "writable",
+     "title": "差异说明", "question": "差异是什么？", "argument": ["比较层级"],
+     "conclusion": "待写作", "evidence": [], "constraints": {},
+     "requirement_ids": ["req1"], "relations": [], "gap_ids": ["g3"],
+     "status": "ready"}
+  ],
+  "removed_node_ids": [],
+  "write_requests": [{"key": "w-n2", "node_ids": ["n2"],
+                      "feedback_wanted": false}],
+  "gap_outcomes": [{"gap_id": "g3", "outcome": "resolved",
+                    "reason": "材料 m6 给出了可定位依据",
+                    "evidence_material_ids": ["m6"]}],
+  "user_decisions": [],
+  "feedback_dispositions": [],
+  "draft_dispositions": []
+}
+```
+
+Do not add an already-resolved gap to `gap_outcomes`. To withdraw a self-added
+optional background question, use:
+
+```json
+{"gap_id": "g4", "outcome": "not_needed",
+ "reason": "辅助背景；不是用户核心请求所必需", "optional": true}
+```
+
 ## User Inputs
+
+`user_decisions` records only decisions actually expressed by a new user input.
+An intended question or a pending HITL request is not a decision; if the packet
+has no new user decision, use `[]`. Do not invent `additional_rounds` or user
+authorization to pass validation.
 
 A normal supplement such as "add a comparison table" or "reorder sections" is
 applied through `user_decisions` with `action: "apply_to_plan"` and
@@ -287,16 +344,20 @@ reference an existing `input_id`.
 
 ## Judge Returned Results
 
-Every research result arrives as `awaiting_outline`. On the next accepted
-output, judge every such gap:
+Research results arrive as `awaiting_outline`. On the next accepted output,
+judge the gaps in the current packet that actually need a disposition; do not
+re-list a gap already closed in the ledger. The normal transitions are:
 
 - `resolved`: the evidence satisfies the question and constraints; state the
   basis.
 - `unresolved`: the evidence is insufficient; the host returns it to research
-  until the allowed rounds, then Central asks the user.
+  until the allowed rounds, then Central asks the user. Use this existing path
+  instead of fabricating `user_decisions` or `continue_research` to reach
+  `awaiting_user`.
 - `not_needed`: the question is withdrawn; when this changes a user
-  requirement, cite the `user_input_id` that authorises it. Genuinely optional
-  items may use `optional: true`.
+  requirement, cite the `user_input_id` that authorises it. Genuinely optional,
+  self-added auxiliary questions may use `optional: true` with a reason; this is
+  not deletion of a user requirement.
 
 Never treat the arrival of a result, a summary, or a user answer as automatic
 resolution. A user answer is input to your judgement, not a closure.
