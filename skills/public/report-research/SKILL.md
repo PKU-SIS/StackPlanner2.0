@@ -37,11 +37,16 @@ create an exclusive source requirement.
    The saved path and material id are the evidence identity.
 6. Report `upstream_truncation` honestly. A provider's returned text is not
    necessarily the whole page.
-7. Continue across independent assigned gaps when useful. Do not claim a search
-   or fetch that did not execute. A failed fetch is a technical failure, not
-   evidence that the fact does not exist. If materials were saved but the final
-   result is incomplete, mark technical_error, retain the saved ids, and state
-   what remained unfinished.
+7. Keep three concepts separate: whether a real search/fetch attempt ran, whether
+   the final result was returned completely, and whether the evidence is
+   sufficient. `searched` means the attempt ran—not that the evidence is
+   complete. Partial evidence or a normal zero-result search is still
+   `searched`; Outline judges sufficiency.
+8. Continue across independent assigned gaps when useful. Do not claim a search
+   or fetch that did not execute. A true tool failure, forced interruption, or
+   incomplete result protocol is not `searched`; preserve saved material ids and
+   state what remained unfinished. A failed fetch is a technical failure, not
+   evidence that the fact does not exist.
 
 ## Output
 
@@ -57,8 +62,10 @@ In `artifact_metadata.gap_attempts`, return one item for every assigned gap:
 ```
 
 Use `not_attempted` for untouched gaps; never claim `searched` for work that did
-not happen. If the invocation is interrupted after saving material, still return
-the per-gap attempt (for example `technical_error`) with the saved material ids.
-Omitting `gap_attempts` is not evidence that no research happened; the host
-retains actual tool executions and materials for Outline's judgment. Use
+not happen. `searched` records an executed attempt even when evidence is partial
+or the search yields no results; it does not assert resolution. If the invocation
+is interrupted after saving material, still return the per-gap attempt (for
+example `technical_error`) with the saved material ids. Omitting `gap_attempts`
+is not evidence that no research happened; the host retains actual tool
+executions and materials for Outline's judgment. Use
 `artifact_type: "research_observation"`.

@@ -224,20 +224,27 @@ def _tool_execution_ok(tool_name: str, content: str) -> bool:
     text = str(content or "").strip()
     if text.lower().startswith("error:"):
         return False
-    try:
-        payload = json.loads(text)
-    except (json.JSONDecodeError, TypeError):
-        return tool_name != "report_fetch_material"
-    if isinstance(payload, Mapping):
-        error = payload.get("error")
-        if error not in (None, "", False):
+    if tool_name == "report_fetch_material":
+        try:
+            payload = json.loads(text)
+        except (json.JSONDecodeError, TypeError):
             return False
-        if payload.get("saved") is False or payload.get("ok") is False:
+        return isinstance(payload, Mapping) and payload.get("saved") is True
+    if tool_name == "web_search":
+        try:
+            payload = json.loads(text)
+        except (json.JSONDecodeError, TypeError):
+            return True
+        if not isinstance(payload, Mapping):
+            return True
+        error = str(payload.get("error") or "").strip()
+        if error.lower() in {"web_search_unavailable", "web_search_attempts_exhausted"}:
             return False
-        if tool_name == "report_fetch_material":
-            return payload.get("saved") is True
+        if error and error.lower() != "no results found":
+            return False
         return True
-    return tool_name != "report_fetch_material"
+    # Do not interpret JSON payload fields for read_file and other data tools.
+    return True
 
 
 def _resolve_report_role_thinking(

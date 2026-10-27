@@ -377,6 +377,12 @@ already closed in the ledger. The normal transitions are:
 Never treat the arrival of a result, a summary, or a user answer as automatic
 resolution. A user answer is input to your judgement, not a closure.
 
+Technical failures are not semantic rounds. If repeated tool failures or
+incomplete result protocols prevent effective progress, do not keep requesting
+the same unchanged work; preserve saved material and request a narrower method
+or a technical block through the existing general HITL path. Do not fake
+`searched`, two effective rounds, `awaiting_user`, or a user decision.
+
 ## Integration Review
 
 When `report_task="integrate_review"`, do not plan or rewrite the tree. Read the

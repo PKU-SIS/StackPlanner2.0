@@ -886,10 +886,12 @@ def test_sp_executor_provider_initializes_shared_tools_once_under_parallel_load(
     assert call_count == 1
     assert all(result is expected for result in results)
 
-def test_tool_execution_status_rejects_structured_errors():
+def test_tool_execution_status_distinguishes_search_zero_results_and_data():
     assert not _tool_execution_ok("web_search", '{"error":"WEB_SEARCH_UNAVAILABLE","retryable":true}')
-    assert not _tool_execution_ok("web_search", '{"error":"provider down"}')
-    assert not _tool_execution_ok("web_search", '{"ok":false,"message":"failed"}')
-    assert _tool_execution_ok("web_search", '{"results":[]}')
+    assert not _tool_execution_ok("web_search", '{"error":"WEB_SEARCH_ATTEMPTS_EXHAUSTED"}')
+    assert _tool_execution_ok("web_search", '{"error":"No results found","query":"x"}')
+    assert _tool_execution_ok("web_search", '{"query":"x","results":[{"title":"hit"}]}')
+    assert _tool_execution_ok("read_file", '{"content":"x","error":"this is file data","ok":false,"saved":false}')
     assert not _tool_execution_ok("report_fetch_material", '{"saved":false,"error":"fetch_failed"}')
     assert _tool_execution_ok("report_fetch_material", '{"saved":true,"material_id":"m1"}')
+    assert not _tool_execution_ok("web_search", "Error: provider down")

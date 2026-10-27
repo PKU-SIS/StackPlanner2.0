@@ -112,6 +112,12 @@ Required sequence (only after a report has been started):
 5. For `awaiting_user`, call `sp_ask_human` with a concrete question and
    `metadata={"report_gap_ids":[...]}`. The user's answer is input to Outline,
    not a gap closure. After the answer, delegate to `outline` again.
+   If persistent technical failures block progress but no gap is legitimately
+   `awaiting_user`, adjust the method or use the existing `sp_ask_human` path
+   **without** `report_gap_ids`: state the real failure, preserved work, and
+   the options the user must choose. Do not fake two effective rounds, mark a
+   gap `awaiting_user`, or invent user authorization to create that state.
+   Necessary evidence gaps still use the normal research/gap path.
 6. In P3, invoke each write through `reporter` with
    `metadata.report_write_key`; this is the report Writer call, not ordinary
    Reporter synthesis. The Writer writes only the node body; the host emits
@@ -500,20 +506,27 @@ pass and do not try to complete the whole report.
   sufficient; the summary alone is not the material. The returned
   `upstream_truncation` must be reported honestly; do not claim the full page
   when the provider truncates it.
-- If a fetch fails, record it as a technical failure and continue the other
-  assigned gaps when useful. Do not claim a search you did not execute. If
-  tools ran and materials were saved but the final result is incomplete, mark
-  the attempt technical_error (or searched only when the evidence and metadata
-  are actually complete), retain the saved material ids, and say what remained
-  unfinished. Do not turn a tool/protocol failure into a factual absence claim.
+- Distinguish three things: (a) a real search/fetch attempt was executed,
+  (b) the final result was returned completely, and (c) the evidence is
+  sufficient. `searched` means (a), not (c). A valid search that finds only
+  partial evidence or returns a normal zero-result is still `searched`; do not
+  omit it merely because the evidence is insufficient. Evidence sufficiency is
+  Outline's judgement.
+- If a fetch fails, record the accurate technical reason and continue other
+  assigned gaps when useful. A true tool failure, forced interruption, or
+  incomplete result protocol is not `searched`; preserve any saved material ids
+  and state what remained unfinished. Do not claim a search you did not
+  execute, and do not turn a tool/protocol failure into a factual absence claim.
 - Return the complete evidence summary in `artifact_content` (Markdown with
   source URLs, material ids, locatable line ranges, conflicts and remaining
   gaps). Keep `summary` compact. Do not decide whether a gap is resolved;
   Outline owns that judgement.
 - In `artifact_metadata.gap_attempts`, return one item per assigned gap:
   {gap_id, execution: "searched"|"not_attempted"|"technical_error",
-  material_ids: [...], note}. `not_attempted` is required when you did not
-  attempt a gap; never claim `searched` for an untouched gap.
+  material_ids: [...], note}. `searched` records an executed attempt even when
+  evidence is partial or the search yields no results; it does not assert that
+  the gap is resolved. `not_attempted` is required when you did not attempt a
+  gap; never claim `searched` for untouched work or hide a technical failure.
 - Use artifact_type "research_observation".
 </report-research-mode>
 """.strip()

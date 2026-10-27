@@ -51,6 +51,21 @@ def test_outline_prompt_keeps_examples_and_source_nature_revisable():
     assert "Do not add a domain whitelist" in normalized
 
 
+def test_central_prompt_allows_general_technical_ask_human_without_fake_rounds():
+    normalized = " ".join(REPORT_CENTRAL_PROMPT.split())
+    assert "**without** `report_gap_ids`" in normalized
+    assert "Do not fake two effective rounds" in normalized
+    assert "Necessary evidence gaps still use the normal research/gap path" in normalized
+
+
+def test_research_prompt_distinguishes_searched_from_sufficiency():
+    normalized = " ".join(REPORT_RESEARCH_PROMPT.split())
+    assert "`searched` means (a), not (c)" in normalized
+    assert "normal zero-result is still `searched`" in normalized
+    assert "incomplete result protocol is not `searched`" in normalized
+    assert "searched` records an executed attempt even when evidence is partial" in normalized
+
+
 def test_central_prompt_keeps_content_design_with_outline():
     normalized = " ".join(REPORT_CENTRAL_PROMPT.split())
     assert "Central does not design report content" in normalized

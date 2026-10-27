@@ -189,6 +189,24 @@ def _research(
     return hooks.handle_success(action, ctx, result, task, artifact_adapter=SPArtifactAdapter(), delegate_entry=delegate_entry)
 
 
+def test_general_technical_ask_human_does_not_require_gap_state(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    action = SPAction.create(
+        ActionType.ASK_HUMAN,
+        action_id="a-technical-question",
+        reason="technical block",
+        task="search provider is unavailable; choose a fallback",
+        metadata={"question": "Search is failing; choose a fallback?", "interaction_type": "clarification"},
+    )
+
+    hooks.prepare_ask_human(action, ctx, SimpleNamespace(interaction_id="sphitl_technical"))
+
+    assert ReportLedger.load_for_context(hooks.report_context(ctx.state)).payload["status"] == "active"
+    assert ledger.gaps() == []
+
+
 def test_section_richer_research_flag_is_saved_and_reaches_researcher_packet(tmp_path):
     ctx = _context(_state(tmp_path))
     _start(ctx)
