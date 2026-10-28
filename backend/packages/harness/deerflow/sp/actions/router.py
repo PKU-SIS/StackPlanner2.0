@@ -147,7 +147,7 @@ class ActionRouter:
     ) -> HandlerResult:
         state = state or {}
         if isinstance(action_input, dict):
-            self._repair_missing_delegate_target_payload(action_input, state, run_id=run_id)
+            self.repair_missing_delegate_target_payload(action_input, state, run_id=run_id)
         try:
             action = action_input if isinstance(action_input, SPAction) else SPAction.from_dict(action_input)
         except ActionValidationError as exc:
@@ -352,14 +352,18 @@ class ActionRouter:
         )
 
     @classmethod
-    def _repair_missing_delegate_target_payload(
+    def repair_missing_delegate_target_payload(
         cls,
         payload: dict[str, Any],
         state: Mapping[str, Any],
         *,
         run_id: str | None,
     ) -> None:
-        """Repair only unambiguous missing DELEGATE targets before validation."""
+        """Repair only unambiguous missing DELEGATE targets before validation.
+
+        Public because the report serial gate must inspect the same effective
+        role the dispatcher will use; it must not keep a second inference path.
+        """
 
         action_type = str(payload.get("action_type") or payload.get("type") or payload.get("action") or "").strip().upper()
         if action_type != ActionType.DELEGATE.value or str(payload.get("target_agent") or "").strip():

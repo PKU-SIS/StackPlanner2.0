@@ -2335,7 +2335,7 @@ def report_delegate_is_serial(
                 from deerflow.sp.actions.router import ActionRouter
 
                 repair_payload = {"action_type": "DELEGATE", **args}
-                ActionRouter._repair_missing_delegate_target_payload(
+                ActionRouter.repair_missing_delegate_target_payload(
                     repair_payload,
                     state,
                     run_id=run_id,
