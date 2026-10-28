@@ -31,7 +31,7 @@
 | `report/<id>/ledger.json` | gap、action、轮次、用户决定、材料、summary 引用 |
 | `report/<id>/materials/<source_id>/<sha>.txt` | 抓取工具实际返回文本 |
 | `report/<id>/materials/catalog.md` | 由账本派生的材料目录 |
-| `report/<id>/research/<action_id>/summary.md` | Researcher 完整 summary |
+| `report/<id>/research/<action_id>/summary.md` | Researcher summary，或协议解析失败时保留的 raw result |
 | `report/<id>/tree/<version>.json` | 接受后的树版本 |
 
 单文件写入使用临时文件 + 原子替换；不引入数据库或第二套报告状态通道。
@@ -45,11 +45,20 @@
 | Researcher | `web_search` + `report_fetch_material` + 只读文件工具；不暴露 `web_fetch` | 调用部署配置的抓取工具实例并落盘；按 gap 报 `searched/not_attempted/technical_error`，不裁决是否解决 |
 | Reporter | P1 活动报告中拒绝委派 | P2 再接入 Writer |
 
-`report_fetch_material` 不新建 HTTP 客户端；它绑定运行时已装配的 `web_fetch`
-实例，保存其返回文本，记录 `source_id/material_id/sha256/lines/content_scope/
-upstream_truncation`。已知 Jina 提供方内部截断到 4096 字符，异步工具实例按
-`coroutine` 识别后标记 `upstream_truncation=true`；`direct_fetch` 按返回中的
-`<truncated>` 标记；未知提供方标记 `unknown`。失败或异常不登记为材料。
+`report_fetch_material` 不新建 HTTP 客户端；在 `direct_fetch` 提供方下它取原始响应
+字节，按魔数/内容类型识别 PDF 并交给现有 `convert_file_to_markdown` 转成 Markdown
+后保存，`content_scope=converted_pdf_markdown`；扫描件、空文本或转换失败不登记
+材料。其它提供方仍保存运行时已装配的 `web_fetch` 实例返回文本，记录
+`source_id/material_id/sha256/lines/content_scope/upstream_truncation`。已知 Jina
+提供方内部截断到 4096 字符，异步工具实例按 `coroutine` 识别后标记
+`upstream_truncation=true`；`direct_fetch` 按返回中的 `<truncated>` 标记；未知
+提供方标记 `unknown`。失败或异常不登记为材料。
+
+报告 Researcher 的输出协议解析失败、且没有 recovered tool evidence 时，适配器把
+`raw_result` 作为 `artifact_content` 保存（上限 24k，超出保留头尾并加
+`<raw-result-truncated; head and tail preserved>` 标记），`summary` 仍压缩到 700
+字符；metadata 记录 `raw_result_preserved` / `raw_result_truncated`。保留原始内容
+不等于协议完整：不填 `gap_attempts`、不伪造 `searched`、不改变完成状态。
 
 ## 4. 缺口与轮次
 
