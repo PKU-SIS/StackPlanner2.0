@@ -498,6 +498,7 @@ class DR2SPExecutorProvider:
             except (TypeError, ValueError):
                 subagent_max_tokens = 0
             global_max_tokens_explicit = subagent_max_tokens > 0
+            global_max_tokens_value = subagent_max_tokens
             raw_role_max_tokens = context.get(
                 "sp_subagent_max_tokens_by_role",
                 configurable.get("sp_subagent_max_tokens_by_role"),
@@ -517,10 +518,11 @@ class DR2SPExecutorProvider:
             protect_test_files = raw_protect_tests.strip().lower() in {"1", "true", "yes", "on"} if isinstance(raw_protect_tests, str) else bool(raw_protect_tests)
             report_role = str(task.metadata.get("report_role") or "")
             if report_role == "outline":
-                # Report Outline has a report-scoped default. A report-specific
-                # explicit override wins; otherwise an existing explicit global
-                # override is preserved, and the ordinary subagent_type map is
-                # intentionally not allowed to leak into report Outline.
+                # Report Outline precedence:
+                # report:outline > explicit global > report default 16384.
+                # The ordinary subagent_type map must not leak into report
+                # Outline, and the explicit global value must be restored after
+                # the ordinary role override above.
                 report_role_value = None
                 if isinstance(raw_role_max_tokens, Mapping):
                     report_role_value = raw_role_max_tokens.get(REPORT_OUTLINE_MAX_TOKENS_KEY)
@@ -530,7 +532,9 @@ class DR2SPExecutorProvider:
                     report_role_max_tokens = 0
                 if report_role_max_tokens > 0:
                     subagent_max_tokens = report_role_max_tokens
-                elif not global_max_tokens_explicit:
+                elif global_max_tokens_explicit:
+                    subagent_max_tokens = global_max_tokens_value
+                else:
                     subagent_max_tokens = REPORT_OUTLINE_OUTPUT_MAX_TOKENS
                 task.metadata["max_tokens_per_step"] = subagent_max_tokens
             available_tools = self._available_tools()

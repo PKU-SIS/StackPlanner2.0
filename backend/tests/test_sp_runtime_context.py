@@ -843,12 +843,49 @@ def test_sp_executor_provider_report_outline_respects_explicit_report_override(m
     provider = DR2SPExecutorProvider(
         app_config=SimpleNamespace(),
         parent_model="test-model",
-        runnable_config={"configurable": {"sp_subagent_max_tokens_by_role": {"report:outline": 12345}}},
+        runnable_config={
+            "configurable": {
+                "sp_subagent_max_tokens": 4096,
+                "sp_subagent_max_tokens_by_role": {"outline": 1024, "report:outline": 12345},
+            }
+        },
     )
     provider._tools = []
     executor = provider({}, SimpleNamespace(context={"thread_id": "thread-1", "run_id": "run-1"}, stream_writer=None))
     executor.execute(SPSubagentTask(action_id="outline-1", subagent_type="outline", task="plan", description="plan", metadata={"report_role": "outline", "report_id": "r1"}))
     assert captured["max_tokens_per_step"] == 12345
+
+
+def test_sp_executor_provider_report_outline_global_explicit_beats_ordinary_role_map(monkeypatch):
+    captured = {}
+    config = SubagentConfig(name="sp-outline", description="outline", skills=[], internal=True)
+
+    class FakeExecutor:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def execute(self, prompt):
+            return SimpleNamespace(status="completed", result="done", error=None, stop_reason=None, task_id="outline-task", token_usage_records=[])
+
+    import deerflow.sp.report as report_package
+
+    monkeypatch.setattr("deerflow.subagents.get_subagent_config", lambda name, app_config=None: config)
+    monkeypatch.setattr("deerflow.subagents.SubagentExecutor", FakeExecutor)
+    monkeypatch.setattr(report_package, "configure_report_subagent", lambda task, **kwargs: (config, [], "outline"))
+    provider = DR2SPExecutorProvider(
+        app_config=SimpleNamespace(),
+        parent_model="test-model",
+        runnable_config={
+            "configurable": {
+                "sp_subagent_max_tokens": 4096,
+                "sp_subagent_max_tokens_by_role": {"outline": 1024},
+            }
+        },
+    )
+    provider._tools = []
+    executor = provider({}, SimpleNamespace(context={"thread_id": "thread-1", "run_id": "run-1"}, stream_writer=None))
+    executor.execute(SPSubagentTask(action_id="outline-1", subagent_type="outline", task="plan", description="plan", metadata={"report_role": "outline", "report_id": "r1"}))
+    assert captured["max_tokens_per_step"] == 4096
 
 
 def test_sp_executor_provider_ordinary_outline_keeps_subagent_type_override(monkeypatch):
