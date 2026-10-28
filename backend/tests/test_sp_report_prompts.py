@@ -45,7 +45,8 @@ def test_central_prompt_uses_revise_after_accepted_tree():
 def test_outline_prompt_keeps_examples_and_source_nature_revisable():
     normalized = " ".join(REPORT_OUTLINE_PROMPT.split())
     assert "Do not decide from a connector alone" in normalized
-    assert "Do not hardcode countries" in normalized
+    assert "only (a) and (b) may become delivery gates" in normalized
+    assert "You are responsible" in normalized
     assert "Judge source nature when selecting evidence" in normalized
     assert "AI-generated trend article" in normalized
     assert "Do not add a domain whitelist" in normalized
@@ -78,10 +79,13 @@ def test_central_prompt_keeps_content_design_with_outline():
 
 def test_outline_prompt_limits_scope_and_action_lists():
     normalized = " ".join(REPORT_OUTLINE_PROMPT.split())
-    assert "not every research direction you add yourself" in normalized
-    assert "not permission to expand the user's scope" in normalized
+    assert "separate three things" in normalized
+    assert "only (a) and (b) may become delivery gates" in normalized
+    assert "do not substitute a fixed quota" in normalized
     assert "`gap_outcomes` is an action list" in normalized
     assert "every gap currently awaiting_outline" in normalized
+    assert "If an Outline delivery is rejected" in normalized
+    assert "do not re-register merely to reset rounds" in normalized
     assert "`user_decisions` records only decisions actually expressed by a new user input" in normalized
     assert "optional: true" in normalized
     assert "do not invent `user_decisions` or `continue_research`" in normalized
@@ -156,8 +160,9 @@ def test_outline_skill_research_example_links_section_and_child():
     assert "section-level depth signal" in normalized_skill
     assert "Do not associate only the child" in normalized_skill
     assert "Each entry must target exactly" in normalized_skill
-    assert "candidates unless the user's wording makes them required" in normalized_skill
-    assert "Do not hardcode countries" in normalized_skill
+    assert "only (a) and (b) may become delivery gates" in normalized_skill
+    assert "do not encode a first-draft country list" in normalized_skill
+    assert "If a prior Outline delivery was rejected" in normalized_skill
     assert "Judge source nature before using it" in normalized_skill
     assert "never repeat an already-closed gap" in normalized_skill
     assert '"optional": true' in text

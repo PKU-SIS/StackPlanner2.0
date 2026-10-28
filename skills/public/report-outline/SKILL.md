@@ -45,6 +45,13 @@ already satisfied.
 - `requirement_refs` must quote the original user input. `why_insufficient` must
   explain what was checked and what is still missing. `stop_condition` must say
   what evidence would settle the question.
+- A `mode:new` request names the user requirement it serves and whether it is
+  user-required, necessary for the core argument, or self-added auxiliary
+  scope. Self-added scope stays adjustable; do not encode a first-draft country
+  list, source count, or named case as an irrevocable stop condition.
+- If a prior Outline delivery was rejected, use its rejection reason when
+  reviewing affected nodes and registered gaps; keep valid work and round
+  history, and do not re-register merely to reset rounds.
 - `node_ids` refers only to nodes in the accepted tree. The first plan, or a
   newly added section that is not accepted yet, registers with `node_ids: []`
   and describes the deeper requirement in the existing request fields. After
@@ -64,7 +71,7 @@ Use the real nested objects, not strings or prose placeholders:
     "question": "What does the official specification say about X?",
     "constraints": {"must_be_primary": true, "need_locator": true},
     "why_insufficient": "Saved material m1 covers Y but not X at a locatable range.",
-    "stop_condition": "A first-party source with a URL and line range.",
+    "stop_condition": "The saved source answers the registered question at a locatable range, including the comparison this section needs.",
     "requirement_refs": [{"input_id": "u1", "quote": "original user text"}],
     "node_ids": ["n6", "n7"],
     "materials_checked": [{"material_id": "m1", "lines": [10, 32]}]
@@ -105,25 +112,29 @@ Return the complete tree JSON in `artifact_content`:
 - `report_title`, `requirements`, `nodes`, `removed_node_ids`,
   `write_requests`, `gap_outcomes`, `user_decisions`,
   `feedback_dispositions`, `draft_dispositions`.
-- `requirements` express the user's actual request and what is genuinely
-  necessary to complete it, not every research direction you add yourself.
+- `requirements` separate (a) the user's explicit hard requirements, (b)
+  conditions genuinely necessary for the core comparison/conclusion, and (c)
+  auxiliary scope you chose (representative countries, classification axes,
+  analysis dimensions, cases, source directions). All three may guide the
+  plan, but only (a) and (b) may become delivery gates; do not promote your
+  own execution choices into a user requirement or whole-report gate.
   Do not decide from a connector alone whether an item is required: "如/例如"
-  and alternatives joined by "或" need the visible context. Explicit coverage
-  verbs or quantifiers ("分别/都/至少/覆盖/全面"), and the purpose of the
-  deliverable, can make examples mandatory; a bare illustrative list can leave
-  room to choose a coherent subset or classification axis. Preserve the user's
-  real coverage requirement either way; do not shrink it and do not turn every
-  example into a mandatory gap. Central's pre-research examples and your own
-  examples (including representative countries) are candidates unless the
-  user's wording makes them required; put one in `constraints` only when the
-  user specified it or the comparison genuinely requires it. Do not hardcode
-  countries, taxonomy levels, or source counts. Background, mechanism, and
-  comparison dimensions may expand when they support the core analysis. A
-  missing fact that is required by the user or indispensable to a core
-  conclusion keeps the existing research/two-round/user path; an auxiliary
-  detail you added may be withdrawn through `not_needed` + `optional: true` with
-  a reason. Withdrawing your own optional detail is not deleting a user
-  requirement. Do not fabricate facts or add a large disclaimer.
+  and alternatives joined by "或" need visible context; explicit coverage
+  verbs/quantifiers and the deliverable's purpose can make examples mandatory,
+  while a bare illustrative list can leave room to choose a subset or axis.
+  You choose representative countries, taxonomy axes, dimensions, cases, and
+  necessary research targets from the user's purpose and available evidence;
+  record a brief basis. A source count, named institution/case, statistical
+  dimension, or country list in the first draft is a planning choice unless the
+  user's wording makes it mandatory; adjust it when evidence/budget shows
+  different coverage is sufficient. Preserve real coverage; do not shrink it
+  or turn every illustrative example into a mandatory gap.
+  Judge evidence sufficiency in context; do not substitute a fixed quota
+  ("one each" vs "two each") for that judgement. Still-necessary research
+  keeps a concrete question/stop condition; substitutable or non-essential
+  self-added scope uses the existing `continue`, outline adjustment, or
+  `not_needed` + `optional: true` path with a reason. Do not delete a real user
+  requirement; withdrawing your own auxiliary detail is not deleting one.
 - Judge source nature before using it: first-party policy/spec/dataset,
   institutional page, personal experience, repost, aggregator snippet, and
   AI-generated commentary are not interchangeable. A title or organization name

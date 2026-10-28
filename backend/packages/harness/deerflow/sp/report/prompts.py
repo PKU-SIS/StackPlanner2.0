@@ -252,32 +252,35 @@ Output contract:
   This is a depth requirement, not an unresolved-evidence flag or research
   completion status; a complex section may keep it true after research. Old
   trees without the field are read as false. Set it on section nodes only.
-- `requirements` must express the user's actual request and what is genuinely
-  necessary to complete it, not every research direction you add yourself.
+- `requirements` must separate three things: (a) the user's explicit hard
+  requirements, (b) conditions genuinely necessary to support the core
+  comparison or conclusion, and (c) auxiliary scope you chose yourself
+  (representative countries, classification axes, analysis dimensions,
+  cases, source directions). All three may guide the plan, but only (a) and
+  (b) may become delivery gates. Do not promote your own execution choices
+  into a user requirement or a whole-report gate.
   Do not decide from a connector alone whether an item is required: "如/例如"
   and alternatives joined by "或" need the visible context. Explicit coverage
   verbs or quantifiers ("分别/都/至少/覆盖/全面"), and the purpose of the
   deliverable, can make examples mandatory; a bare illustrative list can leave
-  room to choose a coherent subset or classification axis. Preserve the user's
-  real coverage requirement either way; do not shrink it and do not turn every
-  example into a mandatory gap. Central's pre-research examples and your own
-  examples (including representative countries) are candidates unless the
-  user's wording makes them required; put one in `constraints` only when the
-  user specified it or the comparison genuinely requires it. Do not hardcode
-  countries, taxonomy levels, or source counts.
-  Background, mechanism, and comparison dimensions may be expanded when they
-  support the core analysis, but `needs_richer_research` is a retrieval-depth
-  signal, not permission to expand the user's scope or turn every discovered
-  issue into a delivery prerequisite.
-- If a missing fact is required by the user or indispensable to a core
-  conclusion, keep the existing research/two-round/user path. If it is an
-  auxiliary detail you added and it is not necessary for the core task, adjust
-  your argument coverage and withdraw that research question through the
-  existing `not_needed` outcome with `optional: true` and a reason. Do not
-  fabricate facts or add a large disclaimer. Withdrawing your own optional
-  detail is not deleting a user requirement; technical recovery must protect
-  valid work but must not permanently freeze an unreasonable self-added
-  constraint.
+  room to choose a coherent subset or classification axis. You are responsible
+  for choosing representative countries, taxonomy axes, comparison dimensions,
+  cases, and necessary research targets from the user's purpose and available
+  evidence; state a brief basis in the plan. A source count, named institution
+  or case, statistical dimension, or country list in the first draft is a
+  planning choice unless the user's wording makes it mandatory; it may be
+  adjusted when evidence or budget shows different coverage is sufficient.
+  Preserve the user's real coverage requirement; do not shrink it, and do not
+  turn every illustrative example into a mandatory gap.
+  Judge evidence sufficiency in the context of the actual argument; do not
+  substitute a fixed quota ("one each" vs "two each") for that judgement.
+  For a still-necessary research target, keep a concrete question and stop
+  condition. For substitutable or non-essential self-added scope, use the
+  existing `continue`, outline adjustment, or `not_needed` + `optional: true`
+  path with a reason; do not delete a real user requirement. Withdrawing your
+  own auxiliary detail is not deleting a user requirement, and technical
+  recovery must not permanently freeze a self-added constraint. Do not
+  fabricate facts or add a large disclaimer.
 - Judge source nature when selecting evidence: title or host organization does
   not prove first-party status. A personal museum visit, a repost, an
   AI-generated trend article, or an aggregator snippet is not equivalent to an
@@ -294,6 +297,14 @@ Output contract:
   its child together. This differs from `write_requests`, where each entry must
   target exactly one writable node. Merge related sections into one request when
   useful; do not create one Researcher call per section mechanically.
+  Before registering or continuing a gap, state whether it serves (a), (b), or
+  (c). For (c), keep the question bounded and use the existing
+  optional/withdraw path when coverage is sufficient; do not encode a
+  first-draft country list, source count, or named case as an irrevocable stop
+  condition. If an Outline delivery is rejected, use the rejection reason to
+  review the affected nodes and registered gaps: keep valid work and round
+  history, do not automatically revoke a gap, and do not re-register merely to
+  reset rounds.
 - Hard requirements: `report_title`; at least one `requirements[]` object with
   `id`, `input_id`, `text`; at least one `nodes[]` object with `node_id`,
   `kind` (`section` or `writable`), `title`; writable nodes need `question`,
