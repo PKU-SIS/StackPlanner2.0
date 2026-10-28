@@ -336,6 +336,77 @@ def test_adapter_externalizes_unstructured_large_result_as_defensive_fallback():
     assert len(result.result) == 700
 
 
+def _report_research_task() -> SPSubagentTask:
+    task = _sp_task()
+    task.metadata = {**task.metadata, "report_role": "researcher", "report_id": "report-1"}
+    return task
+
+
+def test_report_researcher_preserves_unparseable_raw_result():
+    raw = "过程说明：已抓取三份材料，下面本该是输出协议 JSON，但引号没有闭合。\n" + " ".join(f"evidence-{index}" for index in range(200)) + '\n{"summary": "partial result ...'
+    executor = FakeDR2Executor(FakeDR2Result(status="completed", result=raw, task_id="task-raw"))
+
+    result = DR2SubagentExecutorAdapter(lambda _: executor).execute(_report_research_task())
+
+    assert result.artifact_metadata["raw_result_preserved"] is True
+    assert result.artifact_content == raw
+    assert "raw_result_truncated" not in result.artifact_metadata
+    assert result.result.endswith("...<truncated>")
+    assert len(result.result) == 700
+
+
+def test_report_researcher_caps_preserved_raw_result_with_head_and_tail():
+    raw = "HEAD_MARKER" + ("x" * 30_000) + "TAIL_MARKER"
+    executor = FakeDR2Executor(FakeDR2Result(status="completed", result=raw, task_id="task-raw-large"))
+
+    result = DR2SubagentExecutorAdapter(lambda _: executor).execute(_report_research_task())
+
+    assert result.artifact_metadata["raw_result_preserved"] is True
+    assert result.artifact_metadata["raw_result_truncated"] is True
+    assert result.artifact_content.startswith("HEAD_MARKER")
+    assert result.artifact_content.endswith("TAIL_MARKER")
+    assert "<raw-result-truncated" in result.artifact_content
+    assert len(result.artifact_content) <= 24_000
+
+
+def test_report_researcher_prefers_recovered_tool_evidence_over_raw_result():
+    executor = FakeDR2Executor(
+        FakeDR2Result(
+            status="completed",
+            result="not a protocol object " + ("y" * 2000),
+            task_id="task-raw-recovered",
+            ai_messages=[
+                {
+                    "type": "ai",
+                    "tool_calls": [{"id": "fetch-1", "name": "web_fetch", "args": {"url": "https://example.test/data"}}],
+                },
+                {
+                    "type": "tool",
+                    "name": "web_fetch",
+                    "tool_call_id": "fetch-1",
+                    "content": '{"value": 42}',
+                },
+            ],
+        )
+    )
+
+    result = DR2SubagentExecutorAdapter(lambda _: executor).execute(_report_research_task())
+
+    assert "raw_result_preserved" not in result.artifact_metadata
+    assert result.artifact_metadata["recovered_tool_evidence"] is True
+    assert "Untrusted source data" in result.artifact_content
+
+
+def test_non_report_researcher_does_not_suppress_large_result_fallback():
+    large_result = "general evidence " * 200
+    executor = FakeDR2Executor(FakeDR2Result(status="completed", result=large_result, task_id="task-general"))
+
+    result = DR2SubagentExecutorAdapter(lambda _: executor).execute(_sp_task())
+
+    assert result.artifact_content == large_result
+    assert "raw_result_preserved" not in result.artifact_metadata
+
+
 def test_adapter_preserves_timeout_status_and_observes_raw_result():
     raw = FakeDR2Result(status="timed_out", error="deadline", task_id="task-timeout")
     executor = FakeDR2Executor(raw)
@@ -505,10 +576,7 @@ def test_researcher_automatically_continues_bounded_multi_item_fetches():
     assert result.artifact_metadata["research_continuation_attempts"] == 2
     assert result.artifact_metadata["research_pass_count"] == 3
     assert result.result == "Fetched BRA=10377.5892792557."
-    assert all(
-        value in result.artifact_metadata["central_evidence_preview"]
-        for value in ("12951.1782397043", "2434.45111237626", "10377.5892792557")
-    )
+    assert all(value in result.artifact_metadata["central_evidence_preview"] for value in ("12951.1782397043", "2434.45111237626", "10377.5892792557"))
     assert result.artifact_content is not None
     assert all(expected in result.artifact_content for expected in ("12951.1782397043", "2434.45111237626", "10377.5892792557"))
     assert result.artifact_content.index("10377.5892792557") < (result.artifact_content.index("12951.1782397043"))

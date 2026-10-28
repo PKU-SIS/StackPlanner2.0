@@ -21,6 +21,8 @@ DR2ResultObserver = Callable[[Any], None]
 
 DEFAULT_RESULT_SUMMARY_MAX_CHARS = 700
 DEFAULT_LARGE_RESULT_THRESHOLD = 1200
+_RAW_RESULT_PRESERVATION_MAX_CHARS = 24_000
+_RAW_RESULT_TRUNCATION_MARKER = "...<raw-result-truncated; head and tail preserved>..."
 OUTPUTS_VIRTUAL_PREFIX = "/mnt/user-data/outputs/"
 _FILE_WRITE_TOOLS = frozenset({"write_file", "str_replace"})
 _COMPLETION_STATUSES = frozenset({"complete", "partial", "blocked"})
@@ -173,6 +175,22 @@ def _compact_result(value: Any, *, max_chars: int = DEFAULT_RESULT_SUMMARY_MAX_C
         return text
     suffix = "...<truncated>"
     return f"{text[: max_chars - len(suffix)]}{suffix}"
+
+
+def _preserve_raw_result(value: str) -> tuple[str, bool]:
+    """Keep a report Researcher's raw output with an explicit head/tail bound.
+
+    The raw result is not a protocol deliverable; it is evidence of what the
+    agent actually returned.  Keep the head and tail so a truncated protocol
+    envelope and its closing fields both survive, and mark the cut explicitly
+    instead of silently storing a shorter prefix.
+    """
+    if len(value) <= _RAW_RESULT_PRESERVATION_MAX_CHARS:
+        return value, False
+    budget = _RAW_RESULT_PRESERVATION_MAX_CHARS - len(_RAW_RESULT_TRUNCATION_MARKER)
+    head_chars = budget // 2
+    tail_chars = budget - head_chars
+    return f"{value[:head_chars]}{_RAW_RESULT_TRUNCATION_MARKER}{value[-tail_chars:]}", True
 
 
 def _parse_result_payload(value: Any) -> dict[str, Any] | None:
@@ -657,13 +675,21 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
     ai_messages = getattr(result, "ai_messages", None)
     recovered_created_paths = _recover_created_paths(raw_result, ai_messages)
     summary = raw_result
+    protocol_payload = payload is not None and any(key in payload for key in ("summary", "artifact_content", "artifact_type", "artifact_metadata"))
+    # A report Researcher can lose its whole observation when the model stops
+    # before closing the output-contract JSON. Preserve the raw return as
+    # evidence, but only when no protocol object and no recovered tool evidence
+    # exist; it is not a delivered protocol result.
+    preserve_report_raw = (
+        task is not None and task.subagent_type == "researcher" and bool(task.metadata.get("report_role") or task.metadata.get("report_id")) and not protocol_payload and isinstance(raw_result, str) and bool(raw_result.strip())
+    )
     if recovered_outline_evidence:
         # Recovered tool text is evidence, even when a tool message contains a
         # complete output-contract envelope. Never extract a formal Outline
         # artifact from that envelope; a real delivery file is read separately.
         artifact_content = None
         artifact_type = None
-    elif not is_memory_recaller and payload is not None and any(key in payload for key in ("summary", "artifact_content", "artifact_type", "artifact_metadata")):
+    elif not is_memory_recaller and protocol_payload:
         summary = payload.get("summary") or payload.get("result")
         artifact_content = artifact_content if artifact_content is not None else payload.get("artifact_content")
         artifact_type = artifact_type or payload.get("artifact_type")
@@ -681,6 +707,7 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         artifact_content is None
         and not recovered_created_paths
         and not recovered_outline_evidence
+        and not preserve_report_raw
         and isinstance(raw_result, str)
         and len(raw_result) > DEFAULT_LARGE_RESULT_THRESHOLD
         and status == SPSubagentStatus.COMPLETED
@@ -706,6 +733,14 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
             central_preview = _structured_evidence_preview(artifact_content)
             if central_preview is not None:
                 artifact_metadata["central_evidence_preview"] = central_preview
+
+    if preserve_report_raw and artifact_content is None:
+        preserved, raw_truncated = _preserve_raw_result(str(raw_result))
+        artifact_content = preserved
+        artifact_type = artifact_type or _default_artifact_type(task.subagent_type if task is not None else None)
+        artifact_metadata["raw_result_preserved"] = True
+        if raw_truncated:
+            artifact_metadata["raw_result_truncated"] = True
 
     if recovered_created_paths and not is_memory_recaller:
         declared_paths = artifact_metadata.get("created_paths")
@@ -878,13 +913,7 @@ def _merge_research_continuations(
     # successful pass's structured evidence so downstream context retains
     # prior still-valid evidence; the latest summary/gaps above remain the
     # current state.
-    structured_previews = list(
-        dict.fromkeys(
-            preview
-            for result in reversed(successful)
-            if (preview := _structured_evidence_preview(result.artifact_content))
-        )
-    )
+    structured_previews = list(dict.fromkeys(preview for result in reversed(successful) if (preview := _structured_evidence_preview(result.artifact_content))))
     if structured_previews:
         metadata["central_evidence_preview"] = " | ".join(structured_previews)[:_CENTRAL_STRUCTURED_EVIDENCE_PREVIEW_MAX_CHARS]
     failed_tail = results[-1] if results[-1].status != SPSubagentStatus.COMPLETED else None
