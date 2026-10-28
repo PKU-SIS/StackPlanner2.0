@@ -433,6 +433,34 @@ def test_missing_gap_attempts_preserves_host_research_without_charging_round(tmp
     assert material["material_id"] in packet_gap["latest_history"][-1]["note"]
 
 
+def test_outline_revision_cannot_skip_awaiting_outline_gaps(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    _register_gap(ctx, "a-gap-1")
+    _register_gap(ctx, "a-gap-2")
+    outline_action, outline_task = _delegate(ctx, "a-outline", "outline", {})
+    accepted = _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=["g1", "g2"]))
+    assert accepted.next_step == "continue", accepted.error
+
+    for action_id, gap_id in (("a-r1", "g1"), ("a-r2", "g2")):
+        research = _research(ctx, action_id, [gap_id], tool_ok=True)
+        assert research.next_step == "continue", research.error
+
+    revise_action, revise_task = _delegate(ctx, "a-revise", "outline", {"report_task": "revise"})
+    missing = _accept_outline(
+        ctx,
+        revise_action,
+        revise_task,
+        _tree(
+            gap_ids=["g1", "g2"],
+            outcomes=[{"gap_id": "g1", "outcome": "unresolved", "reason": "evidence still partial", "evidence_material_ids": []}],
+        ),
+    )
+    assert missing.next_step == "error_recoverable"
+    assert "g2" in (missing.error or "")
+    assert "unjudged" in (missing.error or "").lower()
+
+
 def test_two_effective_rounds_then_user_question_and_answer_returns_to_outline(tmp_path):
     ctx = _context(_state(tmp_path))
     _start(ctx)

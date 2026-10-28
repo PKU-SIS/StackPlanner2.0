@@ -182,6 +182,25 @@ def test_outline_prompt_has_directory_grep_and_structured_tool_examples():
     assert "`ready` and has no current valid draft" in normalized_prompt
     assert '{"input_id":"u1","quote":"..."}' in REPORT_OUTLINE_PROMPT
     assert '{"material_id":"m1","lines":[10,32]}' in REPORT_OUTLINE_PROMPT
+
+
+def test_central_prompt_batches_research_and_centralizes_judgment():
+    normalized = " ".join(REPORT_CENTRAL_PROMPT.split())
+    assert "whole selected research batch" in normalized
+    assert "Never ask Outline to judge only one gap" in normalized
+    assert "use the existing file-delivery and chunked-write path" in normalized
+
+
+def test_outline_prompt_and_skill_require_complete_file_delivery_on_retry():
+    normalized_prompt = " ".join(REPORT_OUTLINE_PROMPT.split())
+    skill = Path(__file__).resolve().parents[2] / "skills/public/report-outline/SKILL.md"
+    normalized_skill = " ".join(skill.read_text(encoding="utf-8").split())
+    assert "required_file" in normalized_prompt
+    assert "never omit an awaiting gap" in normalized_prompt
+    assert "required_file" in normalized_skill
+    assert "Never omit an awaiting gap" in normalized_skill
+    assert "Keep `question`, `constraints`, and `stop_condition` aligned" in normalized_prompt
+    assert "Keep `question`, `constraints`, and `stop_condition` aligned" in normalized_skill
     assert '"evidence_material_ids":["m1"]' in REPORT_OUTLINE_PROMPT
     assert "needs_richer_research" in REPORT_OUTLINE_PROMPT
     assert "needs_richer_research" in REPORT_RESEARCH_PROMPT

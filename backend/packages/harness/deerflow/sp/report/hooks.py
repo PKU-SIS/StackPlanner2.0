@@ -11,6 +11,7 @@ import hashlib
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -52,14 +53,20 @@ CONTEXT_INSTRUCTIONS = """
 <report-control>
 This is derived control state from the active report ledger, injected before
 your model call. Do not edit the ledger by writing files. Use gap ids exactly.
-Follow each gap's next_action: open -> delegate researcher with
-metadata.report_gap_ids; awaiting_outline -> delegate outline; awaiting_user ->
-sp_ask_human with metadata.report_gap_ids; in_flight -> wait. After an Outline
-result, inspect the returned tree version and gap changes. Do not delegate
-integrate_review; the Harness fixed-acceptance gate owns that review. The gate
-uses only ready/revise; local-edit re-review loops are retired. sp_finish is
-allowed only for the current ready final and is blocked by any unfinished
-research/write/feedback/gap/input state.
+Dispatch every selected `open` gap in one research batch up to the existing
+concurrency limit; if more remain, use further batches without calling Outline
+between them. Wait until every selected gap has returned one attempt (success,
+partial, timeout, or technical failure), then call Outline once to judge all
+`awaiting_outline` gaps together. Do not call Outline after each result. An
+`open` gap that reappears after a technical failure is a returned observation,
+not an automatic re-dispatch. A gap in `awaiting_outline`, `in_flight`, or
+`awaiting_user` must not be dispatched. Do not ask Outline to judge only a
+subset or skip awaiting gaps because output is long; use its file-delivery and
+chunked-write path. After an Outline result, inspect the returned tree version
+and gap changes. Do not delegate integrate_review; the Harness fixed-acceptance
+gate owns that review. The gate uses only ready/revise; local-edit re-review
+loops are retired. sp_finish is allowed only for the current ready final and is
+blocked by any unfinished research/write/feedback/gap/input state.
 </report-control>
 """.strip()
 
@@ -417,11 +424,20 @@ def prepare_delegation(
         else:
             packet = report_packets.build_outline_packet(ledger)
             delivery_path = _outline_delivery_path(ledger.paths, action.action_id)
+            protocol_error = context.state.get("sp_report_protocol_error") if isinstance(context.state, Mapping) else None
+            requires_file = isinstance(protocol_error, Mapping) and bool(protocol_error.get("outline_delivery_required"))
             instruction = (
                 "For a complete tree, write the full JSON to this host-assigned path using "
                 "write_file; use append=True for later chunks and read_file before appending. "
                 "Return artifact_content=null and this path in artifact_metadata."
             )
+            if requires_file:
+                instruction = (
+                    "This Outline retry requires file delivery. Write the complete tree JSON to this "
+                    "host-assigned path using write_file; use append=True for later chunks and read_file "
+                    "before appending. Do not return the tree inline and do not omit any awaiting_outline "
+                    "gap from gap_outcomes. Return artifact_content=null and this path in artifact_metadata."
+                )
             rejected = ledger.payload.get("rejected_outline")
             candidate = report_packets._outline_candidate_view(rejected)
             if report_task in {"plan", "revise"} and isinstance(candidate, Mapping):
@@ -443,11 +459,12 @@ def prepare_delegation(
                     # diagnostics without introducing a second submission protocol.
                     task_metadata["rejected_candidate_path"] = candidate_host
             packet["delivery"] = {
-                "mode": "optional_file",
+                "mode": "required_file" if requires_file else "optional_file",
                 "path": ledger.paths.virtual(delivery_path),
                 "instruction": instruction,
             }
             task_metadata["outline_delivery_path"] = str(delivery_path)
+            task_metadata["outline_delivery_required"] = requires_file
     task_metadata["report_id"] = report.report_id
     task_metadata["report_role"] = role
     task_metadata["report_task"] = report_task
@@ -1443,13 +1460,24 @@ def _outline_payload(result: SPSubagentResult, task: SPSubagentTask) -> tuple[di
         or bool(metadata.get("tree_path"))
         or bool(metadata.get("created_paths"))
     )
+    required_file = bool(task.metadata.get("outline_delivery_required"))
+    if required_file and file_text is None:
+        if result.artifact_content:
+            raise ReportValidationError(
+                "Outline retry requires file delivery, but the response returned inline content and no host-assigned delivery file was created"
+            )
+        raise ReportValidationError(
+            "Outline retry requires file delivery, but no host-assigned delivery file was created"
+        )
+    if required_file and file_text is not None and not file_text.strip():
+        raise ReportValidationError("Outline delivery file is empty; no complete tree was written")
     if declared_file:
         if file_text is None:
             raise ReportValidationError(
                 "Outline declared file delivery but did not create the host-assigned tree file"
             )
         return report_tree.parse_tree_payload(file_text), file_text
-    if file_text is not None and not result.artifact_content:
+    if file_text is not None and (required_file or not result.artifact_content):
         return report_tree.parse_tree_payload(file_text), file_text
     return report_tree.parse_tree_payload(result.artifact_content), None
 
@@ -1634,7 +1662,16 @@ def _accept_outline_locked(
                 "delegate Coder to compress report material."
             )
         if result.finish_reason == "length":
-            detail += "\nfinish_reason=length: the model output was incomplete; the host file/raw candidate was retained."
+            if rejected:
+                detail += (
+                    "\nfinish_reason=length: output was truncated; the partial candidate was retained at "
+                    f"{rejected['virtual_path']}."
+                )
+            else:
+                detail += (
+                    "\nfinish_reason=length: output was truncated before a candidate was formed; "
+                    "no candidate was retained."
+                )
         if rejected:
             detail += (
                 f"\nrejected_candidate: {rejected['virtual_path']}"
@@ -1642,13 +1679,20 @@ def _accept_outline_locked(
                 "drop planned nodes, or move evidence preparation to Writer."
             )
         else:
-            detail += "\nNo tree candidate was available; only diagnostic text was returned."
+            detail += "\nNo tree candidate was available; no candidate was retained."
         state_update = {"sp_active_delegate_id": None}
         if rejected:
             state_update["sp_report_protocol_error"] = {
                 "reason": "invalid_report_tree",
                 "rejected_candidate": rejected["virtual_path"],
                 "errors": str(exc),
+                "outline_delivery_required": True,
+            }
+        else:
+            state_update["sp_report_protocol_error"] = {
+                "reason": "invalid_report_tree",
+                "errors": str(exc),
+                "outline_delivery_required": True,
             }
         return _rejection(action, context, detail, reason="invalid_report_tree", state_update=state_update)
     except Exception as exc:  # noqa: BLE001 - persistence boundary must surface a technical fault
@@ -1690,7 +1734,7 @@ def _accept_outline_locked(
         },
     )
     state_update = _artifact_state_update(artifact.state_update)
-    state_update.update({"sp_active_delegate_id": None, "sp_current_stage": action.stage or "planning"})
+    state_update.update({"sp_active_delegate_id": None, "sp_current_stage": action.stage or "planning", "sp_report_protocol_error": None})
     return HandlerResult(
         next_step="continue",
         state_update=state_update,
@@ -2302,6 +2346,194 @@ def control_context(state: Mapping[str, Any] | None) -> dict[str, Any] | None:
     return {"report": ledger.control_summary(), "instructions": CONTEXT_INSTRUCTIONS}
 
 
+def _report_gap_ids_from_payload(payload: Mapping[str, Any]) -> list[str]:
+    metadata = payload.get("metadata")
+    raw = metadata.get("report_gap_ids") if isinstance(metadata, Mapping) else None
+    if raw is None:
+        raw = payload.get("report_gap_ids")
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        return []
+    return [str(item) for item in raw if isinstance(item, str) and item.strip()]
+
+
+def _parse_report_timestamp(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _gap_attempted_since_tree(gap: Mapping[str, Any], accepted_at: Any) -> bool:
+    """Return True when this gap already has a research result in this round."""
+
+    cutoff = _parse_report_timestamp(accepted_at)
+    for entry in reversed(gap.get("history") or []):
+        if not isinstance(entry, Mapping) or str(entry.get("event") or "") != "research_result":
+            continue
+        at = _parse_report_timestamp(entry.get("at"))
+        if cutoff is None or at is None or at >= cutoff:
+            return True
+    return False
+
+
+def _load_report_ledger_for_gate(state: Mapping[str, Any] | None) -> ReportLedger | None:
+    context_info = report_context(state)
+    if not context_info.is_active:
+        return None
+    paths = _paths_for_context(context_info)
+    # Read under the existing short ledger lock only; never hold it across a
+    # model/network wait.
+    with report_store.report_lock(paths):
+        return ReportLedger.load(paths)
+
+
+def report_delegate_dispatch_error(
+    state: Mapping[str, Any] | None,
+    tool_call_id: str,
+    *,
+    payload: Mapping[str, Any],
+    payload_builder: Callable[[Mapping[str, Any], str], Mapping[str, Any]],
+    run_id: str | None = None,
+) -> str | None:
+    """Return a precise block reason for a report delegation, or None.
+
+    Independent Researchers may run together when they belong to the same
+    accepted tree and their gap sets are disjoint. Outline/Writer stay
+    sequential, and Outline waits until every open gap selected for this round
+    has returned one attempt (success, failure, timeout, or partial).
+    """
+    context_info = report_context(state)
+    if not context_info.is_active:
+        return None
+    messages = state.get("messages") if isinstance(state, Mapping) else None
+    if not isinstance(messages, list):
+        return None
+    latest = next((message for message in reversed(messages) if isinstance(message, AIMessage)), None)
+    if latest is None or not isinstance(latest.tool_calls, list):
+        return None
+    from deerflow.sp.actions.router import ActionRouter
+
+    calls: list[dict[str, Any]] = []
+    current_invalid = False
+    for call in latest.tool_calls:
+        if not isinstance(call, Mapping) or str(call.get("name") or "") != "sp_delegate":
+            continue
+        call_id = str(call.get("id") or "")
+        candidate = dict(payload) if call_id == tool_call_id else dict(payload_builder(dict(call.get("args") or {}), call_id))
+        try:
+            target = ActionRouter.effective_delegate_target(candidate, state, run_id=run_id)
+        except ActionValidationError:
+            # Let the dispatcher preserve its own validation error. An invalid
+            # call must not consume a parallel slot or block a valid sibling.
+            if call_id == tool_call_id:
+                current_invalid = True
+            continue
+        if target in REPORT_DELEGATE_ROLES:
+            calls.append(
+                {
+                    "call_id": call_id,
+                    "role": target,
+                    "gaps": _report_gap_ids_from_payload(candidate),
+                    "order": len(calls),
+                }
+            )
+    if current_invalid:
+        return None
+    current = next((item for item in calls if item["call_id"] == tool_call_id), None)
+    if current is None:
+        return None
+    role = str(current["role"])
+    if role not in {"outline", "researcher", "reporter"}:
+        return None
+    current_order = int(current["order"])
+
+    if role == "researcher":
+        if any(
+            item["role"] in {"outline", "reporter"} and item["order"] < current_order
+            for item in calls
+        ):
+            return "Report roles are not mixed in one batch: dispatch the research batch and the Outline/Writer phase separately."
+        gap_ids = list(current["gaps"])
+        if not gap_ids:
+            prior_researchers = [
+                item
+                for item in calls
+                if item["role"] == "researcher" and item["call_id"] != tool_call_id and item["order"] < current_order
+            ]
+            if prior_researchers:
+                return "Report research delegation is missing report_gap_ids; only one research call can be dispatched without gap identity."
+            return None
+        ledger = _load_report_ledger_for_gate(state)
+        if ledger is None:
+            return None
+        if any(str(request.get("status") or "") == "in_flight" for request in report_writing.write_requests(ledger)):
+            return "Report research delegation blocked: the Writer is still running; wait for the writing phase to finish."
+        accepted_at = (ledger.payload.get("tree") or {}).get("accepted_at") if isinstance(ledger.payload.get("tree"), Mapping) else None
+        in_flight_gaps: set[str] = set()
+        for action in (ledger.payload.get("actions") or {}).values():
+            if isinstance(action, Mapping) and str(action.get("status") or "") == "in_flight":
+                in_flight_gaps.update(str(gap_id) for gap_id in action.get("gap_ids") or [])
+        seen_in_batch: set[str] = set()
+        for item in calls:
+            if item["call_id"] == tool_call_id:
+                break
+            if item["role"] == "researcher":
+                seen_in_batch.update(item["gaps"])
+        duplicate = seen_in_batch.intersection(gap_ids)
+        if duplicate:
+            return "Report research delegation blocked: gap(s) " + ", ".join(sorted(duplicate)) + " are already in this batch; gap sets must be disjoint."
+        for gap_id in gap_ids:
+            gap = ledger.gap(gap_id)
+            if gap is None:
+                return None
+            if gap_id in in_flight_gaps or str(gap.get("status") or "") == "in_flight":
+                return f"Report research delegation blocked: gap {gap_id} already has an in-flight research action."
+            if str(gap.get("status") or "") != "open":
+                return f"Report research delegation blocked: gap {gap_id} is {gap.get('status')}; only open gaps can be dispatched."
+            if _gap_attempted_since_tree(gap, accepted_at):
+                return f"Report research delegation blocked: gap {gap_id} already returned a result in this round; wait for Outline to judge all awaiting_outline gaps before re-dispatching."
+        return None
+
+    # Outline and Writer are single report calls in a batch and wait for any
+    # in-flight research batch. Outline additionally waits until all open gaps
+    # selected for this round have been attempted once.
+    if any(item["call_id"] != tool_call_id and item["order"] < current_order for item in calls):
+        return "Report Outline/Writer delegations are sequential and cannot share a batch with an earlier report delegation."
+    ledger = _load_report_ledger_for_gate(state)
+    if ledger is None:
+        return None
+    active_research: list[str] = []
+    for action in (ledger.payload.get("actions") or {}).values():
+        if isinstance(action, Mapping) and str(action.get("status") or "") == "in_flight":
+            active_research.extend(str(gap_id) for gap_id in action.get("gap_ids") or [])
+    if active_research:
+        return "Report Outline/Writer delegation blocked: research is still in flight for gap(s) " + ", ".join(sorted(set(active_research))) + "; wait for the whole batch and judge all awaiting_outline results together."
+    if any(str(request.get("status") or "") == "in_flight" for request in report_writing.write_requests(ledger)):
+        return "Report Outline delegation blocked: a Writer delegation is still running; wait for it to finish before revising the tree."
+    accepted_at = (ledger.payload.get("tree") or {}).get("accepted_at") if isinstance(ledger.payload.get("tree"), Mapping) else None
+    open_unattempted = [
+        str(gap.get("gap_id"))
+        for gap in ledger.gaps()
+        if str(gap.get("status") or "") == "open" and not _gap_attempted_since_tree(gap, accepted_at)
+    ]
+    if role == "outline" and accepted_at and open_unattempted:
+        return "Report Outline delegation blocked: gap(s) " + ", ".join(sorted(open_unattempted)) + " have not been attempted in this research round; dispatch the remaining selected research batch before central judgment."
+    if role == "reporter":
+        awaiting = [str(gap.get("gap_id")) for gap in ledger.gaps() if str(gap.get("status") or "") == "awaiting_outline"]
+        if awaiting:
+            return "Report Writer delegation blocked: gap(s) " + ", ".join(sorted(awaiting)) + " are awaiting Outline judgment; let Outline judge all returned results before writing."
+        if open_unattempted:
+            return "Report Writer delegation blocked: gap(s) " + ", ".join(sorted(open_unattempted)) + " still need a research attempt; complete the research round before writing."
+    return None
+
+
 def report_delegate_is_serial(
     state: Mapping[str, Any] | None,
     tool_call_id: str,
@@ -2310,49 +2542,14 @@ def report_delegate_is_serial(
     payload_builder: Callable[[Mapping[str, Any], str], Mapping[str, Any]],
     run_id: str | None = None,
 ) -> bool:
-    """Return False for a report delegation that must wait for its sibling.
-
-    ``payload`` is the exact control-tool payload built for this call and
-    ``payload_builder`` builds the same payload for sibling calls. Serial
-    gating asks the router for the final dispatch role, so the repair and
-    normalization rules are not duplicated and the precheck never mutates the
-    original payload or writes report state.
-    """
-    context_info = report_context(state)
-    if not context_info.is_active:
-        return True
-    messages = state.get("messages") if isinstance(state, Mapping) else None
-    if not isinstance(messages, list):
-        return True
-    latest = next((message for message in reversed(messages) if isinstance(message, AIMessage)), None)
-    if latest is None or not isinstance(latest.tool_calls, list):
-        return True
-    from deerflow.sp.actions.router import ActionRouter
-
-    report_call_ids: list[str] = []
-    current_invalid = False
-    for call in latest.tool_calls:
-        if not isinstance(call, Mapping) or str(call.get("name") or "") != "sp_delegate":
-            continue
-        call_id = str(call.get("id") or "")
-        if call_id == tool_call_id:
-            candidate = dict(payload)
-        else:
-            args = dict(call.get("args")) if isinstance(call.get("args"), Mapping) else {}
-            candidate = dict(payload_builder(args, call_id))
-        try:
-            target = ActionRouter.effective_delegate_target(candidate, state, run_id=run_id)
-        except ActionValidationError:
-            # The dispatcher rejects this call with the same validation error.
-            # It cannot dispatch, so it must not occupy the serial slot.
-            if call_id == tool_call_id:
-                current_invalid = True
-            continue
-        if target in REPORT_DELEGATE_ROLES:
-            report_call_ids.append(call_id)
-    if current_invalid:
-        return True
-    return not report_call_ids or report_call_ids[0] == tool_call_id
+    """Backward-compatible boolean wrapper for the report dispatch gate."""
+    return report_delegate_dispatch_error(
+        state,
+        tool_call_id,
+        payload=payload,
+        payload_builder=payload_builder,
+        run_id=run_id,
+    ) is None
 
 
 def gap_dispatch_summary(ledger: ReportLedger) -> dict[str, Any]:

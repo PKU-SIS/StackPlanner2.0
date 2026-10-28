@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,12 +19,13 @@ from _agent_e2e_helpers import FakeToolCallingModel
 
 from deerflow.config.app_config import AppConfig
 from deerflow.sp.actions.handlers.base import HandlerContext
+from deerflow.sp.actions.handlers.delegate import DelegateHandler
 from deerflow.sp.actions.router import ActionRouter
 from deerflow.sp.actions.schema import ActionType, ActionValidationError, SPAction
 from deerflow.sp.agent_tools import SPControlActionMiddleware, build_control_payload
 from deerflow.sp.memory import TaskMemoryStack
 from deerflow.sp.report import hooks
-from deerflow.sp.report.hooks import report_delegate_is_serial
+from deerflow.sp.report.hooks import report_delegate_dispatch_error, report_delegate_is_serial
 from deerflow.sp.report.ledger import ReportLedger
 from deerflow.sp.subagents import SPSubagentResult, SPSubagentStatus
 
@@ -132,6 +135,40 @@ def _active_report_state() -> dict:
     return {"thread_data": {"outputs_path": str(outputs)}, "messages": []}
 
 
+def _active_report_with_gaps(count: int = 2) -> tuple[dict, list[str]]:
+    from deerflow.sp.report.ledger import utc_now_iso
+
+    state = _active_report_state()
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    gap_ids: list[str] = []
+    for index in range(count):
+        gap = ledger.register_gap(
+            mode="new",
+            question=f"research question {index + 1}",
+            constraints={},
+            why_insufficient="not researched yet",
+            stop_condition="a saved locatable source answers the question",
+            requirement_refs=[{"input_id": "u1", "quote": "test report"}],
+            node_ids=[],
+            materials_checked=[],
+        )
+        gap_ids.append(str(gap["gap_id"]))
+    ledger.payload["tree"] = {"version": 1, "accepted_at": utc_now_iso(), "path": "", "virtual_path": ""}
+    ledger.save()
+    return state, gap_ids
+
+
+def _gate(state, call_id, args, run_id=None):
+    payload = _payload_for(state, args, call_id)
+    return report_delegate_dispatch_error(
+        state,
+        call_id,
+        payload=payload,
+        payload_builder=lambda raw, cid: _payload_for(state, raw, cid),
+        run_id=run_id,
+    )
+
+
 class _RecordingExecutor:
     def __init__(self):
         self.tasks = []
@@ -144,6 +181,34 @@ class _RecordingExecutor:
             artifact_content="observation",
             artifact_type="research_observation",
             artifact_metadata={"completion_status": "complete", "evidence_gaps": []},
+        )
+
+
+class _BarrierExecutor:
+    """Execute two independent researchers concurrently, proving real overlap."""
+
+    def __init__(self):
+        self.started = []
+        self.barrier = threading.Barrier(2, timeout=10)
+
+    def execute(self, task):
+        gap_ids = [str(gap_id) for gap_id in task.metadata.get("report_gap_ids") or []]
+        self.started.append((task.action_id, gap_ids))
+        # This call only returns when the other independent research has entered
+        # execute() too. A serial host times out here.
+        self.barrier.wait()
+        return SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="observation",
+            artifact_content="observation",
+            artifact_type="research_observation",
+            artifact_metadata={
+                "completion_status": "complete",
+                "gap_attempts": [
+                    {"gap_id": gap_id, "execution": "searched", "material_ids": [], "note": "test observation"}
+                    for gap_id in gap_ids
+                ],
+            },
         )
 
 
@@ -328,6 +393,135 @@ def test_serial_gate_uses_final_role_after_router_normalization():
     assert filled["task"]
 
 
+def test_parallel_independent_researchers_allowed_and_same_gap_blocked():
+    state, gaps = _active_report_with_gaps(2)
+
+    def researcher_args(gap_ids):
+        return {
+            "target_agent": "researcher",
+            "task": "research the assigned gap",
+            "stage": "research",
+            "metadata": {"report_gap_ids": list(gap_ids)},
+        }
+
+    state["messages"] = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                {"name": "sp_delegate", "args": researcher_args([gaps[0]]), "id": "call-a", "type": "tool_call"},
+                {"name": "sp_delegate", "args": researcher_args([gaps[1]]), "id": "call-b", "type": "tool_call"},
+            ],
+        )
+    ]
+    assert _gate(state, "call-a", researcher_args([gaps[0]])) is None
+    assert _gate(state, "call-b", researcher_args([gaps[1]])) is None
+
+    state["messages"] = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                {"name": "sp_delegate", "args": researcher_args([gaps[0]]), "id": "call-a", "type": "tool_call"},
+                {"name": "sp_delegate", "args": researcher_args([gaps[0]]), "id": "call-b", "type": "tool_call"},
+            ],
+        )
+    ]
+    assert _gate(state, "call-a", researcher_args([gaps[0]])) is None
+    duplicate_error = _gate(state, "call-b", researcher_args([gaps[0]]))
+    assert duplicate_error is not None and "already in this batch" in duplicate_error
+
+
+def test_outline_waits_for_all_selected_gaps_and_blocks_in_flight_research():
+    from deerflow.sp.report.ledger import utc_now_iso
+
+    state, gaps = _active_report_with_gaps(2)
+    outline_args = {"target_agent": "outline", "task": "judge the returned results", "stage": "revision", "metadata": {"report_task": "revise"}}
+    state["messages"] = [AIMessage(content="", tool_calls=[{"name": "sp_delegate", "args": dict(outline_args), "id": "outline-a", "type": "tool_call"}])]
+
+    blocked = _gate(state, "outline-a", outline_args)
+    assert blocked is not None and "have not been attempted" in blocked
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    ledger.begin_research_action("a-research", [gaps[0]])
+    ledger.save()
+    in_flight = _gate(state, "outline-a", outline_args)
+    assert in_flight is not None and "still in flight" in in_flight
+
+    # Return both results (one success-shaped, one technical failure shaped)
+    # without requiring all gaps to be resolved. Outline may then judge them.
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    now = utc_now_iso()
+    for gap_id in gaps:
+        gap = ledger.require_gap(gap_id)
+        gap["status"] = "awaiting_outline"
+        gap["updated_at"] = now
+        gap.setdefault("history", []).append({"at": now, "event": "research_result", "execution": "searched", "rounds_after": 1, "material_ids": [], "note": "test result"})
+    ledger.payload["actions"]["a-research"]["status"] = "completed"
+    ledger.save()
+
+    assert _gate(state, "outline-a", outline_args) is None
+
+
+def test_research_gap_already_attempted_is_not_redispatched_before_outline():
+    from deerflow.sp.report.ledger import utc_now_iso
+
+    state, gaps = _active_report_with_gaps(1)
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    now = utc_now_iso()
+    gap = ledger.require_gap(gaps[0])
+    gap["status"] = "awaiting_outline"
+    gap["updated_at"] = now
+    gap.setdefault("history", []).append({"at": now, "event": "research_result", "execution": "searched", "rounds_after": 1, "material_ids": [], "note": "test result"})
+    ledger.save()
+
+    args = {
+        "target_agent": "researcher",
+        "task": "retry the same gap",
+        "stage": "research",
+        "metadata": {"report_gap_ids": [gaps[0]]},
+    }
+    state["messages"] = [AIMessage(content="", tool_calls=[{"name": "sp_delegate", "args": dict(args), "id": "call-a", "type": "tool_call"}])]
+    error = _gate(state, "call-a", args)
+    assert error is not None and ("already returned" in error or "only open" in error)
+
+
+def test_independent_research_actually_overlaps_and_merges_ledger_updates():
+    state, gaps = _active_report_with_gaps(2)
+    executor = _BarrierExecutor()
+    handler = DelegateHandler(executor=executor)
+
+    actions = [
+        SPAction.create(
+            ActionType.DELEGATE,
+            action_id=f"a-research-{index}",
+            reason="independent research",
+            task=f"research gap {gap_id}",
+            target_agent="researcher",
+            stage="research",
+            metadata={"report_gap_ids": [gap_id]},
+        )
+        for index, gap_id in enumerate(gaps)
+    ]
+    contexts = [
+        HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="t-overlap", run_id="run-overlap")
+        for _ in gaps
+    ]
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda pair: handler.handle(pair[0], pair[1]), zip(actions, contexts)))
+
+    assert all(result.next_step == "continue" for result in results), [result.error for result in results]
+    assert len(executor.started) == 2
+    assert {action_id for action_id, _ in executor.started} == {"a-research-0", "a-research-1"}
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    assert ledger.action("a-research-0")["status"] == "completed"
+    assert ledger.action("a-research-1")["status"] == "completed"
+    assert {gap["gap_id"]: gap["status"] for gap in ledger.gaps() if gap["gap_id"] in gaps} == {
+        gaps[0]: "awaiting_outline",
+        gaps[1]: "awaiting_outline",
+    }
+
+
 def test_serial_gate_keeps_invalid_call_out_of_serial_slot():
     state = _active_report_state()
     invalid = {"target_agent": "wizard", "task": "research g1"}
@@ -398,7 +592,7 @@ def test_active_report_precheck_failure_returns_recoverable_tool_error(monkeypat
     def boom(*args, **kwargs):
         raise RuntimeError("precheck exploded")
 
-    monkeypatch.setattr(report_package, "report_delegate_is_serial", boom)
+    monkeypatch.setattr(report_package, "report_delegate_dispatch_error", boom)
     command = SPControlActionMiddleware()._execute_control_tool(request)
 
     payload = json.loads(command.update["messages"][0].content)
@@ -469,7 +663,7 @@ def test_graph_report_delegate_batch_executes_only_first_valid_report_task(monke
     assert executor.tasks[0].subagent_type == "researcher"
     serial_messages = [message for message in _tool_messages(result) if getattr(message, "tool_call_id", "") == "call-b"]
     assert serial_messages
-    assert "Report delegations are serial" in serial_messages[-1].content
+    assert "missing report_gap_ids" in serial_messages[-1].content
 
 
 def test_graph_ordinary_double_delegation_still_runs_both(monkeypatch):

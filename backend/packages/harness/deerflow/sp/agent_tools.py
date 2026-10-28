@@ -2028,7 +2028,7 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
         payload: dict[str, Any] | None = None
         if tool_name == "sp_delegate":
             try:
-                from deerflow.sp.report import report_context, report_delegate_is_serial
+                from deerflow.sp.report import report_context, report_delegate_dispatch_error
 
                 report_active = report_context(request.state).is_active
             except Exception:  # noqa: BLE001 - ordinary delegation keeps its legacy path
@@ -2041,7 +2041,7 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
                         tool_call_id=tool_call_id,
                         state=request.state,
                     )
-                    serial = report_delegate_is_serial(
+                    dispatch_error = report_delegate_dispatch_error(
                         request.state,
                         tool_call_id,
                         payload=payload,
@@ -2058,11 +2058,8 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
                         tool_call_id,
                         f"Report delegation precheck failed: {type(exc).__name__}: {exc}",
                     )
-                if not serial:
-                    return _report_delegate_error(
-                        tool_call_id,
-                        "Report delegations are serial. The first report delegation in this turn is already executing; wait for its result and inspect it before dispatching the next one.",
-                    )
+                if dispatch_error:
+                    return _report_delegate_error(tool_call_id, dispatch_error)
 
         if payload is None:
             payload = build_control_payload(

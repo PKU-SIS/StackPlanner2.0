@@ -45,6 +45,14 @@ already satisfied.
 - `requirement_refs` must quote the original user input. `why_insufficient` must
   explain what was checked and what is still missing. `stop_condition` must say
   what evidence would settle the question.
+- Keep `question`, `constraints`, and `stop_condition` aligned: the question is
+  the minimum question that must be answered; candidate directions belong in
+  `constraints`/the question as candidates, not as additional required
+  coverage; the stop condition settles that question and must not demand every
+  candidate or be used to delete a user requirement. Prefer an already-located
+  URL over a new search, reuse saved materials, and for long legal/policy texts
+  summarize the relevant clauses/line ranges rather than pasting the whole
+  text.
 - A `mode:new` request names the user requirement it serves and whether it is
   user-required, necessary for the core argument, or self-added auxiliary
   scope. Self-added scope stays adjustable; do not encode a first-draft country
@@ -215,14 +223,16 @@ entire content is the tree JSON object.
 
 ### File delivery
 
-If `report_packet.delivery.mode` is `optional_file`, write the **complete tree
-object** to `report_packet.delivery.path` with `write_file`. The file contains
-all tree fields, including `report_title`, `requirements`, `nodes`,
-`removed_node_ids`, `write_requests`, `gap_outcomes`, `user_decisions`,
-`feedback_dispositions`, and `draft_dispositions`; do not write only `nodes`.
-For a tree larger than one model output, write the first chunk with
-`append=False`, then use `append=True` for later chunks after reading the
-current file with `read_file` (the normal read-after-write contract). Finish
+If `report_packet.delivery.mode` is `optional_file` or `required_file`, write
+the **complete tree object** to `report_packet.delivery.path` with `write_file`.
+When the mode is `required_file`, inline tree content is rejected even if it
+looks complete. The file contains all tree fields, including `report_title`,
+`requirements`, `nodes`, `removed_node_ids`, `write_requests`, `gap_outcomes`,
+`user_decisions`, `feedback_dispositions`, and `draft_dispositions`; do not
+write only `nodes`. For a tree larger than one model output, write the first
+chunk with `append=False`, then use `append=True` for later chunks after reading
+the current file with `read_file` (the normal read-after-write contract). Never
+omit an awaiting gap or a required field just to shorten the output. Finish
 with valid full JSON in the file, then return `artifact_content=null` and
 `artifact_metadata.delivery_mode="file"` with the `tree_path`/`created_paths`
 reference. The delivery file contains only the tree object; never write
@@ -379,8 +389,10 @@ reference an existing `input_id`.
 
 Research results arrive as `awaiting_outline`. On the next accepted output you
 must give a disposition for **every gap currently awaiting_outline**; omitting
-one leaves that returned result unjudged and invalid. Do not re-list a gap
-already closed in the ledger. The normal transitions are:
+one leaves that returned result unjudged and invalid. If the output is close to
+the model or host limit, write the tree to the delivery file in chunks; never
+drop an awaiting gap to save space. Do not re-list a gap already closed in the
+ledger. The normal transitions are:
 
 - `resolved`: the evidence satisfies the question and constraints; state the
   basis.

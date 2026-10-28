@@ -94,6 +94,92 @@ def _result() -> SPSubagentResult:
     )
 
 
+def _empty_length_result() -> SPSubagentResult:
+    return SPSubagentResult(
+        status=SPSubagentStatus.COMPLETED,
+        result="",
+        finish_reason="length",
+        artifact_type="outline",
+        artifact_metadata={"completion_status": "partial"},
+    )
+
+
+def test_empty_length_result_reports_no_candidate_without_false_retention(tmp_path):
+    ctx = _context(tmp_path)
+    action, task = _outline_delegate(ctx)
+    result = hooks.handle_success(
+        action,
+        ctx,
+        _empty_length_result(),
+        task,
+        artifact_adapter=SPArtifactAdapter(),
+        delegate_entry=ctx.stack.append_delegate("outline", thread_id="t1", run_id="run1", stage="planning"),
+    )
+
+    assert result.next_step == "error_recoverable"
+    assert "finish_reason=length" in (result.error or "")
+    assert "no candidate was retained" in (result.error or "")
+    assert "host file/raw candidate was retained" not in (result.error or "")
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert not ledger.payload.get("rejected_outline")
+
+
+def test_rejected_outline_forces_file_delivery_on_retry_and_accepts_complete_file(tmp_path):
+    ctx = _context(tmp_path)
+    action, task = _outline_delegate(ctx)
+    rejected = hooks.handle_success(
+        action,
+        ctx,
+        _empty_length_result(),
+        task,
+        artifact_adapter=SPArtifactAdapter(),
+        delegate_entry=ctx.stack.append_delegate("outline", thread_id="t1", run_id="run1", stage="planning"),
+    )
+    ctx.state.update(rejected.state_update or {})
+
+    retry_action, retry_task = _outline_delegate(ctx)
+    assert retry_task.metadata.get("outline_delivery_required") is True
+    assert retry_task.context_refs["report_packet"]["delivery"]["mode"] == "required_file"
+
+    inline = SPSubagentResult(
+        status=SPSubagentStatus.COMPLETED,
+        result="inline tree",
+        artifact_content=json.dumps(_tree(), ensure_ascii=False),
+        artifact_type="outline",
+        artifact_metadata={"completion_status": "complete"},
+    )
+    missing = hooks.handle_success(
+        retry_action,
+        ctx,
+        inline,
+        retry_task,
+        artifact_adapter=SPArtifactAdapter(),
+        delegate_entry=ctx.stack.append_delegate("outline", thread_id="t1", run_id="run1", stage="planning"),
+    )
+    assert missing.next_step == "error_recoverable"
+    assert "requires file delivery" in (missing.error or "")
+
+    delivery = Path(str(retry_task.metadata["outline_delivery_path"]))
+    delivery.parent.mkdir(parents=True, exist_ok=True)
+    delivery.write_text(json.dumps(_tree(), ensure_ascii=False), encoding="utf-8")
+    file_result = SPSubagentResult(
+        status=SPSubagentStatus.COMPLETED,
+        result="file tree",
+        artifact_content=None,
+        artifact_type="outline",
+        artifact_metadata={"completion_status": "complete", "delivery_mode": "file"},
+    )
+    accepted = hooks.handle_success(
+        retry_action,
+        ctx,
+        file_result,
+        retry_task,
+        artifact_adapter=SPArtifactAdapter(),
+        delegate_entry=ctx.stack.append_delegate("outline", thread_id="t1", run_id="run1", stage="planning"),
+    )
+    assert accepted.next_step == "continue", accepted.error
+
+
 def test_rejected_candidate_is_referenced_but_not_prefilled(tmp_path):
     ctx = _context(tmp_path)
     action, task = _outline_delegate(ctx)

@@ -104,13 +104,25 @@ Required sequence (only after a report has been started):
    because the dispatch is labelled "judge" or "update"; do not rely on task
    wording or a default. `integrate_review` is Harness-owned; do not delegate
    it from Central.
-3. Dispatch each `open` gap to the researcher with `metadata.report_gap_ids`.
-   A gap in `awaiting_outline`, `in_flight`, or `awaiting_user` must not be
-   dispatched; wait or ask the user. Do not dispatch the same gap twice before
-   Outline judges the returned result.
-4. When research returns, delegate to `outline` again with the result in view.
-   Outline decides resolved / unresolved / not_needed and may continue a gap.
-   After two effective rounds, an unresolved gap becomes `awaiting_user`.
+3. For one research round, dispatch all selected `open` gaps in a batch, using
+   the existing concurrency limit. If there are more selected gaps than the
+   limit, dispatch the remaining batches without calling Outline in between.
+   Wait until every selected gap has returned one attempt (success, partial,
+   timeout, or technical failure) before judging the round. A gap in
+   `awaiting_outline`, `in_flight`, or `awaiting_user` must not be dispatched;
+   do not dispatch the same gap twice before Outline judges the returned
+   result. An `open` gap that reappears after a technical failure is a returned
+   observation, not an instruction to re-dispatch it automatically in the same
+   round.
+4. After the whole selected research batch returns, delegate to Outline once
+   with all results in view. Outline judges all `awaiting_outline` gaps
+   together and may continue a gap; do not revise after each individual result.
+   Never ask Outline to judge only one gap such as g2, or to skip g3/g4 because
+   its output is long or close to a limit: use the existing file-delivery and
+   chunked-write path instead of omitting awaiting gaps. Central must pass the
+   host's exact error and must not decide evidence sufficiency or rewrite the
+   Outline output contract. After two effective rounds, an unresolved gap
+   becomes `awaiting_user`.
 5. For `awaiting_user`, call `sp_ask_human` with a concrete question and
    `metadata={"report_gap_ids":[...]}`. The user's answer is input to Outline,
    not a gap closure. After the answer, delegate to `outline` again.
@@ -196,6 +208,13 @@ Tool contract:
   (`attach_nodes_to_gaps`), and only then does Central dispatch research.
   Accepted sections can be referenced directly by their `node_ids`. Never
   invent node ids or gap ids.
+  Keep `question`, `constraints`, and `stop_condition` aligned: the question is
+  the minimum question that must be answered; candidate directions belong in
+  the request as candidates, not as additional required coverage; the stop
+  condition settles that question and must not demand every candidate or be
+  used to delete a user requirement. Prefer an already-located URL over a new
+  search, reuse saved materials, and for long legal/policy texts summarize the
+  relevant clauses/line ranges rather than pasting the whole text.
 - Research results return as `awaiting_outline`. On this accepted output you
   must give a disposition for **every gap currently awaiting_outline**; omitting
   one leaves that returned result unjudged and is invalid. `gap_outcomes` is an
@@ -208,6 +227,9 @@ Tool contract:
   `not_needed` needs a user input unless the item is genuinely optional
   (`optional: true`); use that optional path only to withdraw an auxiliary
   research question you added yourself, not to erase a user requirement.
+  If the output is close to the model or host limit, write the tree to the
+  host-assigned delivery file in chunks; never omit an awaiting gap, a node, or
+  a required field merely to make the output shorter.
 - Submit the complete `nodes`/`requirements` tree with valid planning and
   drafts preserved. `gap_outcomes` and `user_decisions` are action lists for
   this output: do not replay closed gap history, and do not use them to carry
@@ -228,9 +250,11 @@ Output contract:
   tree body itself (an object; a JSON string is tolerated only when its entire
   content is that object). Do not add a `tree` wrapper, do not put
   `tree_version` in the tree, and do not wrap the envelope in prose or fences.
-- File delivery: if `report_packet.delivery.mode` is `optional_file`, write the
-  complete tree JSON to `report_packet.delivery.path` with `write_file`. The file
-  is the full `artifact_content` object, including `report_title`,
+- File delivery: if `report_packet.delivery.mode` is `optional_file` or
+  `required_file`, write the complete tree JSON to
+  `report_packet.delivery.path` with `write_file`. When the mode is
+  `required_file`, an inline tree is rejected even if it looks complete. The
+  file is the full `artifact_content` object, including `report_title`,
   `requirements`, `nodes`, `removed_node_ids`, `write_requests`, `gap_outcomes`,
   `user_decisions`, `feedback_dispositions`, and `draft_dispositions`; do not
   write only `nodes`. For a file larger than one model output, write the first
@@ -514,6 +538,10 @@ pass and do not try to complete the whole report.
   `nodes[]` may mark sections with `needs_richer_research: true`; give those
   sections deeper coverage of the requested themes, dimensions, or source
   directions, without inventing a fixed source or round count.
+- If the gap brief names an already-located URL, fetch that exact URL before
+  opening a new search. For a long legal/policy or statutory source, save the
+  source but make the summary point to the relevant clauses and line ranges;
+  do not treat pasting the whole text as evidence location.
 - State source nature when it affects the claim: first-party policy/spec/
   dataset, institutional page, personal experience, repost, aggregator snippet,
   or AI-generated commentary are not interchangeable. A title or organization
