@@ -11,11 +11,14 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import json
+import shutil
+import tempfile
 import threading
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
+from uuid import uuid4
 
 from langchain.tools import tool
 
@@ -77,6 +80,42 @@ def _provider_scope(fetch_tool: Any, text: str) -> tuple[str, Any]:
 def _looks_like_html(text: str) -> bool:
     head = text.lstrip()[:4096].lower()
     return head.startswith(("<!doctype html", "<html", "<head", "<body")) or "<html" in head
+
+
+def _is_pdf_payload(body: bytes, content_type: str) -> bool:
+    """Detect PDF payloads by magic bytes first, then the declared type."""
+    if body.lstrip().startswith(b"%PDF-"):
+        return True
+    return "application/pdf" in content_type.lower()
+
+
+def _convert_pdf_bytes_to_markdown(data: bytes) -> str:
+    """Convert a fetched PDF body to Markdown through the shared converter.
+
+    The temp directory is created with ``Path.mkdir`` under a uuid name rather
+    than ``tempfile.mkdtemp``: the sandboxed Windows runtime can create a
+    directory that its own process cannot write into, while a normal mkdir
+    works on both Linux and Windows.  The caller keeps the existing transport
+    bounds (timeout, 1 MiB byte cap, URL safety) before this point.
+    """
+    from deerflow.utils.file_conversion import convert_file_to_markdown
+
+    workdir = Path(tempfile.gettempdir()) / f"sp2-report-pdf-{uuid4().hex}"
+    workdir.mkdir(parents=True, exist_ok=False)
+    try:
+        pdf_path = workdir / "material.pdf"
+        pdf_path.write_bytes(data)
+        md_path = _run_coroutine_sync(lambda: convert_file_to_markdown(pdf_path))
+        if md_path is None or not md_path.is_file():
+            raise ValueError("pdf conversion returned no markdown file")
+        text = md_path.read_text(encoding="utf-8")
+        if not text.strip():
+            raise ValueError("pdf conversion produced empty markdown")
+        if text.lstrip().startswith("%PDF"):
+            raise ValueError("pdf conversion returned raw PDF content")
+        return text
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
 
 
 def _readability_markdown(raw_html: str) -> tuple[str | None, str | None]:
@@ -146,27 +185,36 @@ def _fetch_material_text(fetch_tool: Any, url: str) -> tuple[str | None, str, An
         content_scope, truncation = _provider_scope(fetch_tool, text)
         return text, content_scope, truncation, None
 
-    from deerflow.community.direct_fetch.tools import fetch_public_url
+    from deerflow.community.direct_fetch.tools import decode_fetch_body, fetch_public_bytes
 
     options = _direct_fetch_options()
     # Fetch the raw payload without the ordinary 20k display cap; the report
     # extraction below determines the readable body.  max_bytes remains the
     # authoritative transport bound.
-    raw = _run_coroutine_sync(
-        lambda: fetch_public_url(
+    fetched = _run_coroutine_sync(
+        lambda: fetch_public_bytes(
             url,
             timeout=options["timeout"],
             max_bytes=options["max_bytes"],
-            max_chars=options["max_bytes"],
             allow_private_addresses=options["allow_private_addresses"],
             trust_env=options["trust_env"],
-            extract_html=False,
         )
     )
-    error = _is_transport_error(raw)
-    if error is not None:
-        return None, "fetch_tool_return", "unknown", error
-    raw_text = str(raw)
+    if isinstance(fetched, str):
+        return None, "fetch_tool_return", "unknown", fetched
+    if _is_pdf_payload(fetched.body, fetched.content_type):
+        try:
+            markdown = _convert_pdf_bytes_to_markdown(fetched.body)
+        except Exception as exc:  # noqa: BLE001 - conversion failure is material failure data
+            return None, "converted_pdf_markdown", False, f"pdf_conversion_failed: {type(exc).__name__}: {exc}"
+        return markdown, "converted_pdf_markdown", False, None
+    raw_text = decode_fetch_body(
+        fetched.body,
+        fetched.content_type,
+        fetched.encoding,
+        max_chars=options["max_bytes"],
+        extract_html=False,
+    )
     raw_truncated = "<truncated>" in raw_text
     if _looks_like_html(raw_text):
         markdown, extraction_error = _readability_markdown(raw_text)

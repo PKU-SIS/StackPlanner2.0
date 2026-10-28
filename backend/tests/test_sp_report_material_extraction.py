@@ -7,7 +7,7 @@ from pathlib import Path
 
 from langchain_core.messages import HumanMessage
 
-from deerflow.community.direct_fetch.tools import web_fetch_tool
+from deerflow.community.direct_fetch.tools import FetchedBody, web_fetch_tool
 from deerflow.sp.actions.handlers.base import HandlerContext
 from deerflow.sp.actions.schema import ActionType, SPAction
 from deerflow.sp.memory import TaskMemoryStack
@@ -48,17 +48,21 @@ def test_html_is_extracted_before_material_save(tmp_path, monkeypatch):
     ledger.save()
 
     async def fake_fetch(url: str, **kwargs):
-        return """
+        return FetchedBody(
+            b"""
         <!doctype html><html><head><title>Example</title></head><body>
         <nav>Home | Login</nav>
         <article><h1>Economic release</h1>
         <p>Consumption rose and investment remained stable.</p>
         <table><tr><th>Metric</th><th>Value</th></tr><tr><td>GDP</td><td>5%</td></tr></table>
         </article><footer>Footer navigation</footer></body></html>
-        """
+        """,
+            "text/html; charset=utf-8",
+            "utf-8",
+        )
 
     monkeypatch.setattr(
-        "deerflow.community.direct_fetch.tools.fetch_public_url",
+        "deerflow.community.direct_fetch.tools.fetch_public_bytes",
         fake_fetch,
     )
     monkeypatch.setattr(
@@ -102,20 +106,30 @@ def test_json_and_plain_text_keep_their_path(tmp_path, monkeypatch):
         },
     )
 
-    for body in ('{"status":"ok","items":[1,2]}', "plain text body"):
-        async def fake_fetch(url: str, **kwargs):
-            return body
+    for body, content_type in (
+        ('{"status":"ok","items":[1,2]}', "application/json"),
+        ("plain text body", "text/plain"),
+    ):
+
+        def make_fetch(payload: str, declared: str):
+            async def fake_fetch(url: str, **kwargs):
+                return FetchedBody(payload.encode(), declared, "utf-8")
+
+            return fake_fetch
 
         monkeypatch.setattr(
-            "deerflow.community.direct_fetch.tools.fetch_public_url",
-            fake_fetch,
+            "deerflow.community.direct_fetch.tools.fetch_public_bytes",
+            make_fetch(body, content_type),
         )
         text, scope, truncated, error = report_materials._fetch_material_text(
             web_fetch_tool,
             "https://example.com/data",
         )
         assert error is None
-        assert text == body
+        if content_type == "application/json":
+            # Direct fetch pretty-prints JSON before returning it as text.
+            assert json.loads(text) == json.loads(body)
+        else:
+            assert text == body
         assert scope == "fetch_tool_return"
         assert truncated is False
-

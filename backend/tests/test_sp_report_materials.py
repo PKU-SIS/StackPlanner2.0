@@ -8,16 +8,19 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from langchain.tools import tool
 from langchain_core.messages import AIMessage, HumanMessage
 
 from deerflow.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
+from deerflow.community.direct_fetch.tools import FetchedBody
 from deerflow.sandbox.local.local_sandbox import LocalSandbox
 from deerflow.sandbox.tools import read_file_tool, write_file_tool
 from deerflow.sp.actions.handlers.base import HandlerContext
 from deerflow.sp.actions.schema import ActionType, SPAction
 from deerflow.sp.memory import TaskMemoryStack
 from deerflow.sp.report import hooks
+from deerflow.sp.report import materials as report_materials
 from deerflow.sp.report import store as report_store
 from deerflow.sp.report.ledger import ReportLedger
 from deerflow.sp.report.materials import build_fetch_material_tool, build_register_user_material_tool
@@ -389,10 +392,7 @@ def test_outline_subagent_exposes_user_material_registration_tool(tmp_path):
         description="plan",
         metadata={"report_role": "outline", "report_id": report.report_id, "report_task": "plan"},
     )
-    tools = [
-        SimpleNamespace(name=name)
-        for name in ("read_file", "write_file", "grep", "glob", "ls")
-    ]
+    tools = [SimpleNamespace(name=name) for name in ("read_file", "write_file", "grep", "glob", "ls")]
     config = SubagentConfig(
         name="sp-outline",
         description="outline",
@@ -463,6 +463,116 @@ def test_outline_five_call_material_read_write_read_passes_real_loop_guard(tmp_p
             result = write_file_tool.func(runtime=runtime, **args)
             assert result == "OK"
 
-    assert (tmp_path / "report" / "r1" / "tree" / "middleware-roundtrip.json").read_text(
-        encoding="utf-8"
-    ) == tree_body
+    assert (tmp_path / "report" / "r1" / "tree" / "middleware-roundtrip.json").read_text(encoding="utf-8") == tree_body
+
+
+def _tiny_pdf(text: str) -> bytes:
+    """Build a minimal single-page text PDF without external fixtures."""
+    stream = f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET".encode()
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream",
+    ]
+    out = bytearray(b"%PDF-1.4\n")
+    offsets: list[int] = []
+    for index, obj in enumerate(objects, 1):
+        offsets.append(len(out))
+        out += f"{index} 0 obj\n".encode() + obj + b"\nendobj\n"
+    xref_pos = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n".encode() + b"0000000000 65535 f \n"
+    for offset in offsets:
+        out += f"{offset:010d} 00000 n \n".encode()
+    out += f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_pos}\n%%EOF\n".encode()
+    return bytes(out)
+
+
+def _material_fetch_options() -> dict:
+    return {
+        "timeout": 20.0,
+        "max_bytes": 1_048_576,
+        "max_chars": 20_000,
+        "allow_private_addresses": False,
+        "trust_env": False,
+    }
+
+
+def _patch_direct_fetch_payload(monkeypatch, payload: FetchedBody) -> None:
+    async def fake_bytes(url: str, **kwargs):
+        return payload
+
+    monkeypatch.setattr(
+        "deerflow.community.direct_fetch.tools.fetch_public_bytes",
+        fake_bytes,
+    )
+    monkeypatch.setattr(
+        report_materials,
+        "_fetch_module",
+        lambda _tool: "deerflow.community.direct_fetch.tools",
+    )
+    monkeypatch.setattr(report_materials, "_direct_fetch_options", _material_fetch_options)
+
+
+def test_pdf_material_is_converted_to_markdown(tmp_path, monkeypatch):
+    pytest.importorskip("markitdown")
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    _patch_direct_fetch_payload(
+        monkeypatch,
+        FetchedBody(_tiny_pdf("SP2 PDF extraction probe"), "application/pdf", None),
+    )
+
+    material_tool = _tool_for(_paths(ctx), _short_fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/paper.pdf"))
+
+    assert payload["saved"] is True
+    assert payload["content_scope"] == "converted_pdf_markdown"
+    assert payload["upstream_truncation"] is False
+    saved = Path(str(payload["path"]).replace("/mnt/user-data/outputs", str(tmp_path))).read_text(encoding="utf-8")
+    assert "SP2 PDF extraction probe" in saved
+    assert "%PDF" not in saved
+    assert "\ufffd" not in saved
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.materials()[0]["content_scope"] == "converted_pdf_markdown"
+
+
+def test_pdf_conversion_failure_is_not_registered(tmp_path, monkeypatch):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    _patch_direct_fetch_payload(
+        monkeypatch,
+        FetchedBody(_tiny_pdf("unused"), "application/pdf", None),
+    )
+
+    async def fake_convert(_path):
+        return None
+
+    monkeypatch.setattr("deerflow.utils.file_conversion.convert_file_to_markdown", fake_convert)
+
+    material_tool = _tool_for(_paths(ctx), _short_fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/broken.pdf"))
+
+    assert payload["saved"] is False
+    assert "pdf_conversion_failed" in payload["error"]
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.materials() == []
+
+
+def test_text_payload_through_byte_path_keeps_text_semantics(tmp_path, monkeypatch):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    _patch_direct_fetch_payload(
+        monkeypatch,
+        FetchedBody(b"plain body through bytes path", "text/plain", "utf-8"),
+    )
+
+    material_tool = _tool_for(_paths(ctx), _short_fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/plain"))
+
+    assert payload["saved"] is True
+    assert payload["content_scope"] == "fetch_tool_return"
+    saved = Path(str(payload["path"]).replace("/mnt/user-data/outputs", str(tmp_path))).read_text(encoding="utf-8")
+    assert saved == "plain body through bytes path"

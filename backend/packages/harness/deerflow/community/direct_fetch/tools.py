@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, NamedTuple
 from urllib.parse import urljoin
 
 import httpx
@@ -77,16 +77,24 @@ def _tool_options() -> dict[str, Any]:
     }
 
 
-def _decode_body(
-    response: httpx.Response,
+class FetchedBody(NamedTuple):
+    """Raw fetch payload plus the decode hints from the response headers."""
+
+    body: bytes
+    content_type: str
+    encoding: str | None
+
+
+def decode_fetch_body(
     body: bytes,
+    content_type: str,
+    encoding: str | None,
     *,
     max_chars: int,
     extract_html: bool = False,
 ) -> str:
-    encoding = response.encoding or "utf-8"
-    text = body.decode(encoding, errors="replace")
-    content_type = response.headers.get("content-type", "").lower()
+    text = body.decode(encoding or "utf-8", errors="replace")
+    content_type = content_type.lower()
     if "json" in content_type:
         try:
             text = json.dumps(
@@ -106,23 +114,21 @@ def _decode_body(
     return f"{text[:max_chars]}\n...<truncated>"
 
 
-async def fetch_public_url(
+async def fetch_public_bytes(
     url: str,
     *,
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
     max_bytes: int = DEFAULT_MAX_BYTES,
-    max_chars: int = DEFAULT_MAX_CHARS,
     allow_private_addresses: bool = False,
     trust_env: bool = False,
     transport: httpx.AsyncBaseTransport | None = None,
-    extract_html: bool = False,
-) -> str:
-    """Fetch one public URL while bounding redirects and response size.
+) -> FetchedBody | str:
+    """Fetch one public URL and return its raw body plus decode hints.
 
-    ``extract_html`` defaults to False to preserve the original raw-body
-    behavior. The ordinary ``web_fetch`` tool explicitly opts into readable
-    HTML extraction; report material capture keeps its existing extraction and
-    source-label path.
+    Transport, redirect, size, and security failures return the same
+    ``Error: ...`` strings as :func:`fetch_public_url`. Callers that need the
+    exact bytes (for example PDF material capture) must use this entry point
+    instead of decoding the body to text first.
     """
 
     current_url = url
@@ -162,11 +168,10 @@ async def fetch_public_url(
                         body.extend(chunk)
                         if len(body) > max_bytes:
                             return f"Error: Response exceeded the configured {max_bytes}-byte limit"
-                    return _decode_body(
-                        response,
+                    return FetchedBody(
                         bytes(body),
-                        max_chars=max_chars,
-                        extract_html=extract_html,
+                        response.headers.get("content-type", ""),
+                        response.encoding,
                     )
             except httpx.HTTPStatusError as exc:
                 return f"Error: HTTP {exc.response.status_code} while fetching {current_url}"
@@ -176,6 +181,44 @@ async def fetch_public_url(
                 return f"Error: Fetch failed: {type(exc).__name__}: {exc}"
 
     return f"Error: Too many redirects (>{MAX_REDIRECTS})"
+
+
+async def fetch_public_url(
+    url: str,
+    *,
+    timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    max_bytes: int = DEFAULT_MAX_BYTES,
+    max_chars: int = DEFAULT_MAX_CHARS,
+    allow_private_addresses: bool = False,
+    trust_env: bool = False,
+    transport: httpx.AsyncBaseTransport | None = None,
+    extract_html: bool = False,
+) -> str:
+    """Fetch one public URL while bounding redirects and response size.
+
+    ``extract_html`` defaults to False to preserve the original raw-body
+    behavior. The ordinary ``web_fetch`` tool explicitly opts into readable
+    HTML extraction; report material capture keeps its existing extraction and
+    source-label path.
+    """
+
+    fetched = await fetch_public_bytes(
+        url,
+        timeout=timeout,
+        max_bytes=max_bytes,
+        allow_private_addresses=allow_private_addresses,
+        trust_env=trust_env,
+        transport=transport,
+    )
+    if isinstance(fetched, str):
+        return fetched
+    return decode_fetch_body(
+        fetched.body,
+        fetched.content_type,
+        fetched.encoding,
+        max_chars=max_chars,
+        extract_html=extract_html,
+    )
 
 
 @tool("web_fetch", parse_docstring=True)

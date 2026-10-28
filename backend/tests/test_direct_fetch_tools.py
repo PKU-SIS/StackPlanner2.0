@@ -75,9 +75,7 @@ async def test_fetch_public_url_keeps_raw_html_by_default(monkeypatch):
 
     result = await tools.fetch_public_url(
         "https://public.example.test/html",
-        transport=httpx.MockTransport(
-            lambda _request: httpx.Response(200, headers={"content-type": "text/html"}, text=html)
-        ),
+        transport=httpx.MockTransport(lambda _request: httpx.Response(200, headers={"content-type": "text/html"}, text=html)),
     )
 
     assert result == html
@@ -87,22 +85,13 @@ async def test_fetch_public_url_keeps_raw_html_by_default(monkeypatch):
 @pytest.mark.asyncio
 async def test_fetch_public_url_extracts_html_only_when_requested(monkeypatch):
     monkeypatch.setattr(tools, "validate_public_http_url", lambda *_args, **_kwargs: None)
-    html = (
-        "<!doctype html><html><head><title>Readable</title>"
-        + "<style>"
-        + ("x" * 30000)
-        + "</style></head><body>"
-        + "<nav>NAV_MARKER</nav><article><h1>Article title</h1><p>BODYAFTERLONGHEAD</p></article>"
-        + "</body></html>"
-    )
+    html = "<!doctype html><html><head><title>Readable</title>" + "<style>" + ("x" * 30000) + "</style></head><body>" + "<nav>NAV_MARKER</nav><article><h1>Article title</h1><p>BODYAFTERLONGHEAD</p></article>" + "</body></html>"
 
     result = await tools.fetch_public_url(
         "https://public.example.test/html",
         max_chars=20000,
         extract_html=True,
-        transport=httpx.MockTransport(
-            lambda _request: httpx.Response(200, headers={"content-type": "text/html"}, text=html)
-        ),
+        transport=httpx.MockTransport(lambda _request: httpx.Response(200, headers={"content-type": "text/html"}, text=html)),
     )
 
     assert "BODYAFTERLONGHEAD" in result
@@ -118,9 +107,7 @@ async def test_fetch_public_url_does_not_return_raw_html_on_extraction_failure(m
     result = await tools.fetch_public_url(
         "https://public.example.test/empty",
         extract_html=True,
-        transport=httpx.MockTransport(
-            lambda _request: httpx.Response(200, headers={"content-type": "text/html"}, text="<html><body></body></html>")
-        ),
+        transport=httpx.MockTransport(lambda _request: httpx.Response(200, headers={"content-type": "text/html"}, text="<html><body></body></html>")),
     )
 
     assert result.startswith("Error: HTML body extraction failed:")
@@ -159,3 +146,44 @@ async def test_fetch_public_url_enforces_response_byte_limit(monkeypatch):
     )
 
     assert result == "Error: Response exceeded the configured 4-byte limit"
+
+
+@pytest.mark.asyncio
+async def test_fetch_public_bytes_returns_raw_pdf_body(monkeypatch):
+    monkeypatch.setattr(
+        tools,
+        "validate_public_http_url",
+        lambda *_args, **_kwargs: None,
+    )
+    pdf = b"%PDF-1.4\n%probe\n%%EOF\n"
+
+    result = await tools.fetch_public_bytes(
+        "https://public.example.test/paper.pdf",
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(
+                200,
+                headers={"content-type": "application/pdf"},
+                content=pdf,
+            )
+        ),
+    )
+
+    assert isinstance(result, tools.FetchedBody)
+    assert result.body == pdf
+    assert result.content_type == "application/pdf"
+
+
+@pytest.mark.asyncio
+async def test_fetch_public_bytes_reports_the_same_transport_errors(monkeypatch):
+    monkeypatch.setattr(
+        tools,
+        "validate_public_http_url",
+        lambda *_args, **_kwargs: None,
+    )
+
+    result = await tools.fetch_public_bytes(
+        "https://public.example.test/missing",
+        transport=httpx.MockTransport(lambda _request: httpx.Response(404)),
+    )
+
+    assert result == "Error: HTTP 404 while fetching https://public.example.test/missing"
