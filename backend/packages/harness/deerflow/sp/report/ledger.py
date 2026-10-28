@@ -416,11 +416,14 @@ class ReportLedger:
             if gap.get("status") in {"resolved", "not_needed"}:
                 raise ReportValidationError(f"gap {gap_id} is already closed")
         now = utc_now_iso()
+        tree = self.payload.get("tree")
+        tree_version = int(tree.get("version")) if isinstance(tree, Mapping) and tree.get("version") is not None else None
         action = {
             "action_id": action_id,
             "run_id": str(run_id) if run_id else None,
             "kind": kind,
             "gap_ids": normalized_gap_ids,
+            "tree_version": tree_version,
             "status": "in_flight",
             "created_at": now,
             "updated_at": now,

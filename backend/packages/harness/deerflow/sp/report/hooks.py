@@ -11,7 +11,6 @@ import hashlib
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import replace
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -2358,27 +2357,36 @@ def _report_gap_ids_from_payload(payload: Mapping[str, Any]) -> list[str]:
     return [str(item) for item in raw if isinstance(item, str) and item.strip()]
 
 
-def _parse_report_timestamp(value: Any) -> datetime | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    if not text:
-        return None
-    try:
-        return datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
+def _gap_attempted_for_current_tree(gap: Mapping[str, Any], ledger: ReportLedger) -> bool:
+    """Return True only for a research attempt bound to the current tree.
 
+    The binding is structural: a research action records the accepted tree
+    version at dispatch time. History timestamps are not used, so an old-round
+    result can share the same second as a newly accepted tree without being
+    mistaken for a new-round attempt.
+    """
 
-def _gap_attempted_since_tree(gap: Mapping[str, Any], accepted_at: Any) -> bool:
-    """Return True when this gap already has a research result in this round."""
-
-    cutoff = _parse_report_timestamp(accepted_at)
+    tree = ledger.payload.get("tree")
+    current_version = int(tree.get("version")) if isinstance(tree, Mapping) and tree.get("version") is not None else None
+    if current_version is None:
+        return False
     for entry in reversed(gap.get("history") or []):
         if not isinstance(entry, Mapping) or str(entry.get("event") or "") not in {"research_result", "research_failed"}:
             continue
-        at = _parse_report_timestamp(entry.get("at"))
-        if cutoff is None or at is None or at >= cutoff:
+        action_id = str(entry.get("action_id") or "").strip()
+        if not action_id:
+            continue
+        action = ledger.action(action_id)
+        if action is None:
+            continue
+        action_gaps = {str(item) for item in action.get("gap_ids") or []}
+        if str(gap.get("gap_id")) not in action_gaps:
+            continue
+        try:
+            action_version = int(action.get("tree_version")) if action.get("tree_version") is not None else None
+        except (TypeError, ValueError):
+            action_version = None
+        if action_version == current_version:
             return True
     return False
 
@@ -2392,6 +2400,17 @@ def _load_report_ledger_for_gate(state: Mapping[str, Any] | None) -> ReportLedge
     # model/network wait.
     with report_store.report_lock(paths):
         return ReportLedger.load(paths)
+
+
+def _outline_revision_has_external_cause(state: Mapping[str, Any] | None, ledger: ReportLedger) -> bool:
+    """A user adjustment, protocol repair, or feedback revision is not a
+    centralized research judgment and must not wait for unrelated open gaps."""
+
+    if isinstance(state, Mapping) and isinstance(state.get("sp_report_protocol_error"), Mapping):
+        return True
+    if ledger.unapplied_input_ids():
+        return True
+    return any(str(item.get("status") or "") in {"open", "handed_off"} for item in report_writing.feedback_entries(ledger))
 
 
 def report_delegate_dispatch_error(
@@ -2475,7 +2494,6 @@ def report_delegate_dispatch_error(
             return None
         if any(str(request.get("status") or "") == "in_flight" for request in report_writing.write_requests(ledger)):
             return "Report research delegation blocked: the Writer is still running; wait for the writing phase to finish."
-        accepted_at = (ledger.payload.get("tree") or {}).get("accepted_at") if isinstance(ledger.payload.get("tree"), Mapping) else None
         in_flight_gaps: set[str] = set()
         for action in (ledger.payload.get("actions") or {}).values():
             if isinstance(action, Mapping) and str(action.get("status") or "") == "in_flight":
@@ -2497,7 +2515,7 @@ def report_delegate_dispatch_error(
                 return f"Report research delegation blocked: gap {gap_id} already has an in-flight research action."
             if str(gap.get("status") or "") != "open":
                 return f"Report research delegation blocked: gap {gap_id} is {gap.get('status')}; only open gaps can be dispatched."
-            if _gap_attempted_since_tree(gap, accepted_at):
+            if _gap_attempted_for_current_tree(gap, ledger):
                 return f"Report research delegation blocked: gap {gap_id} already returned a result in this round; wait for Outline to judge all awaiting_outline gaps before re-dispatching."
         return None
 
@@ -2517,13 +2535,19 @@ def report_delegate_dispatch_error(
         return "Report Outline/Writer delegation blocked: research is still in flight for gap(s) " + ", ".join(sorted(set(active_research))) + "; wait for the whole batch and judge all awaiting_outline results together."
     if any(str(request.get("status") or "") == "in_flight" for request in report_writing.write_requests(ledger)):
         return "Report Outline delegation blocked: a Writer delegation is still running; wait for it to finish before revising the tree."
-    accepted_at = (ledger.payload.get("tree") or {}).get("accepted_at") if isinstance(ledger.payload.get("tree"), Mapping) else None
+    tree = ledger.payload.get("tree")
+    tree_version = int(tree.get("version")) if isinstance(tree, Mapping) and tree.get("version") is not None else None
     open_unattempted = [
         str(gap.get("gap_id"))
         for gap in ledger.gaps()
-        if str(gap.get("status") or "") == "open" and not _gap_attempted_since_tree(gap, accepted_at)
+        if str(gap.get("status") or "") == "open" and not _gap_attempted_for_current_tree(gap, ledger)
     ]
-    if role == "outline" and accepted_at and open_unattempted:
+    if (
+        role == "outline"
+        and tree_version is not None
+        and open_unattempted
+        and not _outline_revision_has_external_cause(state, ledger)
+    ):
         return "Report Outline delegation blocked: gap(s) " + ", ".join(sorted(open_unattempted)) + " have not been attempted in this research round; dispatch the remaining selected research batch before central judgment."
     if role == "reporter":
         awaiting = [str(gap.get("gap_id")) for gap in ledger.gaps() if str(gap.get("status") or "") == "awaiting_outline"]

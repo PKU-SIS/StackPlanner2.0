@@ -449,16 +449,66 @@ def test_outline_waits_for_all_selected_gaps_and_blocks_in_flight_research():
     # Return both results (one success-shaped, one technical failure shaped)
     # without requiring all gaps to be resolved. Outline may then judge them.
     ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    ledger.begin_research_action("a-research-2", [gaps[1]])
     now = utc_now_iso()
-    for gap_id in gaps:
+    for gap_id, action_id in ((gaps[0], "a-research"), (gaps[1], "a-research-2")):
         gap = ledger.require_gap(gap_id)
         gap["status"] = "awaiting_outline"
         gap["updated_at"] = now
-        gap.setdefault("history", []).append({"at": now, "event": "research_result", "execution": "searched", "rounds_after": 1, "material_ids": [], "note": "test result"})
-    ledger.payload["actions"]["a-research"]["status"] = "completed"
+        gap.setdefault("history", []).append(
+            {"at": now, "event": "research_result", "action_id": action_id, "execution": "searched", "rounds_after": 1, "material_ids": [], "note": "test result"}
+        )
+        ledger.payload["actions"][action_id]["status"] = "completed"
     ledger.save()
 
     assert _gate(state, "outline-a", outline_args) is None
+
+
+def test_same_second_old_result_does_not_count_for_new_tree():
+    from deerflow.sp.report.ledger import utc_now_iso
+
+    state, gaps = _active_report_with_gaps(1)
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    ledger.begin_research_action("a-old", [gaps[0]])
+    timestamp = utc_now_iso()
+    gap = ledger.require_gap(gaps[0])
+    gap["status"] = "open"
+    gap["updated_at"] = timestamp
+    gap.setdefault("history", []).append(
+        {"at": timestamp, "event": "research_result", "action_id": "a-old", "execution": "searched", "rounds_after": 1, "material_ids": [], "note": "old tree result"}
+    )
+    ledger.payload["actions"]["a-old"]["status"] = "completed"
+    ledger.payload["tree"]["version"] = 2
+    ledger.payload["tree"]["accepted_at"] = timestamp
+    ledger.save()
+
+    args = {
+        "target_agent": "researcher",
+        "task": "continue on the new tree",
+        "stage": "research",
+        "metadata": {"report_gap_ids": [gaps[0]]},
+    }
+    state["messages"] = [AIMessage(content="", tool_calls=[{"name": "sp_delegate", "args": dict(args), "id": "call-a", "type": "tool_call"}])]
+    assert _gate(state, "call-a", args) is None
+
+
+def test_outline_external_revision_is_not_blocked_by_unrelated_open_gap():
+    state, gaps = _active_report_with_gaps(2)
+    outline_args = {"target_agent": "outline", "task": "adjust the report scope", "stage": "revision", "metadata": {"report_task": "revise"}}
+    state["messages"] = [AIMessage(content="", tool_calls=[{"name": "sp_delegate", "args": dict(outline_args), "id": "outline-a", "type": "tool_call"}])]
+
+    blocked = _gate(state, "outline-a", outline_args)
+    assert blocked is not None and "have not been attempted" in blocked
+
+    state["sp_report_protocol_error"] = {"reason": "invalid_report_tree", "errors": "previous delivery incomplete"}
+    assert _gate(state, "outline-a", outline_args) is None
+
+    state.pop("sp_report_protocol_error")
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    ledger.add_user_input("请调整报告范围，不要求继续旧缺口。", source="user_message", source_message_id="m-new")
+    ledger.save()
+    updated = {**state, "sp_report_protocol_error": None}
+    assert _gate(updated, "outline-a", outline_args) is None
 
 
 def test_research_gap_already_attempted_is_not_redispatched_before_outline():
@@ -466,11 +516,15 @@ def test_research_gap_already_attempted_is_not_redispatched_before_outline():
 
     state, gaps = _active_report_with_gaps(1)
     ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    ledger.begin_research_action("a-r1", [gaps[0]])
     now = utc_now_iso()
     gap = ledger.require_gap(gaps[0])
     gap["status"] = "awaiting_outline"
     gap["updated_at"] = now
-    gap.setdefault("history", []).append({"at": now, "event": "research_result", "execution": "searched", "rounds_after": 1, "material_ids": [], "note": "test result"})
+    gap.setdefault("history", []).append(
+        {"at": now, "event": "research_result", "action_id": "a-r1", "execution": "searched", "rounds_after": 1, "material_ids": [], "note": "test result"}
+    )
+    ledger.payload["actions"]["a-r1"]["status"] = "completed"
     ledger.save()
 
     args = {
@@ -489,12 +543,10 @@ def test_failed_research_counts_as_returned_without_auto_redispatch():
 
     state, gaps = _active_report_with_gaps(1)
     ledger = ReportLedger.load_for_context(hooks.report_context(state))
-    now = utc_now_iso()
+    ledger.begin_research_action("a-failed", [gaps[0]])
+    ledger.fail_research_action("a-failed", "timeout")
     gap = ledger.require_gap(gaps[0])
-    gap["status"] = "open"
-    gap["technical_attempts"] = 1
-    gap["updated_at"] = now
-    gap.setdefault("history", []).append({"at": now, "event": "research_failed", "action_id": "a-failed", "execution": "technical_error", "note": "timeout"})
+    gap["updated_at"] = utc_now_iso()
     ledger.save()
 
     researcher_args = {
@@ -692,6 +744,56 @@ def test_graph_report_delegate_batch_executes_only_first_valid_report_task(monke
     serial_messages = [message for message in _tool_messages(result) if getattr(message, "tool_call_id", "") == "call-b"]
     assert serial_messages
     assert "missing report_gap_ids" in serial_messages[-1].content
+
+
+def test_full_graph_parallel_independent_research_overlaps(monkeypatch):
+    thread_id = f"report-w-graph-parallel-{uuid4().hex[:8]}"
+    first = _invoke(_model([_start_call(), AIMessage(content="started")]), thread_id=thread_id)
+    outputs = Path(first["thread_data"]["outputs_path"])
+    ledger = ReportLedger.load_for_context(hooks.report_context({"thread_data": {"outputs_path": str(outputs)}}))
+    gap_ids = []
+    for index in range(2):
+        gap = ledger.register_gap(
+            mode="new",
+            question=f"graph research question {index + 1}",
+            constraints={},
+            why_insufficient="not researched yet",
+            stop_condition="a saved locatable source answers the question",
+            requirement_refs=[{"input_id": "u1", "quote": "test report"}],
+            node_ids=[],
+            materials_checked=[],
+        )
+        gap_ids.append(str(gap["gap_id"]))
+    ledger.payload["tree"] = {"version": 1, "path": "", "virtual_path": ""}
+    ledger.save()
+
+    executor = _BarrierExecutor()
+    calls = [
+        {
+            "name": "sp_delegate",
+            "args": {
+                "target_agent": "researcher",
+                "task": f"research graph gap {gap_id}",
+                "stage": "research",
+                "metadata": {"report_gap_ids": [gap_id]},
+            },
+            "id": f"call-graph-{index}",
+            "type": "tool_call",
+        }
+        for index, gap_id in enumerate(gap_ids)
+    ]
+    model = _model(
+        [
+            AIMessage(content="", tool_calls=calls),
+            AIMessage(content="done"),
+        ]
+    )
+    result = _invoke_with_executor(model, thread_id=thread_id, executor=executor, monkeypatch=monkeypatch)
+
+    assert result["messages"][-1].content == "done"
+    assert len(executor.started) == 2
+    ledger = ReportLedger.load_for_context(hooks.report_context({"thread_data": {"outputs_path": str(outputs)}}))
+    assert all(ledger.action(action_id)["status"] == "completed" for action_id, _ in executor.started)
 
 
 def test_graph_ordinary_double_delegation_still_runs_both(monkeypatch):
