@@ -44,7 +44,7 @@ def test_central_prompt_uses_revise_after_accepted_tree():
 
 def test_outline_prompt_keeps_examples_and_source_nature_revisable():
     normalized = " ".join(REPORT_OUTLINE_PROMPT.split())
-    assert "Text introduced by" in normalized and "design space" in normalized
+    assert "Do not decide from a connector alone" in normalized
     assert "Do not hardcode countries" in normalized
     assert "Judge source nature when selecting evidence" in normalized
     assert "AI-generated trend article" in normalized
@@ -78,7 +78,7 @@ def test_central_prompt_keeps_content_design_with_outline():
 
 def test_outline_prompt_limits_scope_and_action_lists():
     normalized = " ".join(REPORT_OUTLINE_PROMPT.split())
-    assert "not every research direction or example you add" in normalized
+    assert "not every research direction you add yourself" in normalized
     assert "not permission to expand the user's scope" in normalized
     assert "`gap_outcomes` is an action list" in normalized
     assert "every gap currently awaiting_outline" in normalized
@@ -156,7 +156,7 @@ def test_outline_skill_research_example_links_section_and_child():
     assert "section-level depth signal" in normalized_skill
     assert "Do not associate only the child" in normalized_skill
     assert "Each entry must target exactly" in normalized_skill
-    assert "not automatically user requirements" in normalized_skill
+    assert "candidates unless the user's wording makes them required" in normalized_skill
     assert "Do not hardcode countries" in normalized_skill
     assert "Judge source nature before using it" in normalized_skill
     assert "never repeat an already-closed gap" in normalized_skill

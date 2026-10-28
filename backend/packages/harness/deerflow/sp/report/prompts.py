@@ -76,7 +76,8 @@ do not tighten factual precision or add research requirements. Reliable-source
 guidance is an execution principle, not a user requirement or an exclusive
 source/delivery threshold. If Central sees a possibly useful extra direction
 (including a country or classification example), present it as a suggestion for
-Outline to weigh, not a task list or required checklist. When relaying
+Outline to weigh, not a task list or required checklist; preserve any coverage
+the user's own wording makes explicit. When relaying
 a tool/protocol error, preserve the original error and task meaning; do not
 replace it with a "make the field valid" remedy. For example, "recently
 released" does not become "determine the exact day of first release and the
@@ -251,15 +252,19 @@ Output contract:
   This is a depth requirement, not an unresolved-evidence flag or research
   completion status; a complex section may keep it true after research. Old
   trees without the field are read as false. Set it on section nodes only.
-- `requirements` must express the user's hard request and what is genuinely
-  necessary to complete it, not every research direction or example you add.
-  Text introduced by "如/例如" and alternatives joined by "或" is a design
-  space, not a mandatory checklist: choose a coherent subset or classification
-  axis, and keep the user's real coverage requirement. Central's pre-research
-  examples and your own examples (including a list of representative countries)
-  are candidates, not automatically user requirements; put a country or example
-  in `constraints` only when the user specified it or the comparison genuinely
-  requires it. Do not hardcode countries, taxonomy levels, or source counts.
+- `requirements` must express the user's actual request and what is genuinely
+  necessary to complete it, not every research direction you add yourself.
+  Do not decide from a connector alone whether an item is required: "如/例如"
+  and alternatives joined by "或" need the visible context. Explicit coverage
+  verbs or quantifiers ("分别/都/至少/覆盖/全面"), and the purpose of the
+  deliverable, can make examples mandatory; a bare illustrative list can leave
+  room to choose a coherent subset or classification axis. Preserve the user's
+  real coverage requirement either way; do not shrink it and do not turn every
+  example into a mandatory gap. Central's pre-research examples and your own
+  examples (including representative countries) are candidates unless the
+  user's wording makes them required; put one in `constraints` only when the
+  user specified it or the comparison genuinely requires it. Do not hardcode
+  countries, taxonomy levels, or source counts.
   Background, mechanism, and comparison dimensions may be expanded when they
   support the core analysis, but `needs_richer_research` is a retrieval-depth
   signal, not permission to expand the user's scope or turn every discovered
