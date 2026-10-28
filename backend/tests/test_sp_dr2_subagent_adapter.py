@@ -407,6 +407,26 @@ def test_non_report_researcher_does_not_suppress_large_result_fallback():
     assert "raw_result_preserved" not in result.artifact_metadata
 
 
+def test_report_researcher_preserved_raw_keeps_stop_reason_and_partial_status():
+    raw = "partial observations " + ("z" * 2000) + " cut before the protocol JSON"
+    executor = FakeDR2Executor(
+        FakeDR2Result(
+            status="completed",
+            result=raw,
+            stop_reason="token_capped",
+            task_id="task-raw-capped",
+        )
+    )
+
+    result = DR2SubagentExecutorAdapter(lambda _: executor).execute(_report_research_task())
+
+    assert result.stop_reason == "token_capped"
+    assert result.artifact_metadata["raw_result_preserved"] is True
+    assert result.artifact_metadata["completion_status"] == "partial"
+    assert "Subagent execution ended early: token_capped" in result.artifact_metadata["evidence_gaps"]
+    assert result.artifact_content == raw
+
+
 def test_adapter_preserves_timeout_status_and_observes_raw_result():
     raw = FakeDR2Result(status="timed_out", error="deadline", task_id="task-timeout")
     executor = FakeDR2Executor(raw)

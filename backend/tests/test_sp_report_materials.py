@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
@@ -576,3 +577,30 @@ def test_text_payload_through_byte_path_keeps_text_semantics(tmp_path, monkeypat
     assert payload["content_scope"] == "fetch_tool_return"
     saved = Path(str(payload["path"]).replace("/mnt/user-data/outputs", str(tmp_path))).read_text(encoding="utf-8")
     assert saved == "plain body through bytes path"
+
+
+def test_pdf_empty_conversion_is_not_registered_and_temp_is_cleaned(tmp_path, monkeypatch):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    _patch_direct_fetch_payload(
+        monkeypatch,
+        FetchedBody(_tiny_pdf("unused"), "application/pdf", None),
+    )
+
+    async def empty_convert(path):
+        md_path = path.with_suffix(".md")
+        md_path.write_text("   \n", encoding="utf-8")
+        return md_path
+
+    monkeypatch.setattr("deerflow.utils.file_conversion.convert_file_to_markdown", empty_convert)
+    before = set(Path(tempfile.gettempdir()).glob("sp2-report-pdf-*"))
+
+    material_tool = _tool_for(_paths(ctx), _short_fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/empty.pdf"))
+
+    after = set(Path(tempfile.gettempdir()).glob("sp2-report-pdf-*"))
+    assert payload["saved"] is False
+    assert "pdf_conversion_failed" in payload["error"]
+    assert before == after
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.materials() == []
