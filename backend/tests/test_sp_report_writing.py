@@ -36,6 +36,34 @@ def _paths(ctx: HandlerContext) -> report_store.ReportPaths:
     return report_store.ReportPaths(context.outputs_path, context.report_id)
 
 
+def _add_user_input(ctx: HandlerContext, text: str = "请继续补充研究。") -> str:
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    input_id = ledger.add_user_input(text, source="hitl_feedback", source_message_id="user-feedback-test")
+    ledger.save()
+    return input_id
+
+
+def _add_material(ctx: HandlerContext, text: str = "Official evidence line.\nSecond line.\n") -> str:
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    material_id = f"m{len(ledger.materials()) + 1}"
+    source_id = f"S{len(ledger.materials()) + 1}"
+    path = ledger.paths.material_file(source_id, report_store.sha256_text(text))
+    report_store.write_text_atomic(path, text)
+    ledger.payload.setdefault("materials", []).append(
+        {
+            "material_id": material_id,
+            "source_id": source_id,
+            "path": str(path),
+            "virtual_path": ledger.paths.virtual(path),
+            "chars": len(text),
+            "lines": len(text.splitlines()),
+            "sha256": report_store.sha256_text(text),
+        }
+    )
+    ledger.save()
+    return material_id
+
+
 def _tree(
     *,
     write_requests: list[dict] | None = None,
@@ -214,6 +242,38 @@ def test_completed_historical_request_survives_revision_with_unready_node(tmp_pa
     assert response.next_step == "continue", response.error
 
 
+def test_writer_packet_receives_node_evidence_locator(tmp_path):
+    ctx = _context(tmp_path)
+    material_id = _add_material(ctx)
+    tree = _tree(write_requests=[{"key": "w-evidence", "node_ids": ["n2"], "feedback_wanted": False}])
+    tree["nodes"][1]["evidence"] = [
+        {
+            "material_id": material_id,
+            "source_ids": ["S1"],
+            "locator": {"lines": [1, 1]},
+            "use": "support the FY2024 statement",
+        }
+    ]
+    assert _outline(ctx, tree, action_id="a-outline-evidence").next_step == "continue"
+
+    _action, task, _host = _writer_action(ctx, "w-evidence", action_id="a-writer-evidence")
+    evidence = task.context_refs["report_packet"]["evidence"]
+    assert evidence == [
+        {
+            "material_id": material_id,
+            "source_id": "S1",
+            "title": None,
+            "url": None,
+            "path": evidence[0]["path"],
+            "lines": [1, 1],
+            "use": "support the FY2024 statement",
+            "content_scope": None,
+            "upstream_truncation": None,
+        }
+    ]
+    assert evidence[0]["path"].endswith(".txt")
+
+
 def test_writer_packet_exposes_host_heading_level(tmp_path):
     ctx = _context(tmp_path)
     assert _outline(
@@ -291,6 +351,7 @@ def test_feedback_only_result_does_not_create_draft_and_needs_research_blocks_re
     feedback_record = writing.feedback_entries(ledger)[0]
     assert feedback_record["status"] == "open"
 
+    _add_user_input(ctx)
     register = build_register_research_request_tool(paths=_paths(ctx), action_id="a-outline-gap")
     registered = json.loads(
         register.func(
@@ -459,6 +520,7 @@ def test_removed_node_retires_blocked_feedback_request_without_closing_gap(tmp_p
     request = ledger.payload["write_requests"][0]
     assert request["status"] == "feedback_pending"
 
+    _add_user_input(ctx)
     register = build_register_research_request_tool(paths=_paths(ctx), action_id="a-outline-removed-gap")
     registered = json.loads(
         register.func(

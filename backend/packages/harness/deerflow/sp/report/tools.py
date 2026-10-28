@@ -39,7 +39,11 @@ def build_register_research_request_tool(
         mode="continue" with the exact gap_id when refining an existing open or
         awaiting_user gap; continuation preserves its identity and round history.
         The host validates references and assigns stable gap ids. Registration
-        succeeds even before the first outline tree is accepted.
+        is normally part of the initial plan before a tree is accepted. After a
+        tree exists, a new target is accepted only when a new user input or an
+        explicitly applied user continuation authorizes it; ordinary final
+        consolidation must use already returned materials instead of opening an
+        automatic second round.
 
         Each questions item uses nested objects: requirement_refs is an array of
         {input_id, quote}; materials_checked is an array of {material_id, lines};
@@ -88,6 +92,20 @@ def _register_questions(
         return _error("questions must be a non-empty list")
     if len(questions) > MAX_REGISTERED_QUESTIONS:
         return _error(f"at most {MAX_REGISTERED_QUESTIONS} questions may be registered in one call")
+    if ledger.payload.get("tree"):
+        # The initial plan is the normal automatic research-registration
+        # phase. After a tree exists, only an explicit user input (or an
+        # already-applied user continuation) may add another research target;
+        # the final consolidation itself must not open a new automatic round.
+        user_entry = bool(ledger.unapplied_input_ids()) or any(
+            int(gap.get("additional_rounds") or 0) > 0 for gap in ledger.gaps()
+        )
+        if not user_entry:
+            return _error(
+                "report_register_research_request is closed after the initial plan; "
+                "final consolidation uses returned materials. A user-authorized research "
+                "request must carry a new user input or an applied continue_research decision."
+            )
 
     idempotency_key = f"{action_id}:{tool_call_id}"
     tool_calls = ledger.payload.setdefault("tool_calls", {})

@@ -431,6 +431,14 @@ def prepare_delegation(
                 "before appending. Do not try to fit a large tree into one response. Return "
                 "artifact_content=null and this path in artifact_metadata."
             )
+            if ledger.has_any_returned_gap_research():
+                instruction += (
+                    " This is the fixed-round consolidation: all selected research attempts have returned. "
+                    "Do not register new automatic research; use the saved materials, put the used material ids/"
+                    "locators/use into the corresponding node evidence, resolve supported needs, close optional "
+                    "targets as not_needed optional, and leave only a genuinely unsupported hard requirement "
+                    "awaiting_user."
+                )
             if requires_file:
                 instruction = (
                     "This Outline retry requires file delivery. Write the complete tree JSON to this "
@@ -1592,6 +1600,24 @@ def _accept_outline_locked(
             tree["accepted_with_stop_reason"] = execution_stop
         user_decisions = working.apply_user_decisions(tree.get("user_decisions") or [])
         gap_outcomes = working.apply_gap_outcomes(tree.get("gap_outcomes") or [])
+        if working.has_any_returned_gap_research():
+            active = [
+                str(gap.get("gap_id"))
+                for gap in working.gaps()
+                if (
+                    str(gap.get("status") or "") in {"awaiting_outline", "in_flight"}
+                    or (
+                        str(gap.get("status") or "") == "open"
+                        and working.has_returned_research(str(gap.get("gap_id") or ""))
+                    )
+                )
+                and int(gap.get("additional_rounds") or 0) <= 0
+            ]
+            if active:
+                raise ReportValidationError(
+                    "fixed research round has returned; final Outline must resolve, mark optional targets not_needed, "
+                    "or leave a hard requirement awaiting_user. Active gaps remain: " + ", ".join(sorted(active))
+                )
         fingerprints = report_tree.node_fingerprints(tree)
         feedback_disposed = report_writing.apply_feedback_dispositions(working, tree)
         draft_disposed = report_writing.apply_draft_dispositions(working, tree, fingerprints)
@@ -1798,7 +1824,14 @@ def _accept_research_locked(
     if not summary:
         ledger.fail_research_action(action.action_id, "Researcher returned no usable summary")
         ledger.save()
-        return _rejection(action, context, "Report research returned no usable summary; no round was charged.", reason="empty_research_summary")
+        return _rejection(
+            action,
+            context,
+            "Report research returned no usable summary; this assigned attempt is closed. "
+            "Do not re-dispatch it automatically; let Outline judge existing saved materials and "
+            "only ask the user if a hard requirement remains unsupported.",
+            reason="empty_research_summary",
+        )
     try:
         declared_attempts = _validate_gap_attempts(result.artifact_metadata.get("gap_attempts"), ledger, task)
         host_executions = _validate_host_executions(result.artifact_metadata.get("host_tool_execution_records"))
@@ -2516,8 +2549,11 @@ def report_delegate_dispatch_error(
                 return f"Report research delegation blocked: gap {gap_id} already has an in-flight research action."
             if str(gap.get("status") or "") != "open":
                 return f"Report research delegation blocked: gap {gap_id} is {gap.get('status')}; only open gaps can be dispatched."
-            if _gap_attempted_for_current_tree(gap, ledger):
-                return f"Report research delegation blocked: gap {gap_id} already returned a result in this round; wait for Outline to judge all awaiting_outline gaps before re-dispatching."
+            if ledger.has_returned_research(gap_id) and int(gap.get("additional_rounds") or 0) <= 0:
+                return (
+                    f"Report research delegation blocked: gap {gap_id} already returned in the fixed round; "
+                    "a user-authorized continuation is required before another attempt."
+                )
         return None
 
     # Outline and Writer are single report calls in a batch and wait for any
@@ -2554,6 +2590,9 @@ def report_delegate_dispatch_error(
         awaiting = [str(gap.get("gap_id")) for gap in ledger.gaps() if str(gap.get("status") or "") == "awaiting_outline"]
         if awaiting:
             return "Report Writer delegation blocked: gap(s) " + ", ".join(sorted(awaiting)) + " are awaiting Outline judgment; let Outline judge all returned results before writing."
+        awaiting_user = [str(gap.get("gap_id")) for gap in ledger.gaps() if str(gap.get("status") or "") == "awaiting_user"]
+        if awaiting_user:
+            return "Report Writer delegation blocked: gap(s) " + ", ".join(sorted(awaiting_user)) + " need a user decision before prose can be written; ask the user first."
         if open_unattempted:
             return "Report Writer delegation blocked: gap(s) " + ", ".join(sorted(open_unattempted)) + " still need a research attempt; complete the research round before writing."
     return None

@@ -35,13 +35,24 @@ a material id.
 
 ## Register Research Requests
 
+For a report that needs external evidence, the initial plan normally includes one
+fixed supplementary-research target for each actual writing need. Do not wait
+until you judge existing material insufficient; the default is to plan the
+round. Related nodes may share one target or one Researcher task; do not create
+one request per leaf and do not use a document-count threshold. Skip the round
+only when the user explicitly restricts the report to supplied materials or
+forbids web research. The initial plan is the normal registration phase; after
+an accepted tree, add a target only when a new user input explicitly asks for
+research, not as part of ordinary final consolidation.
+
 Use `report_register_research_request` for every evidence need that is not
 already satisfied.
 
 - `mode: "new"` allocates a stable gap id. Never invent one.
 - `mode: "continue"` with the exact `continue_gap_id` refines an existing open
-  or awaiting-user gap and preserves its round history. Do not create a second
-  gap for the same unresolved question merely to reset rounds.
+  or awaiting-user gap only when a new user input explicitly authorizes more
+  research; it preserves identity and round history. Do not use it to open a
+  second automatic round during final consolidation.
 - `requirement_refs` must quote the original user input. `why_insufficient` must
   explain what was checked and what is still missing. `stop_condition` must say
   what evidence would settle the question.
@@ -165,6 +176,17 @@ Return the complete tree JSON in `artifact_content`:
   `constraints`, `requirement_ids`, `status`, `gap_ids`.
 - Evidence cites saved `material_id`s and locatable line ranges. Do not cite a
   source that is not in the catalog.
+- After the fixed research round returns, judge from existing saved materials:
+  no additional document does not by itself make prose impossible. Resolve a
+  supported target, or close a self-added auxiliary target as
+  `not_needed` + `optional: true`; do not fabricate `resolved` and do not turn
+  every unmet supplementary target into `awaiting_user`. Only a hard user
+  requirement genuinely unsupported by available evidence should ask for a user
+  decision. Do not automatically start a second research round.
+- In final consolidation, put the actually used material ids, source ids,
+  locator lines and use strings into the corresponding writable node's
+  `evidence[]`. A global material catalog alone is not Writer input; do not
+  leave evidence preparation to Writer.
 - A first plan may contain `needs_evidence` nodes. Do not fabricate evidence or
   state a conclusion the saved material cannot support.
 - Every previous node that is removed must be listed in `removed_node_ids`.

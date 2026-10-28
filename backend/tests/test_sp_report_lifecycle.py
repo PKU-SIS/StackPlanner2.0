@@ -54,6 +54,13 @@ def _paths(ctx: HandlerContext) -> report_store.ReportPaths:
     return report_store.ReportPaths(context.outputs_path, context.report_id)
 
 
+def _add_user_input(ctx: HandlerContext, text: str = "请继续补充研究。") -> str:
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    input_id = ledger.add_user_input(text, source="hitl_feedback", source_message_id="user-feedback-test")
+    ledger.save()
+    return input_id
+
+
 def _register_gap(ctx: HandlerContext, action_id: str, *, question: str = "示例公司 FY2024 偿付能力", mode: str = "new", continue_gap_id: str | None = None, node_ids: list[str] | None = None) -> dict:
     tool = build_register_research_request_tool(paths=_paths(ctx), action_id=action_id)
     request: dict = {
@@ -210,16 +217,17 @@ def test_general_technical_ask_human_does_not_require_gap_state(tmp_path):
 def test_section_richer_research_flag_is_saved_and_reaches_researcher_packet(tmp_path):
     ctx = _context(_state(tmp_path))
     _start(ctx)
+    registered = _register_gap(ctx, "a-outline", node_ids=[])
+    assert registered["registered"][0]["gap_id"] == "g1"
     outline_action, outline_task = _delegate(ctx, "a-outline", "outline", {"report_task": "plan"})
-    accepted = _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=[], section_needs_richer=True))
+    tree = _tree(gap_ids=["g1"], section_needs_richer=True)
+    tree["nodes"][0]["gap_ids"] = ["g1"]
+    accepted = _accept_outline(ctx, outline_action, outline_task, tree)
     assert accepted.next_step == "continue", accepted.error
 
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
     assert ledger.payload["nodes"]["n1"]["needs_richer_research"] is True
     assert not [item for item in (ledger.payload.get("actions") or {}).values() if item.get("kind") == "research"]
-
-    registered = _register_gap(ctx, "a-outline", node_ids=["n1", "n2"])
-    assert registered["registered"][0]["gap_id"] == "g1"
 
     action, task = _delegate(ctx, "a-r1", "researcher", {"report_gap_ids": ["g1"]})
     assert action.action_id == "a-r1"
@@ -244,10 +252,10 @@ def test_section_richer_research_flag_is_saved_and_reaches_researcher_packet(tmp
 def test_true_richer_research_flag_does_not_auto_repeat_research(tmp_path):
     ctx = _context(_state(tmp_path))
     _start(ctx)
+    _register_gap(ctx, "a-outline", node_ids=[])
     outline_action, outline_task = _delegate(ctx, "a-outline", "outline", {"report_task": "plan"})
-    accepted = _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=[], section_needs_richer=True))
+    accepted = _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=["g1"], section_needs_richer=True))
     assert accepted.next_step == "continue", accepted.error
-    _register_gap(ctx, "a-outline", node_ids=["n1"])
 
     result = _research(ctx, "a-r1", ["g1"], tool_ok=True)
     assert result.next_step == "continue", result.error
@@ -294,10 +302,10 @@ def test_unaccepted_node_id_is_still_rejected_before_first_plan(tmp_path):
 def test_false_richer_research_flag_does_not_block_normal_research(tmp_path):
     ctx = _context(_state(tmp_path))
     _start(ctx)
+    _register_gap(ctx, "a-outline", node_ids=[])
     outline_action, outline_task = _delegate(ctx, "a-outline", "outline", {"report_task": "plan"})
-    accepted = _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=[], section_needs_richer=False))
+    accepted = _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=["g1"], section_needs_richer=False))
     assert accepted.next_step == "continue", accepted.error
-    _register_gap(ctx, "a-outline", node_ids=["n1"])
 
     _action, task = _delegate(ctx, "a-r1", "researcher", {"report_gap_ids": ["g1"]})
     assert task.context_refs["report_packet"]["gaps"][0]["nodes"][0]["needs_richer_research"] is False
@@ -461,7 +469,7 @@ def test_outline_revision_cannot_skip_awaiting_outline_gaps(tmp_path):
     assert "unjudged" in (missing.error or "").lower()
 
 
-def test_two_effective_rounds_then_user_question_and_answer_returns_to_outline(tmp_path):
+def test_fixed_round_then_user_question_and_answer_returns_to_outline(tmp_path):
     ctx = _context(_state(tmp_path))
     _start(ctx)
     _register_gap(ctx, "a-outline")
@@ -479,16 +487,8 @@ def test_two_effective_rounds_then_user_question_and_answer_returns_to_outline(t
     judged1 = _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=["g1"], outcomes=[{"gap_id": "g1", "outcome": "unresolved", "reason": "口径不符"}]))
     assert judged1.next_step == "continue", judged1.error
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
-    assert (ledger.require_gap("g1")["status"], ledger.require_gap("g1")["rounds"]) == ("open", 1)
-
-    second = _research(ctx, "a-r2", ["g1"], tool_ok=True)
-    assert second.next_step == "continue", second.error
-    judged2 = _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=["g1"], outcomes=[{"gap_id": "g1", "outcome": "unresolved", "reason": "两轮仍未找到 FY2024 口径"}]))
-    assert judged2.next_step == "continue", judged2.error
-    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
-    gap = ledger.require_gap("g1")
-    assert (gap["status"], gap["rounds"]) == ("awaiting_user", 2)
-    assert ledger.control_summary()["gaps"][0]["next_action"] == "ask_human"
+    assert (ledger.require_gap("g1")["status"], ledger.require_gap("g1")["rounds"]) == ("awaiting_user", 1)
+    before = len(ledger.payload.get("actions") or {})
 
     ask = SPAction.create(
         ActionType.ASK_HUMAN,
@@ -510,7 +510,7 @@ def test_two_effective_rounds_then_user_question_and_answer_returns_to_outline(t
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
     gap = ledger.require_gap("g1")
     assert gap["status"] == "awaiting_outline"
-    assert gap["rounds"] == 2
+    assert gap["rounds"] == 1
 
     tree = _tree(
         gap_ids=["g1"],
@@ -536,8 +536,157 @@ def test_two_effective_rounds_then_user_question_and_answer_returns_to_outline(t
     assert resolved.next_step == "continue", resolved.error
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
     assert ledger.require_gap("g1")["status"] == "resolved"
-    assert ledger.payload["tree"]["version"] == 4
+    assert len(ledger.payload.get("actions") or {}) == before
     assert ledger.input(recorded["input_id"])["applied"] is True
+
+
+def test_user_authorization_reopens_one_fixed_round(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    _register_gap(ctx, "a-outline", node_ids=[])
+    outline_action, outline_task = _delegate(ctx, "a-outline", "outline", {"report_task": "plan"})
+    assert _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=["g1"])).next_step == "continue"
+    assert _research(ctx, "a-r1", ["g1"], tool_ok=True).next_step == "continue"
+
+    with pytest.raises(Exception, match="awaiting Outline|fixed round"):
+        _delegate(ctx, "a-r2", "researcher", {"report_gap_ids": ["g1"]})
+
+    input_id = _add_user_input(ctx, "继续补一项日德来源。")
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    ledger.apply_user_decisions([
+        {
+            "input_id": input_id,
+            "gap_ids": ["g1"],
+            "action": "continue_research",
+            "additional_rounds": 1,
+            "reason": "用户明确要求继续研究",
+        }
+    ])
+    ledger.save()
+
+    _action, _task = _delegate(ctx, "a-r2", "researcher", {"report_gap_ids": ["g1"]})
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    action = ledger.action("a-r2")
+    assert action["user_authorized_gap_ids"] == ["g1"]
+    assert ledger.require_gap("g1")["additional_rounds"] == 0
+
+
+def test_registration_after_tree_requires_new_user_input(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    outline_action, outline_task = _delegate(ctx, "a-outline", "outline", {"report_task": "plan"})
+    assert _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=[])).next_step == "continue"
+
+    rejected = _register_gap(ctx, "a-outline-late", node_ids=[])
+    assert rejected["registered"] == []
+    assert "closed after the initial plan" in rejected["error"]
+
+    _add_user_input(ctx, "请为新增章节补充一个来源。")
+    accepted = _register_gap(ctx, "a-outline-late", node_ids=[])
+    assert accepted["registered"][0]["gap_id"] == "g1"
+
+
+def test_duplicate_not_needed_closure_is_idempotent_but_conflict_is_rejected(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    _register_gap(ctx, "a-outline", node_ids=[])
+    input_id = _add_user_input(ctx, "日本德国不继续研究。")
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+
+    ledger.apply_user_decisions([
+        {
+            "input_id": input_id,
+            "gap_ids": ["g1"],
+            "action": "change_scope",
+            "reason": "用户改变范围",
+        }
+    ])
+    ledger.apply_gap_outcomes([
+        {
+            "gap_id": "g1",
+            "outcome": "not_needed",
+            "reason": "用户改变范围",
+            "user_input_id": input_id,
+        }
+    ])
+    assert ledger.require_gap("g1")["status"] == "not_needed"
+    ledger.apply_gap_outcomes([
+        {
+            "gap_id": "g1",
+            "outcome": "not_needed",
+            "reason": "重复表达同一次范围调整",
+            "user_input_id": input_id,
+        }
+    ])
+
+    with pytest.raises(Exception, match="already closed"):
+        ledger.apply_gap_outcomes([
+            {
+                "gap_id": "g1",
+                "outcome": "resolved",
+                "reason": "冲突结论",
+                "user_input_id": input_id,
+            }
+        ])
+
+
+def test_unresolved_hard_gap_asks_user_but_optional_target_can_close(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    _register_gap(ctx, "a-outline", question="硬要求来源", node_ids=[])
+    _register_gap(ctx, "a-outline", question="可选补充背景", node_ids=[])
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    ledger.apply_gap_outcomes([
+        {"gap_id": "g1", "outcome": "unresolved", "reason": "用户硬要求仍缺可定位来源"},
+        {"gap_id": "g2", "outcome": "not_needed", "reason": "补充背景不是用户要求", "optional": True},
+    ])
+    assert ledger.require_gap("g1")["status"] == "awaiting_user"
+    assert ledger.require_gap("g2")["status"] == "not_needed"
+
+
+def test_user_authorized_new_gap_can_remain_open_for_dispatch(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    _register_gap(ctx, "a-outline", node_ids=[])
+    outline_action, outline_task = _delegate(ctx, "a-outline", "outline", {"report_task": "plan"})
+    assert _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=["g1"])).next_step == "continue"
+    assert _research(ctx, "a-r1", ["g1"], tool_ok=True).next_step == "continue"
+
+    input_id = _add_user_input(ctx, "请为新章节再补一项来源。")
+    registered = _register_gap(ctx, "a-outline-late", question="新增章节来源", node_ids=[])
+    assert registered["registered"][0]["gap_id"] == "g2"
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    final = _accept_outline(
+        ctx,
+        outline_action,
+        outline_task,
+        _tree(
+            gap_ids=["g1", "g2"],
+            outcomes=[
+                {
+                    "gap_id": "g1",
+                    "outcome": "resolved",
+                    "reason": "已有材料足够",
+                    "evidence_material_ids": [ledger.materials()[0]["material_id"]],
+                    "user_input_id": input_id,
+                }
+            ],
+            decisions=[
+                {
+                    "input_id": input_id,
+                    "gap_ids": [],
+                    "action": "apply_to_plan",
+                    "reason": "新增用户要求的补研目标",
+                }
+            ],
+        ),
+    )
+    assert final.next_step == "continue", final.error
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.require_gap("g2")["status"] == "open"
+
+    _action, _task = _delegate(ctx, "a-r2", "researcher", {"report_gap_ids": ["g2"]})
 
 
 def test_technical_failure_does_not_charge_a_round(tmp_path):
@@ -553,6 +702,34 @@ def test_technical_failure_does_not_charge_a_round(tmp_path):
     assert gap["rounds"] == 0
     assert gap["status"] == "awaiting_outline"
     assert gap["technical_attempts"] == 1
+
+
+def test_empty_research_summary_ends_attempt_without_a_round(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    _register_gap(ctx, "a-outline")
+    outline_action, outline_task = _delegate(ctx, "a-outline", "outline", {})
+    assert _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=["g1"])).next_step == "continue"
+
+    action, task = _delegate(ctx, "a-empty", "researcher", {"report_gap_ids": ["g1"]})
+    entry = ctx.stack.append_delegate("empty research", thread_id="t1", run_id="run1", stage="research")
+    result = SPSubagentResult(
+        status=SPSubagentStatus.COMPLETED,
+        result="",
+        artifact_content=None,
+        artifact_type="research_observation",
+        artifact_metadata={"completion_status": "complete"},
+    )
+    response = hooks.handle_success(action, ctx, result, task, artifact_adapter=SPArtifactAdapter(), delegate_entry=entry)
+    assert response.next_step == "error_recoverable"
+    assert "this assigned attempt is closed" in (response.error or "")
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    gap = ledger.require_gap("g1")
+    assert (gap["status"], gap["rounds"], gap["technical_attempts"]) == ("awaiting_outline", 0, 1)
+    assert ledger.action("a-empty")["status"] == "failed"
+
+    with pytest.raises(Exception, match="awaiting Outline|fixed round"):
+        _delegate(ctx, "a-empty-retry", "researcher", {"report_gap_ids": ["g1"]})
 
 
 def test_finish_is_blocked_while_report_active(tmp_path):
@@ -710,7 +887,7 @@ def test_executor_exception_releases_in_flight_action_without_a_round(tmp_path):
         handler.handle(action, ctx)
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
     gap = ledger.require_gap("g1")
-    assert gap["status"] == "open"
+    assert gap["status"] == "awaiting_outline"
     assert gap["rounds"] == 0
     assert gap["technical_attempts"] == 1
     assert ledger.action("a-r-raise")["status"] == "failed"

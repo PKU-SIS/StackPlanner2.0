@@ -405,6 +405,7 @@ class ReportLedger:
         normalized_gap_ids = _string_list(list(gap_ids), "report_gap_ids")
         if not normalized_gap_ids and not allow_empty:
             raise ReportValidationError("a report research delegation requires at least one gap_id")
+        user_authorized: list[str] = []
         for gap_id in normalized_gap_ids:
             gap = self.require_gap(gap_id)
             if gap.get("status") == "in_flight":
@@ -415,15 +416,26 @@ class ReportLedger:
                 raise ReportValidationError(f"gap {gap_id} is awaiting a user decision; it cannot be researched yet")
             if gap.get("status") in {"resolved", "not_needed"}:
                 raise ReportValidationError(f"gap {gap_id} is already closed")
+            if self.has_returned_research(gap_id):
+                if int(gap.get("additional_rounds") or 0) <= 0:
+                    raise ReportValidationError(
+                        f"gap {gap_id} already returned in the current fixed round; "
+                        "only an explicit user-authorized continuation may dispatch another attempt"
+                    )
+                user_authorized.append(gap_id)
         now = utc_now_iso()
         tree = self.payload.get("tree")
         tree_version = int(tree.get("version")) if isinstance(tree, Mapping) and tree.get("version") is not None else None
+        for gap_id in user_authorized:
+            gap = self.require_gap(gap_id)
+            gap["additional_rounds"] = max(0, int(gap.get("additional_rounds") or 0) - 1)
         action = {
             "action_id": action_id,
             "run_id": str(run_id) if run_id else None,
             "kind": kind,
             "gap_ids": normalized_gap_ids,
             "tree_version": tree_version,
+            "user_authorized_gap_ids": user_authorized,
             "status": "in_flight",
             "created_at": now,
             "updated_at": now,
@@ -447,6 +459,29 @@ class ReportLedger:
             return None
         value = actions.get(action_id)
         return dict(value) if isinstance(value, Mapping) else None
+
+    def has_returned_research(self, gap_id: str) -> bool:
+        """Whether any completed/failed research action already covered this gap.
+
+        This is intentionally not tree-version scoped. The normal report flow
+        has one automatic research round; a later accepted tree must not make
+        the same gap automatically dispatchable again. An explicit user
+        continuation uses ``additional_rounds`` separately.
+        """
+        for action in (self.payload.get("actions") or {}).values():
+            if not isinstance(action, Mapping) or str(action.get("kind") or "research") != "research":
+                continue
+            if str(action.get("status") or "") not in {"completed", "failed"}:
+                continue
+            if gap_id in {str(item) for item in action.get("gap_ids") or []}:
+                return True
+        return False
+
+    def has_any_returned_gap_research(self) -> bool:
+        for gap in self.gaps():
+            if self.has_returned_research(str(gap.get("gap_id") or "")):
+                return True
+        return False
 
     def record_tool_execution(self, action_id: str, *, tool: str, ok: bool, detail: str | None = None) -> None:
         action = self.payload.setdefault("actions", {}).setdefault(
@@ -538,8 +573,8 @@ class ReportLedger:
                 gap["status"] = "awaiting_outline"
                 note = note or "This research action reported a technical failure; no effective round was charged."
             else:
-                gap["status"] = "open" if gap.get("status") == "in_flight" else gap.get("status")
-                note = note or "This action did not attempt the gap; no effective round was charged."
+                gap["status"] = "awaiting_outline"
+                note = note or "This action did not attempt the gap; the fixed attempt is returned without charging a round."
             gap["updated_at"] = now
             gap.setdefault("history", []).append(
                 {
@@ -599,7 +634,7 @@ class ReportLedger:
             gap = self.gap(str(gap_id))
             if gap is None or gap.get("status") in {"resolved", "not_needed"}:
                 continue
-            gap["status"] = "open"
+            gap["status"] = "awaiting_outline"
             gap["updated_at"] = utc_now_iso()
             gap.setdefault("technical_attempts", 0)
             gap["technical_attempts"] = int(gap.get("technical_attempts") or 0) + 1
@@ -631,8 +666,6 @@ class ReportLedger:
                 raise ReportValidationError(f"unsupported gap outcome for {gap_id}: {outcome!r}")
             reason = _text(item.get("reason"), f"gap_outcomes[{gap_id}].reason")
             gap = self.require_gap(gap_id)
-            if gap.get("status") not in {"awaiting_outline", "awaiting_user", "open", "in_flight"}:
-                raise ReportValidationError(f"gap {gap_id} is already closed (status={gap.get('status')})")
             entry: dict[str, Any] = {"outcome": outcome, "reason": reason, "at": utc_now_iso()}
             material_ids = _string_list(item.get("evidence_material_ids"), f"gap_outcomes[{gap_id}].evidence_material_ids")
             for material_id in material_ids:
@@ -651,6 +684,20 @@ class ReportLedger:
                 entry["user_input_id"] = user_input_id
             if outcome == "not_needed" and item.get("optional") is not True and "user_input_id" not in entry:
                 raise ReportValidationError(f"gap_outcomes[{gap_id}] not_needed must cite user_input_id unless optional=true (scope change requires user authority)")
+            if gap.get("status") in {"resolved", "not_needed"}:
+                prior = gap.get("outcome") if isinstance(gap.get("outcome"), Mapping) else {}
+                # A user decision may close the same gap before the tree's
+                # matching gap_outcome is applied. Repeating that same closure
+                # is idempotent; conflicting closures remain invalid.
+                if (
+                    gap.get("status") == "not_needed"
+                    and outcome == "not_needed"
+                    and prior.get("outcome") == "not_needed"
+                    and user_input_id
+                    and prior.get("user_input_id") == user_input_id
+                ):
+                    continue
+                raise ReportValidationError(f"gap {gap_id} is already closed (status={gap.get('status')})")
             by_gap[gap_id] = entry
 
         missing = [gap["gap_id"] for gap in awaiting if gap.get("gap_id") not in by_gap]
@@ -668,8 +715,10 @@ class ReportLedger:
             elif outcome == "not_needed":
                 gap["status"] = "not_needed"
             else:
-                allowed = int(gap.get("allowed_rounds") or DEFAULT_ALLOWED_ROUNDS) + int(gap.get("additional_rounds") or 0)
-                gap["status"] = "awaiting_user" if int(gap.get("rounds") or 0) >= allowed else "open"
+                # The automatic fixed round has ended. An unresolved target is
+                # a user decision, unless the same accepted tree also carries an
+                # explicit user-authorized continuation for this gap.
+                gap["status"] = "open" if int(gap.get("additional_rounds") or 0) > 0 else "awaiting_user"
             gap["updated_at"] = now
             gap.setdefault("history", []).append(
                 {

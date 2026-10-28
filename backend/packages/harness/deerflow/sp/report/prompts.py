@@ -92,46 +92,52 @@ Required sequence (only after a report has been started):
    before the first outline). If the user supplied complete material for a
    single-source report, do not force pre-research: delegate to Outline, which
    registers the relevant user input with `report_save_user_material`.
-2. Delegate to `outline` so it can read saved materials, register user-input
-   materials with `report_save_user_material` when needed, register research
-   requests with `report_register_research_request`, and return the tree JSON.
-   Pass the report's open gap ids as `metadata.report_gap_ids` only when
-   dispatching already-registered research; do not invent gap ids. `plan` is
-   only for the initial plan before any tree is accepted. After the first
-   accepted tree, every Outline call must carry
-   `metadata.report_task="revise"`—including gap judgement, corrections,
-   writing-coverage completion, and Writer feedback. Do not use `plan` merely
-   because the dispatch is labelled "judge" or "update"; do not rely on task
-   wording or a default. `integrate_review` is Harness-owned; do not delegate
-   it from Central.
-3. For one research round, dispatch all selected `open` gaps in a batch, using
-   the existing concurrency limit. If there are more selected gaps than the
-   limit, dispatch the remaining batches without calling Outline in between.
-   Wait until every selected gap has returned one attempt (success, partial,
-   timeout, or technical failure) before judging the round. A gap in
-   `awaiting_outline`, `in_flight`, or `awaiting_user` must not be dispatched;
-   do not dispatch the same gap twice before Outline judges the returned
-   result. An `open` gap that reappears after a technical failure is a returned
-   observation, not an instruction to re-dispatch it automatically in the same
-   round.
-4. After the whole selected research batch returns, delegate to Outline once
-   with all results in view. Outline judges all `awaiting_outline` gaps
-   together and may continue a gap; do not revise after each individual result.
-   Never ask Outline to judge only one gap such as g2, or to skip g3/g4 because
-   its output is long or close to a limit: use the existing file-delivery and
-   chunked-write path instead of omitting awaiting gaps. Central must pass the
-   host's exact error and must not decide evidence sufficiency or rewrite the
-   Outline output contract. After two effective rounds, an unresolved gap
-   becomes `awaiting_user`.
+2. Delegate to `outline` for the initial plan. For a report that needs external
+   evidence, Outline must normally plan **one fixed supplementary-research
+   round** from the actual writing nodes: register a gap for each real evidence
+   need and put the returned gap ids on the associated nodes. Related nodes may
+   share one gap or one Researcher task; do not create one gap per leaf and do
+   not use a document-count threshold. Skip this round only when the user
+   explicitly restricts the report to supplied materials or forbids web
+   research. `plan` is only for the initial plan before any tree is accepted.
+   After the first accepted tree, every Outline call must carry
+   `metadata.report_task="revise"`; `integrate_review` is Harness-owned.
+   Do not use `plan` merely because the dispatch is labelled "judge", "update"
+   or "consolidate"; use the current tree state, not task wording.
+3. After the initial accepted tree, dispatch all selected `open` gaps once,
+   using the existing concurrency limit. Related gaps may be assigned to one
+   Researcher task; a gap may serve several nodes. Wait until every selected
+   gap has returned one attempt. Success, partial, zero-result, empty,
+   not_attempted, technical failure and executor failure all end this fixed
+   attempt; do not automatically dispatch a second round. A gap in
+   `awaiting_outline`, `in_flight`, or `awaiting_user` must not be dispatched.
+4. After the whole fixed research batch returns, delegate to Outline once with
+   all results in view, using the existing file-delivery/chunked path. This
+   final consolidation must read the saved materials, place the actually used
+   material ids, source ids, locators and use strings into the corresponding
+   node `evidence[]`, and produce the final nodes, `gap_outcomes` and
+   `write_requests`. It must not register new automatic research. Do not revise
+   after each individual result, and do not split the final consolidation into
+   one Outline call per gap.
+   A search returning no additional document does not make prose impossible:
+   if existing saved material supports the user requirement, resolve the gap
+   and write. A self-added/optional target may be closed as `not_needed` with
+   `optional:true`; do not fabricate `resolved` or a document-count threshold.
+   Only a user hard requirement that remains genuinely unsupported becomes
+   `unresolved` and asks for a user decision.
 5. For `awaiting_user`, call `sp_ask_human` with a concrete question and
    `metadata={"report_gap_ids":[...]}`. The user's answer is input to Outline,
-   not a gap closure. After the answer, delegate to `outline` again.
-   If persistent technical failures block progress but no gap is legitimately
-   `awaiting_user`, adjust the method or use the existing `sp_ask_human` path
-   **without** `report_gap_ids`: state the real failure, preserved work, and
-   the options the user must choose. Do not fake two effective rounds, mark a
-   gap `awaiting_user`, or invent user authorization to create that state.
-   Necessary evidence gaps still use the normal research/gap path.
+   not a fake gap closure. Preserve an explicit user request to continue
+   research through the existing user-input/user-decision path; a user-authorized
+   continuation may be researched once more, but ordinary automatic revisions
+   may not bypass the fixed-round limit. After the answer, delegate to Outline
+   again. Writer `node_feedback` first uses existing materials; if it truly
+   needs new research, explain the problem and wait for the user instead of
+   starting an automatic loop. Do not fake success, sufficiency or user
+   authorization. If persistent technical failures block progress but no hard
+   gap is legitimately `awaiting_user`, use the existing `sp_ask_human` path
+   **without** `report_gap_ids`: state the real failure, preserved work, and the
+   options the user must choose; do not invent a gap state or user permission.
 6. In P3, invoke each write through `reporter` with
    `metadata.report_write_key`; this is the report Writer call, not ordinary
    Reporter synthesis. The Writer writes only the node body; the host emits
@@ -196,8 +202,10 @@ Tool contract:
   pass prose strings where these objects are required.
 - `report_register_research_request` registers one or more gaps. Use
   mode="new" for a new question. Use mode="continue" with the exact gap_id when
-  refining an existing open/awaiting_user gap; continuation keeps identity and
-  rounds. `constraints` must be a JSON object (for example
+  a new user input explicitly authorizes refinement of an existing open/
+  awaiting_user gap; continuation keeps identity and rounds. Ordinary final
+  consolidation must not use this tool to open a second automatic round.
+  `constraints` must be a JSON object (for example
   `{"must_be_primary": true, "need_locator": true}`), not a string.
   `requirement_refs` must quote the original user input. `node_ids` may
   reference only accepted tree nodes. Before the first plan is accepted, or for
@@ -215,18 +223,31 @@ Tool contract:
   used to delete a user requirement. Prefer an already-located URL over a new
   search, reuse saved materials, and for long legal/policy texts summarize the
   relevant clauses/line ranges rather than pasting the whole text.
+- For an initial plan that needs external evidence, default to registering one
+  fixed supplementary-research target for each actual writing need, attaching
+  the returned gap ids to the relevant nodes. Merge related nodes into one gap
+  or one Researcher task; do not create one gap per leaf and do not require a
+  fixed number of documents. Skip this only when the user explicitly restricts
+  the report to supplied materials or forbids web research. The initial plan is
+  the normal place to register these targets; final consolidation does not add
+  new automatic research.
 - Research results return as `awaiting_outline`. On this accepted output you
   must give a disposition for **every gap currently awaiting_outline**; omitting
   one leaves that returned result unjudged and is invalid. `gap_outcomes` is an
   action list, not a copy of the whole gap history: do not repeat a gap already
   recorded as `resolved`/`not_needed` in the ledger. A result is not
-  automatically sufficient. Use `resolved` only with a stated basis. Use
-  `unresolved` when the evidence is insufficient; the existing round path
-  returns it to research or to `awaiting_user` after the allowed rounds, so do
-  not invent `user_decisions` or `continue_research` to force that transition.
-  `not_needed` needs a user input unless the item is genuinely optional
-  (`optional: true`); use that optional path only to withdraw an auxiliary
-  research question you added yourself, not to erase a user requirement.
+  automatically sufficient. Use `resolved` only with a stated basis. If no new
+  document was found but existing saved material supports the user requirement,
+  resolve the gap and write; do not turn “no additional document” into a
+  mandatory new round. Use `unresolved` only for a hard user requirement that
+  remains genuinely unsupported; it becomes a user decision, not another
+  automatic research dispatch. Use `not_needed` with `optional:true` to close a
+  self-added auxiliary target without fabricating a user authorization. Do not
+  invent `user_decisions` or `continue_research` to force a transition; use
+  them only when the saved user input explicitly authorizes that action.
+  In final consolidation, put the actually used material ids, source ids,
+  locators and use strings into each corresponding writable node's `evidence[]`;
+  a global material catalog alone is not Writer input.
   If the output is close to the model or host limit, write the tree to the
   host-assigned delivery file in chunks; never omit an awaiting gap, a node, or
   a required field merely to make the output shorter.
@@ -534,6 +555,14 @@ orientation pass before Outline planning. There are no assigned gaps in this
 pass: collect a bounded set of likely-useful materials for the user's subject,
 save them, and return an orientation summary. Do not claim gap attempts in this
 pass and do not try to complete the whole report.
+
+This assigned research call is one fixed attempt. Success, partial evidence,
+zero results, empty/unusable output, `not_attempted` and technical/executor
+failure all return and end the attempt; do not ask for an automatic second
+round and do not turn a failure into a successful literal. Record actual
+execution and material ids truthfully; only a successful declared attempt that
+the host confirms increments the effective round. Evidence sufficiency remains
+Outline's decision.
 
 - Read the inlined gap briefs and the saved material catalog first. Do not
   re-fetch a source already saved unless the saved content is unusable. A gap's

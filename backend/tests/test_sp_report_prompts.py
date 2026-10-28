@@ -56,12 +56,15 @@ def test_outline_prompt_keeps_examples_and_source_nature_revisable():
 def test_central_prompt_allows_general_technical_ask_human_without_fake_rounds():
     normalized = " ".join(REPORT_CENTRAL_PROMPT.split())
     assert "**without** `report_gap_ids`" in normalized
-    assert "Do not fake two effective rounds" in normalized
-    assert "Necessary evidence gaps still use the normal research/gap path" in normalized
+    assert "Do not fake success, sufficiency or user authorization" in normalized
+    assert "use the existing `sp_ask_human` path" in normalized
 
 
 def test_research_prompt_distinguishes_searched_from_sufficiency():
     normalized = " ".join(REPORT_RESEARCH_PROMPT.split())
+    assert "one fixed attempt" in normalized
+    assert "Success, partial evidence" in normalized
+    assert "do not ask for an automatic second round" in normalized
     assert "`searched` means (a), not (c)" in normalized
     assert "A valid search that finds only" in normalized
     assert "After a forced stop this agent cannot repair the result" in normalized
@@ -78,6 +81,15 @@ def test_central_prompt_keeps_content_design_with_outline():
     assert "make the field valid" in normalized
 
 
+def test_outline_prompt_defaults_fixed_research_round():
+    normalized = " ".join(REPORT_OUTLINE_PROMPT.split())
+    assert "For an initial plan that needs external evidence, default to registering one" in normalized
+    assert "fixed supplementary-research target" in normalized
+    assert "Skip this only when the user explicitly restricts" in normalized
+    assert "do not require a fixed number of documents" in normalized
+    assert "If no new document was found but existing saved material supports" in normalized
+
+
 def test_outline_prompt_limits_scope_and_action_lists():
     normalized = " ".join(REPORT_OUTLINE_PROMPT.split())
     assert "`requirements` records the user's actual request" in normalized
@@ -91,7 +103,7 @@ def test_outline_prompt_limits_scope_and_action_lists():
     assert "do not re-register merely to reset rounds" in normalized
     assert "`user_decisions` records only decisions actually expressed by a new user input" in normalized
     assert "optional: true" in normalized
-    assert "do not invent `user_decisions` or `continue_research`" in normalized
+    assert "Do not invent `user_decisions` or `continue_research`" in normalized
 
 
 def test_outline_skill_example_is_valid_tree_protocol(tmp_path):
@@ -186,9 +198,9 @@ def test_outline_prompt_has_directory_grep_and_structured_tool_examples():
 
 def test_central_prompt_batches_research_and_centralizes_judgment():
     normalized = " ".join(REPORT_CENTRAL_PROMPT.split())
-    assert "whole selected research batch" in normalized
-    assert "Never ask Outline to judge only one gap" in normalized
-    assert "use the existing file-delivery and chunked-write path" in normalized
+    assert "whole fixed research batch" in normalized
+    assert "Do not revise after each individual result" in normalized
+    assert "file-delivery/chunked path" in normalized
 
 
 def test_outline_prompt_and_skill_require_complete_file_delivery_on_retry():

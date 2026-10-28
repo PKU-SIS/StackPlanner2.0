@@ -489,6 +489,11 @@ def test_same_second_old_result_does_not_count_for_new_tree():
         "metadata": {"report_gap_ids": [gaps[0]]},
     }
     state["messages"] = [AIMessage(content="", tool_calls=[{"name": "sp_delegate", "args": dict(args), "id": "call-a", "type": "tool_call"}])]
+    blocked = _gate(state, "call-a", args)
+    assert blocked is not None and "fixed round" in blocked
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    ledger.require_gap(gaps[0])["additional_rounds"] = 1
+    ledger.save()
     assert _gate(state, "call-a", args) is None
 
 
@@ -618,7 +623,7 @@ def test_failed_research_counts_as_returned_without_auto_redispatch():
     }
     state["messages"] = [AIMessage(content="", tool_calls=[{"name": "sp_delegate", "args": dict(researcher_args), "id": "call-a", "type": "tool_call"}])]
     error = _gate(state, "call-a", researcher_args)
-    assert error is not None and "already returned" in error
+    assert error is not None and ("awaiting_outline" in error or "already returned" in error)
 
     outline_args = {"target_agent": "outline", "task": "judge the failed attempt", "stage": "revision", "metadata": {"report_task": "revise"}}
     state["messages"] = [AIMessage(content="", tool_calls=[{"name": "sp_delegate", "args": dict(outline_args), "id": "outline-a", "type": "tool_call"}])]

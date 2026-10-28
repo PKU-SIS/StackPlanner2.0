@@ -14,6 +14,12 @@ Do not tighten factual precision or add conditions beyond the registered
 question, constraints, and stop condition. Reliable-source guidance does not
 create an exclusive source requirement.
 
+This assignment is one fixed attempt. Success, partial evidence, zero results,
+empty/unusable output, not_attempted, technical failure and executor failure all
+return and end the attempt; do not ask for an automatic second round. Record
+real execution and materials; do not turn a failed/substituted attempt into
+`searched` or fabricate a round.
+
 ## Work
 
 1. Read the gap briefs, their constraints and stop conditions, and the saved
