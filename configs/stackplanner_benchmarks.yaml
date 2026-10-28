@@ -1,0 +1,45 @@
+config_version: 20
+log_level: info
+models:
+  - name: benchmark-model
+    display_name: Benchmark API (injected by CLI)
+    use: langchain_openai:ChatOpenAI
+    model: injected-by-cli
+    api_key: EMPTY
+    supports_thinking: false
+    supports_vision: false
+tool_groups:
+  - name: file:read
+  - name: file:write
+  - name: bash
+tools:
+  - name: ls
+    group: file:read
+    use: deerflow.sandbox.tools:ls_tool
+  - name: read_file
+    group: file:read
+    use: deerflow.sandbox.tools:read_file_tool
+  - name: glob
+    group: file:read
+    use: deerflow.sandbox.tools:glob_tool
+  - name: grep
+    group: file:read
+    use: deerflow.sandbox.tools:grep_tool
+  - name: write_file
+    group: file:write
+    use: deerflow.sandbox.tools:write_file_tool
+  - name: str_replace
+    group: file:write
+    use: deerflow.sandbox.tools:str_replace_tool
+  - name: bash
+    group: bash
+    use: deerflow.sandbox.tools:bash_tool
+sandbox:
+  use: deerflow.sandbox.local:LocalSandboxProvider
+  # Explicitly authorized by the user: native coder requires a bash tool.
+  # LocalSandboxProvider executes it on the host, not inside a container.
+  allow_host_bash: true
+skills:
+  container_path: /mnt/skills
+summarization:
+  enabled: true
