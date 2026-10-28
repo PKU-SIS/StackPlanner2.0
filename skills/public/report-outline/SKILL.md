@@ -223,17 +223,20 @@ entire content is the tree JSON object.
 
 ### File delivery
 
+File delivery is preferred for every report Outline, including the first plan.
 If `report_packet.delivery.mode` is `optional_file` or `required_file`, write
 the **complete tree object** to `report_packet.delivery.path` with `write_file`.
 When the mode is `required_file`, inline tree content is rejected even if it
-looks complete. The file contains all tree fields, including `report_title`,
-`requirements`, `nodes`, `removed_node_ids`, `write_requests`, `gap_outcomes`,
-`user_decisions`, `feedback_dispositions`, and `draft_dispositions`; do not
-write only `nodes`. For a tree larger than one model output, write the first
-chunk with `append=False`, then use `append=True` for later chunks after reading
-the current file with `read_file` (the normal read-after-write contract). Never
-omit an awaiting gap or a required field just to shorten the output. Finish
-with valid full JSON in the file, then return `artifact_content=null` and
+looks complete. For a first plan or any tree larger than one response, use file
+chunks rather than trying to fit the whole tree into one output. The file
+contains all tree fields, including `report_title`, `requirements`, `nodes`,
+`removed_node_ids`, `write_requests`, `gap_outcomes`, `user_decisions`,
+`feedback_dispositions`, and `draft_dispositions`; do not write only `nodes`.
+For a tree larger than one model output, write the first chunk with
+`append=False`, then use `append=True` for later chunks after reading the
+current file with `read_file` (the normal read-after-write contract). Never omit
+an awaiting gap or a required field just to shorten the output. Finish with
+valid full JSON in the file, then return `artifact_content=null` and
 `artifact_metadata.delivery_mode="file"` with the `tree_path`/`created_paths`
 reference. The delivery file contains only the tree object; never write
 `summary`, `artifact_type`, `artifact_metadata`, or an `artifact_content`

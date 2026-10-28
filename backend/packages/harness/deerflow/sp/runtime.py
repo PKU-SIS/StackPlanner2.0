@@ -91,6 +91,12 @@ SP_SUBAGENT_REGISTRY_NAMES = {
     "memory_recaller": "sp-memory-recaller",
 }
 
+# Report Outline is the only role that must serialize a whole planning tree.
+# Keep this override separate from the shared model default and from the
+# ordinary subagent_type-based output override.
+REPORT_OUTLINE_OUTPUT_MAX_TOKENS = 16384
+REPORT_OUTLINE_MAX_TOKENS_KEY = "report:outline"
+
 # Host credentials are never forwarded wholesale. This allowlist is consulted
 # only when Central explicitly selects the matching Skill for one delegation;
 # SubagentExecutor then independently verifies that the loaded Skill is public
@@ -491,6 +497,7 @@ class DR2SPExecutorProvider:
                 subagent_max_tokens = int(raw_max_tokens) if raw_max_tokens is not None else 0
             except (TypeError, ValueError):
                 subagent_max_tokens = 0
+            global_max_tokens_explicit = subagent_max_tokens > 0
             raw_role_max_tokens = context.get(
                 "sp_subagent_max_tokens_by_role",
                 configurable.get("sp_subagent_max_tokens_by_role"),
@@ -509,6 +516,23 @@ class DR2SPExecutorProvider:
             )
             protect_test_files = raw_protect_tests.strip().lower() in {"1", "true", "yes", "on"} if isinstance(raw_protect_tests, str) else bool(raw_protect_tests)
             report_role = str(task.metadata.get("report_role") or "")
+            if report_role == "outline":
+                # Report Outline has a report-scoped default. A report-specific
+                # explicit override wins; otherwise an existing explicit global
+                # override is preserved, and the ordinary subagent_type map is
+                # intentionally not allowed to leak into report Outline.
+                report_role_value = None
+                if isinstance(raw_role_max_tokens, Mapping):
+                    report_role_value = raw_role_max_tokens.get(REPORT_OUTLINE_MAX_TOKENS_KEY)
+                try:
+                    report_role_max_tokens = int(report_role_value) if report_role_value is not None else 0
+                except (TypeError, ValueError):
+                    report_role_max_tokens = 0
+                if report_role_max_tokens > 0:
+                    subagent_max_tokens = report_role_max_tokens
+                elif not global_max_tokens_explicit:
+                    subagent_max_tokens = REPORT_OUTLINE_OUTPUT_MAX_TOKENS
+                task.metadata["max_tokens_per_step"] = subagent_max_tokens
             available_tools = self._available_tools()
             if report_role:
                 # Report roles receive a host-assembled tool/Skill/prompt set.

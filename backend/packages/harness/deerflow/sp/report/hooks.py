@@ -426,9 +426,10 @@ def prepare_delegation(
             protocol_error = context.state.get("sp_report_protocol_error") if isinstance(context.state, Mapping) else None
             requires_file = isinstance(protocol_error, Mapping) and bool(protocol_error.get("outline_delivery_required"))
             instruction = (
-                "For a complete tree, write the full JSON to this host-assigned path using "
-                "write_file; use append=True for later chunks and read_file before appending. "
-                "Return artifact_content=null and this path in artifact_metadata."
+                "Prefer file delivery from this first Outline attempt. Write the complete tree JSON to "
+                "this host-assigned path using write_file; use append=True for later chunks and read_file "
+                "before appending. Do not try to fit a large tree into one response. Return "
+                "artifact_content=null and this path in artifact_metadata."
             )
             if requires_file:
                 instruction = (

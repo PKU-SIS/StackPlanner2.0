@@ -104,6 +104,16 @@ def _empty_length_result() -> SPSubagentResult:
     )
 
 
+def test_first_outline_guides_file_chunks_before_any_rejection(tmp_path):
+    ctx = _context(tmp_path)
+    action, task = _outline_delegate(ctx)
+    delivery = task.context_refs["report_packet"]["delivery"]
+    assert delivery["mode"] == "optional_file"
+    assert "first Outline attempt" in delivery["instruction"]
+    assert "append=True" in delivery["instruction"]
+    assert task.metadata.get("outline_delivery_required") is False
+
+
 def test_empty_length_result_reports_no_candidate_without_false_retention(tmp_path):
     ctx = _context(tmp_path)
     action, task = _outline_delegate(ctx)

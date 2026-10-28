@@ -250,24 +250,26 @@ Output contract:
   tree body itself (an object; a JSON string is tolerated only when its entire
   content is that object). Do not add a `tree` wrapper, do not put
   `tree_version` in the tree, and do not wrap the envelope in prose or fences.
-- File delivery: if `report_packet.delivery.mode` is `optional_file` or
+- File delivery: file delivery is preferred for every report Outline, including
+  the first plan. If `report_packet.delivery.mode` is `optional_file` or
   `required_file`, write the complete tree JSON to
   `report_packet.delivery.path` with `write_file`. When the mode is
-  `required_file`, an inline tree is rejected even if it looks complete. The
-  file is the full `artifact_content` object, including `report_title`,
-  `requirements`, `nodes`, `removed_node_ids`, `write_requests`, `gap_outcomes`,
-  `user_decisions`, `feedback_dispositions`, and `draft_dispositions`; do not
-  write only `nodes`. For a file larger than one model output, write the first
-  chunk with `append=False`, then use `append=True` for later chunks after
-  `read_file` of the current file. Then return a compact envelope with
-  `artifact_content=null`, `artifact_type="outline"`, and
-  `artifact_metadata.delivery_mode="file"` plus `tree_path`/`created_paths`.
-  The delivery file contains only the tree object: never write `summary`,
-  `artifact_type`, `artifact_metadata`, or an `artifact_content` wrapper into
-  it. Do not rewrite an already-valid tree merely to restate it; a read-back
-  check is enough. Do not silently fall back to a different inline body after
-  declaring file delivery. If no file delivery is requested, use inline
-  `artifact_content` as before.
+  `required_file`, an inline tree is rejected even if it looks complete. For a
+  first plan or any tree larger than one response, use file chunks rather than
+  trying to fit the whole tree into one output. The file is the full
+  `artifact_content` object, including `report_title`, `requirements`, `nodes`,
+  `removed_node_ids`, `write_requests`, `gap_outcomes`, `user_decisions`,
+  `feedback_dispositions`, and `draft_dispositions`; do not write only `nodes`.
+  For a file larger than one model output, write the first chunk with
+  `append=False`, then use `append=True` for later chunks after `read_file` of
+  the current file. Then return a compact envelope with `artifact_content=null`,
+  `artifact_type="outline"`, and `artifact_metadata.delivery_mode="file"` plus
+  `tree_path`/`created_paths`. The delivery file contains only the tree object:
+  never write `summary`, `artifact_type`, `artifact_metadata`, or an
+  `artifact_content` wrapper into it. Do not rewrite an already-valid tree
+  merely to restate it; a read-back check is enough. Do not silently fall back
+  to a different inline body after declaring file delivery. If no file delivery
+  is requested, use inline `artifact_content` as before.
 - Section nodes may set `needs_richer_research` to a boolean. `true` means this
   section needs more extensive, deeper research support (for example multiple
   objects compared, several dimensions, or deeper analysis); `false` means no
