@@ -105,21 +105,22 @@ Return the complete tree JSON in `artifact_content`:
 - `report_title`, `requirements`, `nodes`, `removed_node_ids`,
   `write_requests`, `gap_outcomes`, `user_decisions`,
   `feedback_dispositions`, `draft_dispositions`.
-- `requirements` express the user's request and what is genuinely necessary to
-  complete it, not every research direction you add yourself. Background,
-  mechanism, and comparison dimensions may expand when they support the core
-  analysis. A missing fact that is required by the user or indispensable to a
-  core conclusion keeps the existing research/two-round/user path; an auxiliary
-  detail you added may be withdrawn through `not_needed` + `optional: true`
-  with a reason. Withdrawing your own optional detail is not deleting a user
-  requirement. Do not fabricate facts or add a large disclaimer.
-- Central's pre-research examples, and your own examples such as a list of
-  countries, are candidates for comparison, not automatically user
-  requirements. Choose the representative set from the user's goal and saved
-  evidence; put a country or example in `constraints` only when the user
-  specified it or the comparison genuinely requires it. Missing one self-added
-  example must not block the whole section or turn "按代表性国家" into "all four
-  named countries".
+- `requirements` express the user's hard request and what is genuinely
+  necessary to complete it, not every research direction or example you add.
+  Text introduced by "如/例如" and alternatives joined by "或" is a design
+  space, not a mandatory checklist: choose a coherent subset or classification
+  axis, and keep the user's real coverage requirement. Central's pre-research
+  examples and your own examples (including a list of representative countries)
+  are candidates, not automatically user requirements; put a country or example
+  in `constraints` only when the user specified it or the comparison genuinely
+  requires it. Do not hardcode countries, taxonomy levels, or source counts.
+  Background, mechanism, and comparison dimensions may expand when they support
+  the core analysis. A missing fact that is required by the user or
+  indispensable to a core conclusion keeps the existing
+  research/two-round/user path; an auxiliary detail you added may be withdrawn
+  through `not_needed` + `optional: true` with a reason. Withdrawing your own
+  optional detail is not deleting a user requirement. Do not fabricate facts or
+  add a large disclaimer.
 - Judge source nature before using it: first-party policy/spec/dataset,
   institutional page, personal experience, repost, aggregator snippet, and
   AI-generated commentary are not interchangeable. A title or organization name

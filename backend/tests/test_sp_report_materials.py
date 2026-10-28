@@ -99,6 +99,44 @@ def test_long_and_short_returns_are_saved_verbatim(tmp_path):
     assert short["material_id"] == "m2"
 
 
+def test_crlf_return_is_saved_with_exact_content_identity(tmp_path):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    crlf_text = "line one\r\nline two\r\n"
+
+    @tool("web_fetch")
+    def fetch(url: str) -> str:
+        """Fetch a URL."""
+        return crlf_text
+
+    material_tool = _tool_for(_paths(ctx), fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/crlf"))
+    assert payload["saved"] is True
+    material_path = Path(payload["path"].replace("/mnt/user-data/outputs", str(tmp_path)))
+    assert material_path.read_bytes().decode("utf-8") == crlf_text
+    assert payload["sha256"] == report_store.sha256_text(crlf_text)
+
+
+def test_material_content_mismatch_still_fails(tmp_path, monkeypatch):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    original = report_store.write_text_atomic
+
+    def altered_write(path: Path, text: str) -> None:
+        if str(path).endswith(".txt"):
+            original(path, text.replace("Short", "Altered", 1))
+        else:
+            original(path, text)
+
+    monkeypatch.setattr(report_store, "write_text_atomic", altered_write)
+    material_tool = _tool_for(_paths(ctx), _short_fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/page"))
+    assert payload["saved"] is False
+    assert "material verification failed" in payload["error"]
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.materials() == []
+
+
 def test_same_url_reuses_source_and_content_identity(tmp_path):
     ctx = _context(tmp_path)
     _begin(ctx)

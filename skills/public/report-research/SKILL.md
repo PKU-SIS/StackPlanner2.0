@@ -42,11 +42,14 @@ create an exclusive source requirement.
    sufficient. `searched` means the attempt ran—not that the evidence is
    complete. Partial evidence or a normal zero-result search is still
    `searched`; Outline judges sufficiency.
-8. Continue across independent assigned gaps when useful. Do not claim a search
-   or fetch that did not execute. A true tool failure, forced interruption, or
-   incomplete result protocol is not `searched`; preserve saved material ids and
-   state what remained unfinished. A failed fetch is a technical failure, not
-   evidence that the fact does not exist.
+8. Continue across independent assigned gaps when useful, but when the host
+   warns that the tool or token budget is near its limit, stop opening new
+   searches and return the best complete observation you can. Do not claim a
+   search or fetch that did not execute. A true tool failure, forced
+   interruption, or incomplete result protocol is not `searched`; preserve saved
+   material ids and state what remained unfinished. A failed fetch is a
+   technical failure, not evidence that the fact does not exist. After a forced
+   stop this agent cannot repair the result.
 
 ## Output
 

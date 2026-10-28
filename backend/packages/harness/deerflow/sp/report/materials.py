@@ -274,7 +274,10 @@ def _save_material_text(
     material_id = ledger.next_material_id()
     path = paths.material_file(source_id, content_sha)
     report_store.write_text_atomic(path, text)
-    read_back = path.read_text(encoding="utf-8")
+    # Read the exact UTF-8 payload. Path.read_text() applies universal-newline
+    # translation, which would turn a saved CRLF body into LF and fail a
+    # content-identity check that is actually correct on disk.
+    read_back = path.read_bytes().decode("utf-8")
     if read_back != text:
         raise OSError("material verification failed: file content differs from tool return")
 

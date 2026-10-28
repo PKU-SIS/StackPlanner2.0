@@ -199,6 +199,52 @@ def test_report_delegate_serial_gate_uses_first_report_call_only():
     assert report_delegate_is_serial({**state, "messages": [HumanMessage(content="x")]}, "call-b") is True
 
 
+def test_report_delegate_serial_gate_uses_inferred_role_for_omitted_target():
+    from deerflow.sp.report.hooks import report_context
+
+    thread_id = f"report-w-inferred-serial-{uuid4().hex[:8]}"
+    first = _invoke(_model([_start_call(), AIMessage(content="started")]), thread_id=thread_id)
+    outputs = Path(first["thread_data"]["outputs_path"])
+    state = {
+        "thread_data": {"outputs_path": str(outputs)},
+        "messages": [
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {"name": "sp_delegate", "args": {"task": "research g1", "stage": "research"}, "id": "call-a", "type": "tool_call"},
+                    {"name": "sp_delegate", "args": {"task": "research g2", "stage": "research"}, "id": "call-b", "type": "tool_call"},
+                ],
+            )
+        ],
+    }
+    assert report_context(state).is_active
+    assert report_delegate_is_serial(state, "call-a") is True
+    assert report_delegate_is_serial(state, "call-b") is False
+
+
+def test_report_delegate_serial_gate_mixes_explicit_and_inferred_roles():
+    from deerflow.sp.report.hooks import report_context
+
+    thread_id = f"report-w-mixed-serial-{uuid4().hex[:8]}"
+    first = _invoke(_model([_start_call(), AIMessage(content="started")]), thread_id=thread_id)
+    outputs = Path(first["thread_data"]["outputs_path"])
+    state = {
+        "thread_data": {"outputs_path": str(outputs)},
+        "messages": [
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {"name": "sp_delegate", "args": {"target_agent": "outline", "task": "plan"}, "id": "call-a", "type": "tool_call"},
+                    {"name": "sp_delegate", "args": {"task": "research g1", "stage": "research"}, "id": "call-b", "type": "tool_call"},
+                ],
+            )
+        ],
+    }
+    assert report_context(state).is_active
+    assert report_delegate_is_serial(state, "call-a") is True
+    assert report_delegate_is_serial(state, "call-b") is False
+
+
 def test_control_middleware_injects_unapplied_answer_state_before_model(tmp_path):
 
     from deerflow.sp.report.context import SPReportContextMiddleware

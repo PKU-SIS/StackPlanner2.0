@@ -1994,7 +1994,11 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
             try:
                 from deerflow.sp.report import report_delegate_is_serial
 
-                serial = report_delegate_is_serial(request.state, tool_call_id)
+                serial = report_delegate_is_serial(
+                    request.state,
+                    tool_call_id,
+                    run_id=_run_id(request.runtime),
+                )
             except Exception:  # noqa: BLE001 - report gate must not affect ordinary delegation
                 serial = True
             if not serial:

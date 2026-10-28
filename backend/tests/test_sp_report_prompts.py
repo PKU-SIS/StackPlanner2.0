@@ -44,8 +44,8 @@ def test_central_prompt_uses_revise_after_accepted_tree():
 
 def test_outline_prompt_keeps_examples_and_source_nature_revisable():
     normalized = " ".join(REPORT_OUTLINE_PROMPT.split())
-    assert "are candidates for comparison, not automatically user requirements" in normalized
-    assert "all four named countries" in normalized
+    assert "Text introduced by" in normalized and "design space" in normalized
+    assert "Do not hardcode countries" in normalized
     assert "Judge source nature when selecting evidence" in normalized
     assert "AI-generated trend article" in normalized
     assert "Do not add a domain whitelist" in normalized
@@ -61,8 +61,8 @@ def test_central_prompt_allows_general_technical_ask_human_without_fake_rounds()
 def test_research_prompt_distinguishes_searched_from_sufficiency():
     normalized = " ".join(REPORT_RESEARCH_PROMPT.split())
     assert "`searched` means (a), not (c)" in normalized
-    assert "normal zero-result is still `searched`" in normalized
-    assert "incomplete result protocol is not `searched`" in normalized
+    assert "A valid search that finds only" in normalized
+    assert "After a forced stop this agent cannot repair the result" in normalized
     assert "searched` records an executed attempt even when evidence is partial" in normalized
 
 
@@ -78,7 +78,7 @@ def test_central_prompt_keeps_content_design_with_outline():
 
 def test_outline_prompt_limits_scope_and_action_lists():
     normalized = " ".join(REPORT_OUTLINE_PROMPT.split())
-    assert "not every research direction you add yourself" in normalized
+    assert "not every research direction or example you add" in normalized
     assert "not permission to expand the user's scope" in normalized
     assert "`gap_outcomes` is an action list" in normalized
     assert "every gap currently awaiting_outline" in normalized
@@ -157,7 +157,7 @@ def test_outline_skill_research_example_links_section_and_child():
     assert "Do not associate only the child" in normalized_skill
     assert "Each entry must target exactly" in normalized_skill
     assert "not automatically user requirements" in normalized_skill
-    assert "all four named countries" in normalized_skill
+    assert "Do not hardcode countries" in normalized_skill
     assert "Judge source nature before using it" in normalized_skill
     assert "never repeat an already-closed gap" in normalized_skill
     assert '"optional": true' in text

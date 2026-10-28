@@ -2302,8 +2302,19 @@ def control_context(state: Mapping[str, Any] | None) -> dict[str, Any] | None:
     return {"report": ledger.control_summary(), "instructions": CONTEXT_INSTRUCTIONS}
 
 
-def report_delegate_is_serial(state: Mapping[str, Any] | None, tool_call_id: str) -> bool:
-    """Return False for a report delegation that must wait for its sibling."""
+def report_delegate_is_serial(
+    state: Mapping[str, Any] | None,
+    tool_call_id: str,
+    *,
+    run_id: str | None = None,
+) -> bool:
+    """Return False for a report delegation that must wait for its sibling.
+
+    The dispatch router repairs an omitted ``target_agent`` from the stage or
+    the latest incomplete specialist. Serial gating must inspect the same
+    effective role; otherwise an omitted role bypasses the report-only gate
+    while the action still dispatches as researcher/outline/reporter.
+    """
     context_info = report_context(state)
     if not context_info.is_active:
         return True
@@ -2317,8 +2328,22 @@ def report_delegate_is_serial(state: Mapping[str, Any] | None, tool_call_id: str
     for call in latest.tool_calls:
         if not isinstance(call, Mapping) or str(call.get("name") or "") != "sp_delegate":
             continue
-        args = call.get("args") if isinstance(call.get("args"), Mapping) else {}
-        if str(args.get("target_agent") or "") in REPORT_DELEGATE_ROLES:
+        args = dict(call.get("args")) if isinstance(call.get("args"), Mapping) else {}
+        target = str(args.get("target_agent") or "").strip()
+        if not target:
+            try:
+                from deerflow.sp.actions.router import ActionRouter
+
+                repair_payload = {"action_type": "DELEGATE", **args}
+                ActionRouter._repair_missing_delegate_target_payload(
+                    repair_payload,
+                    state,
+                    run_id=run_id,
+                )
+                target = str(repair_payload.get("target_agent") or "").strip()
+            except Exception:  # noqa: BLE001 - preserve the existing non-report fallback
+                target = ""
+        if target in REPORT_DELEGATE_ROLES:
             report_call_ids.append(str(call.get("id") or ""))
     return not report_call_ids or report_call_ids[0] == tool_call_id
 

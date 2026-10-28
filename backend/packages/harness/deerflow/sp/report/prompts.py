@@ -74,8 +74,9 @@ structure, analysis dimensions, and research needs. A Researcher delegation
 must faithfully carry the registered question, constraints, and stop condition;
 do not tighten factual precision or add research requirements. Reliable-source
 guidance is an execution principle, not a user requirement or an exclusive
-source/delivery threshold. If Central sees a possibly useful extra direction,
-present it as a suggestion for Outline to weigh, not a task list. When relaying
+source/delivery threshold. If Central sees a possibly useful extra direction
+(including a country or classification example), present it as a suggestion for
+Outline to weigh, not a task list or required checklist. When relaying
 a tool/protocol error, preserve the original error and task meaning; do not
 replace it with a "make the field valid" remedy. For example, "recently
 released" does not become "determine the exact day of first release and the
@@ -250,8 +251,15 @@ Output contract:
   This is a depth requirement, not an unresolved-evidence flag or research
   completion status; a complex section may keep it true after research. Old
   trees without the field are read as false. Set it on section nodes only.
-- `requirements` must express the user's request and what is genuinely
-  necessary to complete it, not every research direction you add yourself.
+- `requirements` must express the user's hard request and what is genuinely
+  necessary to complete it, not every research direction or example you add.
+  Text introduced by "如/例如" and alternatives joined by "或" is a design
+  space, not a mandatory checklist: choose a coherent subset or classification
+  axis, and keep the user's real coverage requirement. Central's pre-research
+  examples and your own examples (including a list of representative countries)
+  are candidates, not automatically user requirements; put a country or example
+  in `constraints` only when the user specified it or the comparison genuinely
+  requires it. Do not hardcode countries, taxonomy levels, or source counts.
   Background, mechanism, and comparison dimensions may be expanded when they
   support the core analysis, but `needs_richer_research` is a retrieval-depth
   signal, not permission to expand the user's scope or turn every discovered
@@ -265,13 +273,6 @@ Output contract:
   detail is not deleting a user requirement; technical recovery must protect
   valid work but must not permanently freeze an unreasonable self-added
   constraint.
-- Central's pre-research examples, and your own examples such as a list of
-  countries, are candidates for comparison, not automatically user
-  requirements. Choose the representative set and comparison scope yourself
-  from the user's goal and saved evidence; put a country or example in
-  `constraints` only when the user specified it or the comparison genuinely
-  requires it. Missing one self-added example must not block the whole section
-  or turn "按代表性国家" into "all four named countries".
 - Judge source nature when selecting evidence: title or host organization does
   not prove first-party status. A personal museum visit, a repost, an
   AI-generated trend article, or an aggregator snippet is not equivalent to an
@@ -513,10 +514,12 @@ pass and do not try to complete the whole report.
   omit it merely because the evidence is insufficient. Evidence sufficiency is
   Outline's judgement.
 - If a fetch fails, record the accurate technical reason and continue other
-  assigned gaps when useful. A true tool failure, forced interruption, or
-  incomplete result protocol is not `searched`; preserve any saved material ids
-  and state what remained unfinished. Do not claim a search you did not
-  execute, and do not turn a tool/protocol failure into a factual absence claim.
+  assigned gaps when useful. When the host warns that the tool or token budget
+  is near its limit, stop opening new searches and return the best complete
+  observation you can. After a forced stop this agent cannot repair the result;
+  preserve saved material ids, state what remained unfinished, and never claim
+  a search you did not execute or turn a tool/protocol failure into a factual
+  absence claim.
 - Return the complete evidence summary in `artifact_content` (Markdown with
   source URLs, material ids, locatable line ranges, conflicts and remaining
   gaps). Keep `summary` compact. Do not decide whether a gap is resolved;
