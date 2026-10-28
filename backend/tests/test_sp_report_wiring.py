@@ -484,6 +484,34 @@ def test_research_gap_already_attempted_is_not_redispatched_before_outline():
     assert error is not None and ("already returned" in error or "only open" in error)
 
 
+def test_failed_research_counts_as_returned_without_auto_redispatch():
+    from deerflow.sp.report.ledger import utc_now_iso
+
+    state, gaps = _active_report_with_gaps(1)
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    now = utc_now_iso()
+    gap = ledger.require_gap(gaps[0])
+    gap["status"] = "open"
+    gap["technical_attempts"] = 1
+    gap["updated_at"] = now
+    gap.setdefault("history", []).append({"at": now, "event": "research_failed", "action_id": "a-failed", "execution": "technical_error", "note": "timeout"})
+    ledger.save()
+
+    researcher_args = {
+        "target_agent": "researcher",
+        "task": "retry the failed gap",
+        "stage": "research",
+        "metadata": {"report_gap_ids": [gaps[0]]},
+    }
+    state["messages"] = [AIMessage(content="", tool_calls=[{"name": "sp_delegate", "args": dict(researcher_args), "id": "call-a", "type": "tool_call"}])]
+    error = _gate(state, "call-a", researcher_args)
+    assert error is not None and "already returned" in error
+
+    outline_args = {"target_agent": "outline", "task": "judge the failed attempt", "stage": "revision", "metadata": {"report_task": "revise"}}
+    state["messages"] = [AIMessage(content="", tool_calls=[{"name": "sp_delegate", "args": dict(outline_args), "id": "outline-a", "type": "tool_call"}])]
+    assert _gate(state, "outline-a", outline_args) is None
+
+
 def test_independent_research_actually_overlaps_and_merges_ledger_updates():
     state, gaps = _active_report_with_gaps(2)
     executor = _BarrierExecutor()

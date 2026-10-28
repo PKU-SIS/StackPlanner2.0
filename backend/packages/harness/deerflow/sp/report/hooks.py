@@ -2375,7 +2375,7 @@ def _gap_attempted_since_tree(gap: Mapping[str, Any], accepted_at: Any) -> bool:
 
     cutoff = _parse_report_timestamp(accepted_at)
     for entry in reversed(gap.get("history") or []):
-        if not isinstance(entry, Mapping) or str(entry.get("event") or "") != "research_result":
+        if not isinstance(entry, Mapping) or str(entry.get("event") or "") not in {"research_result", "research_failed"}:
             continue
         at = _parse_report_timestamp(entry.get("at"))
         if cutoff is None or at is None or at >= cutoff:
