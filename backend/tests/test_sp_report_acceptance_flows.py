@@ -12,7 +12,6 @@ import shutil
 import sys
 from pathlib import Path
 
-import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -74,9 +73,7 @@ class _FixedExecutor:
                     "review": {
                         "status": "ready" if status == "ready" else "issues",
                         "outcome": "deliver" if status == "ready" else "revise",
-                        "findings": [] if status == "ready" else (self.findings or [
-                            {"kind": "coverage", "severity": "blocking", "node_ids": ["n2"], "message": "缺少必要内容"}
-                        ]),
+                        "findings": [] if status == "ready" else (self.findings or [{"kind": "coverage", "severity": "blocking", "node_ids": ["n2"], "message": "缺少必要内容"}]),
                         "covered_requirement_ids": ["R1"],
                         "edits": [],
                     },
@@ -180,7 +177,6 @@ class _RewriteExecutor(_FixedExecutor):
         return super().execute(task)
 
 
-
 def _outputs():
     outputs = get_paths().sandbox_outputs_dir("t1", user_id=get_effective_user_id())
     if outputs.exists():
@@ -206,9 +202,9 @@ def _ledger(state):
     return ReportLedger.load_for_context(hooks.report_context(state))
 
 
-def _state_without_messages():
+def _state_without_messages(**seed_kwargs):
     outputs = _outputs()
-    ctx, ledger = _seed(outputs)
+    ctx, ledger = _seed(outputs, **seed_kwargs)
     state = dict(ctx.state)
     state["messages"] = []
     return state, ledger
@@ -384,7 +380,17 @@ def test_explicit_new_cycle_uses_new_action_identity(monkeypatch):
 
 
 def test_outline_rewrite_request_is_written_by_central_writer_and_reaccepted(monkeypatch):
-    state, _ = _state_without_messages()
+    # The Writer dispatch gate requires a ready node with saved-material
+    # evidence locators. The old seed put a pre-existing draft on a planned
+    # node, a state the production writer path cannot create.
+    state, _ = _state_without_messages(
+        node_status="ready",
+        with_sources=True,
+        node_evidence=[
+            {"material_id": "m1", "source_ids": ["S1"], "locator": {"lines": [1, 1]}, "use": "seed evidence one"},
+            {"material_id": "m2", "source_ids": ["S1"], "locator": {"lines": [1, 1]}, "use": "seed evidence two"},
+        ],
+    )
     outputs = Path(state["thread_data"]["outputs_path"])
     new_body = "Rewritten body after the acceptance finding.\n"
     executor = _RewriteExecutor(["issues", "ready"], outputs, new_body)
@@ -424,5 +430,3 @@ def test_outline_rewrite_request_is_written_by_central_writer_and_reaccepted(mon
     final_text = Path(ledger.payload["final_report"]["path"]).read_text(encoding="utf-8")
     assert new_body.strip() in final_text
     assert "Seed body for n2." not in final_text
-
-

@@ -35,7 +35,15 @@ def _paths(ctx: HandlerContext) -> report_store.ReportPaths:
     return report_store.ReportPaths(context.outputs_path, context.report_id)
 
 
-def _seed(tmp_path: Path, *, write_status: str | None = None, body: str = "Seed body for n2.\n", with_sources: bool = False) -> tuple[HandlerContext, ReportLedger]:
+def _seed(
+    tmp_path: Path,
+    *,
+    write_status: str | None = None,
+    body: str = "Seed body for n2.\n",
+    with_sources: bool = False,
+    node_status: str = "planned",
+    node_evidence: list[dict] | None = None,
+) -> tuple[HandlerContext, ReportLedger]:
     ctx = _context(tmp_path)
     paths = _paths(ctx)
     ledger = ReportLedger.load(paths)
@@ -53,12 +61,12 @@ def _seed(tmp_path: Path, *, write_status: str | None = None, body: str = "Seed 
                 "question": "FY2024 指标如何？",
                 "argument": ["读取官方附注"],
                 "conclusion": "待证据",
-                "evidence": [],
+                "evidence": list(node_evidence or []),
                 "constraints": {"period": "FY2024"},
                 "requirement_ids": ["R1"],
                 "relations": [],
                 "gap_ids": [],
-                "status": "planned",
+                "status": node_status,
             },
         ],
     }
