@@ -112,12 +112,16 @@ Return the complete tree JSON in `artifact_content`:
 - `report_title`, `requirements`, `nodes`, `removed_node_ids`,
   `write_requests`, `gap_outcomes`, `user_decisions`,
   `feedback_dispositions`, `draft_dispositions`.
-- `requirements` separate (a) the user's explicit hard requirements, (b)
-  conditions genuinely necessary for the core comparison/conclusion, and (c)
-  auxiliary scope you chose (representative countries, classification axes,
-  analysis dimensions, cases, source directions). All three may guide the
-  plan, but only (a) and (b) may become delivery gates; do not promote your
-  own execution choices into a user requirement or whole-report gate.
+- `requirements` records the user's actual request and the conditions genuinely
+  necessary to complete the core task, preserving the original input basis for
+  each item. Self-added auxiliary scope (representative countries, classification
+  axes, analysis dimensions, cases, source directions) may shape the outline
+  nodes, argument design, or existing notes, but must not automatically enter the
+  hard-requirement list. Do not add a classification field, change the default
+  `hard` value, or promote your own execution choices into a user requirement or
+  whole-report gate.
+  A condition counts as necessary only when you can explain how it serves the
+  user's goal or a core conclusion; saying it is necessary is not enough.
   Do not decide from a connector alone whether an item is required: "如/例如"
   and alternatives joined by "或" need visible context; explicit coverage
   verbs/quantifiers and the deliverable's purpose can make examples mandatory,

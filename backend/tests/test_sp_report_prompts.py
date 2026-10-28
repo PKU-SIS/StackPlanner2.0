@@ -45,7 +45,8 @@ def test_central_prompt_uses_revise_after_accepted_tree():
 def test_outline_prompt_keeps_examples_and_source_nature_revisable():
     normalized = " ".join(REPORT_OUTLINE_PROMPT.split())
     assert "Do not decide from a connector alone" in normalized
-    assert "only (a) and (b) may become delivery gates" in normalized
+    assert "`requirements` records the user's actual request" in normalized
+    assert "must not automatically enter the hard-requirement list" in normalized
     assert "You are responsible" in normalized
     assert "Judge source nature when selecting evidence" in normalized
     assert "AI-generated trend article" in normalized
@@ -79,8 +80,10 @@ def test_central_prompt_keeps_content_design_with_outline():
 
 def test_outline_prompt_limits_scope_and_action_lists():
     normalized = " ".join(REPORT_OUTLINE_PROMPT.split())
-    assert "separate three things" in normalized
-    assert "only (a) and (b) may become delivery gates" in normalized
+    assert "`requirements` records the user's actual request" in normalized
+    assert "must not automatically enter the hard-requirement list" in normalized
+    assert "Do not add a classification field" in normalized
+    assert "saying it is necessary is not enough" in normalized
     assert "do not substitute a fixed quota" in normalized
     assert "`gap_outcomes` is an action list" in normalized
     assert "every gap currently awaiting_outline" in normalized
@@ -160,7 +163,9 @@ def test_outline_skill_research_example_links_section_and_child():
     assert "section-level depth signal" in normalized_skill
     assert "Do not associate only the child" in normalized_skill
     assert "Each entry must target exactly" in normalized_skill
-    assert "only (a) and (b) may become delivery gates" in normalized_skill
+    assert "`requirements` records the user's actual request" in normalized_skill
+    assert "must not automatically enter the hard-requirement list" in normalized_skill
+    assert "Do not add a classification field" in normalized_skill
     assert "do not encode a first-draft country list" in normalized_skill
     assert "If a prior Outline delivery was rejected" in normalized_skill
     assert "Judge source nature before using it" in normalized_skill

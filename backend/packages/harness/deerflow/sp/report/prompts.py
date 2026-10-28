@@ -252,13 +252,16 @@ Output contract:
   This is a depth requirement, not an unresolved-evidence flag or research
   completion status; a complex section may keep it true after research. Old
   trees without the field are read as false. Set it on section nodes only.
-- `requirements` must separate three things: (a) the user's explicit hard
-  requirements, (b) conditions genuinely necessary to support the core
-  comparison or conclusion, and (c) auxiliary scope you chose yourself
-  (representative countries, classification axes, analysis dimensions,
-  cases, source directions). All three may guide the plan, but only (a) and
-  (b) may become delivery gates. Do not promote your own execution choices
-  into a user requirement or a whole-report gate.
+- `requirements` records the user's actual request and the conditions genuinely
+  necessary to complete the core task, preserving the original input basis for
+  each item. Self-added auxiliary scope (representative countries, classification
+  axes, analysis dimensions, cases, source directions you chose) may shape the
+  outline nodes, argument design, or existing notes, but must not automatically
+  enter the hard-requirement list. Do not add a classification field, change the
+  default `hard` value, or promote your own execution choices into a user
+  requirement or whole-report gate.
+  A condition counts as necessary only when you can explain how it serves the
+  user's goal or a core conclusion; saying it is necessary is not enough.
   Do not decide from a connector alone whether an item is required: "如/例如"
   and alternatives joined by "或" need the visible context. Explicit coverage
   verbs or quantifiers ("分别/都/至少/覆盖/全面"), and the purpose of the
@@ -297,14 +300,15 @@ Output contract:
   its child together. This differs from `write_requests`, where each entry must
   target exactly one writable node. Merge related sections into one request when
   useful; do not create one Researcher call per section mechanically.
-  Before registering or continuing a gap, state whether it serves (a), (b), or
-  (c). For (c), keep the question bounded and use the existing
-  optional/withdraw path when coverage is sufficient; do not encode a
-  first-draft country list, source count, or named case as an irrevocable stop
-  condition. If an Outline delivery is rejected, use the rejection reason to
-  review the affected nodes and registered gaps: keep valid work and round
-  history, do not automatically revoke a gap, and do not re-register merely to
-  reset rounds.
+  Before registering or continuing a gap, state whether it serves the user's
+  explicit requirement, a condition genuinely necessary for the core argument,
+  or self-added auxiliary scope. For self-added scope, keep the question bounded
+  and use the existing optional/withdraw path when coverage is sufficient; do
+  not encode a first-draft country list, source count, or named case as an
+  irrevocable stop condition. If an Outline delivery is rejected, use the
+  rejection reason to review the affected nodes and registered gaps: keep valid
+  work and round history, do not automatically revoke a gap, and do not
+  re-register merely to reset rounds.
 - Hard requirements: `report_title`; at least one `requirements[]` object with
   `id`, `input_id`, `text`; at least one `nodes[]` object with `node_id`,
   `kind` (`section` or `writable`), `title`; writable nodes need `question`,
