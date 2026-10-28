@@ -1936,6 +1936,41 @@ def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: st
     return payload
 
 
+def build_control_payload(
+    tool_name: str,
+    args: Mapping[str, Any],
+    *,
+    tool_call_id: str,
+    state: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the exact payload the control-tool dispatcher will consume."""
+
+    return _action_payload(tool_name, args, tool_call_id=tool_call_id, state=state)
+
+
+def _report_delegate_error(tool_call_id: str, error: str) -> Command[Any]:
+    """Return one recoverable report-delegation error tool result."""
+
+    return Command(
+        update={
+            "messages": [
+                ToolMessage(
+                    content=json.dumps(
+                        {
+                            "action_type": "DELEGATE",
+                            "next_step": "error_recoverable",
+                            "error": error,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    tool_call_id=tool_call_id,
+                    name="sp_delegate",
+                )
+            ]
+        }
+    )
+
+
 class SPControlActionMiddleware(AgentMiddleware[AgentState]):
     """Execute SP control methods in-place inside the one DR2 agent loop."""
 
@@ -1990,38 +2025,52 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
         tool_name = str(request.tool_call.get("name") or "")
         tool_call_id = str(request.tool_call.get("id") or "sp-tool")
 
+        payload: dict[str, Any] | None = None
         if tool_name == "sp_delegate":
             try:
-                from deerflow.sp.report import report_delegate_is_serial
+                from deerflow.sp.report import report_context, report_delegate_is_serial
 
-                serial = report_delegate_is_serial(
-                    request.state,
-                    tool_call_id,
-                    run_id=_run_id(request.runtime),
-                )
-            except Exception:  # noqa: BLE001 - report gate must not affect ordinary delegation
-                serial = True
-            if not serial:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                content=json.dumps(
-                                    {
-                                        "action_type": "DELEGATE",
-                                        "next_step": "error_recoverable",
-                                        "error": "Report delegations are serial. The first report delegation in this turn is already executing; wait for its result and inspect it before dispatching the next one.",
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                                tool_call_id=tool_call_id,
-                                name="sp_delegate",
-                            )
-                        ]
-                    }
-                )
+                report_active = report_context(request.state).is_active
+            except Exception:  # noqa: BLE001 - ordinary delegation keeps its legacy path
+                report_active = False
+            if report_active:
+                try:
+                    payload = build_control_payload(
+                        tool_name,
+                        request.tool_call.get("args") or {},
+                        tool_call_id=tool_call_id,
+                        state=request.state,
+                    )
+                    serial = report_delegate_is_serial(
+                        request.state,
+                        tool_call_id,
+                        payload=payload,
+                        payload_builder=lambda args, call_id: build_control_payload(
+                            "sp_delegate",
+                            args,
+                            tool_call_id=call_id,
+                            state=request.state,
+                        ),
+                        run_id=_run_id(request.runtime),
+                    )
+                except Exception as exc:  # noqa: BLE001 - active report must not fall open
+                    return _report_delegate_error(
+                        tool_call_id,
+                        f"Report delegation precheck failed: {type(exc).__name__}: {exc}",
+                    )
+                if not serial:
+                    return _report_delegate_error(
+                        tool_call_id,
+                        "Report delegations are serial. The first report delegation in this turn is already executing; wait for its result and inspect it before dispatching the next one.",
+                    )
 
-        payload = _action_payload(tool_name, request.tool_call.get("args") or {}, tool_call_id=tool_call_id, state=request.state)
+        if payload is None:
+            payload = build_control_payload(
+                tool_name,
+                request.tool_call.get("args") or {},
+                tool_call_id=tool_call_id,
+                state=request.state,
+            )
         if tool_name == "sp_finish":
             payload["metadata"] = {
                 **dict(payload.get("metadata") or {}),

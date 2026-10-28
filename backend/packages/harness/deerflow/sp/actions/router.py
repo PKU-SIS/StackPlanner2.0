@@ -391,6 +391,28 @@ class ActionRouter:
         }
         payload["metadata"] = metadata
 
+    @classmethod
+    def effective_delegate_target(
+        cls,
+        payload: dict[str, Any],
+        state: Mapping[str, Any],
+        *,
+        run_id: str | None,
+    ) -> str:
+        """Return the role ``execute`` will dispatch for this exact payload.
+
+        Applies the same target-repair and normalization sequence as
+        :meth:`execute` without running a handler, dispatching, or writing
+        report state. ``payload`` may be mutated only with the same target
+        repair the dispatcher performs.
+        """
+
+        cls.repair_missing_delegate_target_payload(payload, state, run_id=run_id)
+        action = SPAction.from_dict(payload)
+        cls._normalize_coder_source_recovery_target(action, state, run_id=run_id)
+        cls._normalize_delegate_target(action)
+        return action.target_agent or ""
+
     @staticmethod
     def _normalize_delegate_target(action: SPAction) -> None:
         """Repair clear researcher/coder role inversions at the action boundary."""

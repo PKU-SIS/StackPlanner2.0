@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import sys
+from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -15,11 +17,14 @@ from _agent_e2e_helpers import FakeToolCallingModel
 
 from deerflow.config.app_config import AppConfig
 from deerflow.sp.actions.handlers.base import HandlerContext
-from deerflow.sp.actions.schema import ActionType, SPAction
+from deerflow.sp.actions.router import ActionRouter
+from deerflow.sp.actions.schema import ActionType, ActionValidationError, SPAction
+from deerflow.sp.agent_tools import SPControlActionMiddleware, build_control_payload
 from deerflow.sp.memory import TaskMemoryStack
 from deerflow.sp.report import hooks
 from deerflow.sp.report.hooks import report_delegate_is_serial
 from deerflow.sp.report.ledger import ReportLedger
+from deerflow.sp.subagents import SPSubagentResult, SPSubagentStatus
 
 _CAPTURED_REQUESTS: list[list[BaseMessage]] = []
 _CAPTURED_TOOLS: list[set[str]] = []
@@ -97,6 +102,56 @@ def _invoke(model: CapturingModel, *, thread_id: str):
 
 def _tool_messages(result) -> list:
     return [message for message in result["messages"] if type(message).__name__ == "ToolMessage"]
+
+
+def _payload_for(state, args, call_id):
+    return build_control_payload("sp_delegate", args, tool_call_id=call_id, state=state)
+
+
+def _serial_gate(state, call_id, *, run_id=None):
+    latest = next((message for message in reversed(state.get("messages") or []) if isinstance(message, AIMessage)), None)
+    args = {}
+    if latest is not None:
+        for call in latest.tool_calls or []:
+            if call.get("id") == call_id:
+                args = dict(call.get("args") or {})
+                break
+    return report_delegate_is_serial(
+        state,
+        call_id,
+        payload=_payload_for(state, args, call_id),
+        payload_builder=lambda raw, cid: _payload_for(state, raw, cid),
+        run_id=run_id,
+    )
+
+
+def _active_report_state() -> dict:
+    thread_id = f"report-w-state-{uuid4().hex[:8]}"
+    first = _invoke(_model([_start_call(), AIMessage(content="started")]), thread_id=thread_id)
+    outputs = Path(first["thread_data"]["outputs_path"])
+    return {"thread_data": {"outputs_path": str(outputs)}, "messages": []}
+
+
+class _RecordingExecutor:
+    def __init__(self):
+        self.tasks = []
+
+    def execute(self, task):
+        self.tasks.append(task)
+        return SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="observation",
+            artifact_content="observation",
+            artifact_type="research_observation",
+            artifact_metadata={"completion_status": "complete", "evidence_gaps": []},
+        )
+
+
+def _invoke_with_executor(model, *, thread_id, executor, monkeypatch):
+    import deerflow.sp.runtime as sp_runtime
+
+    monkeypatch.setattr(sp_runtime.DR2SPExecutorProvider, "__call__", lambda self, state, runtime: executor)
+    return _invoke(model, thread_id=thread_id)
 
 
 def test_production_graph_starts_report_injects_control_and_rejects_p1_finish(monkeypatch):
@@ -194,9 +249,9 @@ def test_report_delegate_serial_gate_uses_first_report_call_only():
         ],
     }
     assert report_context(state).is_active
-    assert report_delegate_is_serial(state, "call-a") is True
-    assert report_delegate_is_serial(state, "call-b") is False
-    assert report_delegate_is_serial({**state, "messages": [HumanMessage(content="x")]}, "call-b") is True
+    assert _serial_gate(state, "call-a") is True
+    assert _serial_gate(state, "call-b") is False
+    assert _serial_gate({**state, "messages": [HumanMessage(content="x")]}, "call-b") is True
 
 
 def test_report_delegate_serial_gate_uses_inferred_role_for_omitted_target():
@@ -218,8 +273,8 @@ def test_report_delegate_serial_gate_uses_inferred_role_for_omitted_target():
         ],
     }
     assert report_context(state).is_active
-    assert report_delegate_is_serial(state, "call-a") is True
-    assert report_delegate_is_serial(state, "call-b") is False
+    assert _serial_gate(state, "call-a") is True
+    assert _serial_gate(state, "call-b") is False
 
 
 def test_report_delegate_serial_gate_mixes_explicit_and_inferred_roles():
@@ -241,8 +296,203 @@ def test_report_delegate_serial_gate_mixes_explicit_and_inferred_roles():
         ],
     }
     assert report_context(state).is_active
-    assert report_delegate_is_serial(state, "call-a") is True
-    assert report_delegate_is_serial(state, "call-b") is False
+    assert _serial_gate(state, "call-a") is True
+    assert _serial_gate(state, "call-b") is False
+
+
+def test_serial_gate_uses_final_role_after_router_normalization():
+    state = _active_report_state()
+    args = {"task": "读取 https://api.example.com/data 的官方接口并整理结果", "stage": "implementation"}
+    state = {
+        **state,
+        "messages": [
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {"name": "sp_delegate", "args": dict(args), "id": "call-a", "type": "tool_call"},
+                    {"name": "sp_delegate", "args": dict(args), "id": "call-b", "type": "tool_call"},
+                ],
+            )
+        ],
+    }
+
+    assert _serial_gate(state, "call-a") is True
+    assert _serial_gate(state, "call-b") is False
+    for call_id in ("call-a", "call-b"):
+        payload = _payload_for(state, args, call_id)
+        assert payload["action_id"] == f"spact_{call_id}"
+        assert payload["reason"]
+        assert ActionRouter.effective_delegate_target(payload, state, run_id=None) == "researcher"
+
+    filled = _payload_for(state, {"target_agent": "researcher", "stage": "research"}, "call-filled")
+    assert filled["task"]
+
+
+def test_serial_gate_keeps_invalid_call_out_of_serial_slot():
+    state = _active_report_state()
+    invalid = {"target_agent": "wizard", "task": "research g1"}
+    valid = {"target_agent": "researcher", "task": "research g2"}
+    state = {
+        **state,
+        "messages": [
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {"name": "sp_delegate", "args": dict(invalid), "id": "call-invalid", "type": "tool_call"},
+                    {"name": "sp_delegate", "args": dict(valid), "id": "call-valid", "type": "tool_call"},
+                ],
+            )
+        ],
+    }
+
+    assert _serial_gate(state, "call-invalid") is True
+    assert _serial_gate(state, "call-valid") is True
+    payload = _payload_for(state, invalid, "call-invalid")
+    with pytest.raises(ActionValidationError):
+        ActionRouter.effective_delegate_target(payload, state, run_id=None)
+
+
+def test_serial_gate_propagates_unknown_role_inference_failure(monkeypatch):
+    state = _active_report_state()
+    state = {
+        **state,
+        "messages": [
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {"name": "sp_delegate", "args": {"target_agent": "researcher", "task": "research g1"}, "id": "call-a", "type": "tool_call"},
+                ],
+            )
+        ],
+    }
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("role inference exploded")
+
+    monkeypatch.setattr(ActionRouter, "effective_delegate_target", boom)
+    with pytest.raises(RuntimeError):
+        _serial_gate(state, "call-a")
+
+
+def test_active_report_precheck_failure_returns_recoverable_tool_error(monkeypatch):
+    state = _active_report_state()
+    state = {
+        **state,
+        "messages": [
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {"name": "sp_delegate", "args": {"target_agent": "researcher", "task": "research g1"}, "id": "call-a", "type": "tool_call"},
+                ],
+            )
+        ],
+    }
+    request = SimpleNamespace(
+        tool_call={"name": "sp_delegate", "args": {"target_agent": "researcher", "task": "research g1"}, "id": "call-a"},
+        state=state,
+        runtime=SimpleNamespace(context={"run_id": "run1", "thread_id": "t1"}),
+    )
+
+    import deerflow.sp.report as report_package
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("precheck exploded")
+
+    monkeypatch.setattr(report_package, "report_delegate_is_serial", boom)
+    command = SPControlActionMiddleware()._execute_control_tool(request)
+
+    payload = json.loads(command.update["messages"][0].content)
+    assert payload["next_step"] == "error_recoverable"
+    assert "precheck failed" in payload["error"]
+
+
+def test_serial_gate_does_not_mutate_payload_ledger_or_task_memory():
+    state = _active_report_state()
+    state["sp_task_memory"] = {"entries": []}
+    args = {"task": "research g1", "stage": "research"}
+    state = {
+        **state,
+        "messages": [
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {"name": "sp_delegate", "args": dict(args), "id": "call-a", "type": "tool_call"},
+                    {"name": "sp_delegate", "args": dict(args), "id": "call-b", "type": "tool_call"},
+                ],
+            )
+        ],
+    }
+    gate_payload = _payload_for(state, args, "call-a")
+    payload_before = deepcopy(gate_payload)
+    memory_before = deepcopy(state["sp_task_memory"])
+    outputs = Path(state["thread_data"]["outputs_path"])
+    files_before = {path.relative_to(outputs): path.read_bytes() for path in outputs.rglob("*") if path.is_file()}
+
+    assert (
+        report_delegate_is_serial(
+            state,
+            "call-a",
+            payload=gate_payload,
+            payload_builder=lambda raw, cid: _payload_for(state, raw, cid),
+            run_id=None,
+        )
+        is True
+    )
+
+    files_after = {path.relative_to(outputs): path.read_bytes() for path in outputs.rglob("*") if path.is_file()}
+    assert gate_payload == payload_before
+    assert state["sp_task_memory"] == memory_before
+    assert files_before == files_after
+
+
+def test_graph_report_delegate_batch_executes_only_first_valid_report_task(monkeypatch):
+    thread_id = f"report-w-graph-{uuid4().hex[:8]}"
+    executor = _RecordingExecutor()
+    args = {"task": "读取 https://api.example.com/data 的官方接口并整理结果", "stage": "implementation"}
+    model = _model(
+        [
+            _start_call(),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {"name": "sp_delegate", "args": dict(args), "id": "call-a", "type": "tool_call"},
+                    {"name": "sp_delegate", "args": dict(args), "id": "call-b", "type": "tool_call"},
+                ],
+            ),
+            AIMessage(content="done"),
+        ]
+    )
+
+    result = _invoke_with_executor(model, thread_id=thread_id, executor=executor, monkeypatch=monkeypatch)
+
+    assert len(executor.tasks) == 1
+    assert executor.tasks[0].subagent_type == "researcher"
+    serial_messages = [message for message in _tool_messages(result) if getattr(message, "tool_call_id", "") == "call-b"]
+    assert serial_messages
+    assert "Report delegations are serial" in serial_messages[-1].content
+
+
+def test_graph_ordinary_double_delegation_still_runs_both(monkeypatch):
+    thread_id = f"ordinary-w-graph-{uuid4().hex[:8]}"
+    executor = _RecordingExecutor()
+    args = {"target_agent": "researcher", "task": "research the same topic", "stage": "research"}
+    model = _model(
+        [
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {"name": "sp_delegate", "args": dict(args), "id": "call-a", "type": "tool_call"},
+                    {"name": "sp_delegate", "args": dict(args), "id": "call-b", "type": "tool_call"},
+                ],
+            ),
+            AIMessage(content="done"),
+        ]
+    )
+
+    result = _invoke_with_executor(model, thread_id=thread_id, executor=executor, monkeypatch=monkeypatch)
+
+    assert len(executor.tasks) == 2
+    assert result["messages"][-1].content == "done"
 
 
 def test_control_middleware_injects_unapplied_answer_state_before_model(tmp_path):

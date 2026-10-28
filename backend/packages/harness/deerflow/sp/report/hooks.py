@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -19,7 +19,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from deerflow.agents.thread_state import SP_CONCURRENT_MERGE_MODE_KEY
 from deerflow.sp.actions.events import make_sp_event
 from deerflow.sp.actions.handlers.base import HandlerContext
-from deerflow.sp.actions.schema import HandlerResult, SPAction
+from deerflow.sp.actions.schema import ActionValidationError, HandlerResult, SPAction
 from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.memory import StackMemoryEntry
 from deerflow.sp.report import assembly as report_assembly
@@ -2306,14 +2306,17 @@ def report_delegate_is_serial(
     state: Mapping[str, Any] | None,
     tool_call_id: str,
     *,
+    payload: Mapping[str, Any],
+    payload_builder: Callable[[Mapping[str, Any], str], Mapping[str, Any]],
     run_id: str | None = None,
 ) -> bool:
     """Return False for a report delegation that must wait for its sibling.
 
-    The dispatch router repairs an omitted ``target_agent`` from the stage or
-    the latest incomplete specialist. Serial gating must inspect the same
-    effective role; otherwise an omitted role bypasses the report-only gate
-    while the action still dispatches as researcher/outline/reporter.
+    ``payload`` is the exact control-tool payload built for this call and
+    ``payload_builder`` builds the same payload for sibling calls. Serial
+    gating asks the router for the final dispatch role, so the repair and
+    normalization rules are not duplicated and the precheck never mutates the
+    original payload or writes report state.
     """
     context_info = report_context(state)
     if not context_info.is_active:
@@ -2324,27 +2327,31 @@ def report_delegate_is_serial(
     latest = next((message for message in reversed(messages) if isinstance(message, AIMessage)), None)
     if latest is None or not isinstance(latest.tool_calls, list):
         return True
+    from deerflow.sp.actions.router import ActionRouter
+
     report_call_ids: list[str] = []
+    current_invalid = False
     for call in latest.tool_calls:
         if not isinstance(call, Mapping) or str(call.get("name") or "") != "sp_delegate":
             continue
-        args = dict(call.get("args")) if isinstance(call.get("args"), Mapping) else {}
-        target = str(args.get("target_agent") or "").strip()
-        if not target:
-            try:
-                from deerflow.sp.actions.router import ActionRouter
-
-                repair_payload = {"action_type": "DELEGATE", **args}
-                ActionRouter.repair_missing_delegate_target_payload(
-                    repair_payload,
-                    state,
-                    run_id=run_id,
-                )
-                target = str(repair_payload.get("target_agent") or "").strip()
-            except Exception:  # noqa: BLE001 - preserve the existing non-report fallback
-                target = ""
+        call_id = str(call.get("id") or "")
+        if call_id == tool_call_id:
+            candidate = dict(payload)
+        else:
+            args = dict(call.get("args")) if isinstance(call.get("args"), Mapping) else {}
+            candidate = dict(payload_builder(args, call_id))
+        try:
+            target = ActionRouter.effective_delegate_target(candidate, state, run_id=run_id)
+        except ActionValidationError:
+            # The dispatcher rejects this call with the same validation error.
+            # It cannot dispatch, so it must not occupy the serial slot.
+            if call_id == tool_call_id:
+                current_invalid = True
+            continue
         if target in REPORT_DELEGATE_ROLES:
-            report_call_ids.append(str(call.get("id") or ""))
+            report_call_ids.append(call_id)
+    if current_invalid:
+        return True
     return not report_call_ids or report_call_ids[0] == tool_call_id
 
 
