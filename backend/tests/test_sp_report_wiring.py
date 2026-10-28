@@ -511,6 +511,67 @@ def test_outline_external_revision_is_not_blocked_by_unrelated_open_gap():
     assert _gate(updated, "outline-a", outline_args) is None
 
 
+def test_outline_waits_for_remaining_batch_above_concurrency_limit():
+    from deerflow.sp.report.ledger import utc_now_iso
+
+    state, gaps = _active_report_with_gaps(4)
+
+    def researcher_args(gap_id):
+        return {
+            "target_agent": "researcher",
+            "task": f"research {gap_id}",
+            "stage": "research",
+            "metadata": {"report_gap_ids": [gap_id]},
+        }
+
+    state["messages"] = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                {"name": "sp_delegate", "args": researcher_args(gap_id), "id": f"call-{index}", "type": "tool_call"}
+                for index, gap_id in enumerate(gaps[:3])
+            ],
+        )
+    ]
+    for index, gap_id in enumerate(gaps[:3]):
+        assert _gate(state, f"call-{index}", researcher_args(gap_id)) is None
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    now = utc_now_iso()
+    for index, gap_id in enumerate(gaps[:3]):
+        action_id = f"a-batch-{index}"
+        ledger.begin_research_action(action_id, [gap_id])
+        gap = ledger.require_gap(gap_id)
+        gap["status"] = "awaiting_outline"
+        gap["updated_at"] = now
+        gap.setdefault("history", []).append(
+            {"at": now, "event": "research_result", "action_id": action_id, "execution": "searched", "rounds_after": 1, "material_ids": [], "note": "batch result"}
+        )
+        ledger.payload["actions"][action_id]["status"] = "completed"
+    ledger.save()
+
+    outline_args = {"target_agent": "outline", "task": "central judgment", "stage": "revision", "metadata": {"report_task": "revise"}}
+    state["messages"] = [AIMessage(content="", tool_calls=[{"name": "sp_delegate", "args": dict(outline_args), "id": "outline-a", "type": "tool_call"}])]
+    blocked = _gate(state, "outline-a", outline_args)
+    assert blocked is not None and gaps[3] in blocked
+
+    state["messages"] = [AIMessage(content="", tool_calls=[{"name": "sp_delegate", "args": researcher_args(gaps[3]), "id": "call-last", "type": "tool_call"}])]
+    assert _gate(state, "call-last", researcher_args(gaps[3])) is None
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    ledger.begin_research_action("a-batch-last", [gaps[3]])
+    gap = ledger.require_gap(gaps[3])
+    gap["status"] = "awaiting_outline"
+    gap["updated_at"] = utc_now_iso()
+    gap.setdefault("history", []).append(
+        {"at": now, "event": "research_result", "action_id": "a-batch-last", "execution": "searched", "rounds_after": 1, "material_ids": [], "note": "last batch result"}
+    )
+    ledger.payload["actions"]["a-batch-last"]["status"] = "completed"
+    ledger.save()
+
+    state["messages"] = [AIMessage(content="", tool_calls=[{"name": "sp_delegate", "args": dict(outline_args), "id": "outline-a", "type": "tool_call"}])]
+    assert _gate(state, "outline-a", outline_args) is None
+
+
 def test_research_gap_already_attempted_is_not_redispatched_before_outline():
     from deerflow.sp.report.ledger import utc_now_iso
 
