@@ -334,10 +334,16 @@ must cover every hard user requirement.
 ```
 
 If `report_packet.rejected_outline` is present on a `plan` or `revise` task,
-read that saved candidate first and correct the same tree; preserve valid nodes,
-requirements, evidence locators and completed updates. Do not prefill or reuse
-the current delivery path from the candidate, and do not let a dispatch message
-redefine this schema or move evidence preparation to Writer.
+follow `report_packet.delivery.instruction`. When the host has already copied the
+candidate into the current delivery, read the relevant tail of that current
+delivery first instead of requiring a full read of the old candidate. If only
+the tail is missing, append the missing content; correct a mid-file error
+normally. Preserve valid nodes, requirements, evidence locators and completed
+updates; do not overwrite newer delivery progress, and leave the original
+candidate unchanged. Only when the host did not prefill should the old candidate
+be used as the recovery basis and written to the specified delivery path. The
+final result must still be complete JSON passing tree, citation and business
+validation; do not change this schema or move evidence preparation to Writer.
 
 ### gap_outcomes shape
 
