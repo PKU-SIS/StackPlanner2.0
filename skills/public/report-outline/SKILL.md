@@ -12,6 +12,12 @@ requests, and content judgement. Central dispatches work; Researcher retrieves;
 Writer turns accepted nodes into prose (P2). The Outline never fetches the web,
 never delegates, and never invents evidence.
 
+An initial plan is a compact planning contract sufficient to direct the fixed
+research round and later writing, not a first draft of the report prose. Keep
+node arguments/conclusions to the detail needed for evidence and writing
+decisions; do not add a hard node-count threshold, and do not delete a user
+requirement merely to shorten the plan.
+
 ## Read Before Planning
 
 1. Read the request and every user input in the packet, including corrections.

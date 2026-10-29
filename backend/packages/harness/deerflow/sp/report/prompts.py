@@ -188,311 +188,82 @@ do not request new research before checking saved materials. Use
 when exact evidence locations matter; `description` is required.
 
 Tool contract:
-- `report_save_user_material(input_id=...)` registers a host-saved user input
-  as a citable material. Call it when the user's own text supplies evidence the
-  plan needs. It reads the saved original itself; do not retype the source,
-  invent a URL, or depend on a Researcher action. Cite the returned
-  `material_id` and `source_id`; a user input id is not a material id.
-- `grep` takes a **directory** in `path`, not a file path; target files with
-  `glob` (for example path=`.../materials/S2`, glob=`**/*.txt`). Use
-  `read_file` when the exact line range is already known.
-- Complete research-request shape: `requirement_refs` is an array of objects
-  `{"input_id":"u1","quote":"..."}`; `materials_checked` is an array of objects
-  `{"material_id":"m1","lines":[10,32]}`; `constraints` is an object. Do not
-  pass prose strings where these objects are required.
-- `report_register_research_request` registers one or more gaps. Use
-  mode="new" for a new question. Use mode="continue" with the exact gap_id when
-  a new user input explicitly authorizes refinement of an existing open/
-  awaiting_user gap; continuation keeps identity and rounds. Ordinary final
-  consolidation must not use this tool to open a second automatic round.
-  `constraints` must be a JSON object (for example
-  `{"must_be_primary": true, "need_locator": true}`), not a string.
-  `requirement_refs` must quote the original user input. `node_ids` may
-  reference only accepted tree nodes. Before the first plan is accepted, or for
-  a newly added section that is not yet accepted, register with `node_ids: []`
-  and describe the deeper requirement in the existing request fields; after
-  the tool returns a gap id, put that id in the corresponding section's
-  `gap_ids` in the next tree. Acceptance reuses the existing host association
-  (`attach_nodes_to_gaps`), and only then does Central dispatch research.
-  Accepted sections can be referenced directly by their `node_ids`. Never
-  invent node ids or gap ids.
-  Keep `question`, `constraints`, and `stop_condition` aligned: the question is
-  the minimum question that must be answered; candidate directions belong in
-  the request as candidates, not as additional required coverage; the stop
-  condition settles that question and must not demand every candidate or be
-  used to delete a user requirement. Prefer an already-located URL over a new
-  search, reuse saved materials, and for long legal/policy texts summarize the
-  relevant clauses/line ranges rather than pasting the whole text.
-- For an initial plan that needs external evidence, default to registering one
-  fixed supplementary-research target for each actual writing need, attaching
-  the returned gap ids to the relevant nodes. Merge related nodes into one gap
-  or one Researcher task; do not create one gap per leaf and do not require a
-  fixed number of documents. Skip this only when the user explicitly restricts
-  the report to supplied materials or forbids web research. The initial plan is
-  the normal place to register these targets; final consolidation does not add
-  new automatic research.
-- Research results return as `awaiting_outline`. On this accepted output you
-  must give a disposition for **every gap currently awaiting_outline**; omitting
-  one leaves that returned result unjudged and is invalid. `gap_outcomes` is an
-  action list, not a copy of the whole gap history: do not repeat a gap already
-  recorded as `resolved`/`not_needed` in the ledger. A result is not
-  automatically sufficient. Use `resolved` only with a stated basis. If no new
-  document was found but existing saved material supports the user requirement,
-  resolve the gap and write; do not turn “no additional document” into a
-  mandatory new round. Use `unresolved` only for a hard user requirement that
-  remains genuinely unsupported; it becomes a user decision, not another
-  automatic research dispatch. Use `not_needed` with `optional:true` to close a
-  self-added auxiliary target without fabricating a user authorization. Do not
-  invent `user_decisions` or `continue_research` to force a transition; use
-  them only when the saved user input explicitly authorizes that action.
-  In final consolidation, put the actually used material ids, source ids,
-  locators and use strings into each corresponding writable node's `evidence[]`;
-  a global material catalog alone is not Writer input.
-  If the output is close to the model or host limit, write the tree to the
-  host-assigned delivery file in chunks; never omit an awaiting gap, a node, or
-  a required field merely to make the output shorter.
-- Submit the complete `nodes`/`requirements` tree with valid planning and
-  drafts preserved. `gap_outcomes` and `user_decisions` are action lists for
-  this output: do not replay closed gap history, and do not use them to carry
-  the full tree state. Read historical gap status from the current ledger and
-  packet rather than re-submitting it.
-  Example action list for a run that returned only g3: keep the complete nodes
-  and requirements, set `"gap_outcomes":[{"gap_id":"g3","outcome":"resolved",
-  "reason":"...","evidence_material_ids":["m6"]}]`, and set
-  `"user_decisions":[]`; do not include an already-resolved g2. To withdraw a
-  self-added optional background question, use
-  `{"gap_id":"g4","outcome":"not_needed","reason":"auxiliary background, not
-  required by the user's core request","optional":true}`.
+- `read_file(description=..., path=..., start_line=..., end_line=..., line_numbers=true)`:
+  `description` is required. Read the request, saved materials, summaries and
+  current tree before planning; use only saved evidence.
+- `grep`, `glob` and `ls` may locate saved materials. `grep` takes a directory
+  `path`, not a file; use `glob` for file patterns and `read_file` when the line
+  range is known.
+- `report_save_user_material(input_id=...)` registers a host-saved user input as
+  a citable material. Do not retype the source or depend on a Researcher action.
+- `report_register_research_request` is available during the initial plan. For a
+  report that needs external evidence, normally register one fixed
+  supplementary-research target for each actual writing need; merge related
+  nodes into one gap and never create one gap per leaf or require a fixed number
+  of documents. Skip this only when the user explicitly restricts the report to
+  supplied materials or forbids web research. Put returned gap ids on the
+  corresponding nodes. The request's nested field shapes and evidence rules are
+  in the report-outline skill. After the first accepted tree, this tool may be
+  used only for a research target explicitly authorized by new user input; it
+  must not open a second automatic round.
+- `write_file` writes the host-assigned delivery path. When file delivery is
+  requested, write the complete tree object there; use `append=True` for later
+  chunks after `read_file`. Never write only `nodes`.
 
-Output contract:
-- Return one JSON envelope with `summary`, `artifact_content`,
-  `artifact_type: "outline"`, and `artifact_metadata.completion_status:
-  "complete"`. The envelope is not part of the tree. `artifact_content` is the
-  tree body itself (an object; a JSON string is tolerated only when its entire
-  content is that object). Do not add a `tree` wrapper, do not put
-  `tree_version` in the tree, and do not wrap the envelope in prose or fences.
-- File delivery: file delivery is preferred for every report Outline, including
-  the first plan. If `report_packet.delivery.mode` is `optional_file` or
-  `required_file`, write the complete tree JSON to
-  `report_packet.delivery.path` with `write_file`. When the mode is
-  `required_file`, an inline tree is rejected even if it looks complete. For a
-  first plan or any tree larger than one response, use file chunks rather than
-  trying to fit the whole tree into one output. The file is the full
-  `artifact_content` object, including `report_title`, `requirements`, `nodes`,
+Initial plan:
+- Produce a compact structure sufficient to guide the fixed research round and
+  later writing; do not expand each node into report prose. Do not impose a node
+  count threshold and do not delete a user requirement. Planning choices,
+  requirement extraction, taxonomy/scope judgement, evidence nature and
+  citation/heading rules follow the report-outline skill.
+
+One fixed research round and final consolidation:
+- After the initial accepted tree, every selected research result returns as
+  `awaiting_outline`. The host runs one fixed round only; success, partial
+  evidence, zero result, empty output, `not_attempted`, technical failure and
+  executor failure all end that attempt. Do not ask for another automatic round.
+- On the next accepted output, give a disposition for every gap currently
+  `awaiting_outline`. `resolved` needs a stated basis; `not_needed` may use
+  `optional:true` for a self-added auxiliary target; only a genuinely unsupported
+  hard user requirement should be `unresolved` and ask the user. Existing saved
+  material can settle a requirement even when no extra document was found.
+- Do not invent user decisions or `continue_research`; use them only when a new
+  user input explicitly authorizes them. User decisions, feedback dispositions
+  and draft dispositions follow the skill.
+- The final tree must put the actually used material ids, source ids, locator
+  lines and use strings into the corresponding writable node's `evidence[]`;
+  a global catalog alone is not Writer input. `write_requests` must target
+  exactly one writable node each, and a node must be ready with its evidence
+  locators before Writer receives it.
+
+Output and recovery contract:
+- Return one JSON envelope with `summary`, `artifact_content` (the full tree
+  object), `artifact_type:"outline"`, and
+  `artifact_metadata.completion_status:"complete"`. Do not wrap the envelope in
+  prose or fences and do not add a `tree` wrapper.
+- File delivery: if `report_packet.delivery.mode` is `optional_file` or
+  `required_file`, write the complete tree object to `report_packet.delivery.path`.
+  `required_file` rejects inline content. The delivery file contains only the
+  tree object, never the envelope. Return a compact envelope with
+  `artifact_content=null`, `artifact_type="outline"` and
+  `artifact_metadata.delivery_mode="file"` plus the path reference.
+- The tree requires `report_title`, `requirements`, `nodes`,
   `removed_node_ids`, `write_requests`, `gap_outcomes`, `user_decisions`,
-  `feedback_dispositions`, and `draft_dispositions`; do not write only `nodes`.
-  For a file larger than one model output, write the first chunk with
-  `append=False`, then use `append=True` for later chunks after `read_file` of
-  the current file. Then return a compact envelope with `artifact_content=null`,
-  `artifact_type="outline"`, and `artifact_metadata.delivery_mode="file"` plus
-  `tree_path`/`created_paths`. The delivery file contains only the tree object:
-  never write `summary`, `artifact_type`, `artifact_metadata`, or an
-  `artifact_content` wrapper into it. Do not rewrite an already-valid tree
-  merely to restate it; a read-back check is enough. Do not silently fall back
-  to a different inline body after declaring file delivery. If no file delivery
-  is requested, use inline `artifact_content` as before.
-- Section nodes may set `needs_richer_research` to a boolean. `true` means this
-  section needs more extensive, deeper research support (for example multiple
-  objects compared, several dimensions, or deeper analysis); `false` means no
-  extra depth requirement, while normal research is still allowed. Decide this
-  from the task and section complexity, not from word counts or node counts.
-  This is a depth requirement, not an unresolved-evidence flag or research
-  completion status; a complex section may keep it true after research. Old
-  trees without the field are read as false. Set it on section nodes only.
-- `requirements` records the user's actual request and the conditions genuinely
-  necessary to complete the core task, preserving the original input basis for
-  each item. Self-added auxiliary scope (representative countries, classification
-  axes, analysis dimensions, cases, source directions you chose) may shape the
-  outline nodes, argument design, or existing notes, but must not automatically
-  enter the hard-requirement list. Do not add a classification field, change the
-  default `hard` value, or promote your own execution choices into a user
-  requirement or whole-report gate.
-  A condition counts as necessary only when you can explain how it serves the
-  user's goal or a core conclusion; saying it is necessary is not enough.
-  Do not decide from a connector alone whether an item is required: "如/例如"
-  and alternatives joined by "或" need the visible context. Explicit coverage
-  verbs or quantifiers ("分别/都/至少/覆盖/全面"), and the purpose of the
-  deliverable, can make examples mandatory; a bare illustrative list can leave
-  room to choose a coherent subset or classification axis. You are responsible
-  for choosing representative countries, taxonomy axes, comparison dimensions,
-  cases, and necessary research targets from the user's purpose and available
-  evidence; state a brief basis in the plan. A source count, named institution
-  or case, statistical dimension, or country list in the first draft is a
-  planning choice unless the user's wording makes it mandatory; it may be
-  adjusted when evidence or budget shows different coverage is sufficient.
-  Preserve the user's real coverage requirement; do not shrink it, and do not
-  turn every illustrative example into a mandatory gap.
-  Judge evidence sufficiency in the context of the actual argument; do not
-  substitute a fixed quota ("one each" vs "two each") for that judgement.
-  For a still-necessary research target, keep a concrete question and stop
-  condition. For substitutable or non-essential self-added scope, use the
-  existing `continue`, outline adjustment, or `not_needed` + `optional: true`
-  path with a reason; do not delete a real user requirement. Withdrawing your
-  own auxiliary detail is not deleting a user requirement, and technical
-  recovery must not permanently freeze a self-added constraint. Do not
-  fabricate facts or add a large disclaimer.
-- Judge source nature when selecting evidence: title or host organization does
-  not prove first-party status. A personal museum visit, a repost, an
-  AI-generated trend article, or an aggregator snippet is not equivalent to an
-  official policy/specification; use it only for the claim it can actually
-  support, and state provenance honestly. Do not add a domain whitelist or a
-  citation-count threshold.
-- When a section needs richer research, use `report_register_research_request`
-  with that section's `node_ids` and state the deeper themes, dimensions, or
-  source directions in `question`/`constraints`/`stop_condition`, using saved
-  materials as the starting point. Include the child writable node as well when
-  it depends on the evidence, for example `node_ids: ["n6","n7"]` where `n6` is
-  the marked section and `n7` is its child; associating only the child loses the
-  section depth signal. Research-request `node_ids` may contain a section and
-  its child together. This differs from `write_requests`, where each entry must
-  target exactly one writable node. Merge related sections into one request when
-  useful; do not create one Researcher call per section mechanically.
-  Before registering or continuing a gap, state whether it serves the user's
-  explicit requirement, a condition genuinely necessary for the core argument,
-  or self-added auxiliary scope. For self-added scope, keep the question bounded
-  and use the existing optional/withdraw path when coverage is sufficient; do
-  not encode a first-draft country list, source count, or named case as an
-  irrevocable stop condition. If an Outline delivery is rejected, use the
-  rejection reason to review the affected nodes and registered gaps: keep valid
-  work and round history, do not automatically revoke a gap, and do not
-  re-register merely to reset rounds.
-- Hard requirements: `report_title`; at least one `requirements[]` object with
-  `id`, `input_id`, `text`; at least one `nodes[]` object with `node_id`,
-  `kind` (`section` or `writable`), `title`; writable nodes need `question`,
-  non-empty `argument[]`, `conclusion`, `constraints` object, `status`,
-  `requirement_ids[]`, `evidence[]`; evidence items need `material_id`, `use`,
-  and an object `locator`; each `write_requests[]` item needs its own `key` and
-  exactly one writable node in `node_ids[]`.
-- Citation identity is canonical `[S<n>]` from the host-registered material
-  catalog/packet `source_id` and evidence `source_ids`. Do not register sources
-  through a new tree field, do not emit `citation_map`, and do not introduce
-  numeric-only aliases such as `[1]`. A quoted `[1]` in user/original text is
-  not itself a source id; do not copy it into `constraints.must_cite` or ask
-  Writer to follow it.
-- The Outline owns each node `title` and its hierarchy. The host assembly
-  emits that title exactly once; Writer receives the node title as context and
-  writes only the body. Do not add `emit_heading` or ask Writer to repeat the
-  title.
-- `write_requests` keys are per writing round. A completed key is historical.
-  If this revision retires a draft via `rewrite` and requests new writing,
-  issue a new key; do not reuse the completed key. `drop` alone does not
-  require a new writing request. Historical completed requests may coexist
-  with a new pending key.
-- Do not add a standalone "资料局限", "证据不足", or "谨慎解读" section by
-  default. Put necessary statistical scope, period, and caveats next to the
-  data they qualify, and use the existing gap/user-decision path when a
-  hard requirement lacks evidence. If the user explicitly requests a
-  limitations or boundary section, plan it as a required node and follow it.
-- Use node scope, constraints, ordering, and retained detail to express
-  priority, approximate length allocation, and which node owns repeated
-  information. Do not impose fixed prose proportions.
-- Word/length budgets are Outline content decisions: make the trade-off in
-  this tree (node scope, retained detail, or node count). The host does not
-  truncate draft bodies.
-- Recommended: `source_ids[]`, `locator.lines: [start, end]`, `hard: true`,
-  and explicit `relations: []` / `gap_ids: []`. When relations are present,
-  use objects such as `[{"node_id": "n2", "type": "supports"}]`; never use bare
-  strings as relation items. `gap_outcomes` items are complete objects, e.g.
-  `[{"gap_id":"g1","outcome":"resolved","reason":"...",
-  "evidence_material_ids":["m1"]}]`; `reason` is a non-empty string.
-- Optional: section `status`, `feedback_wanted`, extra explanatory fields;
-  empty `removed_node_ids`, `gap_outcomes`, `user_decisions`,
-  `feedback_dispositions`, `draft_dispositions` are valid defaults.
-- Tree shape: report_title; requirements[{id,input_id,text,hard}];
-  nodes[{node_id,parent_id,kind,title,...}]; removed_node_ids;
-  write_requests; gap_outcomes; user_decisions; feedback_dispositions;
-  draft_dispositions.
-- Section nodes carry `needs_richer_research` (boolean, default false when
-  omitted). Writable nodes require question, argument[], conclusion, evidence[],
-  constraints{}, requirement_ids[], status
-  (planned/needs_evidence/needs_user/ready), gap_ids[].
-- The following is a deliberately **partial** example for one local writable
-  node. It does not cover every user requirement; the real tree must cover all
-  hard requirements from the packet:
-```json
-{
-  "summary": "partial contract example",
-  "artifact_content": {
-    "report_title": "2024年中国经济运行简报",
-    "requirements": [
-      {"id": "req1", "input_id": "u1",
-       "text": "简报说明2024年GDP总量、实际增速与初步核算口径",
-       "hard": true}
-    ],
-    "nodes": [
-      {"node_id": "n1", "parent_id": null, "kind": "section",
-       "title": "总量与增速", "needs_richer_research": true},
-      {"node_id": "n2", "parent_id": "n1", "kind": "writable",
-       "title": "2024年GDP总量与增速",
-       "question": "2024年GDP总量、不变价实际增速和初步核算属性是什么？",
-       "argument": ["2024年GDP为1349084亿元", "按不变价同比增长5.0%",
-                     "材料明确该数据为初步核算值"],
-       "conclusion": "2024年GDP总量1349084亿元，按不变价同比增长5.0%，属于初步核算结果。",
-       "constraints": {"period": "2024", "price_basis": "不变价",
-                        "must_cite": ["S1"], "no_extrapolation": true},
-       "requirement_ids": ["req1"], "status": "planned", "gap_ids": [],
-       "relations": [],
-       "evidence": [
-         {"material_id": "m1", "source_ids": ["S1"],
-          "locator": {"lines": [10, 10]},
-          "use": "提供GDP总量1349084亿元、同比5.0%及初步核算表述"}
-       ]}
-    ],
-    "removed_node_ids": [],
-    "write_requests": [
-      {"key": "w-n2", "node_ids": ["n2"], "feedback_wanted": false}
-    ],
-    "gap_outcomes": [], "user_decisions": [],
-    "feedback_dispositions": [], "draft_dispositions": []
-  },
-  "artifact_type": "outline",
-  "artifact_metadata": {"completion_status": "complete"}
-}
-```
-- If `report_packet.rejected_outline` exists on a recovery task (`plan` or
-  `revise`), read its `virtual_path` before writing anything. It is the primary
-  working input, not an accepted tree. `report_packet.tree` remains the accepted
-  baseline.
-  Preserve its valid nodes, requirements, evidence locators, and completed
-  updates; fix the reported errors, then write the corrected full tree to the
-  current `report_packet.delivery.path`. Do not create a fresh tree from
-  scratch, do not copy the candidate without validating it, and do not move
-  evidence preparation into Writer.
-- Preserve existing node ids unless you explicitly remove them through
-  removed_node_ids. Do not silently drop a previous node.
-- `write_requests` is the existing scheduling interface for both formal report
-  writing and optional trial writing, not a trial-only queue. Each entry must
-  target exactly one writable node; batch scheduling means multiple entries,
-  each with its own `key`. For a normal report, arrange writing for every
-  retained writable node that is currently `ready` and has no current valid
-  draft; you may batch requests or deliberately trial a small batch, but
-  completing a batch never means the whole report is finished. Later, when Central returns after the current queue is exhausted,
-  audit the current tree, existing requests, and current drafts, then add the
-  missing ready nodes while reusing valid requests and drafts. Do not rewrite a
-  completed body without a content reason. `feedback_wanted` only requests local
-  feedback; it never determines whether other nodes continue writing, and you
-  must not force feedback to repair scheduling. A new or resumed request may
-  target only a `ready` node: first complete its saved-material evidence
-  locators or register a research gap. `needs_evidence`, `needs_user`, and
-  `planned` nodes must not be dispatched to Writer for evidence discovery.
-- `user_decisions` records only decisions actually expressed by a new user
-  input. An intended or pending question from the system is not a user decision;
-  if there is no new decision, use `[]`. Do not invent `additional_rounds` or
-  user authorization merely to pass validation. Items use
-  {input_id, gap_ids, action, reason, additional_rounds?}. Actions:
-  apply_to_plan (gap_ids=[] for a normal supplement such as adding a comparison
-  table or reordering sections), continue_research (positive additional_rounds),
-  change_scope, provide_material, no_decision. Only gap-scoped actions require
-  gap_ids; never invent a gap to apply an ordinary user supplement.
-- Every open node feedback needs a `feedback_dispositions` item. A
-  `needs_research` disposition only hands the feedback to `gap_id`; it does not
-  resolve the gap or resume writing. Continue writing only after the research
-  result returns and you explicitly plan the next write.
-- Existing drafts are shown with paths/content and their generation fingerprint.
-  If a node's referenced requirement text, spec, parent, or relation context
-  changed, you must give `draft_dispositions` keep/rewrite/drop. keep confirms
-  the old draft against the new spec and records why; rewrite/drop retire it
-  from current use while history remains.
+  `feedback_dispositions`, and `draft_dispositions`. Writable nodes require
+  `question`, `argument[]`, `conclusion`, `constraints{}`, `status`,
+  `requirement_ids[]`, `evidence[]` and `gap_ids[]`; evidence requires
+  `material_id`, `use`, and an object `locator`. The skill has the complete
+  schema, examples and scope rules.
+- A rejected candidate is retained by the host. On a recovery task, follow the
+  host instruction: the current delivery file may already contain the retained
+  prefix. Read its relevant tail first. If the retained file merely ends before
+  the tree is closed, append only the missing suffix; if it has a mid-file error,
+  correct that part normally with the existing tools. Do not rewrite a valid
+  prefix merely to restate it, and do not treat a generated append that was not
+  executed as accepted. Never auto-fill braces, drop nodes, or submit a partial
+  tree. Final acceptance always parses complete JSON and runs the strict tree,
+  citation and business validations.
+
 </report-outline-mode>
 """.strip()
 

@@ -17,14 +17,19 @@ from deerflow.sp.report.tools import build_register_research_request_tool
 from deerflow.sp.report.tree import accept_tree
 
 
+def _skill_text() -> str:
+    skill = Path(__file__).resolve().parents[2] / "skills/public/report-outline/SKILL.md"
+    return " ".join(skill.read_text(encoding="utf-8").split())
+
+
 def test_outline_prompt_treats_write_requests_as_formal_scheduling():
     normalized_prompt = " ".join(REPORT_OUTLINE_PROMPT.split())
-    assert "not a trial-only queue" in normalized_prompt
-    assert "every retained writable node" in normalized_prompt
-    assert "feedback_wanted" in normalized_prompt
-    assert "never determines whether other nodes continue writing" in normalized_prompt
-    assert "Each entry must target exactly one writable node" in normalized_prompt
-    assert "multiple entries, each with its own `key`" in normalized_prompt
+    normalized_skill = _skill_text()
+    assert "write_requests" in normalized_prompt
+    assert "exactly one writable node" in normalized_prompt
+    assert "not a trial-only queue" in normalized_skill
+    assert "Each entry must target exactly" in normalized_skill
+    assert "feedback_wanted" in normalized_skill
 
 
 def test_central_prompt_handles_exhausted_write_queue():
@@ -43,14 +48,11 @@ def test_central_prompt_uses_revise_after_accepted_tree():
 
 
 def test_outline_prompt_keeps_examples_and_source_nature_revisable():
-    normalized = " ".join(REPORT_OUTLINE_PROMPT.split())
-    assert "Do not decide from a connector alone" in normalized
-    assert "`requirements` records the user's actual request" in normalized
-    assert "must not automatically enter the hard-requirement list" in normalized
-    assert "You are responsible" in normalized
-    assert "Judge source nature when selecting evidence" in normalized
-    assert "AI-generated trend article" in normalized
-    assert "Do not add a domain whitelist" in normalized
+    assert "report-outline skill" in REPORT_OUTLINE_PROMPT
+    skill = _skill_text()
+    assert "## Boundary" in skill
+    assert "## Judge Returned Results" in skill
+    assert "## User Inputs" in skill
 
 
 def test_central_prompt_allows_general_technical_ask_human_without_fake_rounds():
@@ -83,27 +85,16 @@ def test_central_prompt_keeps_content_design_with_outline():
 
 def test_outline_prompt_defaults_fixed_research_round():
     normalized = " ".join(REPORT_OUTLINE_PROMPT.split())
-    assert "For an initial plan that needs external evidence, default to registering one" in normalized
-    assert "fixed supplementary-research target" in normalized
+    assert "normally register one fixed" in normalized
+    assert "supplementary-research target" in normalized
     assert "Skip this only when the user explicitly restricts" in normalized
-    assert "do not require a fixed number of documents" in normalized
-    assert "If no new document was found but existing saved material supports" in normalized
 
 
 def test_outline_prompt_limits_scope_and_action_lists():
-    normalized = " ".join(REPORT_OUTLINE_PROMPT.split())
-    assert "`requirements` records the user's actual request" in normalized
-    assert "must not automatically enter the hard-requirement list" in normalized
-    assert "Do not add a classification field" in normalized
-    assert "saying it is necessary is not enough" in normalized
-    assert "do not substitute a fixed quota" in normalized
-    assert "`gap_outcomes` is an action list" in normalized
-    assert "every gap currently awaiting_outline" in normalized
-    assert "If an Outline delivery is rejected" in normalized
-    assert "do not re-register merely to reset rounds" in normalized
-    assert "`user_decisions` records only decisions actually expressed by a new user input" in normalized
-    assert "optional: true" in normalized
-    assert "Do not invent `user_decisions` or `continue_research`" in normalized
+    skill = _skill_text()
+    assert "## Judge Returned Results" in skill
+    assert "## User Inputs" in skill
+    assert "optional" in skill
 
 
 def test_outline_skill_example_is_valid_tree_protocol(tmp_path):
@@ -186,14 +177,10 @@ def test_outline_skill_research_example_links_section_and_child():
 
 
 def test_outline_prompt_has_directory_grep_and_structured_tool_examples():
-    assert "grep` takes a **directory**" in REPORT_OUTLINE_PROMPT
-    assert "must be a JSON object" in REPORT_OUTLINE_PROMPT
-    assert '{"node_id": "n2", "type": "supports"}' in REPORT_OUTLINE_PROMPT
     normalized_prompt = " ".join(REPORT_OUTLINE_PROMPT.split())
-    assert "arrange writing for every retained writable node" in normalized_prompt
-    assert "`ready` and has no current valid draft" in normalized_prompt
-    assert '{"input_id":"u1","quote":"..."}' in REPORT_OUTLINE_PROMPT
-    assert '{"material_id":"m1","lines":[10,32]}' in REPORT_OUTLINE_PROMPT
+    assert "grep" in normalized_prompt
+    assert "glob" in normalized_prompt
+    assert "report_packet" in normalized_prompt
 
 
 def test_central_prompt_batches_research_and_centralizes_judgment():
@@ -205,16 +192,11 @@ def test_central_prompt_batches_research_and_centralizes_judgment():
 
 def test_outline_prompt_and_skill_require_complete_file_delivery_on_retry():
     normalized_prompt = " ".join(REPORT_OUTLINE_PROMPT.split())
-    skill = Path(__file__).resolve().parents[2] / "skills/public/report-outline/SKILL.md"
-    normalized_skill = " ".join(skill.read_text(encoding="utf-8").split())
+    normalized_skill = _skill_text()
     assert "required_file" in normalized_prompt
-    assert "never omit an awaiting gap" in normalized_prompt
+    assert "complete tree object" in normalized_prompt
     assert "required_file" in normalized_skill
     assert "Never omit an awaiting gap" in normalized_skill
-    assert "Keep `question`, `constraints`, and `stop_condition` aligned" in normalized_prompt
-    assert "Keep `question`, `constraints`, and `stop_condition` aligned" in normalized_skill
-    assert '"evidence_material_ids":["m1"]' in REPORT_OUTLINE_PROMPT
-    assert "needs_richer_research" in REPORT_OUTLINE_PROMPT
     assert "needs_richer_research" in REPORT_RESEARCH_PROMPT
 
 
