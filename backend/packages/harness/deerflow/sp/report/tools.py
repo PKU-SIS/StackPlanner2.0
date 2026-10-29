@@ -92,20 +92,6 @@ def _register_questions(
         return _error("questions must be a non-empty list")
     if len(questions) > MAX_REGISTERED_QUESTIONS:
         return _error(f"at most {MAX_REGISTERED_QUESTIONS} questions may be registered in one call")
-    if ledger.payload.get("tree"):
-        # The initial plan is the normal automatic research-registration
-        # phase. After a tree exists, only an explicit user input (or an
-        # already-applied user continuation) may add another research target;
-        # the final consolidation itself must not open a new automatic round.
-        user_entry = bool(ledger.unapplied_input_ids()) or any(
-            int(gap.get("additional_rounds") or 0) > 0 for gap in ledger.gaps()
-        )
-        if not user_entry:
-            return _error(
-                "report_register_research_request is closed after the initial plan; "
-                "final consolidation uses returned materials. A user-authorized research "
-                "request must carry a new user input or an applied continue_research decision."
-            )
 
     idempotency_key = f"{action_id}:{tool_call_id}"
     tool_calls = ledger.payload.setdefault("tool_calls", {})
@@ -116,6 +102,15 @@ def _register_questions(
     try:
         for index, raw in enumerate(questions):
             prepared.append(_validate_question(raw, ledger, index))
+        if ledger.payload.get("tree"):
+            unapplied = set(ledger.unapplied_input_ids())
+            for item in prepared:
+                if not _registration_authorized(ledger, item, unapplied):
+                    return _error(
+                        "report_register_research_request after the initial plan requires the target's own "
+                        "user authorization: mode=new must cite a new user input, and mode=continue must "
+                        "either cite a new user input or target a gap with an applied continue_research quota"
+                    )
         registered: list[dict[str, Any]] = []
         for item in prepared:
             gap = ledger.register_gap(
@@ -158,6 +153,21 @@ def _register_questions(
     tool_calls[idempotency_key] = result
     ledger.save()
     return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+def _registration_authorized(ledger: ReportLedger, item: Mapping[str, Any], unapplied: set[str]) -> bool:
+    """Limit a continuation quota to its own target, and new targets to new input."""
+    input_ids = {
+        str(ref.get("input_id") or "")
+        for ref in item.get("requirement_refs") or []
+        if isinstance(ref, Mapping)
+    }
+    if item.get("mode") == "continue":
+        gap_id = str(item.get("continue_gap_id") or "")
+        gap = ledger.gap(gap_id)
+        if gap is not None and int(gap.get("additional_rounds") or 0) > 0:
+            return True
+    return bool(input_ids.intersection(unapplied))
 
 
 def _validate_question(raw: Any, ledger: ReportLedger, index: int) -> dict[str, Any]:

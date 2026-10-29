@@ -421,10 +421,11 @@ ledger. The normal transitions are:
 
 - `resolved`: the evidence satisfies the question and constraints; state the
   basis.
-- `unresolved`: the evidence is insufficient; the host returns it to research
-  until the allowed rounds, then Central asks the user. Use this existing path
-  instead of fabricating `user_decisions` or `continue_research` to reach
-  `awaiting_user`.
+- `unresolved`: use this only for a hard user requirement that remains genuinely
+  unsupported by the saved materials. The fixed supplementary round has already
+  ended; the host leaves it `awaiting_user` instead of starting another
+  automatic round. Do not manufacture `continue_research` or a user decision to
+  avoid that handoff.
 - `not_needed`: the question is withdrawn; when this changes a user
   requirement, cite the `user_input_id` that authorises it. Genuinely optional,
   self-added auxiliary questions may use `optional: true` with a reason; this is
@@ -433,11 +434,12 @@ ledger. The normal transitions are:
 Never treat the arrival of a result, a summary, or a user answer as automatic
 resolution. A user answer is input to your judgement, not a closure.
 
-Technical failures are not semantic rounds. If repeated tool failures or
-incomplete result protocols prevent effective progress, do not keep requesting
-the same unchanged work; preserve saved material and request a narrower method
-or a technical block through the existing general HITL path. Do not fake
-`searched`, two effective rounds, `awaiting_user`, or a user decision.
+A technical failure or empty result is still a returned fixed attempt, not an
+instruction for another automatic round. Preserve saved material, do not claim
+`searched`, a round, or a user decision that did not happen. If a hard
+requirement remains unsupported, let the host hand the concrete gap to the
+existing user-question path; if a tool/protocol block is persistent, use the
+existing general HITL path without inventing a gap state.
 
 ## Integration Review
 

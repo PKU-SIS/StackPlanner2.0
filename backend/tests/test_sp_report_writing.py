@@ -38,7 +38,8 @@ def _paths(ctx: HandlerContext) -> report_store.ReportPaths:
 
 def _add_user_input(ctx: HandlerContext, text: str = "请继续补充研究。") -> str:
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
-    input_id = ledger.add_user_input(text, source="hitl_feedback", source_message_id="user-feedback-test")
+    source_message_id = f"user-feedback-test-{len(ledger.inputs())}"
+    input_id = ledger.add_user_input(text, source="hitl_feedback", source_message_id=source_message_id)
     ledger.save()
     return input_id
 
@@ -351,7 +352,7 @@ def test_feedback_only_result_does_not_create_draft_and_needs_research_blocks_re
     feedback_record = writing.feedback_entries(ledger)[0]
     assert feedback_record["status"] == "open"
 
-    _add_user_input(ctx)
+    input_id = _add_user_input(ctx)
     register = build_register_research_request_tool(paths=_paths(ctx), action_id="a-outline-gap")
     registered = json.loads(
         register.func(
@@ -362,7 +363,7 @@ def test_feedback_only_result_does_not_create_draft_and_needs_research_blocks_re
                     "constraints": {},
                     "why_insufficient": "node feedback",
                     "stop_condition": "comparison evidence",
-                    "requirement_refs": [{"input_id": "u1", "quote": "示例公司"}],
+                    "requirement_refs": [{"input_id": input_id, "quote": "示例公司"}],
                     "node_ids": [],
                     "materials_checked": [],
                 }
@@ -520,7 +521,7 @@ def test_removed_node_retires_blocked_feedback_request_without_closing_gap(tmp_p
     request = ledger.payload["write_requests"][0]
     assert request["status"] == "feedback_pending"
 
-    _add_user_input(ctx)
+    input_id = _add_user_input(ctx)
     register = build_register_research_request_tool(paths=_paths(ctx), action_id="a-outline-removed-gap")
     registered = json.loads(
         register.func(
@@ -531,7 +532,7 @@ def test_removed_node_retires_blocked_feedback_request_without_closing_gap(tmp_p
                     "constraints": {},
                     "why_insufficient": "node feedback",
                     "stop_condition": "evidence",
-                    "requirement_refs": [{"input_id": "u1", "quote": "示例公司"}],
+                    "requirement_refs": [{"input_id": input_id, "quote": "示例公司"}],
                     "node_ids": [],
                     "materials_checked": [],
                 }

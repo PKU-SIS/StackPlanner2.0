@@ -56,12 +56,13 @@ def _paths(ctx: HandlerContext) -> report_store.ReportPaths:
 
 def _add_user_input(ctx: HandlerContext, text: str = "请继续补充研究。") -> str:
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
-    input_id = ledger.add_user_input(text, source="hitl_feedback", source_message_id="user-feedback-test")
+    source_message_id = f"user-feedback-test-{len(ledger.inputs())}"
+    input_id = ledger.add_user_input(text, source="hitl_feedback", source_message_id=source_message_id)
     ledger.save()
     return input_id
 
 
-def _register_gap(ctx: HandlerContext, action_id: str, *, question: str = "示例公司 FY2024 偿付能力", mode: str = "new", continue_gap_id: str | None = None, node_ids: list[str] | None = None) -> dict:
+def _register_gap(ctx: HandlerContext, action_id: str, *, question: str = "示例公司 FY2024 偿付能力", mode: str = "new", continue_gap_id: str | None = None, node_ids: list[str] | None = None, input_id: str = "u1") -> dict:
     tool = build_register_research_request_tool(paths=_paths(ctx), action_id=action_id)
     request: dict = {
         "mode": mode,
@@ -69,7 +70,7 @@ def _register_gap(ctx: HandlerContext, action_id: str, *, question: str = "示�
         "constraints": {"period": "FY2024"},
         "why_insufficient": "saved materials do not contain the metric",
         "stop_condition": "official annual report note",
-        "requirement_refs": [{"input_id": "u1", "quote": "示例公司"}],
+        "requirement_refs": [{"input_id": input_id, "quote": "示例公司"}],
         "node_ids": node_ids or [],
         "materials_checked": [],
     }
@@ -571,6 +572,45 @@ def test_user_authorization_reopens_one_fixed_round(tmp_path):
     assert ledger.require_gap("g1")["additional_rounds"] == 0
 
 
+def test_continue_quota_is_scoped_to_its_gap_and_new_target_cites_new_input(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    _register_gap(ctx, "a-outline", node_ids=[])
+    outline_action, outline_task = _delegate(ctx, "a-outline", "outline", {"report_task": "plan"})
+    assert _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=["g1"])).next_step == "continue"
+    assert _research(ctx, "a-r1", ["g1"], tool_ok=True).next_step == "continue"
+
+    continuation_input = _add_user_input(ctx, "只继续 g1 一次。")
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    ledger.apply_user_decisions([
+        {
+            "input_id": continuation_input,
+            "gap_ids": ["g1"],
+            "action": "continue_research",
+            "additional_rounds": 1,
+            "reason": "用户只授权继续 g1",
+        }
+    ])
+    ledger.save()
+
+    unrelated = _register_gap(ctx, "a-late", question="无关的新来源", input_id="u1")
+    assert unrelated["registered"] == []
+    assert "target's own user authorization" in unrelated["error"]
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.gap("g2") is None
+
+    continued = _register_gap(ctx, "a-outline-continue", question="g1 补充来源", mode="continue", continue_gap_id="g1", input_id="u1")
+    assert continued["registered"][0]["gap_id"] == "g1"
+    assert _research(ctx, "a-r2", ["g1"], tool_ok=True).next_step == "continue"
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.require_gap("g1")["additional_rounds"] == 0
+
+    new_input = _add_user_input(ctx, "新增章节需要一项研究。")
+    new_target = _register_gap(ctx, "a-new", question="新增章节研究", input_id=new_input)
+    assert new_target["registered"][0]["gap_id"] == "g2"
+    _action, _task = _delegate(ctx, "a-r3", "researcher", {"report_gap_ids": ["g2"]})
+
+
 def test_registration_after_tree_requires_new_user_input(tmp_path):
     ctx = _context(_state(tmp_path))
     _start(ctx)
@@ -579,10 +619,10 @@ def test_registration_after_tree_requires_new_user_input(tmp_path):
 
     rejected = _register_gap(ctx, "a-outline-late", node_ids=[])
     assert rejected["registered"] == []
-    assert "closed after the initial plan" in rejected["error"]
+    assert "target's own user authorization" in rejected["error"]
 
-    _add_user_input(ctx, "请为新增章节补充一个来源。")
-    accepted = _register_gap(ctx, "a-outline-late", node_ids=[])
+    input_id = _add_user_input(ctx, "请为新增章节补充一个来源。")
+    accepted = _register_gap(ctx, "a-outline-late", node_ids=[], input_id=input_id)
     assert accepted["registered"][0]["gap_id"] == "g1"
 
 
@@ -653,7 +693,7 @@ def test_user_authorized_new_gap_can_remain_open_for_dispatch(tmp_path):
     assert _research(ctx, "a-r1", ["g1"], tool_ok=True).next_step == "continue"
 
     input_id = _add_user_input(ctx, "请为新章节再补一项来源。")
-    registered = _register_gap(ctx, "a-outline-late", question="新增章节来源", node_ids=[])
+    registered = _register_gap(ctx, "a-outline-late", question="新增章节来源", node_ids=[], input_id=input_id)
     assert registered["registered"][0]["gap_id"] == "g2"
 
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
