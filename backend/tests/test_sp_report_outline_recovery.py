@@ -120,7 +120,8 @@ def _empty_length_result() -> SPSubagentResult:
     )
 
 
-def test_real_sp_delegate_observation_includes_stop_json_and_file(tmp_path):
+@pytest.mark.parametrize("finish_reason", [None, "length"])
+def test_real_sp_delegate_observation_includes_stop_json_and_file(tmp_path, finish_reason):
     ctx = _context(tmp_path)
     tool_call = {
         "name": "sp_delegate",
@@ -149,6 +150,7 @@ def test_real_sp_delegate_observation_includes_stop_json_and_file(tmp_path):
                 status=SPSubagentStatus.COMPLETED,
                 result="partial",
                 stop_reason="token_capped",
+                finish_reason=finish_reason,
                 artifact_type="outline",
                 artifact_metadata={"completion_status": "partial"},
             )
@@ -166,7 +168,8 @@ def test_real_sp_delegate_observation_includes_stop_json_and_file(tmp_path):
 
     assert payload["next_step"] == "error_recoverable"
     assert "stop_reason=token_capped" in error
-    assert "cumulative report Outline token budget" in error
+    assert f"finish_reason={finish_reason or 'none'}" in error
+    assert "not finish_reason=length" not in error
     assert "Expecting value" in error
     assert "rejected_candidate:" in error
     assert "/outline/rejected-spact_call-real-outline.json" in error

@@ -1757,8 +1757,9 @@ def _accept_outline_locked(
         detail = f"Outline result rejected: {exc}"
         if execution_stop:
             detail += f"\nExecution stop reason: stop_reason={execution_stop}"
-            if execution_stop == "token_capped":
-                detail += " (cumulative report Outline token budget; not finish_reason=length)"
+        detail += f"\nfinish_reason={result.finish_reason or 'none'}"
+        if execution_stop == "token_capped":
+            detail += "\nstop_reason=token_capped means the report Outline cumulative token budget was exhausted."
         if recover_delivered_file:
             detail += (
                 "\nThe current delegation's delivery file was checked as recovery progress but "
