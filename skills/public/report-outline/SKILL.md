@@ -205,9 +205,9 @@ Return the complete tree JSON in `artifact_content`:
 - In final consolidation, put the actually used material ids, source ids,
   locator lines and use strings into the corresponding writable node's
   `evidence[]`. A global material catalog alone is not Writer input; do not
-  leave evidence preparation to Writer. Technology-trend evidence does not by
-  itself establish education-philosophy support; judge those claims separately
-  and do not mark a combined gap resolved on one part.
+  leave evidence preparation to Writer. When a gap has multiple necessary
+  sub-requirements, judge them separately; support for one part does not make
+  the whole gap resolved.
 - A first plan may contain `needs_evidence` nodes. Do not fabricate evidence or
   state a conclusion the saved material cannot support.
 - Every previous node that is removed must be listed in `removed_node_ids`.
