@@ -8,12 +8,13 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from langchain_core.messages import HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.prebuilt.tool_node import ToolCallRequest
 
 from deerflow.agents.middlewares.read_before_write_middleware import ReadBeforeWriteMiddleware
 from deerflow.sp.actions.handlers.base import HandlerContext
 from deerflow.sp.actions.schema import ActionType, SPAction
+from deerflow.sp.agent_tools import SPControlActionMiddleware
 from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.memory import TaskMemoryStack
 from deerflow.sp.report import hooks
@@ -117,6 +118,58 @@ def _empty_length_result() -> SPSubagentResult:
         artifact_type="outline",
         artifact_metadata={"completion_status": "partial"},
     )
+
+
+def test_real_sp_delegate_observation_includes_stop_json_and_file(tmp_path):
+    ctx = _context(tmp_path)
+    tool_call = {
+        "name": "sp_delegate",
+        "id": "call-real-outline",
+        "args": {
+            "target_agent": "outline",
+            "task": "Recover the final outline",
+            "reason": "test real delegate return",
+            "stage": "planning",
+            "metadata": {"report_task": "plan"},
+        },
+        "type": "tool_call",
+    }
+    state = dict(ctx.state)
+    state["messages"] = [
+        HumanMessage(content="写一份简报", id="m1"),
+        AIMessage(content="", tool_calls=[tool_call]),
+    ]
+
+    class _PartialExecutor:
+        def execute(self, task):
+            delivery = Path(str(task.metadata["outline_delivery_path"]))
+            delivery.parent.mkdir(parents=True, exist_ok=True)
+            delivery.write_text('{"report_title":"partial","nodes":[', encoding="utf-8")
+            return SPSubagentResult(
+                status=SPSubagentStatus.COMPLETED,
+                result="partial",
+                stop_reason="token_capped",
+                artifact_type="outline",
+                artifact_metadata={"completion_status": "partial"},
+            )
+
+    middleware = SPControlActionMiddleware(executor_provider=lambda _state, _runtime: _PartialExecutor())
+    request = SimpleNamespace(
+        tool_call=tool_call,
+        state=state,
+        runtime=SimpleNamespace(context={"thread_id": "t1", "run_id": "run1"}),
+    )
+    command = middleware.wrap_tool_call(request, lambda _: (_ for _ in ()).throw(AssertionError("native handler must not run")))
+    message = command.update["messages"][0]
+    payload = json.loads(message.content)
+    error = str(payload["error"])
+
+    assert payload["next_step"] == "error_recoverable"
+    assert "stop_reason=token_capped" in error
+    assert "cumulative report Outline token budget" in error
+    assert "Expecting value" in error
+    assert "rejected_candidate:" in error
+    assert "/outline/rejected-spact_call-real-outline.json" in error
 
 
 def test_first_outline_guides_file_chunks_before_any_rejection(tmp_path):
@@ -258,6 +311,9 @@ def test_rejected_candidate_is_copied_to_delivery_and_original_preserved(tmp_pat
     assert delivery_path.read_bytes() == candidate.read_bytes()
     assert candidate.read_text(encoding="utf-8") == partial
     assert "byte-for-byte copy" in packet["delivery"]["instruction"]
+    assert "complete accepted baseline" in packet["delivery"]["instruction"]
+    assert "retained progress" in packet["delivery"]["instruction"]
+    assert "removed_node_ids" in packet["delivery"]["instruction"]
     assert str(packet["delivery"]["path"]) == ledger.paths.virtual(delivery_path)
     assert task_metadata["rejected_candidate_path"] == str(candidate)
     assert packet["tree"]["version"] == 1
@@ -747,6 +803,8 @@ def test_token_capped_invalid_current_file_is_not_accepted(tmp_path):
     )
 
     assert "invalid_report_tree" in (result.error or "") or "JSON syntax error" in (result.error or "")
-    assert "Do not reduce node count" in (result.error or "")
+    assert "Execution stop reason: stop_reason=token_capped" in (result.error or "")
+    assert "accepted baseline" in (result.error or "")
+    assert "rejected_candidate:" in (result.error or "")
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
     assert not ledger.payload.get("tree")

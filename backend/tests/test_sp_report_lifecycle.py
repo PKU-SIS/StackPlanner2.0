@@ -323,6 +323,24 @@ def test_missing_richer_research_flag_defaults_false_for_old_trees(tmp_path):
     assert ledger.payload["nodes"]["n1"]["needs_richer_research"] is False
 
 
+def test_outline_revision_cannot_drop_an_accepted_node_without_removed_node_ids(tmp_path):
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    outline_action, outline_task = _delegate(ctx, "a-outline", "outline", {"report_task": "plan"})
+    accepted = _accept_outline(ctx, outline_action, outline_task, _tree(gap_ids=[]))
+    assert accepted.next_step == "continue", accepted.error
+
+    revise_action, revise_task = _delegate(ctx, "a-outline-revise", "outline", {"report_task": "revise"})
+    dropped = _tree(gap_ids=[])
+    dropped["nodes"] = [node for node in dropped["nodes"] if node["node_id"] != "n2"]
+    rejected = _accept_outline(ctx, revise_action, revise_task, dropped)
+
+    assert rejected.next_step == "error_recoverable"
+    assert "dropped without removed_node_ids: n2" in (rejected.error or "")
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.payload["tree"]["version"] == 1
+
+
 def test_non_boolean_richer_research_flag_is_rejected(tmp_path):
     ctx = _context(_state(tmp_path))
     _start(ctx)

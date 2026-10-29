@@ -520,24 +520,22 @@ def prepare_delegation(
                 candidate_virtual = str(rejected.get("virtual_path") or "").strip()
                 candidate_host = str(rejected.get("path") or "").strip()
                 if copied:
-                    instruction += (
-                        " The delivery file already contains a byte-for-byte copy of the retained "
-                        "rejected candidate. Read its relevant tail first. If it merely ends before "
-                        "the tree is closed, append only the missing suffix; if it has a mid-file "
-                        "error, correct that part normally with the existing tools. Do not rewrite "
-                        "the existing prefix merely to restate it. The original candidate remains "
-                        "unchanged."
-                    )
+                    instruction += " The current delivery contains a byte-for-byte copy of the retained rejected candidate."
                 elif candidate_virtual:
                     instruction += (
-                        " Recovery basis: before writing this delivery path, read "
-                        f"report_packet.rejected_outline.virtual_path ({candidate_virtual}) "
-                        "and use it as the primary planning input. The accepted tree in "
-                        "report_packet.tree remains the accepted baseline. Preserve valid nodes, "
-                        "evidence locators, and completed updates in the candidate; correct its "
-                        "reported errors and write the corrected tree only to this independent "
-                        "delivery path. Do not create a fresh tree from scratch."
+                        f" Recovery basis: read report_packet.rejected_outline.virtual_path ({candidate_virtual}) "
+                        "and write the corrected tree only to this independent delivery path."
                     )
+                instruction += (
+                    " Use report_packet.tree as the complete accepted baseline when present; the rejected "
+                    "candidate is retained progress, not a new complete scope. Read the current delivery tail "
+                    "first; if it ends before the tree is closed, append only the missing suffix; if it has a "
+                    "mid-file error, correct that part normally. Do not overwrite newer delivery progress. "
+                    "Complete accepted node identities, or make a "
+                    "legal structural change through removed_node_ids; do not treat the candidate's node count "
+                    "as the complete planning range. Keep the original candidate unchanged and use the existing "
+                    "schema, scope and tree acceptance checks."
+                )
                 if candidate_host:
                     # Keep the existing recovery metadata name: Central already
                     # passes this path, and the executor/prompt can use it for
@@ -1757,12 +1755,15 @@ def _accept_outline_locked(
             source_kind=candidate_kind,
         )
         detail = f"Outline result rejected: {exc}"
+        if execution_stop:
+            detail += f"\nExecution stop reason: stop_reason={execution_stop}"
+            if execution_stop == "token_capped":
+                detail += " (cumulative report Outline token budget; not finish_reason=length)"
         if recover_delivered_file:
             detail += (
-                "\nToken-cap recovery inspected the current delegation's delivery file but it "
+                "\nThe current delegation's delivery file was checked as recovery progress but "
                 "failed strict tree validation; no tree was accepted. Retry only this same Outline "
-                "with the rejected candidate path. Do not reduce node count, forbid research, or "
-                "delegate Coder to compress report material."
+                "with the accepted baseline and the rejected candidate path."
             )
         if result.finish_reason == "length":
             if rejected:
