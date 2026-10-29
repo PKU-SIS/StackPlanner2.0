@@ -48,6 +48,15 @@ The single LangGraph agent (`lead_agent`) is the runtime entry point, created vi
 - **Subagent delegation** for parallel task execution
 - **System prompt** with skills injection, memory context, and working directory guidance
 
+For native StackPlanner delegations, Central marks data extraction, filtering,
+calculation, and validation with `metadata.coder_task_kind="data_processing"`.
+These tasks require observable execution evidence, but do not require repository
+source patches or software tests. Software changes retain the existing source
+and test acceptance rules; the task kind is preserved during recovery. Data
+processing retains its validated execution tools even when no source patch is
+required; software inspection stages keep their existing read-only restrictions. Reporter
+language checks apply to narrative text, excluding source tables, code, and URLs.
+
 ### Middleware Chain
 
 Middlewares execute in strict order, each handling a specific concern:

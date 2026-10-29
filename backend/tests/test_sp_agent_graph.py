@@ -5,13 +5,14 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from deerflow.sp import ActionRouter, ActionType, HandlerResult, SPAction, create_sp_agent_graph
 from deerflow.sp.central.runtime_context import SPCentralRuntimeContext
 from deerflow.sp.memory import TaskMemoryStack
-from deerflow.sp.runtime import _apply_sp_stage_tool_policy, make_sp_agent
+from deerflow.sp.runtime import _apply_sp_stage_tool_policy, _apply_task_tool_policy, make_sp_agent
 from deerflow.sp.subagents import SPSubagentTask
 from deerflow.subagents.config import SubagentConfig
 
@@ -369,6 +370,58 @@ def test_coder_verification_stage_retains_execution_tools():
     )
 
     assert _apply_sp_stage_tool_policy(config, task).tools == ["read_file", "bash"]
+
+
+@pytest.mark.parametrize("stage", ["perception", "planning", "research", "implementation", "verification", "revision"])
+def test_data_processing_coder_retains_validated_execution_tools(stage):
+    config = SubagentConfig(name="sp-coder", description="Data processing", tools=None)
+    task = SPSubagentTask(
+        action_id="data-processing-1",
+        subagent_type="coder",
+        task="Extract and verify filtered source rows",
+        description="Execute data filtering without modifying repository source",
+        metadata={
+            "stage": stage,
+            "coder_task_kind": "data_processing",
+            "requires_implementation": False,
+            "tool_names": ["read_file", "bash"],
+        },
+    )
+    selected = _apply_task_tool_policy(
+        config,
+        task,
+        available_tools=[SimpleNamespace(name="read_file"), SimpleNamespace(name="bash")],
+    )
+
+    restricted = _apply_sp_stage_tool_policy(selected, task)
+
+    assert restricted.tools == ["read_file", "bash"]
+
+
+@pytest.mark.parametrize("requested_tools", [["read_file"], []])
+def test_data_processing_stage_policy_does_not_expand_requested_tools(requested_tools):
+    config = SubagentConfig(name="sp-coder", description="Data processing", tools=None)
+    task = SPSubagentTask(
+        action_id="data-processing-narrow-tools",
+        subagent_type="coder",
+        task="Inspect source rows",
+        description="Honor the delegated tool allowlist",
+        metadata={
+            "stage": "verification",
+            "coder_task_kind": "data_processing",
+            "requires_implementation": False,
+            "tool_names": requested_tools,
+        },
+    )
+    selected = _apply_task_tool_policy(
+        config,
+        task,
+        available_tools=[SimpleNamespace(name="read_file"), SimpleNamespace(name="bash")],
+    )
+
+    restricted = _apply_sp_stage_tool_policy(selected, task)
+
+    assert restricted.tools == requested_tools
 
 
 def test_runtime_factory_disables_automatic_long_term_memory_injection(monkeypatch):

@@ -37,6 +37,7 @@ from deerflow.sp.subagents import (
     SPSubagentStatus,
     SPSubagentTask,
 )
+from deerflow.sp.subagents.dr2_adapter import is_data_processing_coder
 
 logger = logging.getLogger(__name__)
 
@@ -314,12 +315,14 @@ def _apply_sp_stage_tool_policy(subagent_config: Any, task: SPSubagentTask):
     implementation stage, whose per-delegation verification then correctly
     reports that it observed no source write.  Remove every mutation-capable
     tool (including shell) from read-only perception/planning/research stages;
-    verification-only work retains bash because it must execute tests.
+    verification-only work retains bash because it must execute tests. Explicit
+    data-processing tasks retain their validated tools for execution evidence;
+    not requiring a source patch does not make a data task read-only.
     """
 
     if task.subagent_type != "coder":
         return subagent_config
-    if task.metadata.get("verification_only") is True:
+    if task.metadata.get("verification_only") is True or is_data_processing_coder(task.metadata):
         return subagent_config
     stage = str(task.metadata.get("stage") or "").strip().lower()
     read_only_stage = stage in {"perception", "planning", "research"}
