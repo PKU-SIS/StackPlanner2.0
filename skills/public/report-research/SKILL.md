@@ -35,7 +35,12 @@ real execution and materials; do not turn a failed/substituted attempt into
    commentary are not interchangeable. A title or organization name does not
    prove first-party status. Use each source only for the claim it can support;
    do not add a domain whitelist or citation-count threshold.
-3. Search with `web_search` to find candidate sources.
+3. Search with `web_search` to find candidate sources. Prefer saved materials
+   and already-known reliable pages before a new search. Use specific queries
+   naming the subject, institution, and language; if a query returns an
+   execution error, empty/unusable results, or clearly irrelevant results, do
+   not resend synonymous broad queries. Do not guess URLs, and treat
+   official-source preference as a priority, not an exclusive requirement.
 4. Retrieve exact URLs with `report_fetch_material(url=...)`. It invokes the
    deployment's configured fetch tool and saves the returned text before any
    summary. Direct `web_fetch` is not exposed to this role.
@@ -48,14 +53,16 @@ real execution and materials; do not turn a failed/substituted attempt into
    sufficient. `searched` means the attempt ran—not that the evidence is
    complete. Partial evidence or a normal zero-result search is still
    `searched`; Outline judges sufficiency.
-8. Continue across independent assigned gaps when useful, but when the host
-   warns that the tool or token budget is near its limit, stop opening new
-   searches and return the best complete observation you can. Do not claim a
-   search or fetch that did not execute. A true tool failure, forced
-   interruption, or incomplete result protocol is not `searched`; preserve saved
-   material ids and state what remained unfinished. A failed fetch is a
-   technical failure, not evidence that the fact does not exist. After a forced
-   stop this agent cannot repair the result.
+8. Continue across independent assigned gaps when useful, but treat a host
+   budget/tool-limit warning as the point to finalize immediately: stop opening
+   new searches, return the standard envelope with the current summary,
+   per-gap `gap_attempts`, saved materials, and unfinished items. Do not wait
+   for a forced stop and do not assume a forced stop will still allow a
+   complete result. A true tool failure, forced interruption, or incomplete
+   result protocol is not `searched`; preserve saved material ids and state
+   what remained unfinished. A failed fetch is a technical failure, not
+   evidence that the fact does not exist. After a forced stop this agent cannot
+   repair the result.
 
 ## Output
 

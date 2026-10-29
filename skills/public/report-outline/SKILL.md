@@ -153,10 +153,13 @@ Return the complete tree JSON in `artifact_content`:
   while a bare illustrative list can leave room to choose a subset or axis.
   You choose representative countries, taxonomy axes, dimensions, cases, and
   necessary research targets from the user's purpose and available evidence;
-  record a brief basis. A source count, named institution/case, statistical
-  dimension, or country list in the first draft is a planning choice unless the
-  user's wording makes it mandatory; adjust it when evidence/budget shows
-  different coverage is sufficient. Preserve real coverage; do not shrink it
+  record a brief basis. A self-chosen country list is a scope choice, not a
+  hard requirement: adjust it to the evidence while still meeting the user's
+  actual representative-country requirement. A single supported country does
+  not satisfy a multi-country comparison. A source count, named
+  institution/case, statistical dimension, or country list in the first draft
+  is a planning choice unless the user's wording makes it mandatory; adjust it
+  when evidence/budget shows different coverage is sufficient. Preserve real coverage; do not shrink it
   or turn every illustrative example into a mandatory gap.
   Judge evidence sufficiency in context; do not substitute a fixed quota
   ("one each" vs "two each") for that judgement. Still-necessary research
@@ -180,6 +183,16 @@ Return the complete tree JSON in `artifact_content`:
   the user's task or make every discovered issue a delivery prerequisite.
 - Writable nodes carry `question`, `argument`, `conclusion`, `evidence`,
   `constraints`, `requirement_ids`, `status`, `gap_ids`.
+- Writable `status` is exactly one of:
+  - `planned`: planned but not evidence-ready; do not send it to Writer.
+  - `needs_evidence`: evidence is still required; do not send it to Writer.
+  - `needs_user`: a genuine user decision or user-supplied evidence is required;
+    do not send it to Writer.
+  - `ready`: the required evidence locators are in place and the node may enter
+    the writing queue. If a node's claims depend on sources and `evidence[]` is
+    empty, it is not `ready`; use `needs_evidence` or `needs_user` instead.
+  Only `ready` nodes may appear in `write_requests`. Do not invent other status
+  values and do not auto-map an unknown status to one of these.
 - Evidence cites saved `material_id`s and locatable line ranges. Do not cite a
   source that is not in the catalog.
 - After the fixed research round returns, judge from existing saved materials:
@@ -192,7 +205,9 @@ Return the complete tree JSON in `artifact_content`:
 - In final consolidation, put the actually used material ids, source ids,
   locator lines and use strings into the corresponding writable node's
   `evidence[]`. A global material catalog alone is not Writer input; do not
-  leave evidence preparation to Writer.
+  leave evidence preparation to Writer. Technology-trend evidence does not by
+  itself establish education-philosophy support; judge those claims separately
+  and do not mark a combined gap resolved on one part.
 - A first plan may contain `needs_evidence` nodes. Do not fabricate evidence or
   state a conclusion the saved material cannot support.
 - Every previous node that is removed must be listed in `removed_node_ids`.
