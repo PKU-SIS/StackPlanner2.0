@@ -171,8 +171,10 @@ def _copy_rejected_outline_to_delivery(
     rejected = ledger.payload.get("rejected_outline")
     if not isinstance(rejected, Mapping):
         return False
-    candidate = report_packets._outline_candidate_view(rejected)
-    if not isinstance(candidate, Mapping):
+    # ``kind`` is only an additional hint; identity, actual path ownership,
+    # action id and content hash are the authoritative checks below.
+    kind = rejected.get("kind")
+    if kind is not None and str(kind) != "tree_candidate":
         return False
     raw_path = str(rejected.get("path") or "").strip()
     record_action_id = str(rejected.get("action_id") or "").strip()
@@ -513,11 +515,10 @@ def prepare_delegation(
                     "gap from gap_outcomes. Return artifact_content=null and this path in artifact_metadata."
                 )
             rejected = ledger.payload.get("rejected_outline")
-            candidate = report_packets._outline_candidate_view(rejected)
-            if report_task in {"plan", "revise"} and isinstance(candidate, Mapping):
+            if report_task in {"plan", "revise"} and isinstance(rejected, Mapping):
                 copied = _copy_rejected_outline_to_delivery(ledger, action, delivery_path)
-                candidate_virtual = str(candidate.get("virtual_path") or "").strip()
-                candidate_host = str(rejected.get("path") or "").strip() if isinstance(rejected, Mapping) else ""
+                candidate_virtual = str(rejected.get("virtual_path") or "").strip()
+                candidate_host = str(rejected.get("path") or "").strip()
                 if copied:
                     instruction += (
                         " The delivery file already contains a byte-for-byte copy of the retained "

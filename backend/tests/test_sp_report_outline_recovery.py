@@ -305,7 +305,6 @@ def test_retained_prefix_read_append_and_strict_accept(tmp_path):
         "sha256": hooks.report_store.sha256_text(partial),
         "chars": len(partial),
         "action_id": "prior-outline",
-        "kind": "tree_candidate",
         "errors": "token_capped",
     }
     ledger.save()

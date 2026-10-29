@@ -1,4 +1,4 @@
-﻿"""E-layer: real DelegateHandler + SubagentExecutor + report tools (fake LLM only)."""
+"""E-layer: real DelegateHandler + SubagentExecutor + report tools (fake LLM only)."""
 
 from __future__ import annotations
 
@@ -351,6 +351,98 @@ def test_real_executor_outline_file_toolchain_and_acceptance(tmp_path, monkeypat
     assert stored["report_title"] == tree["report_title"]
     assert stored["write_requests"][0]["key"] == "w-file-e2e"
     assert stored["user_decisions"][0]["input_id"] == "u1"
+
+
+def test_real_executor_recovers_retained_prefix_and_appends_tail(tmp_path, monkeypatch, real_executor):
+    app_config = _app_config()
+    state = _state(tmp_path)
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    candidate = ledger.paths.directory / "outline" / "rejected-prior-outline.json"
+    candidate.parent.mkdir(parents=True, exist_ok=True)
+    tree = _tree()
+    tree["nodes"][1]["gap_ids"] = []
+    full = json.dumps(tree, ensure_ascii=False)
+    partial = full[:-1]
+    candidate.write_text(partial, encoding="utf-8")
+    ledger.payload["rejected_outline"] = {
+        "path": str(candidate),
+        "virtual_path": ledger.paths.virtual(candidate),
+        "sha256": report_store.sha256_text(partial),
+        "chars": len(partial),
+        "action_id": "prior-outline",
+        "kind": "tree_candidate",
+        "errors": "token_capped",
+    }
+    ledger.save()
+
+    path = "/mnt/user-data/outputs/report/r1/outline/delivery-a-outline-recovered-e2e.json"
+    model = FakeToolCallingModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "read_file",
+                        "args": {"description": "read retained tail", "path": path, "start_line": 1},
+                        "id": "call-read-tail",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "write_file",
+                        "args": {"description": "append missing tail", "path": path, "content": "}", "append": True},
+                        "id": "call-append-tail",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(
+                content=json.dumps(
+                    {
+                        "summary": "recovered complete tree",
+                        "artifact_content": None,
+                        "artifact_type": "outline",
+                        "artifact_metadata": {"completion_status": "complete", "delivery_mode": "file", "tree_path": path},
+                    },
+                    ensure_ascii=False,
+                )
+            ),
+        ]
+    )
+    _install_fake_model(monkeypatch, model, real_executor)
+    handler = DelegateHandler(
+        executor=DR2SubagentExecutorAdapter(
+            _executor_factory(
+                state,
+                app_config,
+                [read_file_tool, ls_tool, grep_tool, glob_tool, write_file_tool],
+                "sp-outline",
+                real_executor,
+            )
+        )
+    )
+    action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-outline-recovered-e2e",
+        reason="recover retained tree",
+        task="recover the retained tree",
+        target_agent="outline",
+        stage="planning",
+        metadata={"report_task": "plan"},
+    )
+    ctx = HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="t-e2e", run_id="run-e2e")
+    result = handler.handle(action, ctx)
+
+    assert result.next_step == "continue", result.error
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    assert ledger.payload["tree"]["version"] == 1
+    delivery = ledger.paths.directory / "outline" / "delivery-a-outline-recovered-e2e.json"
+    assert delivery.read_text(encoding="utf-8") == full
+    assert candidate.read_text(encoding="utf-8") == partial
 
 
 def test_real_executor_review_revise_new_write_and_reassemble(tmp_path, monkeypatch, real_executor):
