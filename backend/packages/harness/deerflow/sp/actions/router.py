@@ -30,6 +30,7 @@ from deerflow.sp.memory import (
 )
 from deerflow.sp.memory.stack import DEFAULT_SUMMARIZE_MIN_PROGRESS_ENTRIES
 from deerflow.sp.subagents import SPSubagentExecutorProtocol
+from deerflow.sp.subagents.dr2_adapter import is_data_processing_coder
 
 DEFAULT_MAX_LOOP_ITERATIONS = 20
 MAX_IDEMPOTENCY_LEDGER_ENTRIES = 100
@@ -458,6 +459,10 @@ class ActionRouter:
         gap_text = " ".join(gap_values)
         if completion_status not in {"partial", "blocked"}:
             return
+        if is_data_processing_coder(observation.metadata):
+            if action.target_agent == "coder":
+                action.metadata.setdefault("coder_task_kind", "data_processing")
+            return
 
         source_recovery = bool(_CODER_SOURCE_GAP_PATTERN.search(gap_text))
         behavior_recovery = bool(_CODER_BEHAVIOR_GAP_PATTERN.search(gap_text))
@@ -728,6 +733,8 @@ class ActionRouter:
             None,
         )
         if observation is None:
+            return None
+        if is_data_processing_coder(observation.metadata):
             return None
         completion_status = str(observation.metadata.get("completion_status") or "").strip().lower()
         if completion_status not in {"partial", "blocked"}:

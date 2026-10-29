@@ -1,5 +1,7 @@
 """Tests for SP Action schema, router, and state-only handlers."""
 
+import json
+
 import pytest
 from langchain_core.messages import HumanMessage
 
@@ -12,6 +14,94 @@ from deerflow.sp.subagents import SPSubagentResult, SPSubagentStatus, SPSubagent
 
 def _action(action_type: ActionType | str, **kwargs):
     return SPAction.create(action_type, reason=kwargs.pop("reason", "unit-test reason"), **kwargs)
+
+
+def test_data_processing_delegation_does_not_inherit_software_contract():
+    stack = TaskMemoryStack()
+    stack.append_delegate("Implement an earlier software fix", run_id="run-1", stage="implementation", metadata={"target_agent": "coder", "requires_implementation": True})
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Data checked.", artifact_metadata={"completion_status": "complete"}))
+    action = _action(
+        ActionType.DELEGATE, target_agent="coder", task="Filter the supplied CSV and check row counts. Do not edit project source.", stage="verification", metadata={"coder_task_kind": "data_processing", "tool_names": ["read_file", "bash"]}
+    )
+
+    result = build_default_action_router(delegate_executor=executor).execute(action, state={"sp_task_memory": stack.to_dict()}, run_id="run-1")
+
+    task = executor.tasks[0]
+    assert task.metadata["requires_implementation"] is False
+    assert task.metadata.get("verification_only") is not True
+    assert task.metadata["tool_names"] == ["read_file", "bash"]
+    observation = TaskMemoryStack.from_dict(result.state_update["sp_task_memory"]).entries[-1]
+    assert observation.metadata["coder_task_kind"] == "data_processing"
+
+
+def test_software_coder_result_cannot_downgrade_its_acceptance_contract(tmp_path):
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Source fix incomplete.",
+            artifact_content="Existing source needs repair.",
+            artifact_type="generated_file",
+            artifact_metadata={"completion_status": "partial", "coder_task_kind": "data_processing", "evidence_gaps": ["Source change missing."]},
+        )
+    )
+    result = build_default_action_router(delegate_executor=executor).execute(
+        _action(ActionType.DELEGATE, target_agent="coder", task="Fix parser source implementation.", stage="implementation"), state=_thread_state_with_outputs(tmp_path), run_id="run-1"
+    )
+    observation = TaskMemoryStack.from_dict(result.state_update["sp_task_memory"]).entries[-1]
+
+    assert executor.tasks[0].metadata["requires_implementation"] is True
+    assert observation.metadata["coder_task_kind"] == "software_change"
+    artifact = result.state_update["sp_current_artifact_refs"]["generated_file"]
+    assert artifact["metadata"]["coder_task_kind"] == "software_change"
+
+
+@pytest.mark.parametrize("recovery_metadata", [{"coder_task_kind": "data_processing"}, {}])
+def test_data_processing_recovery_does_not_turn_into_source_implementation(recovery_metadata):
+    stack = TaskMemoryStack()
+    stack.append_observe(
+        "Data check incomplete",
+        actor="coder",
+        run_id="run-1",
+        stage="verification",
+        metadata={"target_agent": "coder", "coder_task_kind": "data_processing", "completion_status": "partial", "evidence_gaps": ["One required record is still missing."]},
+    )
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Checked missing record.", artifact_metadata={"completion_status": "complete"}))
+    action = _action(ActionType.DELEGATE, target_agent="coder", task="Recheck the missing record without editing source.", stage="verification", metadata=recovery_metadata)
+
+    build_default_action_router(delegate_executor=executor).execute(action, state={"sp_task_memory": stack.to_dict()}, run_id="run-1")
+
+    task = executor.tasks[0]
+    assert task.task == "Recheck the missing record without editing source."
+    assert task.metadata["requires_implementation"] is False
+    assert "non-test source change" not in task.task
+
+
+@pytest.mark.parametrize(
+    "data_block",
+    [
+        "| name | reference |\n| --- | --- |\n" + "| Original English Source Value | https://example.org/registry/long-reference |\n" * 20,
+        "```json\n" + json.dumps([{"name": "Original English Source Value", "reference": "https://example.org/registry"}] * 20) + "\n```",
+        "```python\n" + "original_source_value = 'An English literal value'\n" * 20 + "````",
+        "\n" + "    original_source_value = 'An English literal value'\n" * 20,
+        "\n".join(f"- [{i}](https://example.org/registry/long-reference-{i})" for i in range(20)),
+    ],
+)
+def test_report_language_ignores_original_data_code_and_urls(data_block):
+    from deerflow.sp.actions.handlers.delegate import _report_language_alignment_gaps
+
+    task = SPSubagentTask(action_id="language", subagent_type="reporter", task="Write the answer", description="Language check", context_refs={"original_query": "请列出符合条件的条目，保留原始字段值。"})
+    report = "# 答案\n\n以下数据已经按题目条件筛选核对，表格字段保留来源原文，引用用于逐行核查。\n\n" + data_block
+
+    assert _report_language_alignment_gaps(report, task=task) == []
+
+
+def test_report_language_still_rejects_english_narrative_with_chinese_data():
+    from deerflow.sp.actions.handlers.delegate import _report_language_alignment_gaps
+
+    task = SPSubagentTask(action_id="language", subagent_type="reporter", task="Write the report", description="Language check", context_refs={"original_query": "请根据材料撰写中文分析报告。"})
+    report = "# Analysis\n\n" + "The evidence supports these conclusions and recommendations. " * 15 + "\n\n| 字段 | 值 |\n| --- | --- |\n" + "| 中文 | 中文数据 |\n" * 50
+
+    assert _report_language_alignment_gaps(report, task=task)
 
 
 def test_action_schema_requires_action_id_and_normalizes_type():

@@ -94,11 +94,19 @@ RESEARCHER_CONFIG = SubagentConfig(
 
 CODER_CONFIG = SubagentConfig(
     name="sp-coder",
-    description="Repository implementation and verification specialist for StackPlanner DELEGATE actions.",
+    description="Data processing, computation, and repository implementation/verification specialist for StackPlanner DELEGATE actions.",
     system_prompt=_prompt(
         "coder",
         """
 <role>
+- Respect `metadata.coder_task_kind`. For `data_processing`, extract, filter,
+  calculate, and validate the supplied data using observable tool execution.
+  Check the requested schema, filters, and completeness; preserve source values.
+  Temporary scripts and requested data artifacts are allowed, but a repository
+  source patch, git diff, and software test suite are not acceptance requirements.
+  Report missing or failed data checks honestly. The repository-editing and
+  regression-test instructions below apply to software-change tasks, not data
+  processing. Never use this distinction to avoid a requested software repair.
 - Inspect the existing repository before editing and follow its local conventions.
 - Resolve the actual repository root before the first repository command. The
   shared workspace may contain the repository in a named child directory. Run
@@ -244,6 +252,9 @@ REPORTER_CONFIG = SubagentConfig(
   report, and no commentary about being unable to write files.
 - A Chinese user request requires a Chinese report unless the user explicitly
   asks for another language; do not silently switch the report to English.
+- Apply that language requirement to your explanations and headings. Preserve
+  original-language source fields, identifiers, code, and URLs; do not translate
+  literal data merely to make the report appear more Chinese.
 - For a long report, prefer `write_file` and create a unique
   `/mnt/user-data/outputs/report-<action_id>.md`; never overwrite a prior report.
   Then set artifact_content to null and list that path in created_paths. For a

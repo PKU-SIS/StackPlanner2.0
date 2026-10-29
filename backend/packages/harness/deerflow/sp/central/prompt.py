@@ -76,6 +76,15 @@ Rules:
   code execution, data processing, and file inspection/writes to `coder`;
   document or image perception to `perception`; structured writing to `reporter`;
   and outline-only work to `outline`.
+- Distinguish coder contracts explicitly in delegation metadata: use
+  `coder_task_kind="data_processing"` for extraction, filtering, calculation,
+  and data validation; use `coder_task_kind="software_change"` for repository
+  implementation and software regression verification. Data work may execute
+  temporary scripts or produce requested data files, but must not require a
+  repository patch or a software test suite. Its acceptance evidence is the
+  executed computation plus checks of the requested schema, filters, and
+  completeness. Do not label a requested software fix as data processing.
+  Preserve this contract on retries; stage alone does not identify the task kind.
 - For a concrete repository repair, delegate one bounded coder contract that
   covers inspection, the smallest source edit, and focused verification. Do not
   spend a separate delegation merely locating the implementation and then ask a

@@ -39,6 +39,7 @@ from deerflow.sp.actions.router import SP_SUMMARY_TURN_RESERVED_KEY
 from deerflow.sp.hitl import record_human_feedback
 from deerflow.sp.memory import StackMemoryEntry, TaskMemoryStack
 from deerflow.sp.subagents import SPSubagentExecutorProtocol
+from deerflow.sp.subagents.dr2_adapter import is_data_processing_coder
 from deerflow.subagents.status_contract import (
     SUBAGENT_STOP_REASON_VALUES,
     make_subagent_additional_kwargs,
@@ -816,6 +817,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 if not gaps and latest_observation.failure_note:
                     gaps = [latest_observation.failure_note]
                 gap_text = "; ".join(gaps[:5]) or ("the delegated acceptance criteria remain incomplete")
+                data_processing = target == "coder" and is_data_processing_coder(latest_observation.metadata)
                 verification_only = target == "coder" and str(latest_observation.stage or "") == "verification" and not _verification_found_behavior_failure(latest_observation)
                 implementation_evidence = latest_observation.metadata.get("implementation_verification")
                 if target == "coder" and isinstance(implementation_evidence, Mapping) and implementation_evidence.get("passed") is True and not _verification_found_behavior_failure(latest_observation):
@@ -834,7 +836,10 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 if verification_only:
                     stage = "verification"
                 coder_instruction = (
-                    (
+                    ' For data-processing recovery, preserve metadata={"coder_task_kind": "data_processing", "requires_implementation": false, "tool_names": ["read_file", "bash"]}; '
+                    "rerun the data extraction or calculation, verify the requested filters and completeness, and report observable execution evidence. Do not require a repository patch or software tests."
+                    if data_processing
+                    else (
                         ' For read-only verification recovery, set metadata={"verification_only": true, "requires_implementation": false, "tool_names": ["read_file", "bash"]}; '
                         "inspect the existing diff and run the missing checks without editing source or tests. "
                         "If the test runner is unavailable, read the actual named tests and reproduce their "
@@ -1257,6 +1262,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             return {"messages": [guarded]}
 
         verification_only = target_agent == "coder" and str(observation.stage or "") == "verification" and not _verification_found_behavior_failure(observation)
+        data_processing = target_agent == "coder" and is_data_processing_coder(observation.metadata)
         stage = {
             "coder": "implementation",
             "researcher": "research",
@@ -1277,7 +1283,10 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             "recovery_attempt": attempts + 1,
         }
         if target_agent == "coder":
-            if verification_only:
+            if data_processing:
+                metadata.update({"coder_task_kind": "data_processing", "requires_implementation": False, "tool_names": ["read_file", "bash"]})
+                task += " Recheck the data extraction, calculations, filters, and completeness with observable execution evidence. Preserve original source values. Do not require repository edits or software tests."
+            elif verification_only:
                 metadata.update(
                     {
                         "verification_only": True,

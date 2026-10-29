@@ -556,6 +556,29 @@ def test_partial_implementation_with_source_write_recovers_as_read_only_verifica
     assert "self-chosen examples" in instruction
 
 
+def test_partial_data_processing_recovery_preserves_its_acceptance_contract():
+    stack = TaskMemoryStack()
+    metadata = {"target_agent": "coder", "coder_task_kind": "data_processing", "requires_implementation": False}
+    stack.append_delegate("Filter the source data", run_id="run-1", stage="verification", metadata=metadata)
+    stack.append_observe("One required row is missing.", actor="coder", run_id="run-1", stage="verification", metadata={**metadata, "completion_status": "partial", "evidence_gaps": ["One required row is missing."]})
+    state = {"sp_loop_run_id": "run-1", "sp_task_memory": stack.to_dict(), "messages": [HumanMessage(content="Filter the records and return the complete table.")]}
+    middleware = SPFinishAvailabilityMiddleware()
+    request = _ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=state["messages"])
+
+    filtered = middleware._filter_request(request)
+
+    instruction = filtered.messages[-1].content
+    assert '"coder_task_kind": "data_processing"' in instruction
+    assert "source implementation recovery" not in instruction
+    update = middleware.after_model({**state, "messages": [*state["messages"], AIMessage(content="The data table is complete.")]}, SimpleNamespace(context={"run_id": "run-1"}))
+    recovery = update["messages"][0].tool_calls[0]["args"]
+    assert recovery["metadata"]["coder_task_kind"] == "data_processing"
+    assert recovery["metadata"]["requires_implementation"] is False
+    assert recovery["metadata"].get("verification_only") is not True
+    assert "existing diff" not in recovery["task"]
+    assert "edit it with a file tool" not in recovery["task"]
+
+
 def test_verification_behavior_regression_recovers_to_writable_implementation():
     stack = TaskMemoryStack()
     stack.append_delegate(

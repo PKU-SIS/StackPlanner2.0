@@ -76,6 +76,68 @@ def test_coder_verification_task_requires_implementation_by_default():
     assert coder_task_requires_implementation(task) is True
 
 
+def test_data_processing_coder_accepts_execution_without_source_patch_or_pytest():
+    task = _sp_task()
+    task.subagent_type = "coder"
+    task.task = "Filter the supplied records and verify the row count with Python."
+    task.stage = "verification"
+    task.metadata = {"stage": "verification", "coder_task_kind": "data_processing", "verification_only": True, "requires_implementation": True}
+    executor = FakeDR2Executor(
+        FakeDR2Result(
+            status="completed",
+            result=json.dumps({"summary": "Two filtered records verified.", "artifact_content": '[{"name": "Alpha"}, {"name": "Beta"}]', "artifact_metadata": {"completion_status": "complete", "evidence_gaps": []}}),
+            ai_messages=[
+                {"type": "ai", "tool_calls": [{"id": "calc", "name": "bash", "args": {"command": "python -c 'rows=[1,2]; assert len(rows)==2; print(rows)'"}}]},
+                {"type": "tool", "name": "bash", "tool_call_id": "calc", "content": "[1, 2]"},
+            ],
+        )
+    )
+
+    result = DR2SubagentExecutorAdapter(lambda _: executor).execute(task)
+
+    assert coder_task_requires_implementation(task) is False
+    assert result.completion_status == "complete"
+    assert result.artifact_metadata["execution_verification"]["passed"] is True
+    assert "implementation_verification" not in result.artifact_metadata
+    assert "test_verification" not in result.artifact_metadata
+
+
+def test_data_processing_coder_still_requires_observable_execution():
+    task = _sp_task()
+    task.subagent_type = "coder"
+    task.task = "Return filtered data."
+    task.metadata = {"stage": "verification", "coder_task_kind": "data_processing"}
+    executor = FakeDR2Executor(FakeDR2Result(status="completed", result=json.dumps({"summary": "Done", "artifact_content": "[]", "artifact_metadata": {"completion_status": "complete"}}), ai_messages=[]))
+
+    result = DR2SubagentExecutorAdapter(lambda _: executor).execute(task)
+
+    assert result.completion_status == "partial"
+    assert result.artifact_metadata["execution_verification"]["passed"] is False
+    assert "implementation_verification" not in result.artifact_metadata
+
+
+def test_data_processing_coder_rejects_masked_execution_failure():
+    task = _sp_task()
+    task.subagent_type = "coder"
+    task.task = "Filter and validate the data."
+    task.metadata = {"stage": "verification", "coder_task_kind": "data_processing"}
+    executor = FakeDR2Executor(
+        FakeDR2Result(
+            status="completed",
+            result=json.dumps({"summary": "Done", "artifact_metadata": {"completion_status": "complete"}}),
+            ai_messages=[
+                {"type": "ai", "tool_calls": [{"id": "calc", "name": "bash", "args": {"command": "python filter.py || true"}}]},
+                {"type": "tool", "name": "bash", "tool_call_id": "calc", "content": "RuntimeError: missing input.csv\nExit Code: 0"},
+            ],
+        )
+    )
+
+    result = DR2SubagentExecutorAdapter(lambda _: executor).execute(task)
+
+    assert result.completion_status == "partial"
+    assert result.artifact_metadata["execution_verification"]["passed"] is False
+
+
 def test_render_sp_subagent_prompt_carries_structured_context():
     prompt = render_sp_subagent_prompt(_sp_task())
 

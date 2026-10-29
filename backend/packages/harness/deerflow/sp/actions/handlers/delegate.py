@@ -14,7 +14,7 @@ from deerflow.sp.actions.schema import HandlerResult, SPAction
 from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.memory import StackMemoryEntry
 from deerflow.sp.subagents import SPSubagentExecutorProtocol, SPSubagentResult, SPSubagentTask
-from deerflow.sp.subagents.dr2_adapter import coder_task_requires_implementation
+from deerflow.sp.subagents.dr2_adapter import coder_task_requires_implementation, is_data_processing_coder
 
 OBSERVE_SUMMARY_MAX_CHARS = 700
 LARGE_RESULT_ARTIFACT_THRESHOLD = 1200
@@ -510,17 +510,29 @@ class DelegateHandler:
                     ]
                 )
             )
+        if action.target_agent == "coder":
+            task_metadata.setdefault("coder_task_kind", "software_change")
+        data_processing = action.target_agent == "coder" and is_data_processing_coder(task_metadata)
+        if data_processing:
+            task_metadata["requires_implementation"] = False
+            task_metadata.pop("verification_only", None)
+            task_metadata.setdefault("tool_names", ["read_file", "bash"])
         if action.target_agent == "coder" and action.stage in {
             "perception",
             "planning",
             "research",
         }:
             task_metadata["requires_implementation"] = False
-        if action.target_agent == "coder" and action.stage not in {
-            "perception",
-            "planning",
-            "research",
-        }:
+        if (
+            action.target_agent == "coder"
+            and not data_processing
+            and action.stage
+            not in {
+                "perception",
+                "planning",
+                "research",
+            }
+        ):
             # Preserve the implementation contract across recovery turns. A
             # later Central action may only say "locate the implementation";
             # without this inherited flag that read-only step could be marked
@@ -899,6 +911,8 @@ class DelegateHandler:
             )
             if key in result.artifact_metadata
         }
+        if task.metadata.get("coder_task_kind"):
+            acceptance_metadata["coder_task_kind"] = task.metadata["coder_task_kind"]
         observe_entry = context.stack.append_observe(
             observe_content,
             actor=str(action.target_agent),
@@ -1219,11 +1233,39 @@ def _report_language_alignment_gaps(
     latest_query = str(task.context_refs.get("latest_user_input") or task.context_refs.get("original_query") or "")
     if len(_CJK_CHARACTER_PATTERN.findall(latest_query)) < 4 or _EXPLICIT_ENGLISH_REPORT_PATTERN.search(latest_query) or len(output.strip()) < 200:
         return []
-    cjk_count = len(_CJK_CHARACTER_PATTERN.findall(output))
-    latin_count = len(_LATIN_CHARACTER_PATTERN.findall(output))
-    if cjk_count >= 20 and cjk_count * 3 >= latin_count:
+    # Source tables, code, literal identifiers, and citation destinations do not
+    # express the report's narrative language and must retain their source values.
+    lines = output.splitlines()
+    prose: list[str] = []
+    in_table = False
+    fence = ""
+    for index, line in enumerate(lines):
+        if fence:
+            if re.fullmatch(r" {0,3}" + re.escape(fence[0]) + "{" + str(len(fence)) + r",}[ \t]*", line):
+                fence = ""
+            continue
+        opening = re.match(r"^ {0,3}(`{3,}|~{3,})", line)
+        if opening:
+            fence = opening.group(1)
+            in_table = False
+            continue
+        if line.startswith(("    ", "\t")):
+            continue
+        next_line = lines[index + 1] if index + 1 < len(lines) else ""
+        separator = bool(re.fullmatch(r"\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*", next_line))
+        if "|" in line and (in_table or separator):
+            in_table = True
+            continue
+        in_table = False
+        prose.append(line)
+    narrative = "\n".join(prose)
+    narrative = re.sub(r"`[^`\n]*`", "", narrative)
+    narrative = re.sub(r"https?://[^\s<>\)\]]+", "", narrative)
+    cjk_count = len(_CJK_CHARACTER_PATTERN.findall(narrative))
+    latin_count = len(_LATIN_CHARACTER_PATTERN.findall(narrative))
+    if not (cjk_count or latin_count) or (cjk_count > 0 and cjk_count * 3 >= latin_count):
         return []
-    return ["User requested in Chinese, but the report is predominantly non-Chinese; rewrite the complete report in Chinese."]
+    return ["User requested in Chinese, but the report is predominantly non-Chinese; rewrite the explanatory narrative in Chinese while preserving original source fields, identifiers, code, and URLs."]
 
 
 def _report_literal_provenance_gaps(
@@ -1696,6 +1738,9 @@ def _delegated_artifact_metadata(
     metadata["delegate_stage"] = action.stage
     metadata["target_agent"] = action.target_agent
     metadata["requires_implementation"] = task.metadata.get("requires_implementation")
+    metadata.pop("coder_task_kind", None)
+    if task.metadata.get("coder_task_kind"):
+        metadata["coder_task_kind"] = task.metadata["coder_task_kind"]
     if task.metadata.get("verification_only") is True:
         metadata["verification_only"] = True
     return metadata

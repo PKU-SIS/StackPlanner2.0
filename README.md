@@ -15,6 +15,12 @@ SP2.0 是基于 DeerFlow 2.0 Runtime 构建的长时任务智能体框架。它�
 StackPlanner 的中枢规划、反思回退和记忆栈设计，同时复用 DeerFlow 的
 Gateway、ThreadState、Checkpoint、Artifact、Sandbox、Subagent 与 Web UI。
 
+Coder delegations distinguish data processing from software changes through
+`metadata.coder_task_kind`: data tasks require observable execution and data
+checks, while software changes retain source-edit and regression-test acceptance.
+Chinese report checks apply to explanatory text, preserving original source
+tables, code, identifiers, and URLs.
+
 > [!IMPORTANT]
 > This repository is a research and engineering fork built on DeerFlow 2.0. It
 > does not include deployment credentials, private experiment traces, or hosted

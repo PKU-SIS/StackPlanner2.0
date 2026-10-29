@@ -109,6 +109,8 @@ def _task_actor_label(task: SPSubagentTask | None) -> str:
 
 
 def _unverified_execution_gap(task: SPSubagentTask | None) -> str:
+    if task is not None and is_data_processing_coder(task.metadata):
+        return "Data-processing coder did not provide a successful execution-tool result with an unmasked exit status."
     return f"{_task_actor_label(task)} claimed execution or test verification without a successful execution-tool result after the latest source change."
 
 
@@ -399,9 +401,16 @@ def _recover_research_tool_evidence(ai_messages: Any) -> str | None:
     return "\n".join(sections)
 
 
+def is_data_processing_coder(metadata: Mapping[str, Any]) -> bool:
+    """Distinguish data execution from the default software-change contract."""
+    return metadata.get("coder_task_kind") == "data_processing"
+
+
 def _coder_requires_execution_evidence(task: SPSubagentTask | None) -> bool:
     if task is None or task.subagent_type != "coder":
         return False
+    if is_data_processing_coder(task.metadata):
+        return True
     text = "\n".join(str(value) for value in (task.task, task.description, task.expected_output) if value)
     return bool(_CODER_EXECUTION_REQUIRED_PATTERN.search(text))
 
@@ -409,13 +418,16 @@ def _coder_requires_execution_evidence(task: SPSubagentTask | None) -> bool:
 def coder_task_requires_implementation(task: SPSubagentTask) -> bool:
     """Return whether a coder delegation must produce a source-file change.
 
-    ``perception`` coder tasks are intentionally read-only.  Every other coder
+    Explicit data-processing tasks do not require repository changes.
+    ``perception`` coder tasks are intentionally read-only. Other software coder
     stage is an implementation/verification task in SP's contract, including a
     follow-up that only says "locate the implementation" after an earlier
     failed edit.  The latter is why this is metadata-driven rather than inferred
     from the latest natural-language task alone.
     """
     if task.subagent_type != "coder":
+        return False
+    if is_data_processing_coder(task.metadata):
         return False
     explicit = task.metadata.get("requires_implementation")
     if isinstance(explicit, bool):
@@ -536,8 +548,10 @@ def _test_execution_verification(ai_messages: Any) -> dict[str, Any]:
 
 def _execution_verification(
     ai_messages: Any,
+    *,
+    reject_masked_commands: bool = False,
 ) -> dict[str, int | bool | None]:
-    calls: dict[str, tuple[str, int]] = {}
+    calls: dict[str, tuple[str, int, Mapping[str, Any] | None]] = {}
     latest_source_write_index: int | None = None
     successful_execution_indices: list[int] = []
     if not isinstance(ai_messages, list):
@@ -554,7 +568,7 @@ def _execution_verification(
                 if not isinstance(call, Mapping):
                     continue
                 call_id = str(call.get("id") or f"anonymous-{index}-{call_index}")
-                calls[call_id] = (str(call.get("name") or ""), index)
+                calls[call_id] = (str(call.get("name") or ""), index, _tool_call_args(call.get("args")))
             continue
         if message.get("type") != "tool":
             continue
@@ -568,6 +582,11 @@ def _execution_verification(
         if tool_name in _FILE_WRITE_TOOLS:
             latest_source_write_index = index
         if tool_name in _EXECUTION_TOOLS:
+            if reject_masked_commands:
+                args = call[2] if call is not None else None
+                command = args.get("command") if args is not None else None
+                if not isinstance(command, str) or not _command_preserves_exit_status(command):
+                    continue
             successful_execution_indices.append(index)
 
     latest_successful_execution_index = successful_execution_indices[-1] if successful_execution_indices else None
@@ -709,7 +728,7 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
             if _NO_RESPONSE_GAP not in artifact_metadata["evidence_gaps"]:
                 artifact_metadata["evidence_gaps"].append(_NO_RESPONSE_GAP)
         if _coder_requires_execution_evidence(task):
-            verification = _execution_verification(ai_messages)
+            verification = _execution_verification(ai_messages, reject_masked_commands=is_data_processing_coder(task.metadata))
             artifact_metadata["execution_verification"] = verification
             if not verification["passed"]:
                 if artifact_metadata["completion_status"] == "complete":
@@ -729,7 +748,13 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         # the final source edit. A task that omits the word "test" is still not
         # safely complete from a source diff alone: syntax checks, focused
         # tests, or the repository's equivalent must be observable.
-        code_verification_only = bool(task is not None and task.subagent_type == "coder" and task.metadata.get("verification_only") is True and str(task.stage or task.metadata.get("stage") or "").strip().lower() == "verification")
+        code_verification_only = bool(
+            task is not None
+            and task.subagent_type == "coder"
+            and not is_data_processing_coder(task.metadata)
+            and task.metadata.get("verification_only") is True
+            and str(task.stage or task.metadata.get("stage") or "").strip().lower() == "verification"
+        )
         if coder_task_requires_implementation(task) or code_verification_only:
             test_verification = _test_execution_verification(ai_messages)
             artifact_metadata["test_verification"] = test_verification
