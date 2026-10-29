@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import shutil
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
@@ -152,6 +154,70 @@ def _paths_for_context(context: report_store.ReportContext) -> report_store.Repo
 def _outline_delivery_path(paths: report_store.ReportPaths, action_id: str) -> Path:
     directory = paths.directory / "outline"
     return directory / f"delivery-{action_id}.json"
+
+
+def _copy_rejected_outline_to_delivery(
+    ledger: ReportLedger,
+    action: SPAction,
+    delivery_path: Path,
+) -> bool:
+    """Copy a validated rejected candidate to this delegation's fresh file.
+
+    The candidate is intentionally not parsed: an incomplete JSON prefix is a
+    valid recovery basis. Identity is checked through the ledger record, the
+    actual outline-directory path, the recorded action id and the recorded text
+    hash. A failed copy never leaves the final delivery path behind.
+    """
+    rejected = ledger.payload.get("rejected_outline")
+    if not isinstance(rejected, Mapping):
+        return False
+    candidate = report_packets._outline_candidate_view(rejected)
+    if not isinstance(candidate, Mapping):
+        return False
+    raw_path = str(rejected.get("path") or "").strip()
+    record_action_id = str(rejected.get("action_id") or "").strip()
+    record_sha256 = str(rejected.get("sha256") or "").strip()
+    if not raw_path or not record_action_id or not record_sha256:
+        raise ReportValidationError("retained outline candidate is missing its recorded identity")
+    outline_dir = (ledger.paths.directory / "outline").resolve()
+    try:
+        candidate_path = Path(raw_path).resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ReportValidationError(f"retained outline candidate is unavailable: {exc}") from exc
+    if not candidate_path.is_relative_to(outline_dir):
+        raise ReportValidationError("retained outline candidate is outside the report outline directory")
+    if candidate_path.name != f"rejected-{record_action_id}.json":
+        raise ReportValidationError("retained outline candidate path does not match its recorded action id")
+    if not candidate_path.is_file():
+        raise ReportValidationError("retained outline candidate is not a regular file")
+    try:
+        text = candidate_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ReportValidationError(f"retained outline candidate is unreadable: {exc}") from exc
+    if report_store.sha256_text(text) != record_sha256:
+        raise ReportValidationError("retained outline candidate content does not match its recorded hash")
+    recorded_chars = rejected.get("chars")
+    if recorded_chars is not None:
+        try:
+            char_count = int(recorded_chars)
+        except (TypeError, ValueError) as exc:
+            raise ReportValidationError("retained outline candidate has an invalid recorded size") from exc
+        if char_count != len(text):
+            raise ReportValidationError("retained outline candidate size does not match its recorded size")
+    if delivery_path.exists():
+        raise ReportValidationError(
+            "current Outline delivery path already exists; refusing to overwrite progress with an older candidate"
+        )
+    delivery_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = delivery_path.with_name(f".{delivery_path.name}.{action.action_id}.tmp")
+    try:
+        temporary.unlink(missing_ok=True)
+        shutil.copyfile(candidate_path, temporary)
+        os.replace(temporary, delivery_path)
+    except OSError as exc:
+        temporary.unlink(missing_ok=True)
+        raise ReportValidationError(f"could not copy retained outline candidate into the new delivery file: {exc}") from exc
+    return True
 
 
 def start_report(context: HandlerContext, action: SPAction) -> dict[str, Any]:
@@ -449,9 +515,19 @@ def prepare_delegation(
             rejected = ledger.payload.get("rejected_outline")
             candidate = report_packets._outline_candidate_view(rejected)
             if report_task in {"plan", "revise"} and isinstance(candidate, Mapping):
+                copied = _copy_rejected_outline_to_delivery(ledger, action, delivery_path)
                 candidate_virtual = str(candidate.get("virtual_path") or "").strip()
                 candidate_host = str(rejected.get("path") or "").strip() if isinstance(rejected, Mapping) else ""
-                if candidate_virtual:
+                if copied:
+                    instruction += (
+                        " The delivery file already contains a byte-for-byte copy of the retained "
+                        "rejected candidate. Read its relevant tail first. If it merely ends before "
+                        "the tree is closed, append only the missing suffix; if it has a mid-file "
+                        "error, correct that part normally with the existing tools. Do not rewrite "
+                        "the existing prefix merely to restate it. The original candidate remains "
+                        "unchanged."
+                    )
+                elif candidate_virtual:
                     instruction += (
                         " Recovery basis: before writing this delivery path, read "
                         f"report_packet.rejected_outline.virtual_path ({candidate_virtual}) "

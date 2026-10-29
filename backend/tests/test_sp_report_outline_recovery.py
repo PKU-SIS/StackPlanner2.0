@@ -5,9 +5,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
-from langchain_core.messages import HumanMessage
+import pytest
+from langchain_core.messages import HumanMessage, ToolMessage
+from langgraph.prebuilt.tool_node import ToolCallRequest
 
+from deerflow.agents.middlewares.read_before_write_middleware import ReadBeforeWriteMiddleware
 from deerflow.sp.actions.handlers.base import HandlerContext
 from deerflow.sp.actions.schema import ActionType, SPAction
 from deerflow.sp.artifacts import SPArtifactAdapter
@@ -56,6 +60,17 @@ def _tree() -> dict:
         "feedback_dispositions": [],
         "draft_dispositions": [],
     }
+
+
+def _request(name: str, args: dict, messages=()) -> ToolCallRequest:
+    runtime = MagicMock()
+    runtime.context = {"thread_id": "t1"}
+    return ToolCallRequest(
+        tool_call={"name": name, "args": args, "id": f"call-{name}"},
+        tool=None,
+        state={"messages": list(messages)},
+        runtime=runtime,
+    )
 
 
 def _outline_delegate(ctx: HandlerContext) -> tuple[SPAction, SPSubagentTask]:
@@ -190,7 +205,7 @@ def test_rejected_outline_forces_file_delivery_on_retry_and_accepts_complete_fil
     assert accepted.next_step == "continue", accepted.error
 
 
-def test_rejected_candidate_is_referenced_but_not_prefilled(tmp_path):
+def test_rejected_candidate_is_copied_to_delivery_and_original_preserved(tmp_path):
     ctx = _context(tmp_path)
     action, task = _outline_delegate(ctx)
     accepted = hooks.handle_success(
@@ -210,14 +225,17 @@ def test_rejected_candidate_is_referenced_but_not_prefilled(tmp_path):
     assert accepted.next_step == "continue"
 
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
-    candidate = ledger.paths.directory / "outline" / "rejected-candidate.json"
+    candidate = ledger.paths.directory / "outline" / "rejected-prior-outline.json"
     candidate.parent.mkdir(parents=True, exist_ok=True)
-    candidate.write_text(json.dumps(_tree(), ensure_ascii=False), encoding="utf-8")
+    partial = '{"report_title":"partial","requirements":[],"nodes":['
+    candidate.write_text(partial, encoding="utf-8")
     ledger.payload["rejected_outline"] = {
         "path": str(candidate),
         "virtual_path": ledger.paths.virtual(candidate),
-        "chars": len(candidate.read_text(encoding="utf-8")),
+        "sha256": hooks.report_store.sha256_text(partial),
+        "chars": len(partial),
         "action_id": "prior-outline",
+        "kind": "tree_candidate",
         "errors": "token_capped",
     }
     ledger.save()
@@ -237,9 +255,9 @@ def test_rejected_candidate_is_referenced_but_not_prefilled(tmp_path):
     packet = refs["report_packet"]
     delivery_path = Path(str(task_metadata["outline_delivery_path"]))
 
-    assert not delivery_path.exists()
-    assert packet["rejected_outline"]["virtual_path"] == ledger.paths.virtual(candidate)
-    assert "Recovery basis" in packet["delivery"]["instruction"]
+    assert delivery_path.read_bytes() == candidate.read_bytes()
+    assert candidate.read_text(encoding="utf-8") == partial
+    assert "byte-for-byte copy" in packet["delivery"]["instruction"]
     assert str(packet["delivery"]["path"]) == ledger.paths.virtual(delivery_path)
     assert task_metadata["rejected_candidate_path"] == str(candidate)
     assert packet["tree"]["version"] == 1
@@ -270,6 +288,230 @@ def test_rejected_candidate_is_referenced_but_not_prefilled(tmp_path):
     assert no_output.next_step == "error_recoverable"
     current_ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
     assert current_ledger.payload["tree"]["version"] == 1
+    assert candidate.read_text(encoding="utf-8") == partial
+
+
+def test_retained_prefix_read_append_and_strict_accept(tmp_path):
+    ctx = _context(tmp_path)
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    candidate = ledger.paths.directory / "outline" / "rejected-prior-outline.json"
+    candidate.parent.mkdir(parents=True, exist_ok=True)
+    full = json.dumps(_tree(), ensure_ascii=False)
+    partial = full[:-1]
+    candidate.write_text(partial, encoding="utf-8")
+    ledger.payload["rejected_outline"] = {
+        "path": str(candidate),
+        "virtual_path": ledger.paths.virtual(candidate),
+        "sha256": hooks.report_store.sha256_text(partial),
+        "chars": len(partial),
+        "action_id": "prior-outline",
+        "kind": "tree_candidate",
+        "errors": "token_capped",
+    }
+    ledger.save()
+
+    action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-outline-recovery",
+        reason="recover",
+        task="recover",
+        target_agent="outline",
+        stage="planning",
+        metadata={"report_task": "plan"},
+    )
+    metadata: dict = {"stage": "planning"}
+    refs: dict = {}
+    hooks.prepare_delegation(action, ctx, metadata, refs)
+    delivery = Path(str(metadata["outline_delivery_path"]))
+    assert delivery.read_text(encoding="utf-8") == partial
+    assert candidate.read_text(encoding="utf-8") == partial
+
+    middleware = ReadBeforeWriteMiddleware(
+        content_reader=lambda _runtime, _path: delivery.read_text(encoding="utf-8")
+    )
+
+    def append_file(request: ToolCallRequest) -> ToolMessage:
+        args = request.tool_call["args"]
+        content = delivery.read_text(encoding="utf-8") + str(args["content"])
+        delivery.write_text(content, encoding="utf-8")
+        return ToolMessage(content="OK", tool_call_id=str(request.tool_call["id"]), name="write_file")
+
+    blocked = middleware.wrap_tool_call(
+        _request("write_file", {"description": "append", "path": refs["report_packet"]["delivery"]["path"], "content": "}", "append": True}),
+        append_file,
+    )
+    assert blocked.status == "error"
+    assert delivery.read_text(encoding="utf-8") == partial
+
+    read_result = middleware.wrap_tool_call(
+        _request("read_file", {"description": "read tail", "path": refs["report_packet"]["delivery"]["path"]}),
+        lambda _request: ToolMessage(content=partial[-80:], tool_call_id="read-1", name="read_file"),
+    )
+    assert "deerflow_read_mark" in read_result.additional_kwargs
+    appended = middleware.wrap_tool_call(
+        _request(
+            "write_file",
+            {"description": "append", "path": refs["report_packet"]["delivery"]["path"], "content": "}", "append": True},
+            messages=[read_result],
+        ),
+        append_file,
+    )
+    assert appended.status != "error"
+    assert delivery.read_text(encoding="utf-8") == full
+    assert json.loads(delivery.read_text(encoding="utf-8"))["report_title"] == "恢复候选"
+    assert candidate.read_text(encoding="utf-8") == partial
+
+    task = SPSubagentTask(
+        action_id=action.action_id,
+        subagent_type="outline",
+        task="recover",
+        description="recover",
+        metadata=metadata,
+        context_refs=refs,
+        stage="planning",
+    )
+    with pytest.raises(Exception, match="already exists"):
+        hooks.prepare_delegation(action, ctx, {"stage": "planning"}, {})
+    assert delivery.read_text(encoding="utf-8") == full
+
+    accepted = hooks.handle_success(
+        action,
+        ctx,
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="file tree",
+            artifact_content=None,
+            artifact_type="outline",
+            artifact_metadata={"completion_status": "complete", "delivery_mode": "file"},
+        ),
+        task,
+        artifact_adapter=SPArtifactAdapter(),
+        delegate_entry=ctx.stack.append_delegate("outline", thread_id="t1", run_id="run1", stage="planning"),
+    )
+    assert accepted.next_step == "continue", accepted.error
+    assert ReportLedger.load_for_context(hooks.report_context(ctx.state)).payload["tree"]["version"] == 1
+
+
+def test_outside_or_untrusted_candidate_has_no_delivery(tmp_path):
+    ctx = _context(tmp_path)
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    candidate = tmp_path / "outside.json"
+    candidate.write_text('{"report_title":"outside","nodes":[', encoding="utf-8")
+    ledger.payload["rejected_outline"] = {
+        "path": str(candidate),
+        "virtual_path": ledger.paths.virtual(candidate),
+        "sha256": hooks.report_store.sha256_text(candidate.read_text(encoding="utf-8")),
+        "chars": len(candidate.read_text(encoding="utf-8")),
+        "action_id": "prior-outline",
+        "kind": "tree_candidate",
+        "errors": "token_capped",
+    }
+    ledger.save()
+    action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-outside",
+        reason="recover",
+        task="recover",
+        target_agent="outline",
+        stage="planning",
+        metadata={"report_task": "plan"},
+    )
+    with pytest.raises(Exception, match="outside"):
+        hooks.prepare_delegation(action, ctx, {"stage": "planning"}, {})
+    assert not (ledger.paths.directory / "outline" / "delivery-a-outside.json").exists()
+
+
+def test_candidate_copy_failure_leaves_no_false_delivery(tmp_path, monkeypatch):
+    ctx = _context(tmp_path)
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    candidate = ledger.paths.directory / "outline" / "rejected-prior-outline.json"
+    candidate.parent.mkdir(parents=True, exist_ok=True)
+    partial = '{"report_title":"partial","nodes":['
+    candidate.write_text(partial, encoding="utf-8")
+    ledger.payload["rejected_outline"] = {
+        "path": str(candidate),
+        "virtual_path": ledger.paths.virtual(candidate),
+        "sha256": hooks.report_store.sha256_text(partial),
+        "chars": len(partial),
+        "action_id": "prior-outline",
+        "kind": "tree_candidate",
+        "errors": "token_capped",
+    }
+    ledger.save()
+    action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-copy-fail",
+        reason="recover",
+        task="recover",
+        target_agent="outline",
+        stage="planning",
+        metadata={"report_task": "plan"},
+    )
+    monkeypatch.setattr(hooks.shutil, "copyfile", lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("copy failed")))
+    with pytest.raises(Exception, match="could not copy"):
+        hooks.prepare_delegation(action, ctx, {"stage": "planning"}, {})
+    assert not (ledger.paths.directory / "outline" / "delivery-a-copy-fail.json").exists()
+    assert candidate.read_text(encoding="utf-8") == partial
+
+
+def test_mid_file_error_candidate_is_corrected_not_auto_appended(tmp_path):
+    ctx = _context(tmp_path)
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    candidate = ledger.paths.directory / "outline" / "rejected-prior-outline.json"
+    candidate.parent.mkdir(parents=True, exist_ok=True)
+    broken = json.dumps(_tree(), ensure_ascii=False).replace('"report_title": "恢复候选"', '"report_title": BROKEN', 1)
+    candidate.write_text(broken, encoding="utf-8")
+    ledger.payload["rejected_outline"] = {
+        "path": str(candidate),
+        "virtual_path": ledger.paths.virtual(candidate),
+        "sha256": hooks.report_store.sha256_text(broken),
+        "chars": len(broken),
+        "action_id": "prior-outline",
+        "kind": "tree_candidate",
+        "errors": "mid-file syntax error",
+    }
+    ledger.save()
+    action = SPAction.create(
+        ActionType.DELEGATE,
+        action_id="a-mid-error",
+        reason="recover",
+        task="recover",
+        target_agent="outline",
+        stage="planning",
+        metadata={"report_task": "plan"},
+    )
+    metadata: dict = {"stage": "planning"}
+    refs: dict = {}
+    hooks.prepare_delegation(action, ctx, metadata, refs)
+    delivery = Path(str(metadata["outline_delivery_path"]))
+    assert delivery.read_text(encoding="utf-8") == broken
+    delivery.write_text(json.dumps(_tree(), ensure_ascii=False), encoding="utf-8")
+
+    task = SPSubagentTask(
+        action_id=action.action_id,
+        subagent_type="outline",
+        task="recover",
+        description="recover",
+        metadata=metadata,
+        context_refs=refs,
+        stage="planning",
+    )
+    accepted = hooks.handle_success(
+        action,
+        ctx,
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="corrected",
+            artifact_content=None,
+            artifact_type="outline",
+            artifact_metadata={"completion_status": "complete", "delivery_mode": "file"},
+        ),
+        task,
+        artifact_adapter=SPArtifactAdapter(),
+        delegate_entry=ctx.stack.append_delegate("outline", thread_id="t1", run_id="run1", stage="planning"),
+    )
+    assert accepted.next_step == "continue", accepted.error
+    assert candidate.read_text(encoding="utf-8") == broken
 
 
 def test_incomplete_candidate_allows_corrected_delivery(tmp_path):
@@ -292,14 +534,17 @@ def test_incomplete_candidate_allows_corrected_delivery(tmp_path):
     assert accepted.next_step == "continue"
 
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
-    candidate = ledger.paths.directory / "outline" / "rejected-candidate.json"
+    candidate = ledger.paths.directory / "outline" / "rejected-prior-outline.json"
     candidate.parent.mkdir(parents=True, exist_ok=True)
-    candidate.write_text('{"report_title":"partial","nodes":[', encoding="utf-8")
+    partial = '{"report_title":"partial","nodes":['
+    candidate.write_text(partial, encoding="utf-8")
     ledger.payload["rejected_outline"] = {
         "path": str(candidate),
         "virtual_path": ledger.paths.virtual(candidate),
-        "chars": len(candidate.read_text(encoding="utf-8")),
+        "sha256": hooks.report_store.sha256_text(partial),
+        "chars": len(partial),
         "action_id": "prior-outline",
+        "kind": "tree_candidate",
         "errors": "token_capped",
     }
     ledger.save()
