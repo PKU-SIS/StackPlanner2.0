@@ -9,7 +9,7 @@ from deerflow.config.model_config import ModelConfig
 from deerflow.config.sandbox_config import SandboxConfig
 from deerflow.config.subagents_config import SubagentsAppConfig
 from deerflow.config.token_budget_config import TokenBudgetConfig
-from deerflow.sp.runtime import app_config_for_report_outline
+from deerflow.sp.runtime import REPORT_OUTLINE_OUTPUT_MAX_TOKENS, app_config_for_report_outline
 from deerflow.sp.subagents import SPSubagentTask
 
 
@@ -75,6 +75,34 @@ def test_report_outline_config_copy_drives_real_middleware_budget():
     assert _budget(report_middlewares) == 240_000
     assert _budget(ordinary_middlewares) == 120_000
     assert app_config.subagents.get_token_budget_for("sp-researcher").max_tokens == 120_000
+
+
+def test_report_outline_360k_candidate_is_scoped_without_other_budget_changes():
+    app_config = _app_config()
+    candidate = app_config.model_copy(deep=True)
+    candidate.subagents.report_outline_token_budget = TokenBudgetConfig(
+        enabled=True,
+        max_tokens=360_000,
+        warn_threshold=0.8,
+        hard_stop_threshold=1.0,
+    )
+    report_config = app_config_for_report_outline(candidate, _task("outline"))
+
+    assert report_config is not candidate
+    assert report_config.subagents.get_token_budget_for("sp-outline").max_tokens == 360_000
+    assert candidate.subagents.get_token_budget_for("sp-outline").max_tokens == 120_000
+    assert candidate.subagents.get_token_budget_for("sp-researcher").max_tokens == 120_000
+    assert app_config_for_report_outline(candidate, _task()) is candidate
+    assert REPORT_OUTLINE_OUTPUT_MAX_TOKENS == 16_384
+
+    middlewares = build_subagent_runtime_middlewares(
+        app_config=report_config,
+        model_name="test-model",
+        agent_name="sp-outline",
+    )
+    budget = next(item for item in middlewares if isinstance(item, TokenBudgetMiddleware))
+    assert budget._config.max_tokens == 360_000
+    assert budget._config.hard_stop_threshold == 1.0
 
 
 def test_non_report_task_returns_shared_config_and_hard_stop_semantics_remain():
