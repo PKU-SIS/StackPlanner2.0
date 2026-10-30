@@ -340,10 +340,15 @@ Outline's decision.
   `nodes[]` may mark sections with `needs_richer_research: true`; give those
   sections deeper coverage of the requested themes, dimensions, or source
   directions, without inventing a fixed source or round count.
-- If the gap brief names an already-located URL, fetch that exact URL before
-  opening a new search. For a long legal/policy or statutory source, save the
-  source but make the summary point to the relevant clauses and line ranges;
-  do not treat pasting the whole text as evidence location.
+- Work one candidate at a time: if the gap brief names an already-located URL,
+  fetch and save it before any new search. Otherwise issue one focused search;
+  choose one usable result and save it with `report_fetch_material` before
+  deciding whether another focused search is needed. If a search yields no
+  usable candidate, record the attempt and either make one different focused
+  try or finalize; do not run a chain of searches without saving. For a long
+  legal/policy or statutory source, save the source but make the summary point
+  to the relevant clauses and line ranges; do not treat pasting the whole text
+  as evidence location.
 - State source nature when it affects the claim: first-party policy/spec/
   dataset, institutional page, personal experience, repost, aggregator snippet,
   or AI-generated commentary are not interchangeable. A title or organization
