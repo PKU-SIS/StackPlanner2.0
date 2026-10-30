@@ -122,6 +122,9 @@ def preprocess(sample, options):
 从服务器已有的 `FinRE/test.parquet`、`FinMR/test.parquet`、`FinSM/test.parquet`
 流式分批读取，一次 JSON 解码原始 `query`，按数据中的七个固定标题精确分离内容。
 六类 filing 文档进入 RAGFlow；原始任务说明与 US GAAP Taxonomy 作为规则/参考文件。
+数据集专属任务要求和最终输出格式同时由 `configs/dcc/prompts/finauditing/` 中的
+FinRE、FinMR、FinSM 三个片段直接注入输入 prompt。示例配置已经按子任务启用这些
+片段：FinRE 输出单个关系标签，FinMR 输出提取值/计算值的 JSON，FinSM 输出标识符数组。
 原文标为 `None` 的缺失文档不伪造内容，记录在公共缺失文档清单中。异常结构直接报错，
 避免在上游格式变化时静默丢失数据。
 
@@ -146,6 +149,8 @@ def preprocess(sample, options):
 规则正文不会塞进初始 prompt；prompt 只列出规则文件，要求 agent 用原生文件工具
 读取。文档只列公共 inventory，并要求调用原生 `ragflow_retrieve` 接口获得证据。
 改 prompt 后只需重跑 render，无需重新上传、切片。
+FinAuditing 的 `prompts.datasets` 映射可以分别替换这三个片段；未来数据集采用相同方式
+提供自己的任务要求与输出约束。领域规则及 taxonomy 仍通过规则文件读取。
 
 ## RAGFlow 建库和续跑
 

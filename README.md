@@ -35,6 +35,8 @@ generic JSONL loaders are included. See
 [DCC preprocessing setup and extension guide](docs/DCC_PREPROCESSING.md).
 The DCC adapter uses the v3 PublicTask and native file-staging contract; rerun
 task rendering after upgrading, while keeping the existing per-sample indexes.
+FinAuditing's example configuration enables separate FinRE, FinMR, and FinSM
+prompt fragments that inject each subtask's requirements and final output format.
 
 ## Why SP2.0
 

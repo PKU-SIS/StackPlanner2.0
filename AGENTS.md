@@ -161,6 +161,10 @@ Builders consume only PublicTask and use native stage_files/build_inputs.
 Rendered files carry a public retrieval context and rules with neutral names;
 record IDs, split and source paths stay in host-side manifests. After upgrading
 the input contract, rerun render; indexing and the existing per-sample bases stay valid.
+FinAuditing subtask instructions/output contracts live in
+`configs/dcc/prompts/finauditing/` and are selected by `prompts.datasets` in its
+example configuration. Keep task/output instructions inline, domain rules and
+taxonomy in public reference files, and all answer labels in private artifacts.
 
 Run `python -m pytest tests/test_dcc_preprocessing.py -q`; with native SP
 dependencies also run `tests/test_dcc_native.py --no-sp-runtime`. Use `ruff check` and `ruff format`

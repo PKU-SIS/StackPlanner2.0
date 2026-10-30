@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+from pathlib import Path
 
 import pytest
 
@@ -146,6 +147,31 @@ def test_prompt_layers_are_ordered_and_unknown_variables_fail(tmp_path):
     assert compose(["literal:${question}", str(layer)], {"question": "Q"}) == "Q\n\nDATASET Q"
     with pytest.raises(ValueError, match="missing"):
         compose(["literal:${gold}"], {"question": "Q"})
+
+
+@pytest.mark.parametrize(
+    ("dataset", "required", "excluded"),
+    [
+        ("finauditing_finre", ("Reversal", "Inappropriateness", "CombinationErr", "unquoted label"), ("extracted_value",)),
+        ("finauditing_finmr", ("extracted_value", "calculated_value", "JSON object", "strings"), ("CombinationErr",)),
+        ("finauditing_finsm", ("JSON array of strings", "us-gaap:Revenues", "erroneous", "axis-member"), ("extracted_value", "CombinationErr")),
+    ],
+)
+def test_finauditing_injects_subtask_requirements_and_output_contract(tmp_path, dataset, required, excluded):
+    from scripts.dcc_preprocess import load_config
+
+    path = Path(__file__).resolve().parents[1] / "configs/dcc/preprocessing.finauditing.example.json"
+    cfg = load_config(path)
+    cfg["ragflow"] = config()["ragflow"]
+    item = dataclasses.replace(sample("PRIVATE_SAMPLE_ID"), dataset=dataset)
+    bundle = tmp_path / "bundle"
+    prepare(cfg, bundle, samples=[item])
+    index_bundle(bundle, cfg["ragflow"], client=FakeRagflow())
+    prompt = render(bundle, cfg)[0]["prompt"]
+    assert all(text in prompt for text in required)
+    assert all(text not in prompt for text in excluded)
+    assert "PRIVATE_" not in prompt
+    assert "ragflow_retrieve" in prompt
 
 
 def test_index_resume_and_scoped_retrieval_do_not_upload_rules(tmp_path):

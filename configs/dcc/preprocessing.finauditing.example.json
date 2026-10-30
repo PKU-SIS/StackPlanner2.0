@@ -5,7 +5,14 @@
     "tasks": ["FinRE", "FinMR", "FinSM"]
   },
   "processors": [],
-  "prompts": {"datasets": {}, "samples": {}},
+  "prompts": {
+    "datasets": {
+      "finauditing_finre": ["prompts/finauditing/finre.md"],
+      "finauditing_finmr": ["prompts/finauditing/finmr.md"],
+      "finauditing_finsm": ["prompts/finauditing/finsm.md"]
+    },
+    "samples": {}
+  },
   "ragflow": {
     "base_url": "https://v262-min-ragflow.pkubir.cn",
     "api_key_env": "RAGFLOW_API_KEY",
