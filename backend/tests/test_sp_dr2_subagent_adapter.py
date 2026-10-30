@@ -3,6 +3,8 @@
 import json
 from dataclasses import dataclass
 
+import pytest
+
 from deerflow.sp.actions.handlers.base import HandlerContext
 from deerflow.sp.actions.handlers.context import build_handler_context_refs
 from deerflow.sp.memory import TaskMemoryStack
@@ -114,6 +116,61 @@ def test_data_processing_coder_still_requires_observable_execution():
     assert result.completion_status == "partial"
     assert result.artifact_metadata["execution_verification"]["passed"] is False
     assert "implementation_verification" not in result.artifact_metadata
+
+
+@pytest.mark.parametrize(
+    ("command", "expected_status"),
+    [
+        ("python -c 'print(\"a | b\")'", "complete"),
+        ("python -c \"print('a | b')\"", "complete"),
+        ("printf '%s' a\\|b", "complete"),
+        ("python extract.py # table uses | separators", "complete"),
+        ("python - <<'PY'\nprint('a | b')\nPY", "complete"),
+        ('python - <<"PY"\nprint("| code | name |")\nPY', "complete"),
+        ("python - <<PY\nprint('a | b')\nPY", "complete"),
+        ("python - <<-'PY'\n\tprint('a | b')\n\tPY", "complete"),
+        ("cat <<'FIRST' <<'SECOND'\na | b\nFIRST\nc | d\nSECOND", "complete"),
+        ("python - <<'PY'\nprint('it is a | b')\nPY\npython verify.py", "complete"),
+        ("python extract.py | head", "partial"),
+        ("python extract.py |& head", "partial"),
+        ("python -c 'print(\"a | b\")' | head", "partial"),
+        ("python - <<'PY' | head\nprint('a | b')\nPY", "partial"),
+        ("python - <<'PY'\nprint('a | b')\nPY\npython verify.py | head", "partial"),
+        ("python extract.py || true", "partial"),
+        ("python extract.py; echo done", "partial"),
+        ("bash -c 'python extract.py | head'", "partial"),
+        ("bash <<'SH'\npython extract.py | head\nSH", "partial"),
+        ('printf "%s" "$(python extract.py | head)"', "partial"),
+        ("python - <<PY\nprint('$(python extract.py | head)')\nPY", "partial"),
+        ("python - <<'PY'\nprint('a | b')", "partial"),
+        ("false \\ #note | cat", "partial"),
+        ("false $'it\\'s' | cat # '", "partial"),
+        ("cat <<EOF-X\nignored\nEOF-X\nfalse | cat\n: <<EOF\nEOF", "partial"),
+        ("cat <<EOF\nignored\nE\\\nOF\nfalse | cat\n: <<EOF\nEOF", "partial"),
+        ("cat <<<EOF\nfalse | cat\n: <<EOF\nEOF", "partial"),
+        ("set -o pipefail; python extract.py | head", "complete"),
+    ],
+)
+def test_data_processing_execution_distinguishes_literal_pipes_from_shell_pipelines(command, expected_status):
+    task = _sp_task()
+    task.subagent_type = "coder"
+    task.task = "Filter source records and verify the result."
+    task.metadata = {"stage": "verification", "coder_task_kind": "data_processing"}
+    executor = FakeDR2Executor(
+        FakeDR2Result(
+            status="completed",
+            result=json.dumps({"summary": "Source rows verified.", "artifact_content": "[]", "artifact_metadata": {"completion_status": "complete", "evidence_gaps": []}}),
+            ai_messages=[
+                {"type": "ai", "tool_calls": [{"id": "extract", "name": "bash", "args": {"command": command}}]},
+                {"type": "tool", "name": "bash", "tool_call_id": "extract", "content": "Verified source rows.\nExit Code: 0"},
+            ],
+        )
+    )
+
+    result = DR2SubagentExecutorAdapter(lambda _: executor).execute(task)
+
+    assert result.completion_status == expected_status
+    assert result.artifact_metadata["execution_verification"]["passed"] is (expected_status == "complete")
 
 
 def test_data_processing_coder_rejects_masked_execution_failure():

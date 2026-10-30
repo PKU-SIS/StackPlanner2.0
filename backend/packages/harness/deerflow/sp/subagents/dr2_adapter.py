@@ -312,6 +312,81 @@ def _coder_reported_behavior_failure(raw_result: Any, ai_messages: Any) -> bool:
     return False
 
 
+def _shell_pipeline_surface(command: str) -> str:
+    """Hide literal text for pipe detection, retaining ambiguous shell input.
+
+    This is a bounded lexical check, not a shell evaluator. Nested shell
+    execution and command substitutions keep the original conservative check.
+    """
+    if re.search(r"\b(?:bash|sh|zsh|dash|ksh|eval)\b", command):
+        return command
+    surface = list(command)
+    quote: str | None = None
+    heredocs: list[tuple[str, bool, bool]] = []
+    index = 0
+    while index < len(command):
+        char = command[index]
+        if quote != "'" and (char == "`" or command.startswith("$(", index)):
+            return command
+        if quote is None and (command.startswith("$'", index) or command.startswith('$"', index)):
+            return command
+        if char == "\\" and quote != "'":
+            if index + 1 < len(command) and command[index + 1].isspace():
+                return command
+            surface[index : index + 2] = " " * len(surface[index : index + 2])
+            index += 2
+            continue
+        if quote is not None:
+            surface[index] = " "
+            if char == quote:
+                quote = None
+        elif char in {"'", '"'}:
+            quote = char
+            surface[index] = " "
+        elif char == "#" and (index == 0 or command[index - 1].isspace() or command[index - 1] in ";&|()"):
+            end = command.find("\n", index)
+            end = len(command) if end < 0 else end
+            surface[index:end] = " " * (end - index)
+            index = end
+            continue
+        elif command.startswith("<<<", index):
+            return command
+        elif command.startswith("<<", index):
+            marker = re.match(r"<<(-?)[ \t]*(?:'([^'\n]+)'|\"([^\"\n]+)\"|([A-Za-z_][A-Za-z0-9_]*))", command[index:])
+            if marker is None:
+                return command
+            end = index + marker.end()
+            if end < len(command) and command[end] not in " \t\r\n;&|<>()":
+                return command
+            delimiter = marker.group(2) or marker.group(3) or marker.group(4)
+            heredocs.append((delimiter, bool(marker.group(1)), marker.group(4) is None))
+            surface[index:end] = " " * (end - index)
+            index = end
+            continue
+        elif char == "\n" and heredocs:
+            index += 1
+            for delimiter, strip_tabs, quoted in heredocs:
+                body_start = index
+                while index < len(command):
+                    end = command.find("\n", index)
+                    end = len(command) if end < 0 else end
+                    line = command[index:end]
+                    if (line.lstrip("\t") if strip_tabs else line) == delimiter:
+                        break
+                    index = end + 1
+                else:
+                    return command
+                body = command[body_start:index]
+                if not quoted and ("$(" in body or "`" in body or "\\\n" in body):
+                    return command
+                surface[body_start:end] = " " * (end - body_start)
+                index = end + 1
+            heredocs.clear()
+            continue
+        index += 1
+    return command if quote is not None or heredocs else "".join(surface)
+
+
 def _command_preserves_exit_status(command: str) -> bool:
     """Reject shell wrappers that can turn a failed test into exit code zero."""
 
@@ -320,7 +395,7 @@ def _command_preserves_exit_status(command: str) -> bool:
         return False
     # Without pipefail, ``pytest ... | head`` reports the consumer's status,
     # not pytest's. This exact pattern produced false-complete SWE patches.
-    if re.search(r"(?<!\|)\|(?!\|)", command) and not re.search(
+    if re.search(r"(?<!\|)\|(?!\|)", _shell_pipeline_surface(command)) and not re.search(
         r"\bset\s+(?:-[^;\n]*o\s+pipefail|-o\s+pipefail)\b",
         lowered,
     ):

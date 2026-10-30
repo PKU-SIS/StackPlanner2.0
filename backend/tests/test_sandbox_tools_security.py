@@ -351,6 +351,43 @@ def test_validate_local_bash_command_paths_blocks_host_paths() -> None:
         validate_local_bash_command_paths("cat /etc/passwd", _THREAD_DATA)
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "python3 - <<'PY'\nfrom decimal import Decimal\nprint((Decimal(2)/Decimal(1)))\nPY",
+        "cat > /mnt/user-data/workspace/task.py <<'PY'\nimport re\np=re.compile(r'/[0-9]{2}/[0-9]{2}')\nPY",
+        "python3 -c \"import re; print(re.search(r'/\\\\d{2}/\\\\d{2}', '2024/01/01'))\"",
+        "python3 -c \"open('./answer.md', 'w').write('ok')\"",
+        "sed -n '/^##/p' /mnt/user-data/outputs/report.md",
+    ],
+)
+def test_data_script_path_scan_preserves_non_path_syntax(command):
+    validate_local_bash_command_paths(command, _THREAD_DATA)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "python3 - <<'PY'\nopen('/etc/passwd').read()\nPY",
+        "cat > /mnt/user-data/workspace/task.py <<'PY'\nopen('/etc/passwd').read()\nPY",
+        "python3 -c \"import re; re.search('/[0-9]', 'x'); open('/etc/passwd').read()\"",
+        "sed -n '/^##/p' /etc/passwd",
+        "cat /mnt/user-data/workspace/../../etc/passwd",
+        "bash <<'EOF'\ncat /etc/passwd\nEOF",
+        "python3 -c \"import re; re.compile('$(cat /etc/passwd)')\"",
+        "python3 - <<EOF\nimport re\nre.compile('$(cat /etc/passwd)')\nEOF",
+        "sed -n '/x/p;e cat /etc/passwd #/p' /mnt/user-data/workspace/input.txt",
+        "python3 -c \"from types import SimpleNamespace; re=SimpleNamespace(compile=open); print(re.compile('/etc/passwd').read())\"",
+        "python3 -c \"import re; re.compile=open; re.compile('/etc/passwd').read()\"",
+        "python3 -c \"import re; from types import SimpleNamespace; (lambda re: re.compile('/etc/passwd').read())(SimpleNamespace(compile=open))\"",
+        "python3 -c \"import re; print(open(re.compile('/etc/passwd').pattern).read())\"",
+    ],
+)
+def test_data_script_path_scan_still_blocks_host_access(command):
+    with pytest.raises(PermissionError):
+        validate_local_bash_command_paths(command, _THREAD_DATA)
+
+
 def test_validate_local_bash_command_paths_allows_https_urls() -> None:
     """URLs like https://github.com/... must not be flagged as unsafe absolute paths."""
     validate_local_bash_command_paths(

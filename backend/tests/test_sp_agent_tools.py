@@ -5,6 +5,7 @@ import json
 import threading
 from types import SimpleNamespace
 
+import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from deerflow.sp.agent_tools import (
@@ -1391,6 +1392,139 @@ def test_action_payload_reroutes_uploaded_document_inspection_to_perception():
     assert payload["stage"] == "perception"
     assert payload["metadata"]["routing_reason"] == "local_document_inspection"
     assert payload["metadata"]["requires_implementation"] is False
+
+
+@pytest.mark.parametrize(
+    "task",
+    [
+        "Inspect the research artifact and produce the final deliverable file: a Markdown table.",
+        "Read the research artifact and emit the complete answer table as a Markdown file.",
+        "读取已有文件，生成最终表格并验证行数。",
+    ],
+)
+def test_data_file_generation_is_not_routed_to_read_only_inspection(task):
+    payload = _action_payload(
+        "sp_delegate",
+        {
+            "target_agent": "coder",
+            "stage": "implementation",
+            "task": task,
+            "metadata": {"coder_task_kind": "data_processing"},
+        },
+        tool_call_id="generate-data-file",
+    )
+    assert payload["target_agent"] == "coder"
+    assert payload["stage"] == "implementation"
+
+
+def _partial_report_request(gap, *, question="Create a report", attempts=1):
+    stack = TaskMemoryStack()
+    for _ in range(attempts):
+        stack.append_delegate("report", run_id="r", metadata={"target_agent": "reporter"})
+    stack.append_observe("partial report", actor="reporter", run_id="r", result_ref="report-1", metadata={"target_agent": "reporter", "completion_status": "partial", "evidence_gaps": [gap]})
+    state = {
+        "messages": [HumanMessage(content=question)],
+        "sp_loop_run_id": "r",
+        "sp_task_memory": stack.to_dict(),
+        "sp_current_artifact_refs": {"report": {"artifact_id": "report-1", "type": "report", "run_id": "r", "is_current": True, "metadata": {"completion_status": "partial", "evidence_gaps": [gap]}}},
+    }
+    return _ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=state["messages"])
+
+
+@pytest.mark.parametrize(
+    ("gap", "target"),
+    [
+        ("Wikipedia HTTP 429; birth dates not verified, needs external sources", "researcher"),
+        ("缺少外部来源，需重新检索出生日期", "researcher"),
+        ("No reliable source for the requested birth dates", "researcher"),
+        ("Missing source URLs and factual evidence for every row", "researcher"),
+        ("缺少出生日期的可核实来源与引用", "researcher"),
+        ("Data-processing script was not executed; row count not validated", "coder"),
+        ("Remove the extra index column from the report", "reporter"),
+    ],
+)
+def test_report_recovery_dispatches_by_missing_capability(gap, target):
+    request = _partial_report_request(gap)
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
+    instruction = filtered.messages[-1].content
+    assert f'target_agent="{target}"' in instruction
+    assert 'input_refs=["report-1"]' in instruction
+    if target == "coder":
+        assert '"coder_task_kind": "data_processing"' in instruction
+
+
+@pytest.mark.parametrize("question", ["Create a report. Don't ask me any questions.", "生成报告，不要问我问题。", "生成报告，不要问问题。", "Create a report. Don't ask follow-up questions.", "Do not ask any clarifying questions."])
+def test_noninteractive_exhausted_report_preserves_incomplete_outcome(question):
+    request = _partial_report_request("Missing citation", question=question, attempts=3)
+    middleware = SPFinishAvailabilityMiddleware()
+    filtered = middleware._filter_request(request)
+    assert filtered.tools == []
+    assert "report-1" in filtered.messages[-1].content
+    request.state["messages"].append(AIMessage(content="The final report is ready", id="draft"))
+    update = middleware._after_model_update(request.state, SimpleNamespace())
+    assert update is not None
+    message = update["messages"][0]
+    assert message.additional_kwargs["stackplanner"]["status"] == "incomplete"
+    assert message.tool_calls == []
+    assert request.state["sp_current_artifact_refs"]["report"]["metadata"]["completion_status"] == "partial"
+
+
+def test_report_recovery_returns_to_reporter_with_new_evidence_reference():
+    request = _partial_report_request("HTTP 429, needs external sources")
+    stack = TaskMemoryStack.from_dict(request.state["sp_task_memory"])
+    stack.append_observe("New evidence obtained", actor="researcher", run_id="r", result_ref="evidence-2", metadata={"target_agent": "researcher", "completion_status": "complete"})
+    request.state["sp_task_memory"] = stack.to_dict()
+    instruction = SPFinishAvailabilityMiddleware()._filter_request(request).messages[-1].content
+    assert 'target_agent="reporter"' in instruction
+    assert 'input_refs=["report-1", "evidence-2"]' in instruction
+
+
+def test_partial_report_does_not_reclassify_software_recovery_as_data_processing():
+    request = _partial_report_request("Software implementation missing")
+    stack = TaskMemoryStack.from_dict(request.state["sp_task_memory"])
+    stack.append_observe(
+        "Patch tests failed",
+        actor="coder",
+        stage="implementation",
+        run_id="r",
+        result_ref="patch-2",
+        metadata={"target_agent": "coder", "coder_task_kind": "software_change", "completion_status": "partial", "evidence_gaps": ["Regression test failed"]},
+    )
+    request.state["sp_task_memory"] = stack.to_dict()
+    instruction = SPFinishAvailabilityMiddleware()._filter_request(request).messages[-1].content
+    assert 'target_agent="coder"' in instruction
+    assert '"coder_task_kind": "data_processing"' not in instruction
+    assert "source implementation recovery" in instruction
+
+
+def test_report_missing_software_test_preserves_patch_and_software_contract():
+    request = _partial_report_request("Regression test script not executed")
+    stack = TaskMemoryStack()
+    stack.append_observe("Patch implemented", actor="coder", stage="implementation", run_id="r", result_ref="patch-1", metadata={"target_agent": "coder", "coder_task_kind": "software_change", "completion_status": "complete"})
+    for entry in TaskMemoryStack.from_dict(request.state["sp_task_memory"]).entries:
+        stack.entries.append(entry)
+    request.state["sp_task_memory"] = stack.to_dict()
+    instruction = SPFinishAvailabilityMiddleware()._filter_request(request).messages[-1].content
+    assert 'target_agent="coder"' in instruction
+    assert '"coder_task_kind": "software_change"' in instruction
+    assert 'stage="verification"' in instruction
+    assert "patch-1" in instruction
+
+
+def test_report_evidence_recovery_does_not_reset_researcher_budget():
+    request = _partial_report_request("Missing external source", question="Create a report. Don't ask questions.")
+    stack = TaskMemoryStack()
+    for _ in range(3):
+        stack.append_delegate("research", run_id="r", stage="research", metadata={"target_agent": "researcher"})
+    stack.entries.extend(TaskMemoryStack.from_dict(request.state["sp_task_memory"]).entries)
+    request.state["sp_task_memory"] = stack.to_dict()
+    middleware = SPFinishAvailabilityMiddleware()
+    filtered = middleware._filter_request(request)
+    assert filtered.tools == []
+    assert "3 researcher attempts" in filtered.messages[-1].content
+    request.state["messages"].append(AIMessage(content="Complete report", id="exhausted-draft"))
+    update = middleware._after_model_update(request.state, SimpleNamespace())
+    assert update["messages"][0].additional_kwargs["stackplanner"]["status"] == "incomplete"
 
 
 def test_action_payload_decodes_string_metadata_refs_and_repairs_upload_path():

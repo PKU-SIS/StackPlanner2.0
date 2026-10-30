@@ -1,10 +1,13 @@
+import ast
 import asyncio
+import io
 import json
 import logging
 import os
 import posixpath
 import re
 import shlex
+import tokenize
 from collections.abc import Callable
 from functools import lru_cache
 from pathlib import Path
@@ -31,7 +34,7 @@ from deerflow.tools.types import Runtime
 
 logger = logging.getLogger(__name__)
 
-_ABSOLUTE_PATH_PATTERN = re.compile(r"(?<![:\w])(?<!:/)/(?:[^\s\"'`;&|<>()]+)")
+_ABSOLUTE_PATH_PATTERN = re.compile(r"(?<![:\w.])(?<!:/)/(?:[^\s\"'`;&|<>()]+)")
 # A ``{...}`` block holding a single identifier-like placeholder (e.g. ``{id}``
 # in a REST template or ``{port}`` in an f-string). Bash brace expansion such as
 # ``{passwd,shadow}`` or ``{,.bak}`` does NOT match (commas/dots/empty inner).
@@ -1259,6 +1262,108 @@ def _is_non_path_literal_fragment(fragment: str) -> bool:
     return False
 
 
+def _python_path_scan_surface(source: str) -> str:
+    """Mask Python operators and regex arguments, retaining file path strings.
+
+    Only syntactically valid Python is recognized. This remains a best-effort
+    host-bash guard, not Python execution isolation.
+    """
+    try:
+        tree = ast.parse(source)
+        tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
+    except (SyntaxError, tokenize.TokenError, IndentationError):
+        return source
+    lines = source.splitlines(keepends=True)
+    starts = [0]
+    for line in lines:
+        starts.append(starts[-1] + len(line))
+    surface = list(source)
+    for token in tokens:
+        if token.type == tokenize.OP and token.string in {"/", "//", "/=", "//="}:
+            start = starts[token.start[0] - 1] + token.start[1]
+            surface[start : start + len(token.string)] = " " * len(token.string)
+    # A name that merely looks like the regex module is not sufficient. Keep
+    # the conservative scan if the module or its attributes are rebound.
+    regex_module = any(isinstance(node, ast.Import) and any(alias.name == "re" and alias.asname in {None, "re"} for alias in node.names) for node in ast.walk(tree))
+    for node in ast.walk(tree):
+        if (
+            (isinstance(node, ast.arg) and node.arg == "re")
+            or (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == "re")
+            or (isinstance(node, ast.alias) and (node.asname or node.name.split(".")[0]) == "re" and node.name != "re")
+            or (isinstance(node, (ast.Attribute, ast.Subscript)) and isinstance(node.ctx, (ast.Store, ast.Del)) and any(isinstance(child, ast.Name) and child.id == "re" for child in ast.walk(node)))
+        ):
+            regex_module = False
+        if (
+            (isinstance(node, ast.Name) and node.id == "re" and isinstance(node.ctx, (ast.Store, ast.Del)))
+            or (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "re" and isinstance(node.ctx, (ast.Store, ast.Del)))
+            or (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {"setattr", "delattr", "exec", "eval", "globals", "locals"})
+        ):
+            regex_module = False
+    for node in ast.walk(tree):
+        if not (
+            regex_module
+            and isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "re"
+            and node.func.attr in {"compile", "search", "match", "fullmatch", "findall", "finditer", "split", "sub", "subn"}
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ):
+            continue
+        pattern = node.args[0]
+        # AST columns count UTF-8 bytes, unlike tokenize columns.
+        start = starts[pattern.lineno - 1] + len(lines[pattern.lineno - 1].encode()[: pattern.col_offset].decode())
+        end = starts[pattern.end_lineno - 1] + len(lines[pattern.end_lineno - 1].encode()[: pattern.end_col_offset].decode())
+        # Even a genuine regex may later be used as a file path (.pattern).
+        # Exempt only the non-path fragments that caused data-task failures;
+        # ordinary absolute path literals remain visible to the guard.
+        for match in _ABSOLUTE_PATH_PATTERN.finditer(source[start:end]):
+            if match.group().startswith(("/[", "/\\", "/^")):
+                left, right = start + match.start(), start + match.end()
+                surface[left:right] = " " * (right - left)
+    return "".join(surface)
+
+
+def _bash_path_scan_surface(command: str) -> str:
+    """Recognize bounded embedded data syntax without exempting path operands."""
+    # A heredoc may execute Python directly or write a Python script for a
+    # later call. Parse the body, never exempt the whole heredoc or its target.
+    heredoc = re.compile(r"<<[ \t]*(?:'(?P<sq>[A-Za-z_]\w*)'|\"(?P<dq>[A-Za-z_]\w*)\"|(?P<plain>[A-Za-z_]\w*))[ \t]*\n")
+    surface = list(command)
+    for match in heredoc.finditer(command):
+        header = command[command.rfind("\n", 0, match.start()) + 1 : match.start()]
+        if not re.search(r"(?:^|[;&|]\s*)\s*(?:python(?:3(?:\.\d+)?)?\s+-\s*|cat\s+>\s*[^\n]*\.py\s*)$", header):
+            continue
+        marker = match.group("sq") or match.group("dq") or match.group("plain")
+        end = re.search(r"(?m)^" + re.escape(marker) + r"[ \t]*(?:\n|$)", command[match.end() :])
+        if end is None:
+            continue
+        start, stop = match.end(), match.end() + end.start()
+        if match.group("plain") and any(fragment in command[start:stop] for fragment in ("$(", "`", "\\\n")):
+            continue
+        surface[start:stop] = _python_path_scan_surface(command[start:stop])
+    text = "".join(surface)
+    # Preserve shell quoting while scanning python -c arguments. Unrecognized
+    # wrappers/quoting keep the old conservative path scan.
+    python_c = re.compile(r"\bpython(?:3(?:\.\d+)?)?\s+-c\s+(?P<arg>'[^']*'|\"(?:\\.|[^\"\\])*\")", re.S)
+
+    def python_argument(match: re.Match) -> str:
+        if match.group("arg").startswith('"') and any(fragment in match.group("arg") for fragment in ("$(", "`")):
+            return match.group()
+        try:
+            source = shlex.split(match.group("arg"))[0]
+        except ValueError:
+            return match.group()
+        return match.group()[: match.start("arg") - match.start()] + shlex.quote(_python_path_scan_surface(source))
+
+    text = python_c.sub(python_argument, text)
+    # Only a simple sed address/print expression is literal data. Expressions
+    # with read/write/execute commands are deliberately not exempted.
+    return re.sub(r"(\bsed\s+-n\s+)'/[^/'\n]*/p'", lambda m: m.group(1) + "' '", text)
+
+
 def validate_local_bash_command_paths(command: str, thread_data: ThreadDataState | None) -> None:
     """Validate absolute paths in local-sandbox bash commands.
 
@@ -1287,9 +1392,10 @@ def validate_local_bash_command_paths(command: str, thread_data: ThreadDataState
     allowed_paths = _get_mcp_allowed_paths()
     _validate_local_bash_shell_tokens(command, allowed_paths)
     _validate_bash_redirect_overwrites(command, thread_data)
-    url_spans = _non_file_url_spans(command)
+    path_surface = _bash_path_scan_surface(command)
+    url_spans = _non_file_url_spans(path_surface)
 
-    for match in _ABSOLUTE_PATH_PATTERN.finditer(command):
+    for match in _ABSOLUTE_PATH_PATTERN.finditer(path_surface):
         if _is_in_spans(match.start(), url_spans):
             continue
         absolute_path = match.group()
