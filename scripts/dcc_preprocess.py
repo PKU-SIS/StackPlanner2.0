@@ -52,6 +52,16 @@ def bundle_lock(bundle: Path):
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    pack = commands.add_parser("pack", help="package the full baseline FinAuditing release")
+    pack.add_argument("--config", type=Path, required=True)
+    pack.add_argument("--bundle", type=Path, required=True)
+    pack.add_argument("--source", type=Path, required=True)
+    pack.add_argument("--output", type=Path, required=True)
+    pack.add_argument("--version", required=True)
+    download = commands.add_parser("download", help="download and verify a published dataset bundle")
+    download.add_argument("--release", required=True, help="release name in configs/dcc/releases/ or a JSON descriptor path")
+    download.add_argument("--output", type=Path, required=True)
+    download.add_argument("--archive", type=Path, help="install a manually downloaded archive instead of using gh")
     for name in ("prepare", "index", "render", "retrieve", "status", "doctor"):
         command = commands.add_parser(name)
         if name != "status":
@@ -69,8 +79,22 @@ def main(argv=None) -> int:
             command.add_argument("--page", type=int, default=1)
             command.add_argument("--page-size", type=int, default=5)
     args = parser.parse_args(argv)
+    if args.command == "download":
+        from dcc_harness.preprocessing.releases import download_release
+
+        specification = Path(args.release)
+        if not specification.is_file():
+            specification = ROOT / "configs/dcc/releases" / (args.release.removesuffix(".json") + ".json")
+        result = download_release(json.loads(specification.read_text()), args.output, archive=args.archive)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
     config = load_config(args.config.resolve()) if args.command != "status" else {}
-    if args.command == "doctor":
+    if args.command == "pack":
+        from dcc_harness.preprocessing.releases import build_finauditing_release
+
+        with bundle_lock(args.bundle):
+            result = build_finauditing_release(args.bundle, args.source, config, args.output, version=args.version)
+    elif args.command == "doctor":
         client = RagflowClient(config["ragflow"])
         try:
             models = client.embedding_models()

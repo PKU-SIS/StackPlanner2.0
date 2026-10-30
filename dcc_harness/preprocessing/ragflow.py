@@ -12,7 +12,10 @@ import os
 import re
 import time
 from collections import defaultdict
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from copy import deepcopy
 from pathlib import Path
+from threading import Lock, local
 from urllib.parse import urlsplit
 
 from .loaders import inside
@@ -207,23 +210,19 @@ def index_bundle(bundle: Path, config: dict, *, client=None, retry_failed: bool 
     state = (
         json.loads(path.read_text())
         if path.exists()
-        else {
-            "schema_version": 2,
-            **identity,
-            "configuration_sha256": configuration_sha256,
-            "datasets": {},
-            "scopes": {},
-            "ready": False,
-        }
+        else {"schema_version": 2, **identity, "configuration_sha256": configuration_sha256, "datasets": {}, "scopes": {}, "ready": False}
     )
     if state.get("schema_version") != 2:
         raise ValueError("legacy shared knowledge-base ledger cannot resume; create a new bundle for sample isolation")
     if state["configuration_sha256"] != configuration_sha256:
         raise ValueError("index configuration or input changed; create a new bundle instead of adopting unrelated remote data")
-    interval, timeout = float(config.get("poll_interval", 2)), float(config.get("parse_timeout", 900))
+    interval, timeout = (float(config.get("poll_interval", 2)), float(config.get("parse_timeout", 900)))
     batch_size = int(config.get("parse_batch_size", 32))
     if interval < 0 or timeout <= 0 or not 1 <= batch_size <= 256:
         raise ValueError("invalid polling/parse configuration")
+    workers = config.get("index_workers", 1)
+    if type(workers) is not int or not 1 <= workers <= 16:
+        raise ValueError("index_workers must be an integer between 1 and 16")
     client = client or RagflowClient(config)
     if client.base_url != identity["base_url"]:
         raise ValueError("client base_url differs from index configuration")
@@ -231,22 +230,38 @@ def index_bundle(bundle: Path, config: dict, *, client=None, retry_failed: bool 
         raise RagflowError("no enabled embedding model is configured for this RAGFlow account; configure one in Model providers before indexing")
     state["ready"] = False
     atomic_json(path, state)
-    for item in samples:
+    lock, thread_state, sessions = Lock(), local(), []
+
+    def index_sample(item, active_client):
         dataset, sample_id = item["dataset"], item["id"]
         suffix = digest(encoded({"configuration": configuration_sha256, "dataset": dataset, "sample_id": sample_id, "split": item["split"]}))[:24]
         name_prefix = re.sub(r"[^A-Za-z0-9_-]", "-", f"{identity['dataset_prefix']}-{dataset}-{sample_id}")[:90]
         managed_name = name_prefix + "-" + suffix
-        dataset_id = client.ensure_dataset(managed_name, identity["dataset_options"])
-        previous = state["datasets"].get(sample_id)
+        dataset_id = active_client.ensure_dataset(managed_name, identity["dataset_options"])
+        with lock:
+            previous = deepcopy(state["datasets"].get(sample_id))
         if previous and previous["id"] != dataset_id:
             raise RagflowError("managed dataset id changed remotely; inspect the index ledger before continuing")
-        if any(owner != sample_id and record["id"] == dataset_id for owner, record in state["datasets"].items()):
-            raise RagflowError("independent samples must not share a knowledge base")
-        ledger = state["datasets"].setdefault(
-            sample_id, {"id": dataset_id, "name": managed_name, "sample_id": sample_id, "source_dataset": dataset, "split": item["split"], "documents": {}}
-        )
-        atomic_json(path, state)
-        existing = client.list_documents(dataset_id)
+        ledger = previous or {
+            "id": dataset_id,
+            "name": managed_name,
+            "sample_id": sample_id,
+            "source_dataset": dataset,
+            "split": item["split"],
+            "documents": {},
+        }
+
+        def checkpoint(scope=None):
+            with lock:
+                if any(owner != sample_id and record["id"] == dataset_id for owner, record in state["datasets"].items()):
+                    raise RagflowError("independent samples must not share a knowledge base")
+                state["datasets"][sample_id] = deepcopy(ledger)
+                if scope is not None:
+                    state["scopes"][sample_id] = scope
+                atomic_json(path, state)
+
+        checkpoint()
+        existing = active_client.list_documents(dataset_id)
         by_name = defaultdict(list)
         for doc in existing:
             by_name[doc["name"]].append(doc)
@@ -264,11 +279,11 @@ def index_bundle(bundle: Path, config: dict, *, client=None, retry_failed: bool 
                 if old and old["id"] != document_id:
                     raise RagflowError("document id changed remotely; inspect the index ledger before continuing")
             else:
-                document_id = client.upload_document(dataset_id, inside(bundle, reference))
+                document_id = active_client.upload_document(dataset_id, inside(bundle, reference))
             ledger["documents"][reference] = {"id": document_id, "name": name, "sha256": asset["sha256"]}
-            atomic_json(path, state)
+            checkpoint()
         expected = {doc["id"] for doc in ledger["documents"].values()}
-        statuses = {doc["id"]: doc for doc in client.list_documents(dataset_id)}
+        statuses = {doc["id"]: doc for doc in active_client.list_documents(dataset_id)}
         if expected != statuses.keys():
             raise RagflowError("sample knowledge base contains missing or foreign documents; inspect it before resuming")
         start = []
@@ -281,10 +296,10 @@ def index_bundle(bundle: Path, config: dict, *, client=None, retry_failed: bool 
             elif status not in {"DONE", "RUNNING"}:
                 raise RagflowError(f"unknown parsing state {status}: {identifier}")
         for offset in range(0, len(start), batch_size):
-            client.parse_documents(dataset_id, start[offset : offset + batch_size])
+            active_client.parse_documents(dataset_id, start[offset : offset + batch_size])
         deadline = time.monotonic() + timeout
         while True:
-            statuses = {doc["id"]: doc for doc in client.list_documents(dataset_id)}
+            statuses = {doc["id"]: doc for doc in active_client.list_documents(dataset_id)}
             if expected != statuses.keys():
                 raise RagflowError("sample knowledge base contains missing or foreign documents during parsing")
             references = {record["id"]: ref for ref, record in ledger["documents"].items()}
@@ -293,23 +308,49 @@ def index_bundle(bundle: Path, config: dict, *, client=None, retry_failed: bool 
                 status = _status(doc)
                 ledger["documents"][references[identifier]].update(run=status, chunk_count=doc.get("chunk_count", 0))
                 if status in {"FAIL", "CANCEL"}:
-                    atomic_json(path, state)
+                    checkpoint()
                     raise RagflowError(f"document parsing {status}: {identifier}; inspect RAGFlow and resume with --retry-failed")
                 if status == "DONE" and not doc.get("chunk_count", 0):
-                    atomic_json(path, state)
+                    checkpoint()
                     raise RagflowError(f"document parsing produced zero indexed chunks: {identifier}")
                 if status not in {"DONE", "RUNNING", "UNSTART"}:
                     raise RagflowError(f"unknown parsing state {status}: {identifier}")
-            atomic_json(path, state)
+            checkpoint()
             if all(_status(statuses[identifier]) == "DONE" for identifier in expected):
                 break
             if time.monotonic() >= deadline:
                 raise RagflowError("parsing wait timed out; the index ledger is saved; resume the same index command")
             time.sleep(min(interval, max(0, deadline - time.monotonic())))
-        state["scopes"][sample_id] = {
-            "dataset_ids": [dataset_id],
-            "document_ids": sorted({ledger["documents"][asset["path"]]["id"] for asset in item["documents"]}),
-        }
+        checkpoint({"dataset_ids": [dataset_id], "document_ids": sorted({ledger["documents"][asset["path"]]["id"] for asset in item["documents"]})})
+
+    def run_sample(item):
+        if not hasattr(thread_state, "client"):
+            thread_state.client = RagflowClient(config)
+            with lock:
+                sessions.append(thread_state.client)
+        index_sample(item, thread_state.client)
+
+    try:
+        if workers == 1:
+            for item in samples:
+                index_sample(item, client)
+        else:
+            # Keep only a bounded window in flight; stop submitting on failure.
+            # Each worker owns its HTTP session; ledger writes are serialized.
+            remaining = iter(samples)
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                pending = {executor.submit(run_sample, item) for item in [next(remaining) for _ in range(min(workers, len(samples)))]}
+                while pending:
+                    done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        future.result()
+                    for _ in done:
+                        item = next(remaining, None)
+                        if item is not None:
+                            pending.add(executor.submit(run_sample, item))
+    finally:
+        for session_client in sessions:
+            session_client.session.close()
     validate_sample_scopes(state, [item["id"] for item in samples])
     state["ready"] = True
     atomic_json(path, state)

@@ -165,8 +165,19 @@ FinAuditing subtask instructions/output contracts live in
 `configs/dcc/prompts/finauditing/` and are selected by `prompts.datasets` in its
 example configuration. Keep task/output instructions inline, domain rules and
 taxonomy in public reference files, and all answer labels in private artifacts.
+FinAuditing baseline prompt files reproduce the original dataset instructions
+verbatim. `releases.py` packages original Parquet/cards, a ready normalized bundle,
+relative configuration and frozen prompts as a same-repository GitHub Release
+asset. Pack verifies every normalized input/label against source rows and requires
+empty processors; keep method optimizations in separately configured variants.
+Release descriptors in `configs/dcc/releases/` pin the tag, asset and SHA-256.
+`download` verifies the archive, complete file inventory and sample scopes before
+atomically installing it; it requires no dataset access token or RAGFlow writes.
+Private GitHub downloads use `gh auth login`; service keys remain local settings.
+`ragflow.index_workers` (1–16, default 1) bounds concurrent independent samples,
+uses one HTTP session per worker, and serializes resumable ledger checkpoints.
 
-Run `python -m pytest tests/test_dcc_preprocessing.py -q`; with native SP
+Run `python -m pytest tests/test_dcc_preprocessing.py tests/test_dcc_releases.py -q`; with native SP
 dependencies also run `tests/test_dcc_native.py --no-sp-runtime`. Use `ruff check` and `ruff format`
 on changed Python files. Live indexing requires an explicit RAGFlow key supplied
 by environment or a private file; keep generated bundles outside the source tree.

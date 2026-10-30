@@ -15,6 +15,54 @@ loader(options) -> Sample
 
 ## 快速使用
 
+### 跨服务器使用 Release 数据包
+
+FinAuditing 的完整数据包在[同仓库 Release](https://github.com/PKU-SIS/StackPlanner2.0/releases/tag/dcc-finauditing-v1)
+发布。普通使用者下载一次即可复用已完成的共享 RAGFlow 知识库，无需自己下载原始数据或重新建库。
+原始 Parquet、数据集卡片和来源版本也随包保留，供回查或重新处理。
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r configs/dcc/preprocessing-requirements.txt
+# 私有仓库附件通过 GitHub CLI 下载；已登录时无需重复登录。
+gh auth login
+.venv/bin/python scripts/dcc_preprocess.py download \
+  --release finauditing-v1 --output .benchmark-data/finauditing-v1
+
+export DCC_BUNDLE="$PWD/.benchmark-data/finauditing-v1/bundle"
+export DCC_CONFIG="$PWD/.benchmark-data/finauditing-v1/config.json"
+export RAGFLOW_API_KEY_FILE=/path/to/your/ragflow.key
+.venv/bin/python scripts/dcc_preprocess.py status --bundle "$DCC_BUNDLE"
+.venv/bin/python scripts/dcc_preprocess.py retrieve \
+  --config "$DCC_CONFIG" --bundle "$DCC_BUNDLE" \
+  --sample-id finauditing-finmr-0 --question 'PaymentsToAcquirePropertyPlantAndEquipment'
+```
+
+也可从 Release 页面手动下载附件，给 `download` 增加 `--archive /path/to/finauditing-v1.tar.gz`，
+其余步骤相同。下载脚本按仓库内的 `configs/dcc/releases/finauditing-v1.json` 固定版本，
+校验压缩包 SHA-256、全部文件哈希、任务清单和知识库范围后才安装；不覆盖已有目录。
+这些检查均在本地完成，不创建或修改 RAGFlow 知识库。
+
+包内结构：
+
+```text
+finauditing-v1/
+  raw/FinAuditing/           # 原始 Parquet、README、来源版本和校验值
+  bundle/                   # 下文定义的统一样本、规则、标签和已完成索引映射
+  config.json               # 共享服务配置，所有数据/prompt 路径均相对本目录
+  prompts/                  # 此版本实际使用的 prompt 片段
+  release.json              # 文件清单、校验值及原始样本一致性核对结果
+  README.md                 # 来源、许可与使用说明
+```
+
+不同服务器通过同一个 RAGFlow 地址和账号 Key 访问同一组知识库，ID 无需转换。
+`index.json` 是这套服务的映射记录，不是向量索引备份；若更换为另一套 RAGFlow，应重新建库。
+运行 SP 时使用 `bundle/public/tasks.jsonl`，并注册
+`--dataset-plugin dcc_harness.preprocessing.native:make_plugin`；其余模型与 SP 配置沿用
+[通用 benchmark 推理说明](dcc_harness.md)。原生适配器只给 agent 问题、规则文件和当前样本检索工具。
+
+### 从原始数据重新准备
+
 在仓库根目录运行。离线预处理只需要轻量环境，无需安装整个 SP：
 
 ```bash
@@ -25,7 +73,7 @@ python3 -m venv .venv
 # 不要把真实 Key 写进 JSON 配置、prompt 或 Git。
 export RAGFLOW_API_KEY_FILE=/home/qiuzh/.config/stackplanner/ragflow.key
 export DCC_CONFIG="$PWD/configs/dcc/preprocessing.finauditing.example.json"
-export DCC_BUNDLE=/home/qiuzh/work/dcc_runs/finauditing
+export DCC_BUNDLE="$PWD/.benchmark-data/finauditing-rebuilt"
 
 .venv/bin/python scripts/dcc_preprocess.py prepare \
   --config "$DCC_CONFIG" --output "$DCC_BUNDLE"
@@ -123,7 +171,8 @@ def preprocess(sample, options):
 流式分批读取，一次 JSON 解码原始 `query`，按数据中的七个固定标题精确分离内容。
 六类 filing 文档进入 RAGFlow；原始任务说明与 US GAAP Taxonomy 作为规则/参考文件。
 数据集专属任务要求和最终输出格式同时由 `configs/dcc/prompts/finauditing/` 中的
-FinRE、FinMR、FinSM 三个片段直接注入输入 prompt。示例配置已经按子任务启用这些
+FinRE、FinMR、FinSM 三个片段直接注入输入 prompt，内容使用数据集原始任务说明。
+示例配置已经按子任务启用这些
 片段：FinRE 输出单个关系标签，FinMR 输出提取值/计算值的 JSON，FinSM 输出标识符数组。
 原文标为 `None` 的缺失文档不伪造内容，记录在公共缺失文档清单中。异常结构直接报错，
 避免在上游格式变化时静默丢失数据。
@@ -131,6 +180,11 @@ FinRE、FinMR、FinSM 三个片段直接注入输入 prompt。示例配置已经
 保留官方 test 划分，不生成训练或验证样本。按子任务加前缀构造唯一 ID；
 `answer`/`gold` 只进入私有文件，不猜测新的统一指标。来源 parquet 哈希、下载清单中
 的 repository/revision 一起保留；如果下载清单带校验值，会先校验原始文件。
+
+基线配置的 `processors` 为空。除一次 JSON 解码、结构拆分、边界空白整理和移除末尾
+空 `Answer:` 标记外，不改写问题或文档，不提取摘要，不合成数据，不依据标签筛选证据。
+RAGFlow 的 `naive` 切片、512 token 和关闭自动关键词/问题生成是可配置的建库参数，
+不作为原始数据的一部分；方法优化可在独立配置和新输出目录中进行。
 
 ## Prompt 注入
 
@@ -153,6 +207,10 @@ FinAuditing 的 `prompts.datasets` 映射可以分别替换这三个片段；未
 提供自己的任务要求与输出约束。领域规则及 taxonomy 仍通过规则文件读取。
 
 ## RAGFlow 建库和续跑
+
+`ragflow.index_workers` 控制同时处理的样本数，范围 1–16，默认 1，FinAuditing 示例为 8。
+每个线程独立使用 HTTP session，索引进度集中串行落盘；遇到错误停止提交新样本，保留
+已经完成和正在处理样本的进度。同一个 bundle 仍只允许一个 index/render/pack 命令操作。
 
 使用公开 REST API：创建/查找 dataset、上传 document、POST dataset chunks 启动解析、
 GET documents 轮询状态，以及 POST retrieval 检索。创建参数通过 `dataset_options`
@@ -216,11 +274,27 @@ Skill、规则文件上传和一个只读 REST 检索工具；不改 CentralAgen
 明确拒绝以该插件评测。仓库 v3 已将推理与离线评测拆开；下一阶段为 DCC 各子任务
 补齐 parser、scorer、聚合指标及标签加载，接到现有通用评测流程。
 
+## 发布新版本
+
+维护者先完成全量 index 和 render，再打包；`pack` 要求 FinAuditing 基线处理插件为空，
+会逐条比较源数据与规范化后的问题、文档、规则和答案，并核对初始 prompt 包含原始任务说明。
+
+```bash
+python scripts/dcc_preprocess.py pack --config "$DCC_CONFIG" \
+  --bundle "$DCC_BUNDLE" --source /path/to/original/FinAuditing \
+  --version finauditing-v2 --output /path/to/finauditing-v2.tar.gz
+```
+
+把输出的附件名和 SHA-256 写入新的 `configs/dcc/releases/finauditing-v2.json`，字段为
+`repository`、`tag`、`asset`、`sha256`，然后随代码提交。将压缩包上传至同仓库对应 tag 的
+Release，下载到新目录验证后发布。已有版本保持不变；二次方法优化使用新的配置与版本。
+RAGFlow 实际索引保存在共享服务中，附件仅携带已完成索引的映射。
+
 ## 验证
 
 ```bash
 python -m pip install pytest ruff
-python -m pytest tests/test_dcc_preprocessing.py -q
+python -m pytest tests/test_dcc_preprocessing.py tests/test_dcc_releases.py -q
 # 原生 SP 依赖已安装时：
 python -m pytest tests/test_dcc_native.py -q --no-sp-runtime
 ruff check dcc_harness/preprocessing scripts/dcc_preprocess.py tests/test_dcc_*.py

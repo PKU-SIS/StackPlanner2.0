@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "dataset": "FinAuditing",
+  "repository": "PKU-SIS/StackPlanner2.0",
+  "tag": "dcc-finauditing-v1",
+  "asset": "finauditing-v1.tar.gz",
+  "sha256": "e5e246f2ef99f76abefbe0d1db5d710b30171bd3295ee570e8a501e94d2702ed",
+  "bytes": 12604328,
+  "samples": 1102,
+  "counts": {
+    "finauditing_finre/test": 440,
+    "finauditing_finmr/test": 332,
+    "finauditing_finsm/test": 330
+  }
+}

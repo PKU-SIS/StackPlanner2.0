@@ -37,6 +37,11 @@ The DCC adapter uses the v3 PublicTask and native file-staging contract; rerun
 task rendering after upgrading, while keeping the existing per-sample indexes.
 FinAuditing's example configuration enables separate FinRE, FinMR, and FinSM
 prompt fragments that inject each subtask's requirements and final output format.
+The FinAuditing baseline uses the original task instructions verbatim. Versioned
+data packages are distributed through this repository's GitHub Releases; use
+`dcc_preprocess.py download` to install originals, normalized inputs and existing
+shared RAGFlow mappings on another server without rebuilding the knowledge bases.
+See the [cross-server quick start](docs/DCC_PREPROCESSING.md#跨服务器使用-release-数据包).
 
 ## Why SP2.0
 

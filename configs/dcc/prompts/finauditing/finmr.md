@@ -1,8 +1,12 @@
-FinAuditing numerical checking task
+You are an auditor for XBRL filings. 
+Given the question and the provided filing 
+(schema, presentation, calculation, definition, label, instance, and US GAAP taxonomy), 
+identify the reported value of a financial element and calculate the actual value that should be reported based on calculation relationships.
 
-Answer both questions for the requested financial element and period: extract its reported value from the instance document, then compute the corresponding actual value from the filing's calculation relationships. Read the supplied rule/reference files, consult the US GAAP taxonomy, and retrieve the relevant facts, contexts, units, and weighted calculation relationships with ragflow_retrieve.
+Answer strictly in the following JSON format:
+{
+  "extracted_value": "<numeric value reported in the instance document, or 0 if not found, keep the same format as in the XBRL filing>",
+  "calculated_value": "<numeric value computed from calculation relationships, or 0 if not computable, use the same number formatting style as extracted_value>"
+}
 
-Final output: only a JSON object with exactly these two fields. Both values must be strings:
-{"extracted_value": "<reported numeric value>", "calculated_value": "<computed numeric value>"}
-
-Keep the reported value's number formatting as it appears in the XBRL filing, and use the same formatting style for the calculated value. As specified by the original task instructions, use "0" for a reported value that is not found or an actual value that is not computable. Do not add explanations, citations, Markdown fences, or extra fields to the final answer.
+No explanations. No extra text. Only the JSON object.

@@ -1,7 +1,7 @@
 {
   "loader": "finauditing",
   "loader_options": {
-    "source": "/home/qiuzh/work/benchmark_datasets/FinAuditing",
+    "source": "../../.benchmark-data/finauditing-v1/raw/FinAuditing",
     "tasks": ["FinRE", "FinMR", "FinSM"]
   },
   "processors": [],
@@ -25,6 +25,7 @@
       "parser_config": {"chunk_token_num": 512, "delimiter": "\n", "auto_keywords": 0, "auto_questions": 0}
     },
     "http_timeout": 60,
+    "index_workers": 8,
     "poll_interval": 3,
     "parse_timeout": 1800,
     "parse_batch_size": 32

@@ -152,9 +152,9 @@ def test_prompt_layers_are_ordered_and_unknown_variables_fail(tmp_path):
 @pytest.mark.parametrize(
     ("dataset", "required", "excluded"),
     [
-        ("finauditing_finre", ("Reversal", "Inappropriateness", "CombinationErr", "unquoted label"), ("extracted_value",)),
-        ("finauditing_finmr", ("extracted_value", "calculated_value", "JSON object", "strings"), ("CombinationErr",)),
-        ("finauditing_finsm", ("JSON array of strings", "us-gaap:Revenues", "erroneous", "axis-member"), ("extracted_value", "CombinationErr")),
+        ("finauditing_finre", ("Reversal", "Inappropriateness", "CombinationErr", "Only the label"), ("extracted_value",)),
+        ("finauditing_finmr", ("extracted_value", "calculated_value", "JSON object", "not computable"), ("CombinationErr",)),
+        ("finauditing_finsm", ("JSON array of strings", "us-gaap:Revenues", "erroneous"), ("extracted_value", "CombinationErr")),
     ],
 )
 def test_finauditing_injects_subtask_requirements_and_output_contract(tmp_path, dataset, required, excluded):
@@ -191,6 +191,43 @@ def test_index_resume_and_scoped_retrieval_do_not_upload_rules(tmp_path):
     assert response["chunks"][0]["content"] == "evidence"
     assert len(client.payload["document_ids"]) == 1
     assert "PUBLIC_RULE" not in tasks[0]["prompt"]  # Rules are read as files.
+
+
+@pytest.mark.parametrize("fail_first", [False, True])
+def test_parallel_index_keeps_sample_scopes_and_resumes_after_failure(tmp_path, monkeypatch, fail_first):
+    from threading import Lock
+    from unittest.mock import Mock
+
+    import dcc_harness.preprocessing.ragflow as module
+
+    client = FakeRagflow()
+    client.session = Mock()
+    lock = Lock()
+    for name in ("ensure_dataset", "upload_document", "parse_documents", "list_documents"):
+        original = getattr(client, name)
+
+        def guarded(*args, _method=original):
+            with lock:
+                return _method(*args)
+
+        monkeypatch.setattr(client, name, guarded)
+    monkeypatch.setattr(module, "RagflowClient", lambda cfg: client)
+    bundle = tmp_path / "parallel"
+    prepare(config(), bundle, samples=[sample(str(index)) for index in range(9)])
+    cfg = {**config()["ragflow"], "index_workers": 3}
+    if fail_first:
+        client.fail = True
+        with pytest.raises(RagflowError, match="FAIL"):
+            index_bundle(bundle, cfg)
+        assert not json.loads((bundle / "index.json").read_text())["ready"]
+        client.fail = False
+    state = index_bundle(bundle, cfg, retry_failed=fail_first)
+    assert state["ready"] and len(state["scopes"]) == 9
+    assert len({scope["dataset_ids"][0] for scope in state["scopes"].values()}) == 9
+    assert len(client.uploads) == 9
+    index_bundle(bundle, cfg)
+    assert len(client.uploads) == 9
+    assert len(render(bundle, config())) == 9
 
 
 def test_independent_samples_have_dedicated_knowledge_bases_even_with_shared_content(tmp_path):

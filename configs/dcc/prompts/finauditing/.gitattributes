@@ -1,0 +1,2 @@
+# Baseline instructions preserve the original dataset's internal whitespace.
+*.md -whitespace

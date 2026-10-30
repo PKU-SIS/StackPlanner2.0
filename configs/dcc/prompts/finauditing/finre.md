@@ -1,10 +1,18 @@
-FinAuditing relationship checking task
+You are an auditor for XBRL filings. 
+Given two concepts and the provided filing (schema, presentation, calculation, definition, label, instance, and US GAAP taxonomy),
+determine which one of the following erroneous relationship types best describes the relationship between the two concepts:
 
-Given the two concepts in the question, check their relationship in the filing against the supplied US GAAP taxonomy. Read the rule/reference files and use ragflow_retrieve to examine the relevant schema, presentation, calculation, definition, label, and instance evidence.
+(1) Reversal  
+    Definition: A relationship is flagged as Reversal when the filer’s extension taxonomy redefines element hierarchy inconsistently with the US GAAP taxonomy. Specifically, this occurs when an element that should be a sibling in the US GAAP taxonomy is instead defined as a child of another element (or vice versa, a child element is incorrectly redefined as a sibling).
 
-Choose exactly one erroneous relationship type:
-- Reversal: a sibling relationship in the US GAAP taxonomy is redefined as parent-child in the filing's extension taxonomy, or vice versa.
-- Inappropriateness: an element is placed under an abstract category where it does not belong according to the US GAAP taxonomy.
-- CombinationErr: an axis is associated with inappropriate members that the US GAAP taxonomy does not permit.
+(2) Inappropriateness  
+    Definition: A relationship is flagged as Inappropriateness when elements appear under an abstract category where they do not belong, contrary to the US GAAP taxonomy.
 
-Final output: exactly one unquoted label: Reversal, Inappropriateness, or CombinationErr. Do not add an explanation, Markdown fence, JSON wrapper, or other text. Keep evidence references in working notes rather than the final answer.
+(3) CombinationErr  
+    Definition: A relationship is flagged as CombinationErr when an axis in the filer’s extension taxonomy is associated with inappropriate members not permitted by the US GAAP taxonomy.
+
+You must reference the US GAAP taxonomy to retrieve and check the two concepts across the entire filing.
+Output only one of the following labels exactly, chosen strictly from:
+["Reversal", "Inappropriateness", "CombinationErr"].
+
+No explanations. No extra text. Only the label.

@@ -1,6 +1,6 @@
 # SP 系统 DCC 数据加载与预处理实现概述
 
-已搭建一套可插拔的数据准备流程，将原始数据整理成 SP 可使用的任务输入。目前提供 FinAuditing 和通用 JSONL 加载器，为后续接入 RuleArena NBA Transaction、CLAUSE 及其他数据集保留扩展接口。
+通过独立的数据准备层，将数据集适配为 SP 的文档筛查任务。当前发布 FinAuditing；加载器、处理插件和 prompt 片段可独立替换，后续数据集复用相同流程。
 
 ## 处理流程
 
@@ -8,27 +8,36 @@
 
 每个样本统一包含问题、待审文档、规则和答案标签。文档送入 RAGFlow；规则保留为文件，供 agent 直接读取；答案标签单独保存，留给后续评测器使用。
 
-## 核心设计
+## 原始数据处理范围
 
-- **按样本独立建库**：独立题目分别使用一个知识库；同一题需要联合检查的多份关联文档可以共库。检索接口固定使用当前样本的库和文档 ID。
-- **自动完成建库流程**：脚本负责上传文档、触发切片、等待索引完成，并记录进度。中断后可以续跑，已完成的上传和解析会复用。
-- **数据处理可插拔**：新增数据集主要增加加载器，特殊清洗或格式转换通过处理插件接入。预处理保留关键文本、数值、单位和结构信息。
-- **Prompt 分层配置**：通用要求、数据集要求和单样本要求分别维护，通过配置组合。规则正文由 agent 读文件获取，文档证据通过原生检索工具调用 RAGFlow 获取。
+FinAuditing 基线只执行一次 JSON 解码，按原始标题拆分问题、六类 XBRL 文档、任务说明和 US GAAP Taxonomy；整理边界空白，移除末尾空 `Answer:` 标记，记录原文的 `None` 缺失文档，并对相同文件做本地存储去重。
 
-FinAuditing 已分别提供 FinRE、FinMR、FinSM 的专属 prompt，直接说明任务要求和最终输出格式，并通过配置自动注入输入。
+问题、文档正文、数值、标签及官方 test 划分均保留。FinRE、FinMR、FinSM 的任务要求和输出格式直接使用各自的原始说明。基线 `processors` 为空，不增加摘要、推理、数据合成或按答案筛选证据；原始 Parquet 同时随包保留。发布时逐条核对全部输入和标签。
 
-上述能力通过 SP 已有插件接口接入。agent 只接收 PublicTask 中的公开内容，样本编号、split、标签和来源路径保留在宿主侧。
+## RAGFlow 与 SP 接入
 
-## FinAuditing 适配与验证
+- **独立建库**：每个样本一个知识库，同一题的关联文档共库；工具固定检索当前题目的库及文档。
+- **自动建库**：脚本完成上传、切片、索引与状态检查，支持有限并发和中断续跑。基线使用 `naive`、512 token，关闭自动关键词和问题生成，参数独立记录、可配置。
+- **Prompt 注入**：通用、数据集和单样本片段分层组合。任务说明直接注入；规则与 taxonomy 由 agent 读文件，文档证据通过 `ragflow_retrieve` 获取。
+- **原生插件接入**：复用 SP 的 `BenchmarkPlugin`、PublicTask 和文件上传机制；标签只供宿主评测侧使用，不修改 agent 执行循环。
 
-将原始输入拆为问题、六类 XBRL 文档、任务说明和 US GAAP Taxonomy。其中 XBRL 文档建库，任务说明和 taxonomy 作为规则或参考文件，保留官方 test 划分。
+## 跨服务器复用
 
-全量 **1,102 个样本**已完成离线预处理，去重后保存 **2,155 份文档、372 份规则或参考文件**。
+处理好的数据通过[同仓库 GitHub Release 附件](https://github.com/PKU-SIS/StackPlanner2.0/releases/tag/dcc-finauditing-v1)发布，包含原始数据、规范化输入、规则、单独保存的标签、prompt、配置及已有知识库映射。版本和校验值由仓库内的发布清单固定。
 
-FinRE、FinMR、FinSM 各选两个样本完成真实联调：新建 **6 个独立知识库**，完成 **34 份文档、306 个切片**的索引。六题检索均返回本题文档，续跑没有重复上传或解析；数据准备和原生接入均有回归测试覆盖。
+其他人 clone 后，使用已登录的 GitHub CLI 下载：
 
-## 后续工作
+```bash
+python scripts/dcc_preprocess.py download \
+  --release finauditing-v1 --output .benchmark-data/finauditing-v1
+export DCC_BUNDLE="$PWD/.benchmark-data/finauditing-v1/bundle"
+export DCC_CONFIG="$PWD/.benchmark-data/finauditing-v1/config.json"
+```
 
-后续开展全量建库，将 RuleArena NBA Transaction、CLAUSE 接入这条 RAG 预处理流程，并把 DCC 各子任务指标接到仓库现有的通用评测器。当前已完成数据加载、预处理和小样本建库检索验证。
+配置共享 RAGFlow 的 API Key 后即可使用；不需要自己部署服务或重新建库。数据与 prompt 路径均随安装目录解析。下载过程校验压缩包、文件和样本映射，不修改远端知识库。
 
-实现已同步至服务器 `8A800-245` 的 `/home/qiuzh/work/StackPlanner2.0`，分支为 `DCCv2`。详细配置和操作见 [DCC 预处理使用说明](DCC_PREPROCESSING.md)。
+## 本次交付
+
+FinAuditing 共 **1,102 条官方 test 样本**：FinRE 440、FinMR 332、FinSM 330；本地去重后为 **2,155 份文档、372 份规则或参考文件**。全量预处理、按样本建库、prompt 生成和数据包发布均已完成。数据准备、断点续跑、下载校验及 SP 输入接入有回归测试覆盖。
+
+本次范围为数据准备和接入；DCC 各子任务评分后续接到仓库现有通用评测器。扩展或优化预处理时使用独立配置和新数据包版本。依赖安装、运行和发布命令见 [详细使用说明](DCC_PREPROCESSING.md)。
