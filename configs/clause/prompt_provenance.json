@@ -1,0 +1,11 @@
+{
+  "default": "l1",
+  "status": "adapted internal-only protocol; not byte-identical to the paper prompt",
+  "l2_example_record_id": "cuad_ambiguity_d3490db803634b56",
+  "l2_example_group": "CUAD:2themartcominc_19990826_10-12g_ex-10.10_6700288_ex-10.10_co-branding agreement_ agency agreement",
+  "l2_example_split": "train",
+  "prompt_sha256": {
+    "l1": "183d4a99d19c8c8272f15f0594ed34d8cad62007b47f836acc40e70d3aa84c4c",
+    "l2": "fd27cffbf5723d818cb66ada94395a44f3b422b1f5abb89e3c608da7cf35f805"
+  }
+}

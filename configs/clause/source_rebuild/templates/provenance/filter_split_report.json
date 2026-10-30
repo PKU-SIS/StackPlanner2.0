@@ -1,0 +1,247 @@
+{
+  "version": "intext-yes-whole-document-v1",
+  "created": "2026-10-30",
+  "upstream_commit": "c81c6a5251771cab3d9f3d081f71c388957cf936",
+  "scope": "Eval 3 In-Text only",
+  "quality_policy": "keep entire nonempty document only when every perturbation has exact YES and required span/explanation schema; never selectively delete individual GT from unchanged input",
+  "input_annotation_documents": 5160,
+  "input_perturbations": 18513,
+  "kept_documents": 5026,
+  "kept_perturbations": 18192,
+  "excluded_documents": 134,
+  "excluded_reason_counts": {
+    "empty_annotation": 28,
+    "contains_non_YES_validation": 105,
+    "missing_or_empty_explanation": 1
+  },
+  "input_validation_counts": {
+    "YES": 18381,
+    "NO": 126,
+    "None": 6
+  },
+  "excluded_perturbation_validation_counts": {
+    "YES": 189,
+    "NO": 126,
+    "None": 6
+  },
+  "orphan_TXT_not_in_candidate_annotations": 6,
+  "group_key": "source + NFKC casefolded filename with .snippet/.txt removed and whitespace collapsed; exact normalized input duplicates unioned",
+  "exact_duplicate_group_merges": [],
+  "seed": "20261030",
+  "split_ratios": {
+    "train": 0.8,
+    "validation": 0.1,
+    "test": 0.1
+  },
+  "split_algorithm": "hash-ranked source-stratified base-contract groups with largest-remainder group counts; published one-shot source group forced into train",
+  "source_group_counts": {
+    "CUAD": {
+      "train": 408,
+      "validation": 51,
+      "test": 51
+    },
+    "NLI": {
+      "train": 473,
+      "validation": 59,
+      "test": 59
+    }
+  },
+  "one_shot_train_record_id": "cuad_ambiguity_d3490db803634b56",
+  "one_shot_train_group": "CUAD:2themartcominc_19990826_10-12g_ex-10.10_6700288_ex-10.10_co-branding agreement_ agency agreement",
+  "splits": {
+    "train": {
+      "documents": 4025,
+      "perturbations": 14604,
+      "base_groups": 881,
+      "by_source": {
+        "CUAD": {
+          "documents": 1893,
+          "perturbations": 5250,
+          "base_groups": 408
+        },
+        "NLI": {
+          "documents": 2132,
+          "perturbations": 9354,
+          "base_groups": 473
+        }
+      },
+      "by_source_category": {
+        "CUAD": {
+          "ambiguity": {
+            "documents": 394,
+            "perturbations": 1094
+          },
+          "inconsistency": {
+            "documents": 382,
+            "perturbations": 973
+          },
+          "terminology": {
+            "documents": 322,
+            "perturbations": 962
+          },
+          "omission": {
+            "documents": 393,
+            "perturbations": 1111
+          },
+          "structural": {
+            "documents": 402,
+            "perturbations": 1110
+          }
+        },
+        "NLI": {
+          "ambiguity": {
+            "documents": 406,
+            "perturbations": 1805
+          },
+          "inconsistency": {
+            "documents": 430,
+            "perturbations": 1830
+          },
+          "terminology": {
+            "documents": 432,
+            "perturbations": 1875
+          },
+          "omission": {
+            "documents": 441,
+            "perturbations": 1940
+          },
+          "structural": {
+            "documents": 423,
+            "perturbations": 1904
+          }
+        }
+      }
+    },
+    "validation": {
+      "documents": 501,
+      "perturbations": 1779,
+      "base_groups": 110,
+      "by_source": {
+        "CUAD": {
+          "documents": 235,
+          "perturbations": 634,
+          "base_groups": 51
+        },
+        "NLI": {
+          "documents": 266,
+          "perturbations": 1145,
+          "base_groups": 59
+        }
+      },
+      "by_source_category": {
+        "CUAD": {
+          "ambiguity": {
+            "documents": 49,
+            "perturbations": 126
+          },
+          "inconsistency": {
+            "documents": 45,
+            "perturbations": 122
+          },
+          "terminology": {
+            "documents": 39,
+            "perturbations": 117
+          },
+          "omission": {
+            "documents": 51,
+            "perturbations": 136
+          },
+          "structural": {
+            "documents": 51,
+            "perturbations": 133
+          }
+        },
+        "NLI": {
+          "ambiguity": {
+            "documents": 48,
+            "perturbations": 212
+          },
+          "inconsistency": {
+            "documents": 58,
+            "perturbations": 251
+          },
+          "terminology": {
+            "documents": 55,
+            "perturbations": 238
+          },
+          "omission": {
+            "documents": 55,
+            "perturbations": 229
+          },
+          "structural": {
+            "documents": 50,
+            "perturbations": 215
+          }
+        }
+      }
+    },
+    "test": {
+      "documents": 500,
+      "perturbations": 1809,
+      "base_groups": 110,
+      "by_source": {
+        "CUAD": {
+          "documents": 240,
+          "perturbations": 658,
+          "base_groups": 51
+        },
+        "NLI": {
+          "documents": 260,
+          "perturbations": 1151,
+          "base_groups": 59
+        }
+      },
+      "by_source_category": {
+        "CUAD": {
+          "ambiguity": {
+            "documents": 47,
+            "perturbations": 129
+          },
+          "inconsistency": {
+            "documents": 50,
+            "perturbations": 121
+          },
+          "terminology": {
+            "documents": 45,
+            "perturbations": 135
+          },
+          "omission": {
+            "documents": 47,
+            "perturbations": 134
+          },
+          "structural": {
+            "documents": 51,
+            "perturbations": 139
+          }
+        },
+        "NLI": {
+          "ambiguity": {
+            "documents": 45,
+            "perturbations": 201
+          },
+          "inconsistency": {
+            "documents": 53,
+            "perturbations": 222
+          },
+          "terminology": {
+            "documents": 54,
+            "perturbations": 229
+          },
+          "omission": {
+            "documents": 55,
+            "perturbations": 252
+          },
+          "structural": {
+            "documents": 53,
+            "perturbations": 247
+          }
+        }
+      }
+    }
+  },
+  "limitations": [
+    "YES is released model-validation metadata, not independent human certification",
+    "no exhaustive semantic reannotation or near-duplicate/template clustering",
+    "custom filtering and split; paper scores are not scores on this test split"
+  ]
+}

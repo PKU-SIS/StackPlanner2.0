@@ -1,0 +1,4 @@
+# Isolated evaluation dependencies, matching the supplied dataset protocol.
+nltk==3.8.1
+rouge-score==0.1.2
+numpy==1.26.4

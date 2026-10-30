@@ -60,3 +60,12 @@ config.yaml.bak
 /frontend/playwright-report/
 .gstack/
 .worktrees
+
+# Local benchmark datasets, encoder weights, and isolated evaluation dependencies
+.benchmark-data/
+.benchmark-env/
+
+# Local development review records; publish user guides and protocols only.
+/docs/benchmark_plugin_review.md
+/docs/clause_plugin_review.md
+/docs/clause_source_rebuild_review.md

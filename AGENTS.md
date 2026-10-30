@@ -139,6 +139,38 @@ machine-wide HTTP proxy.
 - Security policy → **[SECURITY.md](SECURITY.md)**
 - Changes → **[CHANGELOG.md](CHANGELOG.md)**
 
+## DCC input preprocessing
+
+`dcc_harness/preprocessing/` is the independent data ingestion layer, with
+`Sample`/`Asset` contracts, trusted `module:function` loader/processor extensions,
+content-addressed public assets, separate private labels, a resumable RAGFlow
+index ledger, and file-based prompt composition. The CLI is
+`scripts/dcc_preprocess.py`; configuration/prompt/Skill examples are under
+`configs/dcc/`. See `docs/DCC_PREPROCESSING.md` for the artifact contract.
+
+The optional `dcc_harness.preprocessing.native:make_plugin` uses the existing
+`BenchmarkPlugin` interface. It stages public rules/context per user/thread and
+registers sample-scoped `ragflow_retrieve`; each independent sample owns a
+dedicated RAGFlow knowledge base, including samples from the same source dataset
+or with identical document bytes. Related documents within one sample may share
+its base. Index schema v2 rejects the old shared-dataset ledger. The adapter does
+not modify the native agent loop and intentionally has no scorer yet. Keep private gold/source metadata and
+credentials out of uploads, prompts, and RAGFlow documents. Never broaden a
+sample's document IDs on an empty retrieval result.
+Builders consume only PublicTask and use native stage_files/build_inputs.
+Rendered files carry a public retrieval context and rules with neutral names;
+record IDs, split and source paths stay in host-side manifests. After upgrading
+the input contract, rerun render; indexing and the existing per-sample bases stay valid.
+FinAuditing subtask instructions/output contracts live in
+`configs/dcc/prompts/finauditing/` and are selected by `prompts.datasets` in its
+example configuration. Keep task/output instructions inline, domain rules and
+taxonomy in public reference files, and all answer labels in private artifacts.
+
+Run `python -m pytest tests/test_dcc_preprocessing.py -q`; with native SP
+dependencies also run `tests/test_dcc_native.py --no-sp-runtime`. Use `ruff check` and `ruff format`
+on changed Python files. Live indexing requires an explicit RAGFlow key supplied
+by environment or a private file; keep generated bundles outside the source tree.
+
 ## Cross-Cutting Conventions
 
 These apply repo-wide; module guides own the module-specific detail.
@@ -151,3 +183,43 @@ These apply repo-wide; module guides own the module-specific detail.
   frontend tests live in `frontend/tests/`.
 - **Format before pushing** — run `make format` (backend) / `pnpm check` (frontend). Backend
   CI enforces `ruff format --check`, so formatting must be clean before a push.
+
+## Benchmark plugin lifecycle (DCC v3)
+
+`scripts/infer_sp_benchmarks.py` collects native SP FINISH deliveries only;
+`scripts/evaluate_sp_benchmarks.py` scores saved deliveries without executing SP.
+`dcc_harness/data.py` separates private `Task` from `PublicTask`; only the latter
+may reach prompt/input builders or answer parsers. UTF-8 inputs are staged in the
+native per-user/thread uploads directory. Evaluation-only labels, metadata,
+record IDs and source paths must not be injected into the agent contract.
+Plugins own parsing, scoring, setup/resource provenance, and aggregation; do not
+add benchmark-specific averaging branches to the shared runner. Preserve failed
+predictions as failures and require complete manifests unless diagnostic partial
+evaluation is explicitly requested. Keep native planning/delegation/FINISH intact.
+See `docs/dcc_harness.md` for the v3 API and migration from the old combined entry.
+Run root benchmark tests with `--no-sp-runtime` when real SP execution is excluded;
+this guards graph construction and skips tests marked `sp_runtime`.
+
+CLAUSE is implemented in `dcc_harness/datasets/clause.py` (plugin),
+`clause_data.py` (pinned bundle conversion), and `dcc_harness/clause_metrics.py`
+(reference alignment/metrics). Keep scoring imports lazy: ordinary inference and
+CUAD must not require NLTK, Torch or BERTScore. Protocol/prompt resources live in
+`configs/clause/`; documents, private annotations and models belong only in the
+ignored `.benchmark-data/`. Do not expose source/category/record IDs through
+filenames, skill selection or PublicTask. Preserve the pinned GPT DFS graph order,
+original-defect counts, nullable similarity denominators and layered rounding.
+CLAUSE validates whole pinned splits independently of run-manifest completeness.
+See `docs/clause_benchmark.md` and `tests/test_clause_plugin.py` for reference-code
+parity, mixed CUAD/CLAUSE delivery tests and optional real local encoder checks.
+
+CLAUSE source reconstruction lives in `dcc_harness/datasets/clause_source.py`.
+`dcc_prepare_clause.py` accepts exactly one of `--download`, `--source-archive`,
+`--archive`, or `--ready-dir`, then uses the same public/private converter.
+Authenticate the pinned source Git tree and all release file hashes; counts alone
+are insufficient. Publish new directories only after verification, preserving
+existing outputs. `configs/clause/source_rebuild/templates/` contains frozen
+byte-authenticated data-protocol resources: never format/rewrite these files.
+Historical upstream source containing credentials must remain excluded from Git;
+reconstruction restores it only into ignored local provenance, never executes it.
+See `tests/test_clause_source_rebuild.py` for tamper checks and optional fresh-source
+parity tests. No reconstruction or adapter test may invoke an SP/model/Judge run.

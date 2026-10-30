@@ -1,0 +1,8 @@
+{
+  "clause": {
+    "resource_root": ".benchmark-data/clause/resources",
+    "device": "cpu",
+    "batch_size": 8,
+    "without_bert": false
+  }
+}

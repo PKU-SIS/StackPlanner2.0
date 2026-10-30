@@ -10,63 +10,223 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from dcc_harness.evaluation.offline import EvaluationContext
 
 from deerflow.config.app_config import AppConfig
 from deerflow.config.tool_config import ToolConfig
 
-from .benchmarks import Task, _prepare_cuad_task, _prepare_widesearch_task
+from dcc_harness.data import InputFile, PublicTask, Task
+
+from .benchmarks import _prepare_cuad_task, _prepare_widesearch_task
 
 
 @dataclass(frozen=True)
 class BenchmarkPlugin:
     name: str
-    prepare_task: Callable[[Task], str]
-    prepare_inputs: Callable[[Task, str], dict[str, Any]]
+    prepare_task: Callable[[PublicTask], str]
+    prepare_inputs: Callable[[PublicTask, str], dict[str, Any]]
     skills_path: Path
     tools: tuple[ToolConfig, ...] = ()
-    parse_answer: Callable[[Task, str], Any] | None = None
+    parse_answer: Callable[[PublicTask, str], Any] | None = None
     score_task: Callable[..., dict[str, Any]] | None = None
+    aggregate: Callable[..., dict[str, Any]] | None = None
+    validate_dataset: Callable[[list[Task]], None] | None = None
+    setup_evaluation: Callable[["EvaluationContext"], None] | None = None
+    evaluation_version: str = "1"
+    evaluation_resources: tuple[Path, ...] = ()
+    requires_judge: bool = False
+    supports_exact_proxy: bool = False
 
 
-def _no_inputs(task: Task, thread_id: str) -> dict[str, Any]:
+def _no_inputs(task: PublicTask, thread_id: str) -> dict[str, Any]:
     return {}
 
 
-def _cuad_inputs(task: Task, thread_id: str) -> dict[str, Any]:
+def stage_files(
+    task: PublicTask, thread_id: str, *, document_name: str = "document.txt"
+) -> dict[str, Any]:
+    """Stage only public UTF-8 bodies in the native per-user/thread uploads area."""
     from deerflow.config.paths import get_paths
     from deerflow.runtime.user_context import get_effective_user_id
 
-    upload = get_paths().sandbox_uploads_dir(thread_id, user_id=get_effective_user_id()) / "contract.txt"
-    upload.parent.mkdir(parents=True, exist_ok=True)
-    with upload.open("x", encoding="utf-8") as handle:
-        handle.write(task.document)
-    return {"uploaded_files": [{"name": "contract.txt", "path": "/mnt/user-data/uploads/contract.txt", "size": upload.stat().st_size}]}
+    files = list(task.files)
+    if task.document:
+        files.insert(0, InputFile(document_name, task.document))
+    if len({item.name for item in files}) != len(files):
+        raise ValueError("duplicate public input filename")
+    if not files:
+        return {}
+    root = get_paths().sandbox_uploads_dir(thread_id, user_id=get_effective_user_id())
+    root.mkdir(parents=True, exist_ok=True)
+    uploads = []
+    for item in files:
+        content = item.text.encode("utf-8")
+        with (root / item.name).open("xb") as handle:
+            handle.write(content)
+        uploads.append(
+            {
+                "name": item.name,
+                "path": f"/mnt/user-data/uploads/{item.name}",
+                "size": len(content),
+            }
+        )
+    return {"uploaded_files": uploads}
 
 
-def _parse_answer(task: Task, text: str) -> Any:
+def _cuad_inputs(task: PublicTask, thread_id: str) -> dict[str, Any]:
+    return stage_files(task, thread_id, document_name="contract.txt")
+
+
+def build_inputs(
+    plugin: BenchmarkPlugin, public: PublicTask, thread_id: str
+) -> dict[str, Any]:
+    """Do not permit a plugin input builder to override native execution state."""
+    from langchain_core.messages import HumanMessage
+    from deerflow.config.paths import get_paths
+    from deerflow.runtime.user_context import get_effective_user_id
+
+    prompt = plugin.prepare_task(public)
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("plugin must return nonempty public instructions")
+    prepared = plugin.prepare_inputs(public, thread_id)
+    if not isinstance(prepared, dict) or set(prepared) - {"uploaded_files"}:
+        raise ValueError("plugin input builder may only return uploaded_files")
+    root = (
+        get_paths()
+        .sandbox_uploads_dir(thread_id, user_id=get_effective_user_id())
+        .resolve()
+    )
+    paths = []
+    uploads = prepared.get("uploaded_files", [])
+    if not isinstance(uploads, list):
+        raise ValueError("uploaded_files must be a list")
+    for item in uploads:
+        if not isinstance(item, dict) or set(item) != {"name", "path", "size"}:
+            raise ValueError("upload descriptor requires exactly name/path/size")
+        InputFile(item["name"], "")
+        path = root / item["name"]
+        if (
+            path.is_symlink()
+            or not path.is_file()
+            or path.stat().st_size != item["size"]
+        ):
+            raise ValueError("uploaded file is missing or its size differs")
+        if item["path"] != f"/mnt/user-data/uploads/{item['name']}":
+            raise ValueError("uploaded file must use its public virtual path")
+        if item["path"] in paths:
+            raise ValueError("duplicate uploaded file")
+        paths.append(item["path"])
+    if paths:
+        prompt += (
+            "\n\nPublic input files (read the complete source as needed):\n"
+            + "\n".join(paths)
+        )
+    if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 12_000:
+        raise ValueError(
+            "benchmark instructions must be 1..12000 characters; put documents in files"
+        )
+    return {
+        "messages": [HumanMessage(content=prompt, id=f"input-{thread_id}")],
+        **prepared,
+        "sp_task_contract": {
+            "version": 1,
+            "mode": "benchmark",
+            "authoritative": True,
+            "immutable": True,
+            "original_issue": prompt,
+        },
+    }
+
+
+def _parse_answer(task: PublicTask, text: str) -> Any:
     from dcc_harness.evaluation.benchmarks import parse_answer
 
     return parse_answer(task, text)
 
 
-def _score_task(task: Task, text: str, judge=None) -> dict[str, Any]:
+def _score_task(task: Task, text: str, context=None) -> dict[str, Any]:
     from dcc_harness.evaluation.benchmarks import score_task
 
-    return score_task(task, text, judge)
+    return score_task(task, text, judge=context.judge if context else None)
+
+
+def _cuad_aggregate(tasks: list[Task], rows: list[dict], context) -> dict:
+    from dcc_harness.metrics import evaluate_cuad
+    from dcc_harness.evaluation.offline import macro_average
+
+    result = evaluate_cuad(
+        {t.id: t.gold for t in tasks}, {r["task_id"]: r["answer"] for r in rows}
+    )
+    result["task_macro"] = macro_average(
+        rows, ("f1", "precision", "recall", "no_answer_correct")
+    )
+    return result
+
+
+def _wide_aggregate(tasks: list[Task], rows: list[dict], context) -> dict:
+    from dcc_harness.evaluation.offline import macro_average
+
+    result = macro_average(
+        rows,
+        tuple(
+            f"{metric}_by_{unit}"
+            for unit in ("row", "item")
+            for metric in ("precision", "recall", "f1")
+        )
+        + ("score",),
+    )
+    result["evaluation_protocol"] = (
+        "strict_exact_proxy"
+        if context.exact_proxy
+        else "official_protocol_custom_judge"
+    )
+    return result
 
 
 def dataset_plugins(specs: tuple[str, ...] = ()) -> dict[str, BenchmarkPlugin]:
     """Build a fresh registry; specs are ``module:plugin_or_zero_arg_factory``."""
+    from .clause import create_plugin as clause_plugin
+
     skills = Path(__file__).resolve().parents[2] / "configs" / "stackplanner_skills"
     registry = {
-        "cuad": BenchmarkPlugin("cuad", _prepare_cuad_task, _cuad_inputs, skills / "cuad",
-                                parse_answer=_parse_answer, score_task=_score_task),
-        "widesearch": BenchmarkPlugin("widesearch", _prepare_widesearch_task, _no_inputs, skills / "widesearch",
+        "clause": clause_plugin(),
+        "cuad": BenchmarkPlugin(
+            "cuad",
+            _prepare_cuad_task,
+            _cuad_inputs,
+            skills / "cuad",
+            parse_answer=_parse_answer,
+            score_task=_score_task,
+            aggregate=_cuad_aggregate,
+            evaluation_version="cuad-span-v1",
+        ),
+        "widesearch": BenchmarkPlugin(
+            "widesearch",
+            _prepare_widesearch_task,
+            _no_inputs,
+            skills / "widesearch",
             tools=(
-                ToolConfig(name="web_search", group="web", use="dcc_harness.evaluation.benchmark_tools:web_search"),
-                ToolConfig(name="web_fetch", group="web", use="dcc_harness.evaluation.benchmark_tools:web_fetch"),
-            ), parse_answer=_parse_answer, score_task=_score_task),
+                ToolConfig(
+                    name="web_search",
+                    group="web",
+                    use="dcc_harness.evaluation.benchmark_tools:web_search",
+                ),
+                ToolConfig(
+                    name="web_fetch",
+                    group="web",
+                    use="dcc_harness.evaluation.benchmark_tools:web_fetch",
+                ),
+            ),
+            parse_answer=_parse_answer,
+            score_task=_score_task,
+            aggregate=_wide_aggregate,
+            requires_judge=True,
+            supports_exact_proxy=True,
+            evaluation_version="widesearch-v1",
+        ),
     }
     for spec in specs:
         module_name, separator, attribute = spec.partition(":")
@@ -109,5 +269,7 @@ def configure_dataset_app(app: AppConfig, plugin: BenchmarkPlugin) -> AppConfig:
             payload["tool_groups"].append({"name": tool.group})
             groups.add(tool.group)
     payload["skills"]["path"] = str(Path(plugin.skills_path).resolve())
-    payload["skills"]["use"] = "deerflow.skills.storage.local_skill_storage:LocalSkillStorage"
+    payload["skills"]["use"] = (
+        "deerflow.skills.storage.local_skill_storage:LocalSkillStorage"
+    )
     return AppConfig.model_validate(payload)

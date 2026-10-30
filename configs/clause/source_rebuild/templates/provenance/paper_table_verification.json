@@ -1,0 +1,26 @@
+[
+  {
+    "table": 11,
+    "pdf_page": 35,
+    "printed_page": 5810,
+    "intext_numeric_rows_verified": 10,
+    "numeric_cells_verified": 160,
+    "status": "PASS"
+  },
+  {
+    "table": 12,
+    "pdf_page": 36,
+    "printed_page": 5811,
+    "intext_numeric_rows_verified": 20,
+    "numeric_cells_verified": 400,
+    "status": "PASS"
+  },
+  {
+    "table": 13,
+    "pdf_page": 40,
+    "printed_page": 5815,
+    "intext_numeric_rows_verified": 20,
+    "numeric_cells_verified": 640,
+    "status": "PASS"
+  }
+]

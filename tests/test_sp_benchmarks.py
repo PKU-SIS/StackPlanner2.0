@@ -169,7 +169,7 @@ def test_cuad_rejects_malformed_entries_instead_of_silently_dropping_them():
             parse_answer(sample, text)
 
 
-def test_summary_keeps_execution_failure_denominator_and_judge_failure_separate():
+def test_summary_only_reports_execution_status_without_inventing_scores():
     rows = [
         {
             "benchmark": "widesearch",
@@ -180,14 +180,19 @@ def test_summary_keeps_execution_failure_denominator_and_judge_failure_separate(
         {"benchmark": "widesearch", "status": "judge_error", "metrics": {}},
     ]
     result = summarize(rows, expected_tasks=3)
-    assert result["completion_rate"] == pytest.approx(2 / 3)
-    assert result["widesearch"]["judge_failures"] == 1
-    assert result["widesearch"]["metric_denominator"] == 2
-    assert result["widesearch"]["f1_by_row"] == 0.5
+    assert result["completion_rate"] == pytest.approx(1 / 3)
+    assert result["status_counts"] == {
+        "completed": 1,
+        "unfinished": 1,
+        "judge_error": 1,
+    }
+    assert "widesearch" not in result
 
 
 @pytest.mark.parametrize("status", ["completed", "ask_human", "unfinished"])
-def test_runner_passes_only_public_input_to_native_factory(tmp_path, monkeypatch, status):
+def test_runner_passes_only_public_input_to_native_factory(
+    tmp_path, monkeypatch, status
+):
     import deerflow.sp.runtime as native
 
     from dcc_harness.evaluation.benchmark_runner import (
@@ -230,9 +235,16 @@ def test_runner_passes_only_public_input_to_native_factory(tmp_path, monkeypatch
     )
     assert result["status"] == status, result
     assert result["native_iterations"] == 7
-    assert json.loads((tmp_path / "attempt" / "result.json").read_text())["native_iterations"] == 7
+    assert (
+        json.loads((tmp_path / "attempt" / "result.json").read_text())[
+            "native_iterations"
+        ]
+        == 7
+    )
     assert "sp_training_model_factory" not in captured["config"]["configurable"]
-    assert captured["config"]["configurable"]["sp_max_actions"] == settings.max_iterations
+    assert (
+        captured["config"]["configurable"]["sp_max_actions"] == settings.max_iterations
+    )
     assert captured["config"]["context"]["user_id"] == result["user_id"]
     assert "PRIVATE_" not in str(captured["inputs"])
     assert (tmp_path / "attempt" / "trace.jsonl").is_file()
@@ -247,7 +259,10 @@ def test_native_registered_tools_match_config_and_keep_file_capability():
         resolve_dataset_plugin,
     )
 
-    app = configure_dataset_app(AppConfig.from_file("configs/stackplanner_benchmarks.yaml"), resolve_dataset_plugin("widesearch"))
+    app = configure_dataset_app(
+        AppConfig.from_file("configs/stackplanner_benchmarks.yaml"),
+        resolve_dataset_plugin("widesearch"),
+    )
     tools = {
         tool.name: tool
         for tool in get_available_tools(app_config=app, include_mcp=False)
@@ -278,6 +293,7 @@ def test_original_chinese_delegation_retains_native_role_routing():
     # with misleading code/API keywords to force a different role.
 
 
+@pytest.mark.sp_runtime
 def test_real_native_executor_can_read_contract_and_write_final_file(
     tmp_path, monkeypatch
 ):
@@ -397,8 +413,14 @@ def test_real_native_executor_can_read_contract_and_write_final_file(
         native_roles.append(role)
         return central if role == "central" else coder
 
-    monkeypatch.setattr(lead, "create_chat_model", lambda **kwargs: factory(role="central", **kwargs))
-    monkeypatch.setattr(specialists, "create_chat_model", lambda **kwargs: factory(role="reporter", **kwargs))
+    monkeypatch.setattr(
+        lead, "create_chat_model", lambda **kwargs: factory(role="central", **kwargs)
+    )
+    monkeypatch.setattr(
+        specialists,
+        "create_chat_model",
+        lambda **kwargs: factory(role="reporter", **kwargs),
+    )
     sample = Task(
         id="contract-law",
         benchmark="cuad",
@@ -422,23 +444,39 @@ def test_real_native_executor_can_read_contract_and_write_final_file(
         result,
         (tmp_path / "attempt" / "state.json").read_text(encoding="utf-8")[-6000:],
     )
-    assert result["answer"] == ["California law"] and result["metrics"]["f1"] == 1
+    assert (
+        json.loads(result["delivery"]) == ["California law"] and "metrics" not in result
+    )
     assert native_roles == ["central", "reporter"]
     state = json.loads(
         (tmp_path / "attempt" / "state.json").read_text(encoding="utf-8")
     )
     saved = Path(state["thread_data"]["outputs_path"]) / "answer.json"
     assert saved.read_text(encoding="utf-8") == text
-    events = [json.loads(line)["data"] for line in (tmp_path / "attempt" / "trace.jsonl").read_text(encoding="utf-8").splitlines() if json.loads(line)["kind"] == "custom"]
-    file_messages = [event.get("message", {}) for event in events if event.get("message", {}).get("name") in {"read_file", "write_file"}]
-    assert file_messages and all(message.get("additional_kwargs", {}).get("deerflow_tool_meta", {}).get("status") != "error" for message in file_messages), file_messages
+    events = [
+        json.loads(line)["data"]
+        for line in (tmp_path / "attempt" / "trace.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if json.loads(line)["kind"] == "custom"
+    ]
+    file_messages = [
+        event.get("message", {})
+        for event in events
+        if event.get("message", {}).get("name") in {"read_file", "write_file"}
+    ]
+    assert file_messages and all(
+        message.get("additional_kwargs", {}).get("deerflow_tool_meta", {}).get("status")
+        != "error"
+        for message in file_messages
+    ), file_messages
     assert (
         result["tool_events"] == []
     )  # Native file task has no mandatory Web-search gate.
 
 
 def test_manifest_rejects_legacy_and_changed_identity(tmp_path):
-    from scripts.evaluate_sp_benchmarks import ensure_manifest
+    from scripts.infer_sp_benchmarks import ensure_manifest
 
     ensure_manifest(
         tmp_path, {"protocol": "sp-native-benchmarks-v1", "data": "a"}, resume=False
@@ -457,7 +495,7 @@ def test_manifest_rejects_legacy_and_changed_identity(tmp_path):
 
 
 def test_manifest_does_not_adopt_old_prediction_directory(tmp_path):
-    from scripts.evaluate_sp_benchmarks import ensure_manifest
+    from scripts.infer_sp_benchmarks import ensure_manifest
 
     (tmp_path / "predictions.jsonl").write_text("old records", encoding="utf-8")
     with pytest.raises(ValueError):
@@ -467,7 +505,7 @@ def test_manifest_does_not_adopt_old_prediction_directory(tmp_path):
 def test_cli_persists_identity_results_and_resumes_without_exposing_key(
     tmp_path, monkeypatch
 ):
-    from scripts import evaluate_sp_benchmarks as cli
+    from scripts import infer_sp_benchmarks as cli
 
     monkeypatch.setenv("DCC_MODEL_API_KEY", "SENTINEL_SECRET_MUST_NOT_BE_RECORDED")
     monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path / "home"))
@@ -485,7 +523,6 @@ def test_cli_persists_identity_results_and_resumes_without_exposing_key(
             "http://unused/v1",
             "--model",
             "scripted",
-            "--exact-proxy",
         ]
     )
     called = []
@@ -497,8 +534,10 @@ def test_cli_persists_identity_results_and_resumes_without_exposing_key(
             "protocol": cli.PROTOCOL,
             "benchmark": "widesearch",
             "status": "completed",
-            "answer": [{"name": "x"}],
-            "metrics": {"f1_by_row": 1.0, "f1_by_item": 1.0},
+            "split": sample.split,
+            "input_sha256": sample.input_sha256(),
+            "delivery": '[{"name":"x"}]',
+            "delivery_sha256": hashlib.sha256(b'[{"name":"x"}]').hexdigest(),
         }
 
     monkeypatch.setattr(cli, "run_task", fake_run)
@@ -518,7 +557,10 @@ def test_cli_persists_identity_results_and_resumes_without_exposing_key(
 
 @pytest.mark.parametrize("page_count", [1, 6])
 @pytest.mark.filterwarnings("error::UserWarning")
-def test_real_native_researcher_uses_registered_web_tools(tmp_path, monkeypatch, page_count):
+@pytest.mark.sp_runtime
+def test_real_native_researcher_uses_registered_web_tools(
+    tmp_path, monkeypatch, page_count
+):
     import deerflow.agents.lead_agent.agent as lead
     import deerflow.subagents.executor as specialists
     from langchain_core.language_models.fake_chat_models import (
@@ -598,16 +640,22 @@ def test_real_native_researcher_uses_registered_web_tools(tmp_path, monkeypatch,
                     {"name": "web_search", "id": "s1", "args": {"query": "names"}}
                 ],
             ),
-            *[AIMessage(
-                content="",
-                tool_calls=[
-                    {
-                        "name": "web_fetch",
-                        "id": f"r{index}",
-                        "args": {"url": "https://example.org" + (f"#sp-read-start={index * 7}" if index else "")},
-                    }
-                ],
-            ) for index in range(page_count)],
+            *[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "web_fetch",
+                            "id": f"r{index}",
+                            "args": {
+                                "url": "https://example.org"
+                                + (f"#sp-read-start={index * 7}" if index else "")
+                            },
+                        }
+                    ],
+                )
+                for index in range(page_count)
+            ],
             AIMessage(
                 content=json.dumps(
                     {
@@ -624,8 +672,14 @@ def test_real_native_researcher_uses_registered_web_tools(tmp_path, monkeypatch,
     def factory(*, role, **kwargs):
         return central if role == "central" else researcher
 
-    monkeypatch.setattr(lead, "create_chat_model", lambda **kwargs: factory(role="central", **kwargs))
-    monkeypatch.setattr(specialists, "create_chat_model", lambda **kwargs: factory(role="researcher", **kwargs))
+    monkeypatch.setattr(
+        lead, "create_chat_model", lambda **kwargs: factory(role="central", **kwargs)
+    )
+    monkeypatch.setattr(
+        specialists,
+        "create_chat_model",
+        lambda **kwargs: factory(role="researcher", **kwargs),
+    )
     sample = dataclasses.replace(task(), gold=[{"name": "A"}])
     result = asyncio.run(
         run_task(
@@ -640,8 +694,10 @@ def test_real_native_researcher_uses_registered_web_tools(tmp_path, monkeypatch,
     )
     assert result["status"] == "completed", result
     assert calls == ["search"] + ["fetch"] * page_count
-    assert [e["tool"] for e in result["tool_events"]] == ["web_search"] + ["web_fetch"] * page_count
-    assert result["metrics"]["f1_by_row"] == 1
+    assert [e["tool"] for e in result["tool_events"]] == ["web_search"] + [
+        "web_fetch"
+    ] * page_count
+    assert score_task(sample, result["delivery"])["f1_by_row"] == 1
 
 
 def test_web_fetch_continuation_urls_keep_native_loop_protection(tmp_path, monkeypatch):
@@ -670,12 +726,23 @@ def test_web_fetch_continuation_urls_keep_native_loop_protection(tmp_path, monke
     async def read_pages():
         nonlocal url
         for index in range(6):
-            message = AIMessage(content="", tool_calls=[{
-                "name": "web_fetch", "args": {"url": url}, "id": f"read-{index}",
-            }])
-            warning, stopped = guard._track_and_check({"messages": [message]}, guard_runtime)
+            message = AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "web_fetch",
+                        "args": {"url": url},
+                        "id": f"read-{index}",
+                    }
+                ],
+            )
+            warning, stopped = guard._track_and_check(
+                {"messages": [message]}, guard_runtime
+            )
             assert warning is None and not stopped
-            result = json.loads(await benchmark_tools.web_fetch.coroutine(url=url, runtime=tool_runtime))
+            result = json.loads(
+                await benchmark_tools.web_fetch.coroutine(url=url, runtime=tool_runtime)
+            )
             observed.append(result["text"])
             assert result["url"] == source
             url = result["next_url"]
@@ -683,31 +750,47 @@ def test_web_fetch_continuation_urls_keep_native_loop_protection(tmp_path, monke
 
     asyncio.run(read_pages())
     assert observed == ["aaaa", "bbbb", "cccc", "dddd", "eeee", "ffff"]
-    repeated = AIMessage(content="", tool_calls=[{
-        "name": "web_fetch", "args": {"url": source + "#sp-read-start=4"}, "id": "repeat",
-    }])
-    outcomes = [guard._track_and_check({"messages": [repeated]}, guard_runtime) for _ in range(4)]
+    repeated = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "web_fetch",
+                "args": {"url": source + "#sp-read-start=4"},
+                "id": "repeat",
+            }
+        ],
+    )
+    outcomes = [
+        guard._track_and_check({"messages": [repeated]}, guard_runtime)
+        for _ in range(4)
+    ]
     assert outcomes[-1][1] is True
 
 
-@pytest.mark.parametrize("text", [
-    'Source: registry.\n```json\n[{"name":"A"}]\n```\nEnd.',
-    '```JSON\n[{"name":"A"}]\n```',
-])
+@pytest.mark.parametrize(
+    "text",
+    [
+        'Source: registry.\n```json\n[{"name":"A"}]\n```\nEnd.',
+        '```JSON\n[{"name":"A"}]\n```',
+    ],
+)
 def test_widesearch_fenced_json_delivery_uses_the_same_scorer(text):
     sample = dataclasses.replace(task(), gold=[{"name": "A"}])
     assert parse_answer(sample, text) == [{"name": "A"}]
     assert score_task(sample, text)["f1_by_row"] == 1
 
 
-@pytest.mark.parametrize("fragment,expected,error", [
-    ("section", "abcd", False),
-    ("sp-read-start=4", "efgh", False),
-    ("sp-read-start=-1", None, True),
-    ("sp-read-start=no", None, True),
-    ("sp-read-start=9999999999999999999", None, True),
-    ("sp-read-start=50", None, True),
-])
+@pytest.mark.parametrize(
+    "fragment,expected,error",
+    [
+        ("section", "abcd", False),
+        ("sp-read-start=4", "efgh", False),
+        ("sp-read-start=-1", None, True),
+        ("sp-read-start=no", None, True),
+        ("sp-read-start=9999999999999999999", None, True),
+        ("sp-read-start=50", None, True),
+    ],
+)
 def test_web_fetch_cursor_keeps_source_query_and_reports_invalid_reads(
     tmp_path, monkeypatch, fragment, expected, error
 ):
@@ -722,9 +805,13 @@ def test_web_fetch_cursor_keeps_source_query_and_reports_invalid_reads(
     client.pages[source] = "abcdefgh"
     monkeypatch.setattr(benchmark_tools, "_client", lambda _: client)
     runtime = SimpleNamespace(context={"thread_id": "cursor"}, config={})
-    result = json.loads(asyncio.run(benchmark_tools.web_fetch.coroutine(
-        url=source + "#" + fragment, runtime=runtime
-    )))
+    result = json.loads(
+        asyncio.run(
+            benchmark_tools.web_fetch.coroutine(
+                url=source + "#" + fragment, runtime=runtime
+            )
+        )
+    )
     assert bool(result.get("error")) is error
     if not error:
         assert result["url"] == source
@@ -744,24 +831,34 @@ def test_web_fetch_navigation_and_repeat_hints_use_read_urls(tmp_path, monkeypat
     client = WebTools(max_text_window_chars=4)
     client.pages[source] = "aaaabbbbcccc"
     client.page_worksheets[source] = [{"name": "Sheet1", "start": 4, "end": 8}]
-    client.page_archives[source] = [{
-        "name": "part.csv", "start": 8, "end": 12,
-        "content_start": 8, "content_end": 12, "readable": True,
-    }]
+    client.page_archives[source] = [
+        {
+            "name": "part.csv",
+            "start": 8,
+            "end": 12,
+            "content_start": 8,
+            "content_end": 12,
+            "readable": True,
+        }
+    ]
     monkeypatch.setattr(benchmark_tools, "_client", lambda _: client)
     runtime = SimpleNamespace(context={"thread_id": "navigation"}, config={})
 
     async def read():
         await benchmark_tools.web_fetch.coroutine(url=source, runtime=runtime)
-        result = json.loads(await benchmark_tools.web_fetch.coroutine(url=source, runtime=runtime))
+        result = json.loads(
+            await benchmark_tools.web_fetch.coroutine(url=source, runtime=runtime)
+        )
         assert result["worksheets"][0]["read_url"] == source + "#sp-read-start=4"
         assert result["archive_members"][0]["read_url"] == source + "#sp-read-start=8"
         for key in ("worksheets_note", "archive_members_note", "read_progress_note"):
             assert "next_start" not in result[key]
             assert "start set" not in result[key]
-        part = json.loads(await benchmark_tools.web_fetch.coroutine(
-            url=result["archive_members"][0]["read_url"], runtime=runtime
-        ))
+        part = json.loads(
+            await benchmark_tools.web_fetch.coroutine(
+                url=result["archive_members"][0]["read_url"], runtime=runtime
+            )
+        )
         assert part["text"] == "cccc"
 
     asyncio.run(read())
@@ -769,7 +866,9 @@ def test_web_fetch_navigation_and_repeat_hints_use_read_urls(tmp_path, monkeypat
 
 @pytest.mark.parametrize("threshold", [12000, 6000])
 @pytest.mark.parametrize("navigation", [False, True])
-def test_web_fetch_windows_remain_readable_through_native_output_budget(tmp_path, monkeypatch, threshold, navigation):
+def test_web_fetch_windows_remain_readable_through_native_output_budget(
+    tmp_path, monkeypatch, threshold, navigation
+):
     from types import SimpleNamespace
 
     from deerflow.agents.middlewares.loop_detection_middleware import (
@@ -789,17 +888,27 @@ def test_web_fetch_windows_remain_readable_through_native_output_budget(tmp_path
     monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path / "native"))
     config = ToolOutputConfig(tool_overrides={"web_fetch": threshold})
     source = "https://example.org/data?format=json&page=1"
-    body = ('{"name":"鸟类\\record","value":"quoted\\\"text"}\n' * 900)
+    body = '{"name":"鸟类\\record","value":"quoted\\"text"}\n' * 900
     client = WebTools()
     client.pages[source] = body
-    client.page_links[source] = [{"url": "https://example.org/help", "title": "Source documentation"}]
+    client.page_links[source] = [
+        {"url": "https://example.org/help", "title": "Source documentation"}
+    ]
     if navigation:
-        client.page_worksheets[source] = [{"name": f"Sheet{i}", "start": i * 1000, "end": (i + 1) * 1000} for i in range(5)]
-        client.page_archives[source] = [{"name": f"part{i}.csv", "start": i * 1000, "end": (i + 1) * 1000} for i in range(5)]
+        client.page_worksheets[source] = [
+            {"name": f"Sheet{i}", "start": i * 1000, "end": (i + 1) * 1000}
+            for i in range(5)
+        ]
+        client.page_archives[source] = [
+            {"name": f"part{i}.csv", "start": i * 1000, "end": (i + 1) * 1000}
+            for i in range(5)
+        ]
     monkeypatch.setattr(benchmark_tools, "_client", lambda _: client)
     app = AppConfig.from_file("configs/stackplanner_benchmarks.yaml")
     app.tool_output = config
-    runtime = SimpleNamespace(context={"thread_id": "budget", "app_config": app}, config={})
+    runtime = SimpleNamespace(
+        context={"thread_id": "budget", "app_config": app}, config={}
+    )
     guard = LoopDetectionMiddleware(tool_freq_warn=100, tool_freq_hard_limit=200)
     guard_runtime = Runtime(context={"thread_id": "budget", "run_id": "budget"})
 
@@ -807,11 +916,27 @@ def test_web_fetch_windows_remain_readable_through_native_output_budget(tmp_path
         url = source
         pieces = []
         while url is not None:
-            message = AIMessage(content="", tool_calls=[{"name": "web_fetch", "args": {"url": url}, "id": str(len(pieces))}])
-            warning, stopped = guard._track_and_check({"messages": [message]}, guard_runtime)
+            message = AIMessage(
+                content="",
+                tool_calls=[
+                    {"name": "web_fetch", "args": {"url": url}, "id": str(len(pieces))}
+                ],
+            )
+            warning, stopped = guard._track_and_check(
+                {"messages": [message]}, guard_runtime
+            )
             assert warning is None and not stopped
             raw = await benchmark_tools.web_fetch.coroutine(url=url, runtime=runtime)
-            assert _budget_content(raw, tool_name="web_fetch", tool_call_id="read", outputs_path=str(tmp_path), config=config) is None
+            assert (
+                _budget_content(
+                    raw,
+                    tool_name="web_fetch",
+                    tool_call_id="read",
+                    outputs_path=str(tmp_path),
+                    config=config,
+                )
+                is None
+            )
             result = json.loads(raw)
             assert result["start"] == sum(map(len, pieces))
             assert result["outgoing_links"] == client.page_links[source]
@@ -822,7 +947,9 @@ def test_web_fetch_windows_remain_readable_through_native_output_budget(tmp_path
         assert "".join(pieces) == body
         repeat_url = source + f"#sp-read-start={len(body) - 20}"
         await benchmark_tools.web_fetch.coroutine(url=repeat_url, runtime=runtime)
-        repeated = json.loads(await benchmark_tools.web_fetch.coroutine(url=repeat_url, runtime=runtime))
+        repeated = json.loads(
+            await benchmark_tools.web_fetch.coroutine(url=repeat_url, runtime=runtime)
+        )
         assert repeated["read_progress"]["new_text"] is False
         assert repeated["read_progress"]["first_read"]["end"] == repeated["end"]
         assert repeated["next_url"] is None
@@ -830,7 +957,9 @@ def test_web_fetch_windows_remain_readable_through_native_output_budget(tmp_path
     asyncio.run(read())
 
 
-def test_budgeted_repeat_keeps_the_same_window_and_reports_already_read(tmp_path, monkeypatch):
+def test_budgeted_repeat_keeps_the_same_window_and_reports_already_read(
+    tmp_path, monkeypatch
+):
     from types import SimpleNamespace
 
     from dcc_harness.evaluation import benchmark_tools
@@ -844,7 +973,9 @@ def test_budgeted_repeat_keeps_the_same_window_and_reports_already_read(tmp_path
     runtime = SimpleNamespace(context={"thread_id": "repeat-budget"}, config={})
 
     async def read():
-        first = json.loads(await benchmark_tools.web_fetch.coroutine(url=source, runtime=runtime))
+        first = json.loads(
+            await benchmark_tools.web_fetch.coroutine(url=source, runtime=runtime)
+        )
         for _ in range(12):
             raw = await benchmark_tools.web_fetch.coroutine(url=source, runtime=runtime)
             assert len(raw) <= 12000
@@ -856,7 +987,9 @@ def test_budgeted_repeat_keeps_the_same_window_and_reports_already_read(tmp_path
     asyncio.run(read())
 
 
-def test_web_fetch_keeps_oversized_navigation_for_native_externalization(tmp_path, monkeypatch):
+def test_web_fetch_keeps_oversized_navigation_for_native_externalization(
+    tmp_path, monkeypatch
+):
     from types import SimpleNamespace
 
     from dcc_harness.evaluation import benchmark_tools
@@ -866,32 +999,42 @@ def test_web_fetch_keeps_oversized_navigation_for_native_externalization(tmp_pat
     source = "https://example.org/data"
     client = WebTools()
     client.pages[source] = "complete body"
-    client.page_links[source] = [{"url": f"https://example.org/{i}", "title": "X" * 300} for i in range(100)]
+    client.page_links[source] = [
+        {"url": f"https://example.org/{i}", "title": "X" * 300} for i in range(100)
+    ]
     monkeypatch.setattr(benchmark_tools, "_client", lambda _: client)
     runtime = SimpleNamespace(context={"thread_id": "oversized"}, config={})
-    result = json.loads(asyncio.run(benchmark_tools.web_fetch.coroutine(url=source, runtime=runtime)))
+    result = json.loads(
+        asyncio.run(benchmark_tools.web_fetch.coroutine(url=source, runtime=runtime))
+    )
     assert result["text"] == "complete body"
     assert result["outgoing_links"] == client.page_links[source]
     assert result["next_url"] is None
 
 
-@pytest.mark.parametrize("text", [
-    '| name |\n| --- |\n| A |\n\nSources by row: A — https://example.org/source',
-    '```json\n[{"name":"A"}]\n```\nSources by row: A — https://example.org/source',
-])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "| name |\n| --- |\n| A |\n\nSources by row: A — https://example.org/source",
+        '```json\n[{"name":"A"}]\n```\nSources by row: A — https://example.org/source',
+    ],
+)
 def test_answer_columns_with_separate_row_citations_keep_existing_scoring(text):
     sample = dataclasses.replace(task(), gold=[{"name": "A"}])
     assert parse_answer(sample, text) == [{"name": "A"}]
     assert score_task(sample, text)["f1_by_row"] == 1
 
 
-@pytest.mark.parametrize("answer", [
-    '| name |\n| --- |\n| A |',
-    '```json\n[{"name":"A"}]\n```',
-])
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "| name |\n| --- |\n| A |",
+        '```json\n[{"name":"A"}]\n```',
+    ],
+)
 def test_native_delivery_and_scoring_select_the_same_answer_beside_counts(answer):
     sample = dataclasses.replace(task(), gold=[{"name": "A"}])
-    text = '| Stage | Count |\n| --- | --- |\n| Fetched | 3 |\n\nAnswer:\n' + answer
+    text = "| Stage | Count |\n| --- | --- |\n| Fetched | 3 |\n\nAnswer:\n" + answer
     assert parse_answer(sample, text) == [{"name": "A"}]
     result = score_task(sample, text)
     assert result["num_pred_rows"] == 1
@@ -924,11 +1067,16 @@ def test_native_failure_classification_does_not_call_everything_evidence_failure
     assert failure_status({"messages": [message]}) == status
 
 
-@pytest.mark.parametrize("mode,code", [
-    ("empty", "No results found"),
-    ("unavailable", "WEB_SEARCH_UNAVAILABLE"),
-])
-def test_search_failures_match_native_protocol_and_stop_native_retry_guard(tmp_path, monkeypatch, mode, code):
+@pytest.mark.parametrize(
+    "mode,code",
+    [
+        ("empty", "No results found"),
+        ("unavailable", "WEB_SEARCH_UNAVAILABLE"),
+    ],
+)
+def test_search_failures_match_native_protocol_and_stop_native_retry_guard(
+    tmp_path, monkeypatch, mode, code
+):
     from types import SimpleNamespace
 
     from deerflow.agents.middlewares.tool_result_meta import normalize_tool_result
@@ -946,7 +1094,12 @@ def test_search_failures_match_native_protocol_and_stop_native_retry_guard(tmp_p
         async def web_search(self, **kwargs):
             if mode == "unavailable":
                 raise InfrastructureError("All public search providers are unavailable")
-            return {"results": [], "backend": "wikipedia", "search_scope": "encyclopedia", "fallback_reason": "duckduckgo_lite: challenge; seznam: no search results"}
+            return {
+                "results": [],
+                "backend": "wikipedia",
+                "search_scope": "encyclopedia",
+                "fallback_reason": "duckduckgo_lite: challenge; seznam: no search results",
+            }
 
     monkeypatch.setattr(benchmark_tools, "_client", lambda _: Provider())
     runtime = SimpleNamespace(context={"thread_id": "failed-search"}, config={})
@@ -954,23 +1107,44 @@ def test_search_failures_match_native_protocol_and_stop_native_retry_guard(tmp_p
 
     async def search():
         for index in range(2):
-            call = {"id": f"search-{index}", "name": "web_search", "args": {"query": f"distinct query {index}"}}
-            raw = await benchmark_tools.web_search.coroutine(**call["args"], runtime=runtime)
+            call = {
+                "id": f"search-{index}",
+                "name": "web_search",
+                "args": {"query": f"distinct query {index}"},
+            }
+            raw = await benchmark_tools.web_search.coroutine(
+                **call["args"], runtime=runtime
+            )
             data = json.loads(raw)
             assert data["error"] == code
             if mode == "empty":
                 assert data["results"] == [] and data["backend"] == "wikipedia"
                 assert data["fallback_reason"].startswith("duckduckgo_lite: challenge")
-            message = normalize_tool_result(ToolMessage(content=raw, name="web_search", tool_call_id=call["id"]))
+            message = normalize_tool_result(
+                ToolMessage(content=raw, name="web_search", tool_call_id=call["id"])
+            )
             assert message.additional_kwargs["deerflow_tool_meta"]["status"] == "error"
             messages.extend([AIMessage(content="", tool_calls=[call]), message])
 
     asyncio.run(search())
-    next_call = {"id": "search-next", "name": "web_search", "args": {"query": "another query"}}
+    next_call = {
+        "id": "search-next",
+        "name": "web_search",
+        "args": {"query": "another query"},
+    }
     messages.append(AIMessage(content="", tool_calls=[next_call]))
-    stopped = WebSearchBudgetMiddleware._short_circuit(SimpleNamespace(tool_call=next_call, state={"messages": messages}))
+    stopped = WebSearchBudgetMiddleware._short_circuit(
+        SimpleNamespace(tool_call=next_call, state={"messages": messages})
+    )
     assert json.loads(stopped.content)["error"] == "WEB_SEARCH_ATTEMPTS_EXHAUSTED"
-    events = [json.loads(line) for line in (tmp_path / "native" / "threads" / "failed-search" / "benchmark-tools.jsonl").read_text(encoding="utf-8").splitlines()]
+    events = [
+        json.loads(line)
+        for line in (
+            tmp_path / "native" / "threads" / "failed-search" / "benchmark-tools.jsonl"
+        )
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
     assert len(events) == 2 and all(e["result"]["error"] == code for e in events)
 
 
@@ -980,7 +1154,13 @@ def test_successful_fallback_search_is_not_changed_into_failure(tmp_path, monkey
     from dcc_harness.evaluation import benchmark_tools
 
     monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path / "native"))
-    result = {"results": [{"title": "Source", "url": "https://example.org", "snippet": "Fact"}], "backend": "seznam", "fallback_reason": "duckduckgo_lite: challenge"}
+    result = {
+        "results": [
+            {"title": "Source", "url": "https://example.org", "snippet": "Fact"}
+        ],
+        "backend": "seznam",
+        "fallback_reason": "duckduckgo_lite: challenge",
+    }
 
     class Provider:
         async def web_search(self, **kwargs):
@@ -988,7 +1168,9 @@ def test_successful_fallback_search_is_not_changed_into_failure(tmp_path, monkey
 
     monkeypatch.setattr(benchmark_tools, "_client", lambda _: Provider())
     runtime = SimpleNamespace(context={"thread_id": "success-search"}, config={})
-    raw = asyncio.run(benchmark_tools.web_search.coroutine(query="fact", runtime=runtime))
+    raw = asyncio.run(
+        benchmark_tools.web_search.coroutine(query="fact", runtime=runtime)
+    )
     assert json.loads(raw) == result
 
 
@@ -1061,19 +1243,25 @@ def test_native_transport_preserves_provider_request_and_stream_defaults(
         effective_app,
     )
 
-    app = effective_app(Settings(
-        config="configs/stackplanner_benchmarks.yaml",
-        base_url="http://127.0.0.1:1/v1", model="transport-test",
-        recover_qwen_tool_calls=recover_qwen_tool_calls,
-    ))
+    app = effective_app(
+        Settings(
+            config="configs/stackplanner_benchmarks.yaml",
+            base_url="http://127.0.0.1:1/v1",
+            model="transport-test",
+            recover_qwen_tool_calls=recover_qwen_tool_calls,
+        )
+    )
     original = app.model_dump(mode="python")
     original["models"][0]["use"] = (
-        "deerflow.models.vllm_provider:VllmChatModel" if recover_qwen_tool_calls
+        "deerflow.models.vllm_provider:VllmChatModel"
+        if recover_qwen_tool_calls
         else "langchain_openai:ChatOpenAI"
     )
 
     async def compare():
-        baseline = create_chat_model(app_config=AppConfig.model_validate(original), attach_tracing=False)
+        baseline = create_chat_model(
+            app_config=AppConfig.model_validate(original), attach_tracing=False
+        )
         adapted = create_chat_model(app_config=app, attach_tracing=False)
         try:
             assert adapted._default_params == baseline._default_params
@@ -1107,12 +1295,24 @@ def test_native_models_can_request_through_proxy_on_separate_event_loops(
         protocol_version = "HTTP/1.1"
 
         def do_POST(self):
-            requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
-            body = json.dumps({
-                "id": "loop-test", "object": "chat.completion", "created": 0,
-                "model": "loop-test", "choices": [{"index": 0, "finish_reason": "stop",
-                    "message": {"role": "assistant", "content": "ok"}}],
-            }).encode()
+            requests.append(
+                json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            )
+            body = json.dumps(
+                {
+                    "id": "loop-test",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "loop-test",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "finish_reason": "stop",
+                            "message": {"role": "assistant", "content": "ok"},
+                        }
+                    ],
+                }
+            ).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -1126,21 +1326,39 @@ def test_native_models_can_request_through_proxy_on_separate_event_loops(
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     # The local server acts as an HTTP proxy. No real API, DNS or key is used.
-    for name in ("http_proxy", "https_proxy", "all_proxy", "no_proxy",
-                 "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"):
+    for name in (
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "no_proxy",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+    ):
         monkeypatch.delenv(name, raising=False)
-    proxy = "http://127.0.0.1:1" if bypass_proxy else f"http://127.0.0.1:{server.server_port}"
+    proxy = (
+        "http://127.0.0.1:1"
+        if bypass_proxy
+        else f"http://127.0.0.1:{server.server_port}"
+    )
     monkeypatch.setenv("http_proxy", proxy)
     if bypass_proxy:
         monkeypatch.setenv("no_proxy", "127.0.0.1,localhost")
-    base_url = (f"http://127.0.0.1:{server.server_port}/v1" if bypass_proxy
-                else f"http://loop-test-{server.server_port}.invalid/v1")
-    app = effective_app(Settings(
-        config="configs/stackplanner_benchmarks.yaml",
-        base_url=base_url,
-        model="loop-test", timeout=5.0,
-        recover_qwen_tool_calls=recover_qwen_tool_calls,
-    ))
+    base_url = (
+        f"http://127.0.0.1:{server.server_port}/v1"
+        if bypass_proxy
+        else f"http://loop-test-{server.server_port}.invalid/v1"
+    )
+    app = effective_app(
+        Settings(
+            config="configs/stackplanner_benchmarks.yaml",
+            base_url=base_url,
+            model="loop-test",
+            timeout=5.0,
+            recover_qwen_tool_calls=recover_qwen_tool_calls,
+        )
+    )
     clients = {}
     sync_clients = {}
 
@@ -1176,7 +1394,7 @@ def test_native_models_can_request_through_proxy_on_separate_event_loops(
 
 
 def test_source_fingerprint_includes_native_soul_and_skill_support_files(tmp_path):
-    from scripts.evaluate_sp_benchmarks import directory_digest, source_digest
+    from scripts.infer_sp_benchmarks import directory_digest, source_digest
 
     soul = (
         tmp_path
@@ -1200,7 +1418,7 @@ def test_source_fingerprint_includes_native_soul_and_skill_support_files(tmp_pat
 def test_search_identity_detects_endpoint_and_proxy_changes_without_recording_secrets(
     monkeypatch,
 ):
-    from scripts.evaluate_sp_benchmarks import retrieval_identity
+    from scripts.infer_sp_benchmarks import retrieval_identity
 
     monkeypatch.setenv("DCC_SEARCH_URL", "http://user:SECRET@search-host")
     before = retrieval_identity()
@@ -1212,7 +1430,9 @@ def test_search_identity_detects_endpoint_and_proxy_changes_without_recording_se
     assert before != retrieval_identity()
 
 
-def test_third_dataset_runs_through_native_runner_and_generic_metrics(tmp_path, monkeypatch):
+def test_third_dataset_runs_through_native_runner_and_generic_metrics(
+    tmp_path, monkeypatch
+):
     import sys
     import types
 
@@ -1226,13 +1446,20 @@ def test_third_dataset_runs_through_native_runner_and_generic_metrics(tmp_path, 
 
     skill = tmp_path / "skills" / "public" / "third"
     skill.mkdir(parents=True)
-    (skill / "SKILL.md").write_text("---\nname: third\ndescription: Handle public third dataset.\n---\nUse only supplied public records.\n", encoding="utf-8")
+    (skill / "SKILL.md").write_text(
+        "---\nname: third\ndescription: Handle public third dataset.\n---\nUse only supplied public records.\n",
+        encoding="utf-8",
+    )
     module = types.ModuleType("test_third_runner_plugin")
     module.plugin = BenchmarkPlugin(
-        name="third", prepare_task=lambda sample: sample.prompt,
-        prepare_inputs=lambda sample, thread_id: {"public_document": sample.document},
-        skills_path=skill.parents[1], parse_answer=lambda sample, text: text,
-        score_task=lambda sample, text, judge=None: {"exact_match": float(text == sample.gold)},
+        name="third",
+        prepare_task=lambda sample: sample.prompt,
+        prepare_inputs=lambda sample, thread_id: {},
+        skills_path=skill.parents[1],
+        parse_answer=lambda sample, text: text,
+        score_task=lambda sample, text, judge=None: {
+            "exact_match": float(text == sample.gold)
+        },
     )
     monkeypatch.setitem(sys.modules, module.__name__, module)
     captured = {}
@@ -1248,14 +1475,26 @@ def test_third_dataset_runs_through_native_runner_and_generic_metrics(tmp_path, 
 
     monkeypatch.setattr(native, "make_sp_agent", build)
     monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path / "native"))
-    sample = Task(id="third-id", benchmark="third", split="validation", prompt="Public task", document="Public source", gold="public answer", metadata={"secret": "PRIVATE_META"})
-    settings = Settings(config="configs/stackplanner_benchmarks.yaml", base_url="http://unused", model="scripted", dataset_plugins=("test_third_runner_plugin:plugin",))
+    sample = Task(
+        id="third-id",
+        benchmark="third",
+        split="validation",
+        prompt="Public task",
+        document="Public source",
+        gold="public answer",
+        metadata={"secret": "PRIVATE_META"},
+    )
+    settings = Settings(
+        config="configs/stackplanner_benchmarks.yaml",
+        base_url="http://unused",
+        model="scripted",
+        dataset_plugins=("test_third_runner_plugin:plugin",),
+    )
     result = asyncio.run(run_task(sample, settings, output_dir=tmp_path / "attempt"))
-    assert result["status"] == "completed" and result["metrics"] == {"exact_match": 1.0}
-    assert captured["inputs"]["public_document"] == "Public source"
+    assert result["status"] == "completed" and "metrics" not in result
+    assert result["delivery"] == "public answer"
     assert "PRIVATE_META" not in str(captured["inputs"])
     assert "web_search" not in captured["tools"]
-    assert summarize([result], expected_tasks=1)["third"]["exact_match"] == 1.0
 
 
 def test_each_native_task_rebuilds_dataset_skill_mounts(tmp_path, monkeypatch):
@@ -1282,51 +1521,120 @@ def test_each_native_task_rebuilds_dataset_skill_mounts(tmp_path, monkeypatch):
             provider = get_sandbox_provider()
             providers.append(provider)
             identity = self.config["context"]
-            sandbox_id = provider.acquire(identity["thread_id"], user_id=identity["user_id"])
+            sandbox_id = provider.acquire(
+                identity["thread_id"], user_id=identity["user_id"]
+            )
             sandbox = provider.get(sandbox_id)
             name = Path(self.app.skills.path).name
             body = sandbox.read_file(f"/mnt/skills/public/{name}/SKILL.md")
             assert f"name: {name}" in body
             seen.append(name)
-            yield "values", finished(sp_last_run_summary='["California law"]' if name == "cuad" else '[{"name":"delivered"}]')
+            yield (
+                "values",
+                finished(
+                    sp_last_run_summary='["California law"]'
+                    if name == "cuad"
+                    else '[{"name":"delivered"}]'
+                ),
+            )
 
-    monkeypatch.setattr(native, "make_sp_agent", lambda config, app_config: Graph(config, app_config))
-    settings = Settings(config="configs/stackplanner_benchmarks.yaml", base_url="http://unused", model="scripted")
+    monkeypatch.setattr(
+        native, "make_sp_agent", lambda config, app_config: Graph(config, app_config)
+    )
+    settings = Settings(
+        config="configs/stackplanner_benchmarks.yaml",
+        base_url="http://unused",
+        model="scripted",
+    )
     reset_sandbox_provider()
     try:
-        for index, sample in enumerate([task(), Task(id="law", benchmark="cuad", split="validation", prompt="Question", document="California law", gold=["California law"])]):
-            result = asyncio.run(run_task(sample, settings, output_dir=tmp_path / f"attempt-{index}"))
+        for index, sample in enumerate(
+            [
+                task(),
+                Task(
+                    id="law",
+                    benchmark="cuad",
+                    split="validation",
+                    prompt="Question",
+                    document="California law",
+                    gold=["California law"],
+                ),
+            ]
+        ):
+            result = asyncio.run(
+                run_task(sample, settings, output_dir=tmp_path / f"attempt-{index}")
+            )
             assert result["status"] == "completed", result
         assert seen == ["widesearch", "cuad"] and providers[0] is not providers[1]
     finally:
         reset_sandbox_provider()
 
 
-def test_cli_loads_a_third_dataset_plugin_and_records_its_identity(tmp_path, monkeypatch):
+def test_cli_loads_a_third_dataset_plugin_and_records_its_identity(
+    tmp_path, monkeypatch
+):
     import sys
     import types
 
     import deerflow.sp.runtime as native
 
     from dcc_harness.datasets.benchmark_plugins import BenchmarkPlugin
-    from scripts import evaluate_sp_benchmarks as cli
+    from scripts import infer_sp_benchmarks as cli
 
     skills = tmp_path / "skills" / "public" / "third"
     skills.mkdir(parents=True)
-    (skills / "SKILL.md").write_text("---\nname: third\ndescription: Process public third records.\n---\nRead supplied public records.\n", encoding="utf-8")
+    (skills / "SKILL.md").write_text(
+        "---\nname: third\ndescription: Process public third records.\n---\nRead supplied public records.\n",
+        encoding="utf-8",
+    )
     extension = types.ModuleType("test_cli_third_plugin")
-    extension.plugin = BenchmarkPlugin("third", lambda sample: sample.prompt, lambda sample, thread_id: {}, skills.parents[1], parse_answer=lambda sample, text: text, score_task=lambda sample, text, judge=None: {"accuracy": float(text == sample.gold)})
+    extension.plugin = BenchmarkPlugin(
+        "third",
+        lambda sample: sample.prompt,
+        lambda sample, thread_id: {},
+        skills.parents[1],
+        parse_answer=lambda sample, text: text,
+        score_task=lambda sample, text, judge=None: {
+            "accuracy": float(text == sample.gold)
+        },
+    )
     monkeypatch.setitem(sys.modules, extension.__name__, extension)
     monkeypatch.setenv("DCC_MODEL_API_KEY", "PRIVATE_API_KEY")
     inputs = tmp_path / "third.jsonl"
-    inputs.write_text(json.dumps(Task("third-id", "third", "validation", "Public question", gold="Public answer").to_dict()), encoding="utf-8")
+    inputs.write_text(
+        json.dumps(
+            Task(
+                "third-id",
+                "third",
+                "validation",
+                "Public question",
+                gold="Public answer",
+            ).to_dict()
+        ),
+        encoding="utf-8",
+    )
 
     class Graph:
         async def astream(self, inputs, **kwargs):
             yield "values", finished(sp_last_run_summary="Public answer")
 
     monkeypatch.setattr(native, "make_sp_agent", lambda config, app_config: Graph())
-    args = cli.parser().parse_args(["--tasks", str(inputs), "--run-dir", str(tmp_path / "run"), "--dataset-source", "third-public-dev", "--dataset-plugin", "test_cli_third_plugin:plugin", "--base-url", "http://unused", "--model", "scripted", "--exact-proxy"])
+    args = cli.parser().parse_args(
+        [
+            "--tasks",
+            str(inputs),
+            "--run-dir",
+            str(tmp_path / "run"),
+            "--dataset-source",
+            "third-public-dev",
+            "--dataset-plugin",
+            "test_cli_third_plugin:plugin",
+            "--base-url",
+            "http://unused",
+            "--model",
+            "scripted",
+        ]
+    )
     assert asyncio.run(cli.main_async(args)) == 0
     args.resume = True
     assert asyncio.run(cli.main_async(args)) == 0
@@ -1334,6 +1642,8 @@ def test_cli_loads_a_third_dataset_plugin_and_records_its_identity(tmp_path, mon
     manifest = json.loads(manifest_text)
     assert "PRIVATE_API_KEY" not in manifest_text
     assert set(manifest["dataset_plugins"]) == {"third"}
-    assert [skill["name"] for skill in manifest["dataset_plugins"]["third"]["skills"]] == ["third"]
+    assert [
+        skill["name"] for skill in manifest["dataset_plugins"]["third"]["skills"]
+    ] == ["third"]
     report = json.loads((tmp_path / "run/report.json").read_text(encoding="utf-8"))
-    assert report["third"]["accuracy"] == 1.0 and report["dataset_source"] == "third-public-dev"
+    assert report["complete_split"] and report["dataset_source"] == "third-public-dev"

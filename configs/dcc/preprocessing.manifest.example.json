@@ -1,0 +1,15 @@
+{
+  "loader": "manifest",
+  "loader_options": {"source": "samples.jsonl"},
+  "processors": [],
+  "prompts": {"datasets": {}, "samples": {}},
+  "ragflow": {
+    "base_url": "https://v262-min-ragflow.pkubir.cn",
+    "dataset_prefix": "dcc-custom",
+    "check_embedding_models": true,
+    "knowledge_base_scope": "sample",
+    "dataset_options": {"chunk_method": "naive", "parser_config": {"chunk_token_num": 512}},
+    "poll_interval": 3,
+    "parse_timeout": 1800
+  }
+}

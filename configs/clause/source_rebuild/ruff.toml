@@ -1,0 +1,3 @@
+# Frozen release files must retain their authenticated byte content.
+extend-exclude = ["templates"]
+force-exclude = true
