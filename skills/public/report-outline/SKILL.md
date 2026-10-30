@@ -277,8 +277,13 @@ contains all tree fields, including `report_title`, `requirements`, `nodes`,
 `feedback_dispositions`, and `draft_dispositions`; do not write only `nodes`.
 For a tree larger than one model output, write the first chunk with
 `append=False`, then use `append=True` for later chunks after reading the
-current file with `read_file` (the normal read-after-write contract). Never omit
-an awaiting gap or a required field just to shorten the output. Finish with
+current file with `read_file` (the normal read-after-write contract). Leave the
+nodes array and root object unclosed until the final chunk; only the final chunk
+should close them. If the current file already parses as a complete tree but is
+missing accepted nodes, read it and overwrite it with the full corrected tree
+instead of appending after the closing `]`/`}`. Complete JSON is not by itself
+acceptance: a complete file that omits accepted nodes is still rejected. Never
+omit an awaiting gap or a required field just to shorten the output. Finish with
 valid full JSON in the file, then return `artifact_content=null` and
 `artifact_metadata.delivery_mode="file"` with the `tree_path`/`created_paths`
 reference. The delivery file contains only the tree object; never write

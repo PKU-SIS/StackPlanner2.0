@@ -495,9 +495,11 @@ def prepare_delegation(
             requires_file = isinstance(protocol_error, Mapping) and bool(protocol_error.get("outline_delivery_required"))
             instruction = (
                 "Prefer file delivery from this first Outline attempt. Write the complete tree JSON to "
-                "this host-assigned path using write_file; use append=True for later chunks and read_file "
-                "before appending. Do not try to fit a large tree into one response. Return "
-                "artifact_content=null and this path in artifact_metadata."
+                "this host-assigned path using write_file; for later chunks use append=True after reading the "
+                "current file before each append, and leave the nodes array/root unclosed until the final chunk. "
+                "If the current file is already complete JSON but is missing accepted nodes, read it and overwrite "
+                "the full corrected tree instead of appending after its closing brackets. Do not try to fit a large "
+                "tree into one response. Return artifact_content=null and this path in artifact_metadata."
             )
             if ledger.has_any_returned_gap_research():
                 instruction += (
@@ -510,9 +512,12 @@ def prepare_delegation(
             if requires_file:
                 instruction = (
                     "This Outline retry requires file delivery. Write the complete tree JSON to this "
-                    "host-assigned path using write_file; use append=True for later chunks and read_file "
-                    "before appending. Do not return the tree inline and do not omit any awaiting_outline "
-                    "gap from gap_outcomes. Return artifact_content=null and this path in artifact_metadata."
+                    "host-assigned path using write_file; for later chunks use append=True after reading the "
+                    "current file before each append, and leave the nodes array/root unclosed until the final chunk. "
+                    "If the current file is already complete JSON but is missing accepted nodes, read it and overwrite "
+                    "the full corrected tree instead of appending after its closing brackets. Do not return the tree "
+                    "inline and do not omit any awaiting_outline gap from gap_outcomes. Return "
+                    "artifact_content=null and this path in artifact_metadata."
                 )
             rejected = ledger.payload.get("rejected_outline")
             if report_task in {"plan", "revise"} and isinstance(rejected, Mapping):
