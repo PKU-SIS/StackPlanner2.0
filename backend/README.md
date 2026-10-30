@@ -56,6 +56,27 @@ and test acceptance rules; the task kind is preserved during recovery. Data
 processing retains its validated execution tools even when no source patch is
 required; software inspection stages keep their existing read-only restrictions. Reporter
 language checks apply to narrative text, excluding source tables, code, and URLs.
+Execution checks distinguish literal `|` characters in quoted arguments and data
+script heredocs from shell pipelines. Pipelines without `pipefail` and commands
+that mask exit status remain unverified; ambiguous nested shell syntax keeps the
+conservative check.
+
+Data-producing delegations that also read or inspect inputs retain Coder;
+only read-only local inspection is routed to Perception. Incomplete reports
+route explicit source/evidence gaps to Researcher and missing data execution
+to Coder, then return to Reporter with the draft and new evidence references.
+Existing software recovery retains its software acceptance contract. Recovery
+limits remain bounded. If the user explicitly forbids questions, exhausted
+report recovery ends with an incomplete draft and unresolved gaps, rather than
+requesting human input or marking a partial artifact complete. Interactive
+requests retain human escalation. Incomplete outcomes still require a later
+successful native FINISH before benchmark scoring.
+
+The local host-bash path guard recognizes Python division and literal regex
+arguments in supported Python `-c`/heredoc commands and `.py` heredoc writes,
+simple `sed -n '/pattern/p'` expressions, and relative `./` paths. Actual file
+path literals, traversal, shell substitution and unrecognized syntax retain
+the conservative checks. Host bash remains opt-in and is not container isolation.
 
 ### Middleware Chain
 

@@ -140,7 +140,7 @@ _CODER_MUTATION_PATTERN = re.compile(
     r"(?:"
     r"实现|修改|编辑|写入|创建|生成|运行|执行|测试|构建"
     r"|\bimplement\b|\bmodify\b|\bedit\b|\bwrite\b|\bcreate\b|\bgenerate\b|"
-    r"\brun\b|\bexecute\b|\btest\b|\bbuild\b"
+    r"\brun\b|\bexecute\b|\btest\b|\bbuild\b|\bproduce\b|\bemit\b|\bsave\b"
     r")",
     re.IGNORECASE,
 )
@@ -772,6 +772,45 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         return isinstance(implementation, Mapping) and implementation.get("passed") is True
 
     @classmethod
+    def _report_recovery_target(cls, state: Mapping[str, Any]) -> str:
+        latest = cls._latest_delegate_observation(state)
+        if latest is not None and latest.actor != "reporter":
+            # Resume synthesis only after the capability that was missing has
+            # finished. A partial research result must not bounce to reporter.
+            if latest.metadata.get("completion_status") in {"partial", "blocked"}:
+                return str(latest.metadata.get("target_agent") or latest.actor)
+            return "reporter"
+        report = cls._incomplete_current_report(state)
+        metadata = report.get("metadata", {}) if report else {}
+        gaps = metadata.get("evidence_gaps") or (latest.metadata.get("evidence_gaps", []) if latest else [])
+        text = "; ".join(str(gap) for gap in gaps)
+        if re.search(
+            r"HTTP\s*(?:403|404|429)|web_fetch|web_search|external\s+sources?|(?:re-?fetch|re-?verif|live-verif)|"
+            r"(?:no|missing|lack\w*).{0,48}(?:source|factual evidence)|(?:缺少|缺乏|未找到).{0,48}(?:来源|事实证据)|外部来源|重新检索|补充证据",
+            text,
+            re.I,
+        ):
+            return "researcher"
+        if re.search(r"(?:script|calculation|data.processing).{0,64}(?:not executed|not validated|execution|assertion)|脚本.{0,32}(?:未执行|执行失败)|计算.{0,16}(?:错误|未验证)", text, re.I):
+            return "coder"
+        return "reporter"
+
+    @classmethod
+    def _allows_human_recovery(cls, state: Mapping[str, Any]) -> bool:
+        latest = cls._latest_visible_human_message(state)
+        text = message_to_text(latest) if latest is not None else ""
+        return not re.search(r"\b(?:do not|don't|don’t)\s+ask\s+(?:me\s+)?(?:any\s+)?(?:(?:follow-up|clarifying|further)\s+)?questions?\b|(?:不要|不用|无需)(?:再)?(?:向我|问我|问问题|询问|提问)", text, re.I)
+
+    @classmethod
+    def _report_recovery_budget(cls, state: Mapping[str, Any]) -> tuple[str, int, int]:
+        attempts = cls._reporter_attempt_count(state)
+        target = cls._report_recovery_target(state)
+        if target == "reporter" or attempts >= SP_REPORT_RECOVERY_MAX_ATTEMPTS:
+            return "reporter", attempts, SP_REPORT_RECOVERY_MAX_ATTEMPTS
+        latest = cls._latest_delegate_observation(state, target_agent=target)
+        return target, cls._delegate_attempt_count(state, target), cls._delegate_recovery_limit(latest)
+
+    @classmethod
     def _artifact_recovery_instruction(cls, state: Mapping[str, Any]) -> str:
         partial_observation = cls._latest_partial_report_observation(state)
         incomplete_report = cls._incomplete_current_report(state)
@@ -779,6 +818,13 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             (ref for ref in cls._artifact_candidates(state) if str(ref.get("type") or "") in _REPORT_ARTIFACT_TYPES and ref.get("is_current", True)),
             None,
         )
+        active = cls._latest_delegate_observation(state)
+        if active is not None and active.actor != "reporter" and active.metadata.get("completion_status") in {"partial", "blocked"}:
+            # Preserve the existing specialist's acceptance contract, especially
+            # software implementation/verification. Report recovery resumes
+            # only once that work has completed.
+            incomplete_report = None
+            partial_observation = None
         if incomplete_report is not None or partial_observation is not None:
             recovery_report = incomplete_report or latest_report
             artifact_id = str(recovery_report.get("artifact_id") or "").strip() if recovery_report is not None else ""
@@ -793,6 +839,36 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                     gaps = [partial_observation.failure_note]
             gap_text = "; ".join(gaps) if gaps else "the report quality gate is still incomplete"
             input_ref_text = f'input_refs=["{artifact_id}"], ' if artifact_id else ""
+            target = cls._report_recovery_target(state)
+            if target != "reporter":
+                stage = {"researcher": "research", "coder": "implementation", "perception": "perception", "outline": "planning"}[target]
+                latest = cls._latest_delegate_observation(state)
+                refs = list(dict.fromkeys(ref for ref in [artifact_id, latest.result_ref if latest else None] if ref))
+                metadata = ', metadata={"coder_task_kind": "data_processing", "requires_implementation": false}' if target == "coder" else ""
+                if target == "coder":
+                    previous_coder = cls._latest_delegate_observation(state, target_agent="coder")
+                    if previous_coder is not None and not is_data_processing_coder(previous_coder.metadata):
+                        # A report mentioning missing test evidence must not
+                        # downgrade the software task that produced its patch.
+                        stage = "verification" if previous_coder.metadata.get("completion_status") == "complete" else "implementation"
+                        contract = {"coder_task_kind": "software_change", "verification_only": stage == "verification"}
+                        if stage == "verification":
+                            contract["requires_implementation"] = False
+                        metadata = f", metadata={json.dumps(contract)}"
+                        if previous_coder.result_ref:
+                            refs = list(dict.fromkeys([*refs, previous_coder.result_ref]))
+                return (
+                    "<sp-artifact-recovery-required>\n"
+                    f'The report lacks evidence this role must obtain. Call sp_delegate exactly once with target_agent="{target}", '
+                    f'stage="{stage}", input_refs={json.dumps(refs)}{metadata}. Resolve: {gap_text}. '
+                    "Use the full referenced artifacts and preserve valid existing work. Return new evidence and its sources in an artifact, "
+                    "with remaining gaps explicitly recorded. Do not require software edits for data processing. "
+                    "After evidence is obtained, delegate reporter to revise the report using both the report and new evidence refs. "
+                    "Do not call FINISH while the report remains incomplete.\n</sp-artifact-recovery-required>"
+                )
+            latest = cls._latest_delegate_observation(state)
+            if artifact_id and latest is not None and latest.actor != "reporter" and latest.result_ref:
+                input_ref_text = f"input_refs={json.dumps(list(dict.fromkeys([artifact_id, latest.result_ref])))}, "
             return (
                 "<sp-artifact-recovery-required>\n"
                 "The previous report attempt cannot be finalized because the current report "
@@ -985,7 +1061,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 )
             return request.override(tools=active_tools, messages=messages)
         completed_deliverable = self._completed_deliverable_from_previous_delegate(state)
-        if completed_deliverable is not None:
+        if completed_deliverable is not None and self._incomplete_current_report(state) is None:
             if self._requires_independent_code_verification(completed_deliverable):
                 active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) == "sp_delegate"]
                 messages = list(request.messages)
@@ -1054,9 +1130,10 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         # arbitrary actions; only a newer complete observation clears it.
         delegate_incomplete = latest_delegate_status in {"partial", "blocked"}
         code_recovery = bool(delegate_incomplete and latest_delegate_observation is not None and str(latest_delegate_observation.metadata.get("target_agent") or latest_delegate_observation.actor or "") == "coder")
-        reporter_attempts = self._reporter_attempt_count(state)
-        if incomplete_current_report is not None and reporter_attempts >= SP_REPORT_RECOVERY_MAX_ATTEMPTS:
-            active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) == "sp_ask_human"]
+        recovery_role, recovery_attempts, recovery_limit = self._report_recovery_budget(state)
+        if incomplete_current_report is not None and recovery_attempts >= recovery_limit:
+            allow_human = self._allows_human_recovery(state)
+            active_tools = [candidate for candidate in request.tools if allow_human and getattr(candidate, "name", None) == "sp_ask_human"]
             messages = list(request.messages)
             if not any(getattr(message, "name", None) == _SP_REPORT_RECOVERY_EXHAUSTED_MESSAGE_NAME for message in messages):
                 metadata = incomplete_current_report.get("metadata")
@@ -1069,14 +1146,18 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                         content=(
                             "<sp-report-recovery-exhausted>\n"
                             "The report reached the bounded recovery limit "
-                            f"({SP_REPORT_RECOVERY_MAX_ATTEMPTS} reporter "
+                            f"({recovery_attempts} {recovery_role} "
                             "attempts) "
                             "and must not be delegated again in this run. "
-                            "Call sp_ask_human exactly once, briefly explain "
-                            "that the latest partial artifact was retained, "
-                            "state the unresolved quality gap, and ask for "
-                            "the minimum decision or evidence needed to "
-                            "continue. Match the latest visible user's "
+                            + (
+                                "Call sp_ask_human exactly once, briefly explain "
+                                if allow_human
+                                else f"End with an explicit incomplete status, without asking questions or claiming success. Preserve the draft reference {incomplete_current_report.get('artifact_id')}. Briefly explain "
+                            )
+                            + "that the latest partial artifact was retained, "
+                            "state the unresolved quality gap. "
+                            + ("Ask for the minimum decision or evidence needed to continue. " if allow_human else "Do not present the incomplete draft as an accepted final deliverable. ")
+                            + "Match the latest visible user's "
                             f"language. Unresolved gap: {gap_text}\n"
                             "</sp-report-recovery-exhausted>"
                         ),
@@ -1197,7 +1278,10 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
 
         requires_artifact = cls._requires_artifact_delivery(state)
         observation = cls._latest_delegate_observation(state)
-        if observation is None or observation.actor == "reporter":
+        if observation is None:
+            return None
+        _, report_attempts, report_limit = cls._report_recovery_budget(state)
+        if observation.actor == "reporter" and (cls._allows_human_recovery(state) or report_attempts < report_limit):
             return None
         completion_status = str(observation.metadata.get("completion_status") or "").strip().lower()
         if completion_status not in {"partial", "blocked"}:
@@ -1206,7 +1290,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         # Code tasks need the same completion gate even when the user did not
         # ask for a downloadable file. Otherwise a coder that failed to run
         # tests can still be followed by a natural-language final answer.
-        if not requires_artifact and target_agent != "coder":
+        if not requires_artifact and target_agent not in {"coder", "reporter"}:
             return None
         if requires_artifact and cls._has_finalizable_artifact(state):
             return None
@@ -1221,9 +1305,11 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         attempts = cls._delegate_attempt_count(
             state,
             target_agent,
-            stage=str(observation.stage or "") or None,
+            stage=None if target_agent == "reporter" else str(observation.stage or "") or None,
         )
         recovery_limit = cls._delegate_recovery_limit(observation)
+        if target_agent == "reporter":
+            attempts, recovery_limit = report_attempts, report_limit
         raw_gaps = observation.metadata.get("evidence_gaps")
         gaps = [str(value).strip() for value in raw_gaps or [] if str(value).strip()]
         if not gaps and observation.failure_note:
@@ -1235,6 +1321,9 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         draft_text = message_to_text(latest).strip()
 
         if attempts >= recovery_limit:
+            report = cls._incomplete_current_report(state)
+            if report is not None:
+                gap_text += f"; retained incomplete draft: {report.get('artifact_id')}"
             if use_chinese:
                 content = f"以下是已保留的未验证草稿，仅供参考，不代表产物已通过验证：\n\n{draft_text}\n\n---\n验证状态：本轮已达到 {attempts} 次恢复上限。未解决问题：{gap_text}。请稍后重试或缩小修复范围。"
             else:
@@ -1584,7 +1673,7 @@ def _normalize_delegate_target(payload: dict[str, Any]) -> tuple[str, str | None
     if _PURE_REPORT_DELEGATION_PATTERN.search(text):
         payload["target_agent"] = "reporter"
         return "reporter", "pure_report_synthesis"
-    if _LOCAL_DOCUMENT_INSPECTION_PATTERN.search(text):
+    if _LOCAL_DOCUMENT_INSPECTION_PATTERN.search(text) and not _CODER_MUTATION_PATTERN.search(text):
         payload["target_agent"] = "perception"
         return "perception", "local_document_inspection"
     return target_agent, None
