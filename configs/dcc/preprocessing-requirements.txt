@@ -1,0 +1,3 @@
+# Lightweight offline preprocessing + RAGFlow HTTP; native SP has its own runtime.
+pyarrow>=18
+requests>=2.32,<3

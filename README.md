@@ -26,6 +26,16 @@ tables, code, identifiers, and URLs.
 > does not include deployment credentials, private experiment traces, or hosted
 > model keys. Configure providers locally through `.env` and `config.yaml`.
 
+DCC document screening inputs can be prepared independently of the agent runtime:
+[`scripts/dcc_preprocess.py`](scripts/dcc_preprocess.py) provides pluggable loaders,
+preprocessing, resumable RAGFlow indexing with a dedicated knowledge base per
+sample, layered prompt files, and a native SP input/tool plugin. FinAuditing and
+generic JSONL loaders are included. See
+[DCC implementation overview](docs/DCC_PREPROCESSING_SUMMARY.md) and the
+[DCC preprocessing setup and extension guide](docs/DCC_PREPROCESSING.md).
+The DCC adapter uses the v3 PublicTask and native file-staging contract; rerun
+task rendering after upgrading, while keeping the existing per-sample indexes.
+
 ## Why SP2.0
 
 SP2.0 separates **decision making** from **tool execution**:

@@ -1,0 +1,25 @@
+{
+  "loader": "finauditing",
+  "loader_options": {
+    "source": "/home/qiuzh/work/benchmark_datasets/FinAuditing",
+    "tasks": ["FinRE", "FinMR", "FinSM"]
+  },
+  "processors": [],
+  "prompts": {"datasets": {}, "samples": {}},
+  "ragflow": {
+    "base_url": "https://v262-min-ragflow.pkubir.cn",
+    "api_key_env": "RAGFLOW_API_KEY",
+    "api_key_file_env": "RAGFLOW_API_KEY_FILE",
+    "check_embedding_models": true,
+    "knowledge_base_scope": "sample",
+    "dataset_prefix": "dcc-finauditing",
+    "dataset_options": {
+      "chunk_method": "naive",
+      "parser_config": {"chunk_token_num": 512, "delimiter": "\n", "auto_keywords": 0, "auto_questions": 0}
+    },
+    "http_timeout": 60,
+    "poll_interval": 3,
+    "parse_timeout": 1800,
+    "parse_batch_size": 32
+  }
+}

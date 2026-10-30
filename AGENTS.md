@@ -139,6 +139,34 @@ machine-wide HTTP proxy.
 - Security policy → **[SECURITY.md](SECURITY.md)**
 - Changes → **[CHANGELOG.md](CHANGELOG.md)**
 
+## DCC input preprocessing
+
+`dcc_harness/preprocessing/` is the independent data ingestion layer, with
+`Sample`/`Asset` contracts, trusted `module:function` loader/processor extensions,
+content-addressed public assets, separate private labels, a resumable RAGFlow
+index ledger, and file-based prompt composition. The CLI is
+`scripts/dcc_preprocess.py`; configuration/prompt/Skill examples are under
+`configs/dcc/`. See `docs/DCC_PREPROCESSING.md` for the artifact contract.
+
+The optional `dcc_harness.preprocessing.native:make_plugin` uses the existing
+`BenchmarkPlugin` interface. It stages public rules/context per user/thread and
+registers sample-scoped `ragflow_retrieve`; each independent sample owns a
+dedicated RAGFlow knowledge base, including samples from the same source dataset
+or with identical document bytes. Related documents within one sample may share
+its base. Index schema v2 rejects the old shared-dataset ledger. The adapter does
+not modify the native agent loop and intentionally has no scorer yet. Keep private gold/source metadata and
+credentials out of uploads, prompts, and RAGFlow documents. Never broaden a
+sample's document IDs on an empty retrieval result.
+Builders consume only PublicTask and use native stage_files/build_inputs.
+Rendered files carry a public retrieval context and rules with neutral names;
+record IDs, split and source paths stay in host-side manifests. After upgrading
+the input contract, rerun render; indexing and the existing per-sample bases stay valid.
+
+Run `python -m pytest tests/test_dcc_preprocessing.py -q`; with native SP
+dependencies also run `tests/test_dcc_native.py --no-sp-runtime`. Use `ruff check` and `ruff format`
+on changed Python files. Live indexing requires an explicit RAGFlow key supplied
+by environment or a private file; keep generated bundles outside the source tree.
+
 ## Cross-Cutting Conventions
 
 These apply repo-wide; module guides own the module-specific detail.
