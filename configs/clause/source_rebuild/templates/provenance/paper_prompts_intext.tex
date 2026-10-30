@@ -1,0 +1,123 @@
+\begin{tcolorbox}[breakable,colback=lightestgray,colframe=black,title=\textbf{Eval\_3 L1: In-Text Discrepancy Detection Prompt}]
+You are a senior U.S. attorney and contract analyst.
+
+\subsection*{\textbf{Task:}}
+Read the following legal document in full. Check and detect whether the document contains any intext discrepancies/contradictions in it.
+
+\subsection*{\textbf{Definitions of intext discrepancy/contradiction:}}
+\textbf{In Text Contradiction:} a statement, clause, term, or definition that conflicts with, negates, or is irreconcilable with another part of the \textbf{same} document.
+
+There are five primary categories of intext discrepancies. Their definitions are provided below:
+
+\subsection*{\textbf{Discrepancy Categories:}}
+
+\textbf{Ambiguities:}
+An ambiguity discrepancy occurs when a contract's language is so vague, indeterminate, or open to multiple reasonable interpretations that it either (a) creates internal conflict within the document—where different sections or clauses can be read in mutually incompatible ways—or (b) fails to meet the clarity standards mandated by a specific U.S. statute, regulation, law, or controlling case, thereby placing the clause in conflict with applicable legal requirements.
+
+\textbf{Inconsistencies:}
+An inconsistency discrepancy arises when a contract contains conflicting deadlines, obligations, or penalties—either within different sections of the document itself or between the contract and applicable legal standards. These contradictions can create uncertainty about which terms should be enforced or may render certain provisions unenforceable if they violate federal or state laws.
+
+\textbf{Misaligned Terminology:}
+A misaligned terminology discrepancy occurs when a contract uses different or undefined terms inconsistently—either by employing multiple terms interchangeably within the document, creating internal contradictions and conflicting obligations, or by deviating from legally established definitions, resulting in non-compliance with statutory or regulatory standards that can render the contract unenforceable.
+
+\textbf{Omissions:}
+An omission discrepancy arises when a required term, clause, definition, or disclosure is missing, incomplete, or left undefined—either when it is referenced elsewhere in the contract, causing internal inconsistency, or when its absence violates specific U.S. legal requirements, such as statutory mandates, regulatory disclosures, or protective safeguards.
+
+\textbf{Structural Flaws:}
+A structural flaw discrepancy occurs when the organization or placement of clauses within a contract undermines its clarity, coherence, or legal validity—such as when the same clause appears in multiple sections with conflicting implications, or when a legally required disclosure is positioned in a misleading or irrelevant part of the document, making it difficult for parties to locate, interpret, or enforce the intended obligations.
+
+The document may contain in-text discrepancies belonging to any of the five defined types. Your task is to identify all such discrepancies and present them strictly in the output format specified below:
+
+\subsection*{\textbf{Output Format:}}
+Return \textbf{exactly} one JSON array—no markdown, no commentary—where each object includes:
+\begin{itemize}
+    \item \texttt{"text"}: the exact sentence(s) or phrase that contains the issue
+    \item \texttt{"explanation"}: clear detailed reasoning—what it contradicts and why it is a discrepancy
+\end{itemize}
+
+\textbf{Example output shape:}
+{\small
+\texttt{[\\\\
+\{\\\\
+``text'': ``<exact sentence(s) or phrase with the issue>'',\\\\
+``explanation'': ``<clear, detailed reason: what it contradicts and why it is a problem>''\\\\
+\},\\\\
+... (one object per discrepancy) ...\\\\
+]}
+}
+
+\subsection*{\textbf{Rules:}}
+\begin{itemize}
+    \item Include \textbf{all} discrepancies you find.
+    \item Assign the most appropriate \texttt{``main\_type''} and \texttt{``sub\_type''} to each discrepancy.
+    \item If no discrepancy exists, return an empty array: \texttt{[]}.
+    \item Do NOT wrap the JSON in markdown and do NOT add any extra keys or commentary.
+\end{itemize}
+\end{tcolorbox}
+
+% --- L2 ---
+
+\begin{tcolorbox}[breakable,colback=lightestgray,colframe=black,title=\textbf{Eval\_3 L2: In-Text Discrepancy Detection Prompt}]
+You are a senior U.S. attorney and contract analyst.
+
+\subsection*{\textbf{Task:}}
+Read the following legal document in full. Check and detect whether the document contains any intext discrepancies/contradictions in it.
+
+\subsection*{\textbf{Definitions of intext discrepancy/contradiction:}}
+\textbf{In-Text Contradiction:} a statement, clause, term, or definition that conflicts with, negates, or is irreconcilable with another part of the \textbf{same} document.
+
+There are five primary categories of intext discrepancies. Their definitions are provided below:
+
+\subsection*{\textbf{Discrepancy Categories:}}
+
+\textbf{Ambiguities:}
+An ambiguity discrepancy occurs when a contract's language is so vague, indeterminate, or open to multiple reasonable interpretations that it either (a) creates internal conflict within the document—where different sections or clauses can be read in mutually incompatible ways—or (b) fails to meet the clarity standards mandated by a specific U.S. statute, regulation, law, or controlling case, thereby placing the clause in conflict with applicable legal requirements.
+
+\textbf{Inconsistencies:}
+An inconsistency discrepancy arises when a contract contains conflicting deadlines, obligations, or penalties—either within different sections of the document itself or between the contract and applicable legal standards. These contradictions can create uncertainty about which terms should be enforced or may render certain provisions unenforceable if they violate federal or state laws.
+
+\textbf{Misaligned Terminology:}
+A misaligned terminology discrepancy occurs when a contract uses different or undefined terms inconsistently—either by employing multiple terms interchangeably within the document, creating internal contradictions and conflicting obligations, or by deviating from legally established definitions, resulting in non-compliance with statutory or regulatory standards that can render the contract unenforceable.
+
+\textbf{Omissions:}
+An omission discrepancy arises when a required term, clause, definition, or disclosure is missing, incomplete, or left undefined—either when it is referenced elsewhere in the contract, causing internal inconsistency, or when its absence violates specific U.S. legal requirements, such as statutory mandates, regulatory disclosures, or protective safeguards.
+
+\textbf{Structural Flaws:}
+A structural flaw discrepancy occurs when the organization or placement of clauses within a contract undermines its clarity, coherence, or legal validity—such as when the same clause appears in multiple sections with conflicting implications, or when a legally required disclosure is positioned in a misleading or irrelevant part of the document, making it difficult for parties to locate, interpret, or enforce the intended obligations.
+
+\subsection*{\textbf{Example of in-text contradiction/discrepancy}}
+
+{\footnotesize
+\texttt{\{\\\\
+``original\_text'': ``1. DEFINITIONS. (a) `CONTENT' means all content or information, in any medium, provided by a party to the other party for use in conjunction with the performance of its obligations hereunder, including without limitation any text, music, sound, photographs, video, graphics, data or software. Content provided by 2TheMart is referred to herein as `2TheMart Content' and content provided by i-Escrow is referred to herein as `i-Escrow Content.'',\\\\
+``changed\_text'': ``1. DEFINITIONS. (a) `CONTENT' means all content or information, in any medium, provided by a party to the other party for use in conjunction with the performance of its obligations hereunder, **including only text and images**. Content provided by 2TheMart is referred to herein as `2TheMart Content' and content provided by i-Escrow is referred to herein as `i-Escrow Content.'',\\\\
+``explanation'': ``The revised definition limits `CONTENT' to text and images, whereas Section 6.1 later grants rights to `publicly perform' and `digitally perform' 2TheMart Content—language that presumes audio, video, or other media. The conflicting scopes create an ambiguity-driven in-text contradiction.'',\\\\
+\}}
+}
+
+\textbf{Expected JSON entry:}
+{\small
+\texttt{[\\\\
+\{\\\\
+``text'': ``\`CONTENT\` means all content or information, in any medium, provided by a party to the other party for use in conjunction with the performance of its obligations hereunder, **including only text and images**. Content provided by 2TheMart is referred to herein as \`2TheMart Content\` and content provided by i-Escrow is referred to herein as \`i-Escrow Content.\`,\\\\
+``explanation'': ``Definition excludes audio/video, yet Section 6.1 authorizes public/digital performance—an implicit reference to multimedia—so the provisions conflict.''\\\\
+\}\\\\
+]}
+}
+
+The document may contain in-text discrepancies belonging to any of the five defined types. Your task is to identify all such discrepancies and present them strictly in the output format specified below:
+
+\subsection*{\textbf{Output Format:}}
+Return \textbf{exactly} one JSON array—no markdown, no commentary—where each object includes:
+\begin{itemize}
+    \item \texttt{"text"}: the exact sentence(s) or phrase that contains the issue
+    \item \texttt{"explanation"}: clear detailed reasoning—what it contradicts and why it is a discrepancy
+\end{itemize}
+
+\subsection*{\textbf{Rules:}}
+\begin{itemize}
+    \item Include \textbf{all} discrepancies you find.
+    \item If no discrepancy exists, return an empty array: \texttt{[]}.
+    \item Do NOT wrap the JSON in markdown and do NOT add any extra keys or commentary.
+\end{itemize}
+\end{tcolorbox}

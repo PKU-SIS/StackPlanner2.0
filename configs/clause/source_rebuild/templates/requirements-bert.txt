@@ -1,0 +1,7 @@
+-r requirements.txt
+bert-score==0.3.13
+transformers==4.44.2
+huggingface-hub==0.25.2
+safetensors==0.4.5
+# Install the PyTorch build matching your server/CUDA first.
+torch>=2.6,<3

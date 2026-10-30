@@ -979,3 +979,35 @@ Your unwavering commitment and expertise have been the driving force behind Deer
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.com/#bytedance/deer-flow&Date)
+
+### Benchmark plugins: separate inference and evaluation
+
+DCC v3 supports native SP2 benchmark inference and independent offline evaluation.
+Run `scripts/infer_sp_benchmarks.py` to collect final deliveries, then
+`scripts/evaluate_sp_benchmarks.py` to score an existing run. Input adapters receive
+only public tasks and staged UTF-8 files; labels and private metadata stay with
+the evaluator. Plugins own their scoring and aggregation, including CUAD AUPR.
+The former combined evaluation command is now evaluation-only; v2 run directories
+are not silently resumed as v3. See the [benchmark guide](docs/dcc_harness.md) for
+commands, plugin interfaces, completeness rules, and tests that do not execute SP2.
+
+CLAUSE **EVAL3 In-Text (文本内部)** is available as the built-in `clause` plugin.
+It audits internal discrepancies in complete contracts; the fixed custom split
+contains 500 test documents and 1,809 annotated defects. CUAD retains its existing
+input and AUPR protocol.
+
+Start with the **[CLAUSE collaborator quickstart](docs/clause_quickstart.md)** for
+environment setup, reproducible data downloads, model configuration, inference,
+and independent seven-metric evaluation. The [protocol reference](docs/clause_benchmark.md)
+explains input isolation, alignment, aggregation, and diagnostic modes.
+
+```bash
+# Run from the repository root; generates local data, without invoking SP2.
+python -B scripts/dcc_prepare_clause.py --download
+```
+
+Only reconstruction code and frozen manifests/prompts/checksums are versioned;
+contracts, annotations, generated task lists, NLTK and model weights stay local.
+The protocol is `intext-yes-whole-document-v1 / sp2-files`, not the paper's official
+split or a claim of reproduced model scores. Development checks cover source reconstruction, input isolation and offline scoring;
+use the `--no-sp-runtime` test option when SP execution must be excluded.

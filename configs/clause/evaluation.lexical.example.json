@@ -1,0 +1,6 @@
+{
+  "clause": {
+    "resource_root": ".benchmark-data/clause/resources",
+    "without_bert": true
+  }
+}

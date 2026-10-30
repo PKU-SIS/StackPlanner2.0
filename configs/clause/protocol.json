@@ -1,0 +1,41 @@
+{
+  "protocol": "intext-yes-whole-document-v1",
+  "bundle_sha256": "e6499247c56d737234afee174b9e6ae17db4c81a7c7a4be7439bc317636f8377",
+  "upstream_commit": "c81c6a5251771cab3d9f3d081f71c388957cf936",
+  "splits": {
+    "train": {
+      "documents": 4025,
+      "perturbations": 14604,
+      "manifest_sha256": "4cf061c45a965cea01c274442328b47d2385d21efa8cda2c235272a455b6087e",
+      "ids_sha256": "19777435c5a534be41bcaec5e9e28836677b9fcbd161700c48028e757b9d2539"
+    },
+    "validation": {
+      "documents": 501,
+      "perturbations": 1779,
+      "manifest_sha256": "5bfe53ef6095e36166f3ba041c7cf0ce9ebf7b0f8df428dbbaeefff53785b1e4",
+      "ids_sha256": "d22cee219968b33804db97668c8993257d43f16dad16b5619c5fbb0dabe51997"
+    },
+    "test": {
+      "documents": 500,
+      "perturbations": 1809,
+      "manifest_sha256": "5bc48168400e1ac90407be7adce58d30229c974cf4a2acf2d27f8e7a18ab2958",
+      "ids_sha256": "fa0a9c8a14b697ce01a3e13b35c2faaf2ece5a8ededd1f383695d919e9a241f2"
+    }
+  },
+  "bert": {
+    "repo_id": "FacebookAI/roberta-large",
+    "revision": "722cf37b1afa9454edce342e7895e588b6ff1d59",
+    "num_layers": 17,
+    "rescale_with_baseline": false,
+    "idf": false,
+    "use_fast_tokenizer": false,
+    "weights_sha256": "047c85f0b96269cd62e6f732644f067004eebd95af5b5d35965ae2528f13bf38",
+    "weights_size": 1421700479
+  },
+  "nltk_files": {
+    "corpora/wordnet.zip": "cbda5ea6eef7f36a97a43d4a75f85e07fccbb4f23657d27b4ccbc93e2646ab59",
+    "tokenizers/punkt/PY3/english.pickle": "5cad3758596392364e3be9803dbd7ebeda384b68937b488a01365f5551bb942c",
+    "tokenizers/punkt/english.pickle": "dda37972ae88998a6fd3e3ec002697a6bd362b32d050fda7d7ca5276873092aa"
+  },
+  "package_checksums_sha256": "fd0139a93064c983337b0dd1e03f0af5ef26833b0702329f350bb4f469cd10af"
+}

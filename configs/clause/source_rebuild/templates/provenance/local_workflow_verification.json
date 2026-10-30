@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "upstream_DFS_matching_comparison_cases": 7,
+  "real_rouge_meteor_pairs_compared": 6,
+  "full_500_test_empty_prediction_smoke": true,
+  "real_data_12_document_lexical_diagnostic": true,
+  "missing_invalid_prediction_strict_rejection": true,
+  "test_request_export_records": 500,
+  "trained_punkt_and_wordnet": true,
+  "bert_score_weights_executed": false,
+  "bert_call_signature_only_stubbed_in_upstream_comparison": true,
+  "model_inference_executed": false,
+  "llm_judge_executed": false,
+  "warning": "Synthetic fixtures only; no model benchmark result was produced"
+}

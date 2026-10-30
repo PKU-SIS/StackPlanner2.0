@@ -1,0 +1,10 @@
+-r requirements-lexical.txt
+bert-score==0.3.13
+transformers==4.44.2
+huggingface-hub==0.25.2
+safetensors==0.4.5
+# Choose an appropriate CPU/CUDA PyTorch wheel before installing this file.
+torch>=2.6,<3
+
+# Keep the shared WideSearch evaluator compatible in this optional environment.
+pandas>=2.2,<3

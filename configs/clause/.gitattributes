@@ -1,0 +1,6 @@
+# These release resources are authenticated by byte hashes, including line endings.
+l1_system.txt -text
+l2_system.txt -text
+source_rebuild/templates/** -text -whitespace
+
+# Historical whitespace in authenticated templates is part of their checksum.

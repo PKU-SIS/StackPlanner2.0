@@ -1,0 +1,4 @@
+# CPU lexical metrics only. Recommended Python 3.10/3.11.
+nltk==3.8.1
+rouge-score==0.1.2
+numpy==1.26.4
