@@ -627,11 +627,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
     ) -> int:
         stack = TaskMemoryStack.from_dict(state.get("sp_task_memory"))
         current_run_id = str(state.get("sp_loop_run_id") or "").strip()
-        return sum(
-            1
-            for entry in stack.entries
-            if entry.action == "delegate" and entry.metadata.get("target_agent") == target_agent and (stage is None or str(entry.stage or "") == stage) and (not current_run_id or str(entry.run_id or "") == current_run_id)
-        )
+        return stack.delegate_recovery_attempt_count(target_agent, run_id=current_run_id or None, stage=stage)
 
     @staticmethod
     def _latest_delegate_observation(
@@ -1170,7 +1166,6 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             delegate_attempts = self._delegate_attempt_count(
                 state,
                 target_agent,
-                stage=str(latest_delegate_observation.stage or "") or None,
             )
             delegate_recovery_limit = self._delegate_recovery_limit(latest_delegate_observation)
             if delegate_attempts >= delegate_recovery_limit:
@@ -1305,7 +1300,6 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         attempts = cls._delegate_attempt_count(
             state,
             target_agent,
-            stage=None if target_agent == "reporter" else str(observation.stage or "") or None,
         )
         recovery_limit = cls._delegate_recovery_limit(observation)
         if target_agent == "reporter":

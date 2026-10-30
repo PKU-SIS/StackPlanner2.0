@@ -2029,6 +2029,57 @@ def _thread_state_with_outputs(tmp_path):
     }
 
 
+def test_delegate_recovery_counter_is_owned_by_harness_and_resets_only_on_completion(tmp_path):
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED))
+    router = build_default_action_router(delegate_executor=executor)
+    state = _thread_state_with_outputs(tmp_path)
+    for index, status in enumerate(("partial", "partial", "complete", "partial")):
+        if index:
+            inspection = router.execute(_action(ActionType.THINK, action_id=f"inspect-{index}", task="Inspect the preceding outcome before continuing"), state=state, run_id="r")
+            state.update(inspection.state_update)
+        executor.result = SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Research outcome",
+            artifact_content="Research evidence",
+            artifact_type="research_observation",
+            artifact_metadata={"completion_status": status, "evidence_gaps": ["Required data missing"] if status == "partial" else [], "recovery_attempt": 0},
+        )
+        result = router.execute(_action(ActionType.DELEGATE, action_id=f"research-{index}", target_agent="researcher", task="Retrieve required data", stage="research", metadata={"recovery_attempt": 0}), state=state, run_id="r")
+        state.update(result.state_update)
+        observation = TaskMemoryStack.from_dict(state["sp_task_memory"]).entries[-1]
+        expected = (1, 2, 3, 1)[index]
+        assert observation.metadata["recovery_attempt"] == expected
+        assert state["sp_current_artifact_refs"]["research_observation"]["metadata"]["recovery_attempt"] == expected
+
+
+@pytest.mark.parametrize("blocking_gap", [None, "One mandatory product row is still missing"])
+def test_report_preserves_disclosed_limits_without_waiving_blocking_gaps(tmp_path, blocking_gap):
+    limitation = "Official site returned 403; retailer citations are supplied."
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Table assembled",
+            artifact_content="# Products\n\n| Brand | Product | ABV |\n| --- | --- | --- |\n| Bacardi | Rum | / |\n\nSource limitation: " + limitation,
+            artifact_type="report_revision",
+            artifact_metadata={"completion_status": "partial" if blocking_gap else "complete", "evidence_gaps": [blocking_gap] if blocking_gap else [], "disclosed_limitations": [limitation]},
+        )
+    )
+    router = build_default_action_router(delegate_executor=executor)
+    result = router.execute(
+        _action(ActionType.DELEGATE, action_id="product-report", target_agent="reporter", task="Create the product table. Use '/' for missing information.", stage="reporting"), state=_thread_state_with_outputs(tmp_path), run_id="r"
+    )
+    ref = result.state_update["sp_current_artifact_refs"]["report_revision"]
+    observation = TaskMemoryStack.from_dict(result.state_update["sp_task_memory"]).entries[-1]
+
+    assert ref["metadata"]["disclosed_limitations"] == [limitation]
+    assert observation.metadata["disclosed_limitations"] == [limitation]
+    assert ref["metadata"]["completion_status"] == ("partial" if blocking_gap else "complete")
+    if not blocking_gap:
+        state = {**_thread_state_with_outputs(tmp_path), **result.state_update}
+        finish = router.execute(_action(ActionType.FINISH, action_id="finish-products", task="Product table delivered", metadata={"final_artifact_ref": ref["artifact_id"], "required_artifact_type": "report"}), state=state, run_id="r")
+        assert finish.next_step == "finish"
+
+
 def test_delegate_handler_calls_executor_and_externalizes_large_result(tmp_path):
     executor = FakeSubagentExecutor(
         SPSubagentResult(
@@ -3143,12 +3194,38 @@ def test_reporter_acceptance_guard_allows_unknowns_under_no_data_constraint(
     ref = result.state_update["sp_current_artifact_refs"]["report_revision"]
     grounding = ref["metadata"]["quality_checks"]["no_data_grounding"]
     assert ref["metadata"]["completion_status"] == "complete"
+    assert ref["metadata"]["evidence_gaps"] == []
+    assert ref["metadata"]["disclosed_limitations"] == ["Actual regional values were not provided."]
     assert grounding == {
         "constraint_detected": True,
         "unsupported_claims": [],
         "accepted_as_complete_with_disclosed_gaps": True,
         "passed": True,
     }
+
+
+@pytest.mark.parametrize(
+    ("gaps", "checks"),
+    [
+        (["Actual values were not provided", "The required appendix has not been written"], {}),
+        (["Actual values were not provided; the mandatory appendix has not been written."], {}),
+        (["The mandatory appendix is missing and actual values were not provided."], {}),
+        (["Actual values were not provided"], {"required_appendix": {"passed": False}}),
+        ([], {}),
+    ],
+)
+def test_no_data_report_does_not_clear_an_unmet_deliverable_requirement(tmp_path, gaps, checks):
+    report = "# Report\n\n" + "Actual data was not provided. Values are unknown; recommendations depend on future data. " * 4
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Draft only", artifact_content=report, artifact_type="report_revision", artifact_metadata={"completion_status": "partial", "evidence_gaps": gaps, "quality_checks": checks})
+    )
+    state = {**_thread_state_with_outputs(tmp_path), "messages": [HumanMessage(content="No actual values were provided. Create a report with an appendix.")]}
+
+    result = build_default_action_router(delegate_executor=executor).execute(_action(ActionType.DELEGATE, action_id="missing-appendix", target_agent="reporter", task="Write the report", stage="reporting"), state=state, run_id="r")
+
+    ref = result.state_update["sp_current_artifact_refs"]["report_revision"]
+    assert ref["metadata"]["completion_status"] == "partial"
+    assert ref["metadata"]["evidence_gaps"] == gaps
 
 
 def test_reporter_acceptance_guard_rejects_english_report_for_chinese_request(

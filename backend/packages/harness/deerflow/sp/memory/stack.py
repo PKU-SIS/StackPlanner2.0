@@ -63,6 +63,36 @@ class TaskMemoryStack:
     def append_observe(self, content: str, *, actor: str, **kwargs: Any) -> StackMemoryEntry:
         return self.append(StackMemoryEntry(action="observe", actor=actor, content=content, **kwargs))
 
+    def delegate_recovery_attempt_count(self, target_agent: str, *, run_id: str | None = None, stage: str | None = None) -> int:
+        """Count the unresolved delegation chain, not successful earlier work.
+
+        A completed result closes that role's chain. THINK, stage changes, and
+        work by another role do not. Handler-owned counters on the newest
+        delegation/observation retain the count when older memory is compacted.
+        Older checkpoints without counters fall back to their retained entries.
+        """
+        attempts = 0
+        for entry in reversed(self.entries):
+            if run_id and str(entry.run_id or "") != run_id:
+                continue
+            if stage is None and entry.action == "summarize":
+                counters = entry.metadata.get("delegate_recovery_attempts")
+                counter = counters.get(target_agent) if isinstance(counters, dict) else None
+                if isinstance(counter, int) and not isinstance(counter, bool) and counter >= 0:
+                    return attempts + counter
+            is_delegate = entry.action == "delegate" and entry.metadata.get("target_agent") == target_agent
+            is_result = entry.action in {"observe", "error"} and entry.actor == target_agent
+            if not is_delegate and not is_result:
+                continue
+            if is_result and entry.metadata.get("completion_status") == "complete":
+                return attempts
+            counter = entry.metadata.get("recovery_attempt")
+            if stage is None and isinstance(counter, int) and not isinstance(counter, bool) and counter > 0:
+                return attempts + counter
+            if is_delegate and (stage is None or str(entry.stage or "") == stage):
+                attempts += 1
+        return attempts
+
     def append_memory_recall(self, content: str, **kwargs: Any) -> StackMemoryEntry:
         return self.append(StackMemoryEntry(action="recall_memory", content=content, **kwargs))
 
@@ -203,6 +233,15 @@ class TaskMemoryStack:
         if inactive:
             raise ValueError(f"SUMMARIZE source memory is not active: {', '.join(inactive)}")
 
+        # Snapshot the current counters, including retained recent work, before
+        # removing source entries. The summary is appended after that retained
+        # work, so reverse scans must not count those same attempts twice.
+        run_id = kwargs.get("run_id")
+        roles = {str(entry.metadata.get("target_agent") or entry.actor) for entry in self.entries if entry.action in {"delegate", "observe", "error"} and (not run_id or entry.run_id == run_id)}
+        roles.update(role for entry in self.entries if entry.action == "summarize" and (not run_id or entry.run_id == run_id) for role in (entry.metadata.get("delegate_recovery_attempts") or {}) if isinstance(role, str))
+        metadata = dict(kwargs.pop("metadata", None) or {})
+        metadata["delegate_recovery_attempts"] = {role: self.delegate_recovery_attempt_count(role, run_id=run_id) for role in sorted(roles)}
+
         # Preserve transitive lineage when an older summary is compacted again.
         # This keeps audit/tombstone semantics intact without retaining the old
         # summary body in active working memory.
@@ -215,7 +254,7 @@ class TaskMemoryStack:
         lineage_ids = list(dict.fromkeys(lineage_ids))
         source_id_set = set(source_ids)
         self.entries = [entry for entry in self.entries if entry.id not in source_id_set or entry.status == "pinned" or entry.priority == "critical"]
-        return self.append_summary(summary, parent_ids=lineage_ids, **kwargs)
+        return self.append_summary(summary, parent_ids=lineage_ids, metadata=metadata, **kwargs)
 
     def mark_backtracked(self, source_entry_ids: list[str], reason: str, **kwargs: Any) -> StackMemoryEntry:
         source_ids = set(source_entry_ids)

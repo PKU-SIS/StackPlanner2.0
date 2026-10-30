@@ -70,6 +70,9 @@ def _bounded_metadata(value: Any) -> EntryDict:
         "status",
         "target_agent",
         "task_id",
+        "completion_status",
+        "recovery_attempt",
+        "delegate_recovery_attempts",
     }
     preserved = {key: normalized[key] for key in preserved_keys if key in normalized}
     return {

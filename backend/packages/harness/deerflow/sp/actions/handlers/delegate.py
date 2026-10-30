@@ -160,6 +160,12 @@ _NO_DATA_REPORT_CONSTRAINT_PATTERN = re.compile(
     r")",
     re.IGNORECASE,
 )
+_MISSING_INPUT_DISCLOSURE_PATTERN = re.compile(
+    r"(?:the\s+)?(?:(?!(?:and|but|missing|unmet|unverified|failed|incomplete)\b)[A-Za-z][A-Za-z-]*\s+){0,3}"
+    r"(?:values?|data|metrics?)\s+(?:(?:was|were|is|are)\s+)?not\s+(?:provided|supplied)(?:\s+by\s+the\s+user)?\.?"
+    r"|(?:实际|具体|量化)?(?:数值|数据|指标)(?:尚未|未)(?:提供|给出)[。.]?",
+    re.IGNORECASE,
+)
 _UNSUPPORTED_NO_DATA_CLAIM_PATTERN = re.compile(
     r"(?:"
     r"\b(?:outperform(?:ed|s|ing)?|underperform(?:ed|s|ing)?|"
@@ -485,19 +491,20 @@ class DelegateHandler:
                 ],
             )
 
+        recovery_attempt = context.stack.delegate_recovery_attempt_count(str(action.target_agent), run_id=context.run_id) + 1
         delegate_entry = context.stack.append_delegate(
             f"Delegate to {action.target_agent}: {action.task}",
             thread_id=context.thread_id,
             run_id=context.run_id,
             stage=action.stage,
             priority=action.priority,
-            metadata={"action_id": action.action_id, "target_agent": action.target_agent, **action.metadata},
+            metadata={"action_id": action.action_id, **action.metadata, "target_agent": action.target_agent, "recovery_attempt": recovery_attempt},
         )
         context_refs = build_handler_context_refs(context)
         # Stage is part of the execution contract, not prompt decoration. It
         # must cross the Delegate -> runtime -> adapter boundary so tool policy
         # and completion validation can enforce read-only vs mutation stages.
-        task_metadata = {**dict(action.metadata), "stage": action.stage}
+        task_metadata = {**dict(action.metadata), "stage": action.stage, "recovery_attempt": recovery_attempt}
         if action.target_agent == "reporter":
             requested_tools = task_metadata.get("tool_names")
             requested_reporter_tools = requested_tools if isinstance(requested_tools, list) else []
@@ -710,6 +717,7 @@ class DelegateHandler:
         task: SPSubagentTask,
     ) -> HandlerResult:
         state_update: dict[str, Any] = {"sp_active_delegate_id": None}
+        result.artifact_metadata["recovery_attempt"] = delegate_entry.metadata["recovery_attempt"]
         artifact_refs: dict[str, Any] = {}
         artifact_events: list[dict[str, Any]] = []
         result_ref = result.task_id
@@ -928,6 +936,8 @@ class DelegateHandler:
                 "stop_reason": result.stop_reason,
                 "completion_status": completion_status,
                 "evidence_gaps": normalized_gaps[:12],
+                "disclosed_limitations": result.artifact_metadata.get("disclosed_limitations", []),
+                "recovery_attempt": delegate_entry.metadata["recovery_attempt"],
                 "target_agent": action.target_agent,
                 **acceptance_metadata,
             },
@@ -988,7 +998,7 @@ class DelegateHandler:
                 priority="high",
                 stage=action.stage,
                 failure_note=error,
-                metadata={"action_id": action.action_id, "status": result.status.value},
+                metadata={"action_id": action.action_id, "status": result.status.value, "target_agent": action.target_agent, "recovery_attempt": delegate_entry.metadata["recovery_attempt"]},
             )
         )
         return HandlerResult(
@@ -1368,6 +1378,10 @@ def _apply_report_acceptance_checks(
         required_adjustments=required_adjustments,
     )
     no_data_constraint = _has_no_data_report_constraint(task)
+    declared_gaps = result.artifact_metadata.get("evidence_gaps")
+    declared_gaps = [str(gap).strip() for gap in declared_gaps if str(gap).strip()] if isinstance(declared_gaps, list) else []
+    checks = result.artifact_metadata.get("quality_checks")
+    quality_checks = dict(checks) if isinstance(checks, Mapping) else {}
     status = str(result.artifact_metadata.get("completion_status") or "complete").strip().lower()
     accept_disclosed_data_gap = bool(
         no_data_constraint
@@ -1385,9 +1399,10 @@ def _apply_report_acceptance_checks(
         and not introduced_tokens
         and not source_precedence_gaps
         and not boundary_adjustment_gaps
+        and declared_gaps
+        and all(_MISSING_INPUT_DISCLOSURE_PATTERN.fullmatch(gap) for gap in declared_gaps)
+        and not any(check is False or (isinstance(check, Mapping) and check.get("passed") is False) for check in quality_checks.values())
     )
-    checks = result.artifact_metadata.get("quality_checks")
-    quality_checks = dict(checks) if isinstance(checks, Mapping) else {}
     quality_checks["created_path_ownership"] = {
         "discarded_paths": discarded_paths,
         "fallback_artifact_content": bool(result.artifact_content),
@@ -1437,6 +1452,10 @@ def _apply_report_acceptance_checks(
     result.artifact_metadata["quality_checks"] = quality_checks
     if accept_disclosed_data_gap:
         result.artifact_metadata["completion_status"] = "complete"
+        limitations = result.artifact_metadata.get("disclosed_limitations")
+        limitations = [str(value).strip() for value in limitations if str(value).strip()] if isinstance(limitations, list) else []
+        result.artifact_metadata["disclosed_limitations"] = list(dict.fromkeys([*limitations, *declared_gaps]))[:12]
+        result.artifact_metadata["evidence_gaps"] = []
     if not missing and not unsafe_links and not threshold_gaps and not unsupported_no_data_claims and not language_gaps and not introduced_tokens and not source_precedence_gaps and not boundary_adjustment_gaps:
         return
 

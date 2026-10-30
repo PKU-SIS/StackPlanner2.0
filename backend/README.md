@@ -66,11 +66,23 @@ only read-only local inspection is routed to Perception. Incomplete reports
 route explicit source/evidence gaps to Researcher and missing data execution
 to Coder, then return to Reporter with the draft and new evidence references.
 Existing software recovery retains its software acceptance contract. Recovery
-limits remain bounded. If the user explicitly forbids questions, exhausted
+limits apply to the current unresolved delegation chain: completed work by the
+same role does not spend a later subtask's retries. Stage changes, intervening
+roles, and memory compaction do not reset an unresolved chain. The handler owns
+the persisted attempt counter; the overall Central action limit still applies.
+If the user explicitly forbids questions, exhausted
 report recovery ends with an incomplete draft and unresolved gaps, rather than
 requesting human input or marking a partial artifact complete. Interactive
 requests retain human escalation. Incomplete outcomes still require a later
 successful native FINISH before benchmark scoring.
+
+Subagents record unmet acceptance requirements in `artifact_metadata.evidence_gaps`
+and non-blocking caveats in `artifact_metadata.disclosed_limitations`. A complete
+result must have no blocking gaps; disclosed limitations remain in the artifact
+and observation metadata without forcing another research pass. Source quality
+and allowed missing-value markers follow the original task, without adding an
+official-source-only requirement. Missing mandatory rows, unverified required
+values, and failed execution or software checks still block completion.
 
 The local host-bash path guard recognizes Python division and literal regex
 arguments in supported Python `-c`/heredoc commands and `.py` heredoc writes,

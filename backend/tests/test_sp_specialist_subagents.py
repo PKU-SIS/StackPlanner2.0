@@ -65,6 +65,14 @@ def test_sp_specialists_have_role_specific_artifact_contracts():
         assert f'Use artifact_type "{artifact_type}"' in SP_SPECIALIST_CONFIGS[name].system_prompt
 
 
+def test_specialists_separate_blocking_gaps_from_disclosed_limitations():
+    for config in SP_SPECIALIST_CONFIGS.values():
+        assert '"disclosed_limitations"' in config.system_prompt
+        assert "Do not impose an official-source-only requirement" in config.system_prompt
+    reporter = SP_SPECIALIST_CONFIGS["reporter"].system_prompt
+    assert "retaining the missing data in evidence_gaps as a disclosed limitation" not in reporter
+
+
 def test_sp_stage_specialists_preserve_stackplanner_1_workflow_strengths():
     perception = SP_SPECIALIST_CONFIGS["perception"].system_prompt
     outline = SP_SPECIALIST_CONFIGS["outline"].system_prompt

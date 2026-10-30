@@ -161,6 +161,8 @@ def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
             "Return the task_result envelope fields implied by protocol.message_type. Do not expose private chain-of-thought; report only observable actions, evidence, tests, files, and blockers.",
             "Honor the subagent output contract: return compact JSON with summary, artifact_content, artifact_type, and artifact_metadata.",
             'Set artifact_metadata.completion_status to "complete", "partial", or "blocked", and list unmet requirements in artifact_metadata.evidence_gaps.',
+            "Put non-blocking source or coverage caveats in artifact_metadata.disclosed_limitations, and disclose them in artifact_content. These do not waive unmet requirements in evidence_gaps.",
+            "Do not impose an official-source-only requirement unless the original task contract requires it. Respect explicitly allowed missing-value markers without inventing facts or omitting required rows.",
             "Use artifact_metadata.filename for a desired text-artifact filename. Use artifact_metadata.created_paths only for absolute /mnt/user-data/outputs/... files that were actually created by a file tool.",
             "Full reports, outlines, research bodies, and other large text belong in artifact_content, never in summary.",
         ]
@@ -786,6 +788,9 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         if not isinstance(evidence_gaps, list):
             evidence_gaps = []
         artifact_metadata["evidence_gaps"] = [str(item) for item in evidence_gaps if str(item).strip()][:12]
+        if "disclosed_limitations" in artifact_metadata:
+            limitations = artifact_metadata["disclosed_limitations"]
+            artifact_metadata["disclosed_limitations"] = list(dict.fromkeys(str(item).strip() for item in limitations if str(item).strip()))[:12] if isinstance(limitations, list) else []
         if task is not None and task.subagent_type == "coder" and _coder_reported_behavior_failure(raw_result, ai_messages):
             artifact_metadata["completion_status"] = "partial"
             if _BEHAVIOR_FAILURE_GAP not in artifact_metadata["evidence_gaps"]:

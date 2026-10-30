@@ -1051,6 +1051,29 @@ def test_declared_evidence_gap_cannot_be_complete():
     assert result.artifact_metadata["completion_status"] == "partial"
 
 
+@pytest.mark.parametrize("blocking_gaps", [[], ["One required record is missing"]])
+def test_disclosed_limitations_are_separate_from_unmet_requirements(blocking_gaps):
+    metadata = {
+        "completion_status": "complete",
+        "evidence_gaps": blocking_gaps,
+        "disclosed_limitations": [" Official site returned 403; cited retailer evidence instead. ", "", "Official site returned 403; cited retailer evidence instead."],
+    }
+    executor = FakeDR2Executor(FakeDR2Result(status="completed", result=json.dumps({"summary": "Table assembled", "artifact_content": "Verified table with source notes", "artifact_metadata": metadata})))
+
+    result = DR2SubagentExecutorAdapter(lambda _: executor).execute(_sp_task())
+
+    assert result.artifact_metadata["disclosed_limitations"] == ["Official site returned 403; cited retailer evidence instead."]
+    assert result.artifact_metadata["evidence_gaps"] == blocking_gaps
+    assert result.artifact_metadata["completion_status"] == ("partial" if blocking_gaps else "complete")
+
+
+def test_subagent_prompt_distinguishes_limits_without_strengthening_source_contract():
+    prompt = render_sp_subagent_prompt(_sp_task())
+
+    assert "disclosed_limitations" in prompt
+    assert "Do not impose an official-source-only requirement" in prompt
+
+
 def test_coder_implementation_claim_is_downgraded_when_only_tests_change():
     executor = FakeDR2Executor(
         FakeDR2Result(

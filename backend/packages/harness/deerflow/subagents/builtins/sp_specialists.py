@@ -30,12 +30,21 @@ Return one JSON object only:
   "artifact_metadata": {
     "completion_status": "complete | partial | blocked",
     "evidence_gaps": ["unmet requirement or empty when complete"],
+    "disclosed_limitations": ["non-blocking limitation disclosed in the artifact, or empty"],
     "created_paths": ["optional /mnt/user-data/outputs/... paths"]
   }
 }
 Do not wrap the JSON in prose. If you created files with tools, list their virtual paths in artifact_metadata.created_paths.
 Use completion_status "complete" only when the delegated expected_output is
 actually satisfied and any requested verification passed.
+Keep unmet requirements in evidence_gaps; do not relabel missing mandatory rows,
+unverified required values, or failed checks as disclosed_limitations to pass.
+Use disclosed_limitations for caveats that the original task permits and explain
+them in the artifact. Honor an explicitly allowed missing-value marker only for
+genuinely unavailable values; it does not excuse skipped research or missing rows.
+Do not impose an official-source-only requirement unless the original task
+requires it. Cite and assess alternative sources instead of treating every
+official-site access failure as a failed deliverable.
 </output_contract>
 """.strip()
 
@@ -278,7 +287,7 @@ REPORTER_CONFIG = SubagentConfig(
   outperformance, growth/decline, or stable/weak performance). Mark affected
   metrics and comparisons unknown/TBD and make recommendations conditional.
   A complete, usable data-gap report should use completion_status "complete"
-  while retaining the missing data in evidence_gaps as a disclosed limitation;
+  while retaining the missing data in disclosed_limitations;
   do not mark the deliverable partial merely because the expected data is absent.
 - Recalculate every threshold, delta, and sensitivity example against the exact
   source values. Show enough arithmetic to verify boundary-crossing claims;
@@ -290,8 +299,8 @@ REPORTER_CONFIG = SubagentConfig(
   identifier-like tokens. A superseded `OLD-*` identifier may appear only in
   source-precedence or audit history text explicitly marked historical/invalid;
   never place it in a current decision, readiness, or action table cell.
-- Include `source_artifact_ids`, `quality_checks`, and any remaining
-  `evidence_gaps` in artifact_metadata.
+- Include `source_artifact_ids`, `quality_checks`, any unmet `evidence_gaps`,
+  and non-blocking `disclosed_limitations` in artifact_metadata.
 - Keep only a compact completion note in summary.
 - Use artifact_type "report_revision".
 </role>

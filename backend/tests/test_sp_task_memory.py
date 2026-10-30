@@ -8,6 +8,45 @@ from deerflow.sp.memory import StackMemoryEntry, TaskMemoryStack
 from deerflow.sp.memory.entry import MAX_ENTRY_CONTENT_CHARS, MAX_METADATA_JSON_CHARS
 
 
+def test_recovery_budget_excludes_completed_subtasks_but_keeps_partial_chain():
+    stack = TaskMemoryStack()
+    for tour in ("Speak Now", "Red", "1989", "reputation"):
+        stack.append_delegate(tour, run_id="r", stage="research", metadata={"target_agent": "researcher"})
+        stack.append_observe(tour, actor="researcher", run_id="r", stage="research", metadata={"completion_status": "complete"})
+    stack.append_delegate("Eras", run_id="r", stage="research", metadata={"target_agent": "researcher"})
+    stack.append_observe("Dates missing", actor="researcher", run_id="r", stage="research", metadata={"completion_status": "partial"})
+
+    assert stack.delegate_recovery_attempt_count("researcher", run_id="r") == 1
+    stack.append_delegate("Assemble draft", run_id="r", metadata={"target_agent": "reporter"})
+    stack.append_observe("Needs Eras dates", actor="reporter", run_id="r", metadata={"completion_status": "partial"})
+    stack.append_delegate("Retry Eras", run_id="r", stage="verification", metadata={"target_agent": "researcher"})
+    assert stack.delegate_recovery_attempt_count("researcher", run_id="r") == 2
+    assert stack.delegate_recovery_attempt_count("researcher", run_id="other") == 0
+
+
+def test_recovery_attempt_survives_compaction_and_metadata_bounding():
+    stack = TaskMemoryStack()
+    old = stack.append_delegate("Original attempt", run_id="r", metadata={"target_agent": "researcher"})
+    latest = stack.append_observe("Still missing dates", actor="researcher", run_id="r", metadata={"completion_status": "partial", "recovery_attempt": 3, "large_context": "x" * MAX_METADATA_JSON_CHARS})
+    stack.condense([old.id, latest.id], "Attempts summarized", run_id="r")
+    restored = TaskMemoryStack.from_dict(stack.to_dict())
+
+    assert latest.metadata["recovery_attempt"] == 3
+    assert latest.metadata["completion_status"] == "partial"
+    assert restored.delegate_recovery_attempt_count("researcher", run_id="r") == 3
+
+
+def test_summary_recovery_snapshot_includes_retained_recent_work_once():
+    stack = TaskMemoryStack()
+    older = stack.append_delegate("Earlier query", run_id="r", metadata={"target_agent": "researcher"})
+    stack.append_observe("Still partial", actor="researcher", run_id="r", metadata={"completion_status": "partial", "recovery_attempt": 2})
+    stack.condense([older.id], "Earlier query summarized", run_id="r")
+    stack.append_delegate("Third attempt", run_id="r", metadata={"target_agent": "researcher"})
+
+    assert stack.delegate_recovery_attempt_count("researcher", run_id="r") == 3
+    assert stack.delegate_recovery_attempt_count("researcher", run_id="other") == 0
+
+
 def test_legacy_memory_stack_json_restores_feedback_as_pinned_critical():
     legacy = json.dumps(
         [

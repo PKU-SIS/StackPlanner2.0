@@ -1527,6 +1527,49 @@ def test_report_evidence_recovery_does_not_reset_researcher_budget():
     assert update["messages"][0].additional_kwargs["stackplanner"]["status"] == "incomplete"
 
 
+def test_completed_research_subtasks_do_not_exhaust_new_reading_recovery():
+    stack = TaskMemoryStack()
+    for tour in ("Speak Now", "Red", "1989", "reputation"):
+        stack.append_delegate(tour, run_id="r", stage="research", metadata={"target_agent": "researcher"})
+        stack.append_observe(tour, actor="researcher", run_id="r", stage="research", metadata={"completion_status": "complete"})
+    stack.append_delegate("Read Eras dates", run_id="r", stage="research", metadata={"target_agent": "researcher"})
+    stack.append_observe("Dates not reached", actor="researcher", run_id="r", stage="research", metadata={"target_agent": "researcher", "completion_status": "blocked", "evidence_gaps": ["Required tour dates not read"]})
+    state = {"messages": [HumanMessage(content="Generate a downloadable Markdown file with the complete concert table.")], "sp_loop_run_id": "r", "sp_task_memory": stack.to_dict()}
+
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(_ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=state["messages"]))
+
+    assert {tool.name for tool in filtered.tools} == {"sp_delegate"}
+    assert 'target_agent="researcher"' in filtered.messages[-1].content
+
+
+def test_report_missing_evidence_does_not_charge_completed_research_tasks():
+    request = _partial_report_request("Missing external source", question="Create a report. Don't ask questions.")
+    stack = TaskMemoryStack()
+    for _ in range(3):
+        stack.append_delegate("Completed research", run_id="r", stage="research", metadata={"target_agent": "researcher"})
+        stack.append_observe("Evidence obtained", actor="researcher", run_id="r", stage="research", metadata={"completion_status": "complete"})
+    stack.entries.extend(TaskMemoryStack.from_dict(request.state["sp_task_memory"]).entries)
+    request.state["sp_task_memory"] = stack.to_dict()
+
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
+
+    assert {tool.name for tool in filtered.tools} == {"sp_delegate"}
+    assert 'target_agent="researcher"' in filtered.messages[-1].content
+
+
+def test_changing_stage_does_not_reset_an_unresolved_recovery_chain():
+    stack = TaskMemoryStack()
+    for stage in ("implementation", "verification", "revision"):
+        stack.append_delegate("Repair same data script", run_id="r", stage=stage, metadata={"target_agent": "coder"})
+        stack.append_observe("Rows still missing", actor="coder", run_id="r", stage=stage, metadata={"target_agent": "coder", "completion_status": "partial", "evidence_gaps": ["Required rows missing"]})
+    state = {"sp_loop_run_id": "r", "sp_task_memory": stack.to_dict()}
+
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(_ModelRequestStub(tools=build_sp_control_tools(), state=state))
+
+    assert filtered.tools == []
+    assert "3 coder attempts" in filtered.messages[-1].content
+
+
 def test_action_payload_decodes_string_metadata_refs_and_repairs_upload_path():
     payload = _action_payload(
         "sp_delegate",
