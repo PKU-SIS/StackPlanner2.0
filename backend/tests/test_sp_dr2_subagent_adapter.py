@@ -629,6 +629,65 @@ def test_researcher_automatically_continues_bounded_multi_item_fetches():
     assert result.artifact_content.index("10377.5892792557") < (result.artifact_content.index("12951.1782397043"))
 
 
+def test_research_continuations_keep_full_artifacts_and_bounded_context():
+    from deerflow.sp.subagents.dr2_adapter import _research_continuation_task
+
+    bodies = [f"pass-{i}-start\n" + (f"| row-{i} | exact value |\n" * 2000) + f"pass-{i}-last-row" for i in range(3)]
+    executor = SequenceDR2Executor(
+        [
+            FakeDR2Result(
+                status="completed",
+                result=json.dumps(
+                    {
+                        "summary": f"Fetched pass {i}.",
+                        "artifact_content": body,
+                        "artifact_type": "research_observation",
+                        "artifact_metadata": {"completion_status": "complete" if i == 2 else "partial", "evidence_gaps": [] if i == 2 else [f"pass {i + 1} remains"]},
+                    }
+                ),
+                ai_messages=[{"type": "tool", "name": "web_fetch", "tool_call_id": f"fetch-{i}", "content": "Successfully fetched source records."}],
+            )
+            for i, body in enumerate(bodies)
+        ]
+    )
+    result = DR2SubagentExecutorAdapter(lambda _: executor).execute(_sp_task())
+
+    assert len(executor.prompts) == 3
+    assert result.artifact_metadata["completion_status"] == "complete"
+    assert all(body in result.artifact_content for body in bodies)
+    assert result.artifact_content.index(bodies[2]) < result.artifact_content.index(bodies[0])
+    assert len(result.result) <= 1200
+    continuation = _research_continuation_task(_sp_task(), result, attempt=3)
+    assert len(continuation.context_refs["automatic_research_continuation"]["collected_evidence"]) <= 24_000
+    assert bodies[2] not in render_sp_subagent_prompt(continuation)
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '{"summary":"done","artifact_content":"unfinished',
+        '{"summary":"done","artifact_content":"unfinished\n{"completion_status":"complete"}',
+        '{"summary":"done","artifact_content":"unfinished\n{"summary":"nested field"}',
+        "[Recovered tool evidence before safety stop]\n\n[read_file output]\npartial table",
+    ],
+)
+def test_incomplete_contract_or_recovered_preview_cannot_be_complete(raw):
+    result = DR2SubagentExecutorAdapter(lambda _: FakeDR2Executor(FakeDR2Result(status="completed", result=raw))).execute(_sp_task())
+    assert result.artifact_metadata["completion_status"] == "partial"
+    assert result.artifact_metadata["evidence_gaps"]
+
+
+def test_provider_length_metadata_survives_adapter_without_guard_reason():
+    raw = FakeDR2Result(
+        status="completed",
+        result=json.dumps({"summary": "done", "artifact_content": "partial", "artifact_metadata": {"completion_status": "complete"}}),
+        ai_messages=[{"type": "ai", "content": "partial", "response_metadata": {"finish_reason": "length"}}],
+    )
+    result = DR2SubagentExecutorAdapter(lambda _: FakeDR2Executor(raw)).execute(_sp_task())
+    assert result.stop_reason == "token_capped"
+    assert result.artifact_metadata["completion_status"] == "partial"
+
+
 def test_coder_complete_claim_is_downgraded_without_successful_execution_evidence():
     executor = FakeDR2Executor(
         FakeDR2Result(

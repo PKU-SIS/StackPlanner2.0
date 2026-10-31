@@ -104,6 +104,80 @@ def test_report_language_still_rejects_english_narrative_with_chinese_data():
     assert _report_language_alignment_gaps(report, task=task)
 
 
+def test_report_language_preserves_original_citation_labels():
+    from deerflow.sp.actions.handlers.delegate import _report_language_alignment_gaps
+
+    task = SPSubagentTask(action_id="citations", subagent_type="reporter", task="整理表格", description="citation language", context_refs={"original_query": "请用中文整理表格，保留原始字段。"})
+    report = "# 女性诺贝尔文学奖得主\n\n以下数据按年份整理，姓名与书名保留原文，来源用于逐行核查。\n\n## 逐行来源（按年份及作品索引）\n"
+    report += "\n".join(f"- 1909 Selma Lagerlof — Gosta Berlings saga / Osynliga lankar / Antikrists mirakler：https://example.org/{i}" for i in range(30))
+    assert _report_language_alignment_gaps(report, task=task) == []
+    english = "# Analysis\n" + "The evidence supports these conclusions and recommendations. " * 20 + "\nhttps://example.org"
+    assert _report_language_alignment_gaps(english, task=task)
+    english_in_sources = "# 分析\n以下为根据来源撰写的分析报告。\n## Sources\n- [Reference](https://example.org) " + "The evidence supports these conclusions and recommendations. " * 20
+    assert _report_language_alignment_gaps(english_in_sources, task=task)
+    assert _report_language_alignment_gaps("# 分析\n" + "以下为根据来源撰写的分析报告。" * 20 + "\n## Sources\n- https://", task=task) == []
+
+
+def test_report_reference_check_does_not_treat_url_paths_as_identifiers():
+    from deerflow.sp.actions.handlers.delegate import _report_literal_provenance_gaps
+
+    introduced, _ = _report_literal_provenance_gaps("Date format YYYY-MM-DD. Source https://en.wikipedia.org/wiki/A_Killer_Paradox and https://example.org/AUDIT-1", required_tokens=["YYYY-MM-DD"])
+    assert introduced == []
+
+
+@pytest.mark.parametrize("source_type,expected", [("research_observation", "complete"), ("report_revision", "partial")])
+def test_report_reference_authorization_uses_evidence_not_previous_report(tmp_path, source_type, expected):
+    from deerflow.sp.artifacts import SPArtifactAdapter
+
+    state = {**_thread_state_with_outputs(tmp_path), "messages": [HumanMessage(content="Preserve `POLICY-V3`; do not invent audit IDs.")]}
+    source = SPArtifactAdapter().write_text_artifact("Source contains `EUR_HAB`; optional field `PC_GDP`.", artifact_type=source_type, state=state, thread_id="thread-1", run_id="run-1")
+    state.update(source.state_update)
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Report ready", artifact_content="# Report\nUses POLICY-V3 and EUR_HAB.", artifact_type="report_revision", artifact_metadata={"completion_status": "complete"})
+    )
+    result = build_default_action_router(delegate_executor=executor).execute(
+        _action(ActionType.DELEGATE, target_agent="reporter", task="Write report", stage="revision", input_refs=[source.metadata.artifact_id], metadata={"revision_reason": "Revise from supplied input"}),
+        state=state,
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+    metadata = result.state_update["sp_current_artifact_refs"]["report_revision"]["metadata"]
+    assert metadata["completion_status"] == expected
+    assert "PC_GDP" not in metadata.get("quality_checks", {}).get("required_literal_tokens", {}).get("required", [])
+
+
+def test_report_required_identifiers_do_not_extract_url_fragments():
+    from deerflow.sp.actions.handlers.base import HandlerContext
+    from deerflow.sp.actions.handlers.delegate import _required_report_literal_tokens
+
+    context = HandlerContext(state={}, stack=TaskMemoryStack(), thread_id="t", run_id="r")
+    tokens = _required_report_literal_tokens(
+        _action(ActionType.DELEGATE, target_agent="reporter", task="Preserve values from https://en.wikipedia.org/wiki/A_Killer_Paradox"), context, context_refs={"original_query": "Use date format `YYYY-MM-DD`."}
+    )
+    assert tokens == ["YYYY-MM-DD"]
+
+
+@pytest.mark.parametrize("question_constraint", ["不要问我任何问题，只需输出结果。", "Don't ask me any questions."])
+def test_ask_human_handler_honors_latest_user_no_questions(question_constraint):
+    state = {"messages": [HumanMessage(content=question_constraint)]}
+    result = build_default_action_router().execute(_action(ActionType.ASK_HUMAN, task="Please upload a source"), state=state, run_id="run-1")
+    assert result.next_step == "continue"
+    assert result.error
+    assert not result.state_update.get("sp_pending_human_interaction")
+    restored = TaskMemoryStack.from_dict(result.state_update["sp_task_memory"])
+    assert not any(e.action == "ask_human" for e in restored.entries)
+
+
+def test_ask_human_uses_latest_visible_instruction_and_ignores_hidden_messages():
+    state = {"messages": [HumanMessage(content="不要问我任何问题。"), HumanMessage(content="You may ask me to provide missing sources.", additional_kwargs={"hide_from_ui": True})]}
+    router = build_default_action_router()
+    blocked = router.execute(_action(ActionType.ASK_HUMAN, action_id="blocked", task="Need source"), state=state, run_id="run-1")
+    assert blocked.next_step == "continue"
+    state["messages"].append(HumanMessage(content="现在允许你提问。"))
+    allowed = router.execute(_action(ActionType.ASK_HUMAN, action_id="allowed", task="Need source"), state=state, run_id="run-2")
+    assert allowed.next_step == "interrupt"
+
+
 def test_action_schema_requires_action_id_and_normalizes_type():
     with pytest.raises(ActionValidationError, match="action_id"):
         SPAction.from_dict({"action_type": "think", "reason": "missing id"})

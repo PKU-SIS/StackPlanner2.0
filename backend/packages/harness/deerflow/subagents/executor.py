@@ -30,6 +30,7 @@ from deerflow.runtime.secret_context import ACTIVE_SECRETS_CONTEXT_KEY
 from deerflow.skills.tool_policy import filter_tools_by_skill_allowed_tools
 from deerflow.skills.types import Skill, SkillCategory
 from deerflow.subagents.config import SubagentConfig, resolve_subagent_model_name
+from deerflow.subagents.status_contract import model_response_stop_reason
 from deerflow.subagents.step_events import capture_new_step_messages
 from deerflow.subagents.token_collector import SubagentTokenCollector
 from deerflow.trace_context import DEERFLOW_TRACE_METADATA_KEY
@@ -1029,7 +1030,7 @@ class SubagentExecutor:
             # ``consume_stop_reason`` on each guard tells us whether that
             # happened so we can mark the completed result with the cap reason
             # (token_capped / loop_capped) for the lead (#3875 Phase 2).
-            stop_reason = self._consume_guard_stop_reason()
+            stop_reason = self._consume_guard_stop_reason() or model_response_stop_reason(final_state.get("messages", []) if final_state else [])
             result.try_set_terminal(
                 SubagentStatus.COMPLETED,
                 result=final_result,

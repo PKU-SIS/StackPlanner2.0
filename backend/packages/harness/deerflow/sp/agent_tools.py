@@ -35,6 +35,7 @@ from deerflow.agents.thread_state import (
     SP_CONCURRENT_MERGE_MODE_KEY,
 )
 from deerflow.sp.actions import ActionType, ActionValidationError, SPAction, build_default_action_router
+from deerflow.sp.actions.handlers.context import allows_human_interaction
 from deerflow.sp.actions.router import SP_SUMMARY_TURN_RESERVED_KEY
 from deerflow.sp.hitl import record_human_feedback
 from deerflow.sp.memory import StackMemoryEntry, TaskMemoryStack
@@ -793,9 +794,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
 
     @classmethod
     def _allows_human_recovery(cls, state: Mapping[str, Any]) -> bool:
-        latest = cls._latest_visible_human_message(state)
-        text = message_to_text(latest) if latest is not None else ""
-        return not re.search(r"\b(?:do not|don't|don’t)\s+ask\s+(?:me\s+)?(?:any\s+)?(?:(?:follow-up|clarifying|further)\s+)?questions?\b|(?:不要|不用|无需)(?:再)?(?:向我|问我|问问题|询问|提问)", text, re.I)
+        return allows_human_interaction(state)
 
     @classmethod
     def _report_recovery_budget(cls, state: Mapping[str, Any]) -> tuple[str, int, int]:

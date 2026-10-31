@@ -338,6 +338,7 @@ def _required_report_literal_tokens(
         )
         if value
     )
+    request_text = re.sub(r"https?://[^\s<>]+", "", request_text)
     tokens = list(dict.fromkeys(_REPORT_LITERAL_TOKEN_PATTERN.findall(request_text)))
     bare_reference_tokens = _REPORT_REFERENCE_TOKEN_PATTERN.findall(request_text)
     bare_preservation_request = bool(
@@ -1249,7 +1250,16 @@ def _report_language_alignment_gaps(
     prose: list[str] = []
     in_table = False
     fence = ""
+    in_sources = False
     for index, line in enumerate(lines):
+        if re.match(r"^ {0,3}#{1,6}\s", line):
+            in_sources = bool(re.search(r"来源|引用|参考|\b(?:sources?|references?|citations?)\b", line, re.I))
+        destination = re.search(r"https?://[^\s<>\)\]]+", line)
+        if in_sources and re.match(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)", line) and destination is not None:
+            # Original citation labels precede the first destination. Keep
+            # explanatory prose after the link subject to the language check.
+            prose.append(line[destination.end() :])
+            continue
         if fence:
             if re.fullmatch(r" {0,3}" + re.escape(fence[0]) + "{" + str(len(fence)) + r",}[ \t]*", line):
                 fence = ""
@@ -1282,10 +1292,14 @@ def _report_literal_provenance_gaps(
     output: str,
     *,
     required_tokens: list[str],
+    source_text: str = "",
 ) -> tuple[list[str], list[str]]:
     """Reject invented reference IDs and current use of superseded IDs."""
-    allowed = set(required_tokens)
-    introduced = [token for token in _REPORT_REFERENCE_TOKEN_PATTERN.findall(output) if token not in allowed] if allowed else []
+    # URL path fragments are citations, not audit/decision identifiers. Inputs
+    # may authorize identifiers without requiring every one in the final report.
+    token_text = re.sub(r"https?://[^\s<>]+", "", output)
+    allowed = set(required_tokens) | set(_REPORT_REFERENCE_TOKEN_PATTERN.findall(re.sub(r"https?://[^\s<>]+", "", source_text)))
+    introduced = [token for token in _REPORT_REFERENCE_TOKEN_PATTERN.findall(token_text) if token not in allowed] if required_tokens else []
     precedence_gaps: list[str] = []
     for line in output.splitlines():
         if "|" not in line or not _SUPERSEDED_REFERENCE_PATTERN.search(line):
@@ -1372,6 +1386,14 @@ def _apply_report_acceptance_checks(
     introduced_tokens, source_precedence_gaps = _report_literal_provenance_gaps(
         output or "",
         required_tokens=required,
+        source_text="\n".join(
+            str(item.get("content") or "")
+            for key in ("artifact_bodies", "uploaded_file_bodies")
+            for item in (task.context_refs.get(key) or {}).get("items", [])
+            if isinstance(item, Mapping) and (key == "uploaded_file_bodies" or item.get("type") not in _REPORT_ARTIFACT_TYPES)
+        )
+        + "\n"
+        + str(task.context_refs.get("latest_user_input") or task.context_refs.get("original_query") or ""),
     )
     boundary_adjustment_gaps = _report_boundary_adjustment_gaps(
         output or "",

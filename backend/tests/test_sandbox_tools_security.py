@@ -359,6 +359,13 @@ def test_validate_local_bash_command_paths_blocks_host_paths() -> None:
         "python3 -c \"import re; print(re.search(r'/\\\\d{2}/\\\\d{2}', '2024/01/01'))\"",
         "python3 -c \"open('./answer.md', 'w').write('ok')\"",
         "sed -n '/^##/p' /mnt/user-data/outputs/report.md",
+        "python3 - <<'PY'\nimport re\ns = re.sub(r'<ref[^>]*>.*?</ref>', '', 'text', flags=re.S)\ns = re.sub(r'<ref[^>]*/?>', '', s)\nPY",
+        "sed -n '/ASSERTIONS/,$p' /mnt/user-data/workspace/input.txt",
+        "sed -n '/BEGIN/,/END/p' /mnt/user-data/workspace/input.txt",
+        "sed -n '/BEGIN/,20p' /mnt/user-data/workspace/input.txt",
+        "awk -F'|' '{gsub(/^[ \\t]+|[ \\t]+$/,\"\",$1); print $1}' /mnt/user-data/workspace/input.txt",
+        "python3 - <<'PY'\nimport re\nprint(re.search(r'<title[^>]*>(.*?)</title>', 'text'))\nPY",
+        "python3 - <<'PY'\ns='text'\nprint(s.find('</title'))\nPY",
     ],
 )
 def test_data_script_path_scan_preserves_non_path_syntax(command):
@@ -381,6 +388,16 @@ def test_data_script_path_scan_preserves_non_path_syntax(command):
         "python3 -c \"import re; re.compile=open; re.compile('/etc/passwd').read()\"",
         "python3 -c \"import re; from types import SimpleNamespace; (lambda re: re.compile('/etc/passwd').read())(SimpleNamespace(compile=open))\"",
         "python3 -c \"import re; print(open(re.compile('/etc/passwd').pattern).read())\"",
+        "python3 -c \"import re, os; print(os.listdir(re.compile('</etc>').pattern[1:-1]))\"",
+        "python3 - <<'PY'\nimport re, os\nm = re.search('</etc>', '<'+chr(47)+'etc>')\nprint(os.listdir(m.re.pattern[1:-1]))\nPY",
+        "sed -n '/ASSERTIONS/,$p' /etc/passwd",
+        "sed -n '/BEGIN/,/END/p; e cat /etc/passwd' /mnt/user-data/workspace/input.txt",
+        "sed -n '/BEGIN/,$w /etc/passwd' /mnt/user-data/workspace/input.txt",
+        "python3 - <<'PY'\nimport re\nre.sub(r'<ref[^>]*>.*?</ref>', '', 'text')\nopen('/etc/passwd').read()\nPY",
+        "awk '{gsub(/^[ ]+/,\"\",$1); print $1}' /etc/passwd",
+        'awk \'BEGIN {system("cat /etc/passwd"); gsub(/^[ ]+/,"",s)}\'',
+        "awk 'BEGIN {system(\"cat /etc/passwd # gsub(/x/,y)\")}'",
+        "python3 - <<'PY'\ns='text'\nprint(s.find('</title'))\nopen('/etc/passwd').read()\nPY",
     ],
 )
 def test_data_script_path_scan_still_blocks_host_access(command):

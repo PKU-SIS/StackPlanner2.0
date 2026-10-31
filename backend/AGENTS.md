@@ -75,7 +75,21 @@ deer-flow/
 
 ## Important Development Guidelines
 
+### SP Acceptance Checks
+
+SP acceptance invariants: use `subagents.status_contract.model_response_stop_reason`
+for the final assistant response's provider truncation signal, and preserve it as
+`token_capped`; earlier truncated attempts do not invalidate a later successful
+response. Malformed output contracts and recovered tool previews remain partial.
+Language checks distinguish prose from citation labels under source headings.
+Report identifier provenance excludes URL tokens and uses source evidence independently
+of mandatory literal preservation; report revisions must not whitelist themselves.
+The shared `allows_human_interaction` policy in action-handler context is also
+enforced by ASK_HUMAN, using the latest visible user instruction. Host-bash syntax
+exemptions require negative tests for real paths and executable awk strings.
+
 ### Documentation Update Policy
+
 **CRITICAL: Always update README.md and AGENTS.md after every code change**
 
 When making code changes, you MUST update the relevant documentation:
@@ -379,6 +393,8 @@ Proxied through nginx: `/api/langgraph/*` → Gateway LangGraph-compatible runti
 
 **Interface**: Abstract `Sandbox` with `execute_command(command, env=None)`, `read_file`, `write_file`, `list_dir`. The optional `env` injects per-call environment variables (request-scoped secrets — see Request-Scoped Secrets below); `LocalSandbox` merges it via `subprocess.run(env=...)` and `AioSandbox` routes env-bearing commands through the `bash.exec(env=...)` API on a fresh session.
 **Provider Pattern**: `SandboxProvider` with `acquire`, `acquire_async`, `get`, `release` lifecycle. Async agent/tool paths call async sandbox lifecycle hooks so Docker sandbox creation, discovery, cross-process locking, readiness polling, and release stay off the event loop.
+
+SP researcher continuation merging must retain full successful-pass artifact bodies; apply the 24K context budget only when building continuation prompts, and keep Central summaries/previews bounded. Never use the prompt budget to slice persisted tables. The host-bash scan recognizes HTML closing/self-closing regex syntax in supported Python calls and single `sed -n` print ranges (regex, numeric, or end-of-file endpoint). File operands, arbitrary sed commands, and Python file path literals remain subject to the existing path checks.
 **Environment policy** (`sandbox/env_policy.py`): `execute_command` no longer inherits the full `os.environ`. `build_sandbox_env()` scrubs secret-looking names (`*KEY*`/`*SECRET*`/`*TOKEN*`/`*PASSWORD*`/`*CREDENTIAL*`) from the inherited environment before layering injected request secrets on top, so platform credentials (e.g. `OPENAI_API_KEY`) never leak into skill subprocesses. Benign vars (`PATH`, `HOME`, `LANG`, `VIRTUAL_ENV`, ...) are preserved.
 **Implementations**:
 - `LocalSandboxProvider` - Local filesystem execution. `acquire(thread_id)` returns a per-thread `LocalSandbox` (id `local:{thread_id}`) whose `path_mappings` resolve `/mnt/user-data/{workspace,uploads,outputs}` and `/mnt/acp-workspace` to that thread's host directories, so the public `Sandbox` API honours the `/mnt/user-data` contract uniformly with AIO. `acquire()` / `acquire(None)` keeps the legacy generic singleton (id `local`) for callers without a thread context. Per-thread sandboxes are held in an LRU cache (default 256 entries) guarded by a `threading.Lock`. Legacy global-custom mounts are gated by the same user-scoped skill discovery rule used for prompt/list visibility; providers must not infer visibility from raw directory presence alone.

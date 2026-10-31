@@ -86,9 +86,25 @@ values, and failed execution or software checks still block completion.
 
 The local host-bash path guard recognizes Python division and literal regex
 arguments in supported Python `-c`/heredoc commands and `.py` heredoc writes,
-simple `sed -n '/pattern/p'` expressions, and relative `./` paths. Actual file
+HTML tag regex syntax, single `sed -n` print expressions (including ranges
+such as `'/ASSERTIONS/,$p'`), and relative `./` paths. Actual file
 path literals, traversal, shell substitution and unrecognized syntax retain
 the conservative checks. Host bash remains opt-in and is not container isolation.
+
+Research continuations retain every successful pass's full artifact body,
+including long tables. Central summaries/previews and continuation prompt context
+remain bounded; the prompt budget does not truncate persisted evidence.
+
+Provider length limits, malformed subagent result contracts, and recovered evidence
+previews are incomplete work, not accepted final deliverables. SP preserves the
+available text and routes it through the existing bounded recovery workflow.
+Chinese report checks exclude original citation labels in source sections.
+Identifier checks ignore URL paths and distinguish required identifiers from
+identifiers authorized by source inputs; a prior report cannot authorize its own
+invented IDs. The host-bash guard also recognizes supported awk regex arguments
+and HTML tag searches while retaining file operand checks. An explicit user
+instruction not to ask questions is enforced at the ASK_HUMAN handler as well as
+the recovery policy; missing evidence is not converted into successful completion.
 
 ### Middleware Chain
 

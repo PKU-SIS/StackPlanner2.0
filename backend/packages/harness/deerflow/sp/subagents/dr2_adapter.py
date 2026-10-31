@@ -9,6 +9,7 @@ from dataclasses import replace
 from typing import Any, Protocol
 
 from deerflow.sp.subagents.adapter import SPSubagentResult, SPSubagentStatus, SPSubagentTask
+from deerflow.subagents.status_contract import model_response_stop_reason
 
 
 class DR2SubagentExecutorLike(Protocol):
@@ -197,11 +198,12 @@ def _parse_result_payload(value: Any) -> dict[str, Any] | None:
     # JSON. Recover the first embedded object instead of externalizing the
     # entire wrapper as a malformed Markdown artifact.
     decoder = json.JSONDecoder()
-    for match in re.finditer(r"\{", text):
+    match = re.search(r"\{", text)
+    if match:
         try:
             payload, _ = decoder.raw_decode(text[match.start() :])
         except (json.JSONDecodeError, TypeError):
-            continue
+            return None
         if isinstance(payload, dict):
             return payload
     return None
@@ -733,6 +735,11 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
     artifact_type = getattr(result, "artifact_type", None)
     artifact_metadata = getattr(result, "artifact_metadata", None)
     ai_messages = getattr(result, "ai_messages", None)
+    stop_reason = stop_reason or model_response_stop_reason(ai_messages if isinstance(ai_messages, list) else [])
+    malformed_contract = (
+        isinstance(raw_result, str) and (payload is None or not any(key in payload for key in ("summary", "artifact_content", "artifact_metadata"))) and bool(re.search(r'"(?:summary|artifact_content|artifact_metadata)"\s*:', raw_result))
+    )
+    recovered_preview = isinstance(raw_result, str) and "[Recovered tool evidence before safety stop]" in raw_result
     recovered_created_paths = _recover_created_paths(raw_result, ai_messages)
     summary = raw_result
     if not is_memory_recaller and payload is not None and any(key in payload for key in ("summary", "artifact_content", "artifact_type", "artifact_metadata")):
@@ -788,6 +795,9 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         if not isinstance(evidence_gaps, list):
             evidence_gaps = []
         artifact_metadata["evidence_gaps"] = [str(item) for item in evidence_gaps if str(item).strip()][:12]
+        if malformed_contract or recovered_preview:
+            artifact_metadata["completion_status"] = "partial"
+            artifact_metadata["evidence_gaps"].append("Incomplete subagent output contract or recovered evidence preview; produce a complete deliverable before acceptance.")
         if "disclosed_limitations" in artifact_metadata:
             limitations = artifact_metadata["disclosed_limitations"]
             artifact_metadata["disclosed_limitations"] = list(dict.fromkeys(str(item).strip() for item in limitations if str(item).strip()))[:12] if isinstance(limitations, list) else []
@@ -915,21 +925,18 @@ def _merge_research_continuations(
     base = successful[-1] if successful else results[-1]
     summaries = list(dict.fromkeys(str(result.result).strip() for result in successful if result.result and str(result.result).strip()))
     artifact_sections: list[str] = []
-    remaining_chars = _RESEARCH_CONTINUATION_CONTEXT_MAX_CHARS
     indexed_results = list(enumerate(successful, start=1))
     for index, result in reversed(indexed_results):
-        if result.artifact_content is None or remaining_chars <= 0:
+        if result.artifact_content is None:
             continue
         content = str(result.artifact_content).strip()
         if not content:
             continue
         heading = f"## Research pass {index}\n\n"
-        item_limit = max(remaining_chars - len(heading), 0)
-        if item_limit <= 0:
-            break
-        section = f"{heading}{content[:item_limit]}"
+        # Persist every pass in full. Only prompt context and Central previews
+        # are bounded; their budget must not truncate the canonical evidence.
+        section = f"{heading}{content}"
         artifact_sections.append(section)
-        remaining_chars -= len(section)
 
     metadata = dict(base.artifact_metadata)
     metadata["research_continuation_attempts"] = len(results) - 1

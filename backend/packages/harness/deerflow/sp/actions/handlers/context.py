@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -19,6 +20,17 @@ MAX_HANDLER_REQUIREMENT_ENTRIES = 8
 MAX_HANDLER_REQUIREMENT_CHARS = 4000
 MAX_HANDLER_REQUIREMENT_TOTAL_CHARS = 12_000
 MAX_HANDLER_TASK_CONTRACT_CHARS = 12_000
+
+
+def allows_human_interaction(state: Mapping[str, Any]) -> bool:
+    """Use the latest visible human instruction for every ASK_HUMAN path."""
+    for message in reversed(state.get("messages") or []):
+        data = message if isinstance(message, Mapping) else vars(message)
+        if (data.get("type") or data.get("role")) not in {"human", "user"} or data.get("name") == "sp_task_memory_context" or (data.get("additional_kwargs") or {}).get("hide_from_ui") is True:
+            continue
+        text = message_to_text(message)
+        return not re.search(r"\b(?:do not|don't|don’t)\s+ask\s+(?:me\s+)?(?:any\s+)?(?:(?:follow-up|clarifying|further)\s+)?questions?\b|(?:不要|不用|无需)(?:再)?(?:向我|问我|问问题|询问|提问)", text, re.I)
+    return True
 
 
 def _bounded_text(value: Any, *, max_chars: int) -> str | None:

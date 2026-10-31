@@ -1282,6 +1282,17 @@ def _python_path_scan_surface(source: str) -> str:
         if token.type == tokenize.OP and token.string in {"/", "//", "/=", "//="}:
             start = starts[token.start[0] - 1] + token.start[1]
             surface[start : start + len(token.string)] = " " * len(token.string)
+    # A literal closing tag passed to a string-search operation is data. Keep
+    # path-building operations (strip/replace/slicing) under the original scan.
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in {"find", "rfind", "index", "rindex", "startswith", "endswith"} and node.args and isinstance(node.args[0], ast.Constant)):
+            continue
+        literal = node.args[0]
+        if not isinstance(literal.value, str) or not re.fullmatch(r"</[A-Za-z][A-Za-z0-9:_-]*>?", literal.value):
+            continue
+        start = starts[literal.lineno - 1] + len(lines[literal.lineno - 1].encode()[: literal.col_offset].decode())
+        end = starts[literal.end_lineno - 1] + len(lines[literal.end_lineno - 1].encode()[: literal.end_col_offset].decode())
+        surface[start:end] = " " * (end - start)
     # A name that merely looks like the regex module is not sufficient. Keep
     # the conservative scan if the module or its attributes are rebound.
     regex_module = any(isinstance(node, ast.Import) and any(alias.name == "re" and alias.asname in {None, "re"} for alias in node.names) for node in ast.walk(tree))
@@ -1323,6 +1334,15 @@ def _python_path_scan_surface(source: str) -> str:
             if match.group().startswith(("/[", "/\\", "/^")):
                 left, right = start + match.start(), start + match.end()
                 surface[left:right] = " " * (right - left)
+        # HTML closing tags and optional self-closing slashes are regex
+        # syntax, not path operands. Keep ordinary path strings visible.
+        # Compiled patterns expose their literal text; Match.re can expose it
+        # too. Retain the conservative scan when pattern access is present.
+        exposes_pattern = any(isinstance(child, ast.Attribute) and child.attr in {"pattern", "re"} for child in ast.walk(tree))
+        if node.func.attr != "compile" and not exposes_pattern:
+            for match in re.finditer(r"(?<=<)/[A-Za-z][A-Za-z0-9:_-]*(?=>)|/\?(?=>)", source[start:end]):
+                left, right = start + match.start(), start + match.end()
+                surface[left:right] = " " * (right - left)
     return "".join(surface)
 
 
@@ -1359,9 +1379,25 @@ def _bash_path_scan_surface(command: str) -> str:
         return match.group()[: match.start("arg") - match.start()] + shlex.quote(_python_path_scan_surface(source))
 
     text = python_c.sub(python_argument, text)
-    # Only a simple sed address/print expression is literal data. Expressions
-    # with read/write/execute commands are deliberately not exempted.
-    return re.sub(r"(\bsed\s+-n\s+)'/[^/'\n]*/p'", lambda m: m.group(1) + "' '", text)
+    # Mask literal regex arguments of awk's built-in data operations, never
+    # double-quoted strings (which can contain system commands or filenames).
+    awk_program = re.compile(r"(?P<prefix>\b(?:awk|gawk|mawk)\s+(?:(?:-F(?:'[^'\n]*'|\"[^\"\n]*\"|[^\s'\"]+)\s+))?)'(?P<body>[^'\n]*)'")
+
+    def awk_argument(match: re.Match) -> str:
+        body = match.group("body")
+        syntax = re.compile(r'"(?:\\.|[^"\\])*"|\b(?:gsub|sub|match)\s*\(\s*(?P<pattern>/(?:\\.|[^/\\\n])*/)(?=\s*,)')
+        masked = list(body)
+        for item in syntax.finditer(body):
+            if item.group("pattern") is not None:
+                left, right = item.span("pattern")
+                masked[left:right] = " " * (right - left)
+        return match.group("prefix") + "'" + "".join(masked) + "'"
+
+    text = awk_program.sub(awk_argument, text)
+    # Only a single sed print expression (optionally an address range) is
+    # literal data. File operands and read/write/execute commands stay scanned.
+    address = r"/[^/'\\\n]*/"
+    return re.sub(r"(\bsed\s+-n\s+)'" + address + r"(?:,(?:\$|[0-9]+|" + address + r"))?p'", lambda m: m.group(1) + "' '", text)
 
 
 def validate_local_bash_command_paths(command: str, thread_data: ThreadDataState | None) -> None:

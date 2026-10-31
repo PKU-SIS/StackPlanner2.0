@@ -900,6 +900,26 @@ class TestAsyncExecutionPath:
         assert result.completed_at is not None
 
     @pytest.mark.anyio
+    async def test_aexecute_provider_length_is_not_a_clean_completion(self, classes, base_config, mock_agent):
+        message = classes["AIMessage"](content='{"summary":"partial","artifact_content":"unfinished', response_metadata={"finish_reason": "length"})
+        mock_agent.astream = lambda *args, **kwargs: async_iterator([{"messages": [message]}])
+        executor = classes["SubagentExecutor"](config=base_config, tools=[], thread_id="test-thread")
+        with patch.object(executor, "_create_agent", return_value=mock_agent):
+            result = await executor._aexecute("Task")
+        assert result.stop_reason == "token_capped"
+        assert "unfinished" in result.result
+
+    @pytest.mark.anyio
+    async def test_aexecute_success_after_earlier_length_response_is_clean(self, classes, base_config, mock_agent):
+        messages = [classes["AIMessage"](content="partial", response_metadata={"finish_reason": "length"}), classes["AIMessage"](content="Complete final answer", response_metadata={"finish_reason": "stop"})]
+        mock_agent.astream = lambda *args, **kwargs: async_iterator([{"messages": messages}])
+        executor = classes["SubagentExecutor"](config=base_config, tools=[], thread_id="test-thread")
+        with patch.object(executor, "_create_agent", return_value=mock_agent):
+            result = await executor._aexecute("Task")
+        assert result.stop_reason is None
+        assert result.result == "Complete final answer"
+
+    @pytest.mark.anyio
     async def test_aexecute_collects_ai_messages(self, classes, base_config, mock_agent, msg):
         """Test that AI messages are collected during streaming."""
         SubagentExecutor = classes["SubagentExecutor"]

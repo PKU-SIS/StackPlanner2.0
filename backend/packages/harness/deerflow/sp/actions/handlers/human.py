@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from deerflow.sp.actions.events import make_sp_event
 from deerflow.sp.actions.handlers.base import HandlerContext
+from deerflow.sp.actions.handlers.context import allows_human_interaction
 from deerflow.sp.actions.schema import HandlerResult, SPAction
 from deerflow.sp.hitl import SPHumanInteraction
 from deerflow.sp.memory import StackMemoryEntry
@@ -11,6 +12,8 @@ from deerflow.sp.memory import StackMemoryEntry
 
 class AskHumanHandler:
     def handle(self, action: SPAction, context: HandlerContext) -> HandlerResult:
+        if not allows_human_interaction(context.state):
+            return HandlerResult(next_step="continue", error="User explicitly disallowed questions. Continue with available evidence or end honestly as incomplete; do not request human input.")
         question = str(action.metadata.get("question") or action.task)
         entry = context.stack.append(
             StackMemoryEntry(

@@ -34,6 +34,18 @@ SUBAGENT_RESULT_BRIEF_KEY = "subagent_result_brief"
 SUBAGENT_RESULT_SHA256_KEY = "subagent_result_sha256"
 SUBAGENT_METADATA_TEXT_MAX_CHARS = 2000
 
+
+def model_response_stop_reason(messages: list) -> str | None:
+    """Read provider truncation on the final assistant turn, not earlier attempts."""
+    for message in reversed(messages):
+        kind = message.get("type") if isinstance(message, Mapping) else getattr(message, "type", None)
+        if kind != "ai":
+            continue
+        metadata = message.get("response_metadata", {}) if isinstance(message, Mapping) else getattr(message, "response_metadata", {})
+        return "token_capped" if isinstance(metadata, Mapping) and metadata.get("finish_reason") in {"length", "max_tokens"} else None
+    return None
+
+
 #: The producer always emits ``hashlib.sha256(...).hexdigest()`` — 64
 #: lowercase hex chars. Readers enforce the same shape so a corrupted
 #: relay value cannot masquerade as a digest.
