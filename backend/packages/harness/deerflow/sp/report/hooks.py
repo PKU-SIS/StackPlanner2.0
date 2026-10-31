@@ -157,6 +157,75 @@ def _outline_delivery_path(paths: report_store.ReportPaths, action_id: str) -> P
     return directory / f"delivery-{action_id}.json"
 
 
+def _outline_stage_path(paths: report_store.ReportPaths, action_id: str) -> Path:
+    return paths.directory / "outline" / "_staging" / f"{action_id}.json"
+
+
+def _valid_outline_stage_progress(ledger: ReportLedger) -> dict[str, Any] | None:
+    progress = ledger.payload.get("outline_stage_progress")
+    if not isinstance(progress, Mapping):
+        return None
+    ref = ledger.payload.get("tree")
+    if not isinstance(ref, Mapping):
+        return None
+    try:
+        base_version = int(ref.get("version") or 0)
+        stage_path = Path(str(progress.get("stage_path") or ""))
+        stage = json.loads(stage_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if (
+        str(progress.get("report_id") or "") != ledger.paths.report_id
+        or str(progress.get("action_id") or "") != str(stage.get("action_id") or "")
+        or int(stage.get("base_version") or 0) != base_version
+        or str(stage.get("base_sha") or "") != str(ref.get("sha256") or "")
+        or str(progress.get("stage_sha") or "") != report_store.sha256_text(stage_path.read_text(encoding="utf-8"))
+    ):
+        return None
+    return {
+        "action_id": str(progress.get("action_id")),
+        "stage_path": str(stage_path),
+        "base_version": base_version,
+        "stage_sha": str(progress.get("stage_sha")),
+    }
+
+
+def _record_outline_stage_progress(ledger: ReportLedger, action: SPAction) -> None:
+    """Record staged progress separately from a complete/rejected delivery.
+
+    The stage is not accepted.  This marker only lets a later prepare_delegation
+    bind the same report/base stage after a token-capped/aborted action.
+    """
+    stage_path = _outline_stage_path(ledger.paths, action.action_id)
+    if not stage_path.is_file():
+        return
+    try:
+        stage = json.loads(stage_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    ref = ledger.payload.get("tree")
+    if not isinstance(ref, Mapping):
+        return
+    if (
+        str(stage.get("report_id") or "") != ledger.paths.report_id
+        or str(stage.get("action_id") or "") != action.action_id
+        or int(stage.get("base_version") or 0) != int(ref.get("version") or 0)
+        or str(stage.get("base_sha") or "") != str(ref.get("sha256") or "")
+    ):
+        return
+    stage_text = stage_path.read_text(encoding="utf-8")
+    ledger.payload["outline_stage_progress"] = {
+        "report_id": ledger.paths.report_id,
+        "action_id": action.action_id,
+        "stage_path": str(stage_path),
+        "stage_sha": report_store.sha256_text(stage_text),
+        "base_version": int(ref.get("version") or 0),
+        "base_sha": str(ref.get("sha256") or ""),
+        "updated_at": utc_now_iso(),
+    }
+    ledger.save()
+
+
 def _copy_rejected_outline_to_delivery(
     ledger: ReportLedger,
     action: SPAction,
@@ -536,15 +605,20 @@ def prepare_delegation(
                     "artifact_content=null and this path in artifact_metadata."
                 )
             rejected = ledger.payload.get("rejected_outline")
-            if report_task in {"plan", "revise"} and isinstance(rejected, Mapping) and staging_mode:
-                source_action_id = str(rejected.get("action_id") or "").strip()
-                if source_action_id:
-                    task_metadata["outline_stage_resume_action_id"] = source_action_id
+            if staging_mode:
+                progress = _valid_outline_stage_progress(ledger)
+                if progress is not None:
+                    task_metadata["outline_stage_resume_action_id"] = progress["action_id"]
                     instruction += (
-                        " A prior rejected candidate is retained, but this revision must continue from "
-                        "the accepted baseline and its staging state. Resume the prior action's staging "
-                        "source through the host-bound resume identity; do not replay the rejected "
-                        "candidate as a whole tree."
+                        " A valid staged-progress identity exists for this report and accepted "
+                        "baseline. Resume that staging source through the host-bound identity; "
+                        "staged progress is not an accepted candidate."
+                    )
+                elif isinstance(rejected, Mapping):
+                    instruction += (
+                        " A legacy rejected file candidate exists but has no verified staging "
+                        "source. Keep it as read-only recovery reference, do not bind it as a "
+                        "stage, and start this revision from the accepted baseline."
                     )
             elif report_task in {"plan", "revise"} and isinstance(rejected, Mapping):
                 copied = _copy_rejected_outline_to_delivery(ledger, action, delivery_path)
@@ -1656,6 +1730,12 @@ def _accept_outline_locked(
                 "delegation was exhausted; it is not finish_reason=length and does not establish that "
                 "the plan or body was too large. Content and scope decisions remain with Outline."
             )
+        try:
+            _record_outline_stage_progress(ledger, action)
+        except Exception:
+            # Progress identity is diagnostic recovery metadata; never mask the
+            # original stop reason or rejection.
+            pass
         rejected = _store_rejected_outline(
             ledger,
             action,
@@ -1772,6 +1852,7 @@ def _accept_outline_locked(
         report_tree.commit_tree(candidate, version=version, path=tree_path, ledger=working)
         report_assembly.invalidate_review(working, "accepted tree changed")
         working.payload.pop("rejected_outline", None)
+        working.payload.pop("outline_stage_progress", None)
         if (
             str(task.metadata.get("report_acceptance_origin") or action.metadata.get("report_acceptance_origin") or "") == "harness"
             and str(task.metadata.get("report_task") or action.metadata.get("report_task") or "").strip().lower() == "revise"
@@ -1799,6 +1880,10 @@ def _accept_outline_locked(
             elif result.artifact_content is not None:
                 candidate_source = result.artifact_content
                 candidate_kind = "artifact_content"
+        try:
+            _record_outline_stage_progress(committed, action)
+        except Exception:
+            pass
         rejected = _store_rejected_outline(
             committed,
             action,

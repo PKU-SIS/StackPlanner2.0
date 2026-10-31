@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -24,24 +25,28 @@ class OutlineStageError(ReportValidationError):
     """A staging/finalization failure that must not touch the accepted tree."""
 
 
-_PATCH_KEYS = frozenset({
-    "report_title",
-    "requirements",
-    "upsert_nodes",
-    "remove_node_ids",
-    "gap_outcomes",
-    "write_requests",
-    "user_decisions",
-    "feedback_dispositions",
-    "draft_dispositions",
-})
-_ACTION_FIELDS = frozenset({
-    "gap_outcomes",
-    "write_requests",
-    "user_decisions",
-    "feedback_dispositions",
-    "draft_dispositions",
-})
+_PATCH_KEYS = frozenset(
+    {
+        "report_title",
+        "requirements",
+        "upsert_nodes",
+        "remove_node_ids",
+        "gap_outcomes",
+        "write_requests",
+        "user_decisions",
+        "feedback_dispositions",
+        "draft_dispositions",
+    }
+)
+_ACTION_FIELDS = frozenset(
+    {
+        "gap_outcomes",
+        "write_requests",
+        "user_decisions",
+        "feedback_dispositions",
+        "draft_dispositions",
+    }
+)
 
 
 def _sha256_text(text: str) -> str:
@@ -77,6 +82,8 @@ class OutlineTreeStage:
         self._baseline: dict[str, Any] = {}
         self._candidate: dict[str, Any] = {}
         self._write_requests_set = False
+        self._finalized = False
+        self._delivery_sha = ""
         self._load()
 
     def _load(self) -> None:
@@ -107,12 +114,7 @@ class OutlineTreeStage:
                 stage = json.loads(stage_source.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
                 raise OutlineStageError(f"staging file is unreadable: {exc}") from exc
-            if (
-                stage.get("report_id") != self.paths.report_id
-                or stage.get("base_version") is None
-                or int(stage.get("base_version") or 0) != version
-                or str(stage.get("base_sha") or "") != baseline_sha
-            ):
+            if stage.get("report_id") != self.paths.report_id or stage.get("base_version") is None or int(stage.get("base_version") or 0) != version or str(stage.get("base_sha") or "") != baseline_sha:
                 raise OutlineStageError("staging file belongs to a different report/base")
             if stage_source == self.stage_path and stage.get("action_id") != self.action_id:
                 raise OutlineStageError("staging file belongs to a different action")
@@ -125,11 +127,15 @@ class OutlineTreeStage:
                 raise OutlineStageError("staging file candidate is invalid")
             self._candidate = candidate
             self._write_requests_set = bool(stage.get("write_requests_set"))
+            self._finalized = bool(stage.get("finalized"))
+            self._delivery_sha = str(stage.get("delivery_sha") or "")
         else:
             if self.resume_action_id and self.resume_action_id != self.action_id:
                 raise OutlineStageError("requested resume stage does not exist")
             self._candidate = self._baseline_candidate(baseline)
             self._write_requests_set = False
+            self._finalized = False
+            self._delivery_sha = ""
 
     def _baseline_candidate(self, baseline: Mapping[str, Any]) -> dict[str, Any]:
         """Copy planning fields, reset every action-scoped field."""
@@ -151,23 +157,26 @@ class OutlineTreeStage:
         current_version = int(ref.get("version") or 0)
         current_sha = str(ref.get("sha256") or "")
         if current_version != self._baseline_version:
-            raise OutlineStageError(
-                f"stale base_version: staged={self._baseline_version}, current={current_version}"
-            )
+            raise OutlineStageError(f"stale base_version: staged={self._baseline_version}, current={current_version}")
         if current_sha and current_sha != self._baseline_sha:
             raise OutlineStageError("stale base tree sha256")
 
     def _save(self) -> None:
         self.stage_dir.mkdir(parents=True, exist_ok=True)
-        report_store.write_json_atomic(self.stage_path, {
-            "report_id": self.paths.report_id,
-            "action_id": self.action_id,
-            "base_version": self._baseline_version,
-            "base_sha": self._baseline_sha,
-            "resumed_from": self._resumed_from,
-            "write_requests_set": self._write_requests_set,
-            "candidate": self._candidate,
-        })
+        report_store.write_json_atomic(
+            self.stage_path,
+            {
+                "report_id": self.paths.report_id,
+                "action_id": self.action_id,
+                "base_version": self._baseline_version,
+                "base_sha": self._baseline_sha,
+                "resumed_from": self._resumed_from,
+                "write_requests_set": self._write_requests_set,
+                "finalized": self._finalized,
+                "delivery_sha": self._delivery_sha,
+                "candidate": self._candidate,
+            },
+        )
 
     @staticmethod
     def _merge_node(nodes: dict[str, dict[str, Any]], patch: Any) -> None:
@@ -181,6 +190,18 @@ class OutlineTreeStage:
         else:
             nodes[node_id] = copy.deepcopy(dict(patch))
 
+    def _invalidate_finalized_delivery(self) -> None:
+        """A newer staged change supersedes the old delivery candidate."""
+        if not self._finalized:
+            return
+        if self.delivery_path.exists():
+            suffix = self._delivery_sha[:12] or str(time.time_ns())
+            superseded = self.stage_dir / f"{self.action_id}.superseded-delivery-{suffix}.json"
+            self.stage_dir.mkdir(parents=True, exist_ok=True)
+            self.delivery_path.replace(superseded)
+        self._finalized = False
+        self._delivery_sha = ""
+
     def apply(self, patch: Mapping[str, Any]) -> dict[str, Any]:
         if not isinstance(patch, Mapping):
             raise OutlineStageError("patch must be an object")
@@ -190,6 +211,7 @@ class OutlineTreeStage:
         with report_store.report_lock(self.paths):
             self._check_current_base()
             self._load()
+            self._invalidate_finalized_delivery()
             candidate = copy.deepcopy(self._candidate)
             nodes = {str(n["node_id"]): n for n in candidate.get("nodes") or []}
             if "upsert_nodes" in patch:
@@ -242,28 +264,26 @@ class OutlineTreeStage:
             self._load()
             candidate = copy.deepcopy(self._candidate)
             if not self._write_requests_set:
-                raise OutlineStageError(
-                    "write_requests must be explicitly supplied by this action; "
-                    "omission does not preserve or clear historical write scheduling"
-                )
+                raise OutlineStageError("write_requests must be explicitly supplied by this action; omission does not preserve or clear historical write scheduling")
             old_ids = [str(n["node_id"]) for n in self._baseline.get("nodes") or []]
             current_ids = {str(n["node_id"]) for n in candidate.get("nodes") or []}
             removed = {str(item) for item in candidate.get("removed_node_ids") or []}
             missing = [node_id for node_id in old_ids if node_id not in current_ids and node_id not in removed]
             if missing:
-                raise OutlineStageError(
-                    "accepted nodes are missing without removed_node_ids: " + ", ".join(missing)
-                )
+                raise OutlineStageError("accepted nodes are missing without removed_node_ids: " + ", ".join(missing))
             ledger = ReportLedger.load(self.paths)
             try:
                 validate_tree(candidate, ledger)
             except Exception as exc:
                 raise OutlineStageError(f"candidate rejected by tree validation: {exc}") from exc
-            self._save()
             report_store.write_json_atomic(self.delivery_path, candidate)
             digest = hashlib.sha256(self.delivery_path.read_bytes()).hexdigest()
+            self._finalized = True
+            self._delivery_sha = digest
+            self._save()
             return {
                 "staged": False,
+                "finalized": True,
                 "delivery_path": str(self.delivery_path),
                 "sha256": digest,
                 "nodes": len(candidate.get("nodes") or []),
@@ -312,9 +332,7 @@ def build_outline_staging_tool(
                 resume_action_id=resume_action_id,
             )
             if int(base_version) != int(stage._baseline_version):
-                raise OutlineStageError(
-                    f"stale base_version: supplied={base_version}, current={stage._baseline_version}"
-                )
+                raise OutlineStageError(f"stale base_version: supplied={base_version}, current={stage._baseline_version}")
             if finalize:
                 stage.apply(patch)
                 return json.dumps(stage.finalize(), ensure_ascii=False)

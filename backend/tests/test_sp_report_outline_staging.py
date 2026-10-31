@@ -162,15 +162,17 @@ def test_stage_finalize_uses_unresolved_and_real_handler_accepts(tmp_path):
     assert task.context_refs["report_packet"]["delivery"]["staging_tool"] is True
     assert "report_update_outline_tree" in task.context_refs["report_packet"]["delivery"]["instruction"]
 
-    receipt = json.loads(tool.func(
-        base_version=1,
-        patch={
-            "upsert_nodes": [{"node_id": "n2", "title": "事实（修订）"}],
-            "gap_outcomes": [{"gap_id": gap_id, "outcome": "unresolved", "reason": "证据不足"}],
-            "write_requests": [],
-        },
-        finalize=True,
-    ))
+    receipt = json.loads(
+        tool.func(
+            base_version=1,
+            patch={
+                "upsert_nodes": [{"node_id": "n2", "title": "事实（修订）"}],
+                "gap_outcomes": [{"gap_id": gap_id, "outcome": "unresolved", "reason": "证据不足"}],
+                "write_requests": [],
+            },
+            finalize=True,
+        )
+    )
     assert receipt["staged"] is False
     assert Path(receipt["delivery_path"]) == delivery
 
@@ -296,20 +298,14 @@ def test_new_action_can_resume_same_report_base_stage(tmp_path):
     gap_id = _register(ctx, "a-gap")
     _accept_baseline(ctx, [gap_id])
     paths = _paths(ctx)
-    source_action = "a-source-stage"
-    first = build_outline_staging_tool(
-        paths=paths,
-        action_id=source_action,
-        delivery_path=paths.directory / "outline" / "delivery-source.json",
-    )
+    source_action, source_task, first, _ = _revise_tool(ctx, "a-source-stage")
     assert json.loads(first.func(base_version=1, patch={"upsert_nodes": [{"node_id": "n1", "title": "源改动"}]}))["staged"] is True
+    capped = _cap_outline(ctx, source_action, source_task)
+    assert capped.next_step == "error_recoverable"
 
-    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
-    ledger.payload["rejected_outline"] = {"action_id": source_action, "path": "unused"}
-    ledger.save()
     _, resumed_task = _delegate(ctx, "a-resumed-stage", "revise")
-    assert resumed_task.metadata["outline_stage_resume_action_id"] == source_action
-    assert resumed_task.context_refs["report_packet"]["delivery"]["staging_resume_action_id"] == source_action
+    assert resumed_task.metadata["outline_stage_resume_action_id"] == "a-source-stage"
+    assert resumed_task.context_refs["report_packet"]["delivery"]["staging_resume_action_id"] == "a-source-stage"
 
     second = build_outline_staging_tool(
         paths=paths,
@@ -377,3 +373,141 @@ def test_revise_assembly_uses_staging_tool_not_write_file(tmp_path):
     assert "report_update_outline_tree" in config.tools
     assert "write_file" not in config.tools
     assert "report_update_outline_tree" in names
+
+
+def _cap_outline(ctx: HandlerContext, action: SPAction, task: SPSubagentTask) -> object:
+    entry = ctx.stack.append_delegate("outline", thread_id="t1", run_id="run1", stage="planning")
+    result = SPSubagentResult(
+        status=SPSubagentStatus.COMPLETED,
+        result="",
+        stop_reason="token_capped",
+        finish_reason="stop",
+        artifact_type="outline",
+        artifact_metadata={"completion_status": "partial"},
+    )
+    return hooks.handle_success(action, ctx, result, task, artifact_adapter=SPArtifactAdapter(), delegate_entry=entry)
+
+
+def test_token_cap_with_only_stage_records_resume_and_next_dispatch_restores(tmp_path):
+    ctx = _ctx(tmp_path)
+    gap_id = _register(ctx, "a-gap")
+    _accept_baseline(ctx, [gap_id])
+    action, task, tool, _ = _revise_tool(ctx)
+    raw = tool.func(
+        base_version=1,
+        patch={"upsert_nodes": [{"node_id": "n2", "title": "saved-before-cap"}]},
+    )
+    assert json.loads(raw)["staged"] is True
+    capped = _cap_outline(ctx, action, task)
+    assert capped.next_step == "error_recoverable"
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    progress = ledger.payload.get("outline_stage_progress")
+    assert progress and progress.get("action_id") == "a-revise"
+    assert progress.get("base_version") == 1
+
+    next_action, next_task = _delegate(ctx, "a-revise-next", "revise")
+    assert next_task.metadata.get("outline_stage_resume_action_id") == "a-revise"
+    next_tool = build_outline_staging_tool(
+        paths=_paths(ctx),
+        action_id=next_action.action_id,
+        delivery_path=Path(str(next_task.metadata["outline_delivery_path"])),
+        resume_action_id=next_task.metadata["outline_stage_resume_action_id"],
+    )
+    final = json.loads(
+        next_tool.func(
+            base_version=1,
+            patch={"write_requests": []},
+            finalize=True,
+        )
+    )
+    assert final["staged"] is False
+    candidate = json.loads(Path(final["delivery_path"]).read_text(encoding="utf-8"))
+    by_id = {n["node_id"]: n for n in candidate["nodes"]}
+    assert by_id["n2"]["title"] == "saved-before-cap"
+
+
+def test_legacy_rejected_candidate_without_stage_does_not_bind_nonexistent_resume(tmp_path):
+    ctx = _ctx(tmp_path)
+    gap_id = _register(ctx, "a-gap")
+    _accept_baseline(ctx, [gap_id])
+    paths = _paths(ctx)
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    legacy_path = paths.directory / "outline" / "rejected-legacy-file.json"
+    legacy_path.parent.mkdir(parents=True, exist_ok=True)
+    legacy_path.write_text('{"report_title": "legacy", "nodes": [', encoding="utf-8")
+    ledger.payload["rejected_outline"] = {
+        "action_id": "legacy-file",
+        "path": str(legacy_path),
+        "virtual_path": str(legacy_path),
+        "sha256": "legacy",
+        "chars": 10,
+        "kind": "tree_candidate",
+    }
+    ledger.save()
+
+    action, task = _delegate(ctx, "a-revise-legacy", "revise")
+    assert task.metadata.get("outline_stage_resume_action_id") is None
+    tool = build_outline_staging_tool(
+        paths=paths,
+        action_id=action.action_id,
+        delivery_path=Path(str(task.metadata["outline_delivery_path"])),
+        resume_action_id=task.metadata.get("outline_stage_resume_action_id"),
+    )
+    final = json.loads(
+        tool.func(
+            base_version=1,
+            patch={"write_requests": []},
+            finalize=True,
+        )
+    )
+    assert final["staged"] is False
+
+
+def test_apply_after_finalize_invalidates_old_delivery_and_cap_then_resume(tmp_path):
+    ctx = _ctx(tmp_path)
+    gap_id = _register(ctx, "a-gap")
+    _accept_baseline(ctx, [gap_id])
+    action, task, tool, delivery = _revise_tool(ctx)
+    first = json.loads(
+        tool.func(
+            base_version=1,
+            patch={"upsert_nodes": [{"node_id": "n2", "title": "final-A"}], "write_requests": []},
+            finalize=True,
+        )
+    )
+    assert first["staged"] is False and delivery.exists()
+
+    changed = json.loads(
+        tool.func(
+            base_version=1,
+            patch={"upsert_nodes": [{"node_id": "n2", "title": "staged-B"}]},
+            finalize=False,
+        )
+    )
+    assert changed["staged"] is True
+    assert not delivery.exists()
+
+    capped = _cap_outline(ctx, action, task)
+    assert capped.next_step == "error_recoverable"
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.payload["outline_stage_progress"]["action_id"] == "a-revise"
+
+    next_action, next_task = _delegate(ctx, "a-revise-after-finalize", "revise")
+    assert next_task.metadata["outline_stage_resume_action_id"] == "a-revise"
+    next_tool = build_outline_staging_tool(
+        paths=_paths(ctx),
+        action_id=next_action.action_id,
+        delivery_path=Path(str(next_task.metadata["outline_delivery_path"])),
+        resume_action_id=next_task.metadata["outline_stage_resume_action_id"],
+    )
+    final = json.loads(
+        next_tool.func(
+            base_version=1,
+            patch={"write_requests": []},
+            finalize=True,
+        )
+    )
+    assert final["staged"] is False
+    candidate = json.loads(Path(final["delivery_path"]).read_text(encoding="utf-8"))
+    assert {n["node_id"]: n for n in candidate["nodes"]}["n2"]["title"] == "staged-B"
