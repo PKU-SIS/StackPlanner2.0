@@ -7,6 +7,7 @@ from string import Template
 
 PROMPTS = Path(__file__).resolve().parents[2] / "configs" / "dcc" / "prompts"
 DEFAULT_LAYERS = [str(PROMPTS / name) for name in ("common.md", "inputs.md", "retrieval.md", "question.md")]
+DEFAULT_INLINE_LAYERS = [str(PROMPTS / name) for name in ("common.md", "inline-protocol.md", "inline-inputs.md", "question.md")]
 
 
 def compose(layers: list[str], variables: dict[str, str]) -> str:

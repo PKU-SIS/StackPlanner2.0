@@ -1,0 +1,15 @@
+{
+  "loader": "dcc_harness.preprocessing.rulearena:load",
+  "release_builder": "dcc_harness.preprocessing.rulearena:build_release",
+  "document_mode": "inline",
+  "loader_options": {
+    "source": "../../.benchmark-data/rulearena-nba-v1/raw/RuleArenaNBA",
+    "levels": [0, 1, 2]
+  },
+  "processors": [],
+  "prompts": {
+    "layers": ["prompts/inline-protocol.md"],
+    "datasets": {"rulearena_nba": ["prompts/rulearena-nba/task.md"]},
+    "samples": {}
+  }
+}

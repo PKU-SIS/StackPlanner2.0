@@ -42,6 +42,10 @@ data packages are distributed through this repository's GitHub Releases; use
 `dcc_preprocess.py download` to install originals, normalized inputs and existing
 shared RAGFlow mappings on another server without rebuilding the knowledge bases.
 See the [cross-server quick start](docs/DCC_PREPROCESSING.md#跨服务器使用-release-数据包).
+RuleArena NBA Transaction is also available as a versioned Release. Its short
+scenario stays in the prompt through the generic `document_mode: inline` path;
+the complete original CBA rules are staged as a file, with no RAGFlow service or
+key required. See the [NBA data and SP input guide](docs/DCC_RULEARENA_NBA.md).
 
 ## Why SP2.0
 

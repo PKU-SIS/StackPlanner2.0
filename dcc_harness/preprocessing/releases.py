@@ -13,8 +13,18 @@ from copy import deepcopy
 from pathlib import Path, PurePosixPath
 
 from .loaders import finauditing, inside
-from .pipeline import atomic_json, digest, encoded, read_jsonl, render, verified_samples
-from .prompts import DEFAULT_LAYERS
+from .pipeline import (
+    atomic_json,
+    digest,
+    document_inventory,
+    document_mode,
+    encoded,
+    inline_text,
+    read_jsonl,
+    render,
+    verified_samples,
+)
+from .prompts import DEFAULT_INLINE_LAYERS, DEFAULT_LAYERS
 from .ragflow import index_identity, validate_sample_scopes
 
 
@@ -28,27 +38,104 @@ def validate_ready_bundle(bundle: Path) -> tuple[dict, list[dict]]:
     tasks = read_jsonl(bundle / "public/tasks.jsonl")
     if [row["id"] for row in gold] != ids or [row["id"] for row in tasks] != ids or len(set(ids)) != manifest["samples"]:
         raise ValueError("sample, label, and rendered task inventories differ")
-    state = json.loads((bundle / "index.json").read_text())
-    if not state.get("ready") or state.get("public_sha256") != manifest["public_sha256"]:
-        raise ValueError("release requires a completed index for the whole bundle")
-    validate_sample_scopes(state, ids)
+    inline = document_mode(manifest) == "inline"
+    if inline:
+        if (bundle / "index.json").exists():
+            raise ValueError("inline release must not carry a RAGFlow index")
+    else:
+        state = json.loads((bundle / "index.json").read_text())
+        if not state.get("ready") or state.get("public_sha256") != manifest["public_sha256"]:
+            raise ValueError("release requires a completed index for the whole bundle")
+        validate_sample_scopes(state, ids)
     for sample, task in zip(samples, tasks, strict=True):
-        scope = state["scopes"][sample["id"]]
-        ledger = state["datasets"][sample["id"]]
-        expected = {ledger["documents"][asset["path"]]["id"] for asset in sample["documents"]}
-        if ledger["id"] != scope["dataset_ids"][0] or expected != set(scope["document_ids"]):
-            raise ValueError("release retrieval scope differs from its document ledger")
-        if any(doc.get("run") != "DONE" or not doc.get("chunk_count") for doc in ledger["documents"].values()):
-            raise ValueError("release contains unfinished document parsing")
         context = task["metadata"]["dcc"]
         content = inside(bundle, context["context_file"]).read_bytes()
         if digest(content) != context["context_sha256"]:
             raise ValueError("rendered context checksum differs")
-        if json.loads(content)["retrieval"] != {**scope, "base_url": state["base_url"]}:
-            raise ValueError("rendered context differs from its sample scope")
+        public_context = json.loads(content)
+        if inline:
+            text = inline_text(bundle, sample["documents"])
+            if (
+                task["benchmark"] != "dcc_inline"
+                or task.get("document") != text
+                or text not in task["prompt"]
+                or public_context.get("document_mode") != "inline"
+                or "retrieval" in public_context
+                or public_context.get("inline_document_sha256") != digest(text.encode("utf-8"))
+                or public_context["documents"] != document_inventory(sample)
+            ):
+                raise ValueError("inline task differs from its complete evidence scenario")
+        else:
+            scope = state["scopes"][sample["id"]]
+            ledger = state["datasets"][sample["id"]]
+            expected = {ledger["documents"][asset["path"]]["id"] for asset in sample["documents"]}
+            if ledger["id"] != scope["dataset_ids"][0] or expected != set(scope["document_ids"]):
+                raise ValueError("release retrieval scope differs from its document ledger")
+            if any(doc.get("run") != "DONE" or not doc.get("chunk_count") for doc in ledger["documents"].values()):
+                raise ValueError("release contains unfinished document parsing")
+            if public_context["retrieval"] != {**scope, "base_url": state["base_url"]}:
+                raise ValueError("rendered context differs from its sample scope")
         for reference in task["files"]:
             inside(bundle / "public", reference["path"]).read_bytes().decode("utf-8")
     return manifest, samples
+
+
+def copy_bundle(bundle: Path, target: Path) -> dict:
+    """Copy only the normalized contract; omit locks, logs and old reports."""
+    manifest, samples = verified_samples(bundle)
+    names = ["manifest.json", "public/samples.jsonl", "private/gold.jsonl"]
+    if document_mode(manifest) == "ragflow":
+        names.append("index.json")
+    names.extend(asset["path"] for item in samples for asset in item["documents"] + item["rules"])
+    for name in sorted(set(names)):
+        destination = target / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(inside(bundle, name), destination)
+    return manifest
+
+
+def freeze_prompts(root: Path, config: dict) -> tuple[dict, dict]:
+    prompts = deepcopy(config.get("prompts", {}))
+    prompts.setdefault("layers", list(DEFAULT_INLINE_LAYERS if document_mode(config) == "inline" else DEFAULT_LAYERS))
+    groups = [prompts["layers"], *prompts.get("datasets", {}).values(), *prompts.get("samples", {}).values()]
+    for group in groups:
+        for index, layer in enumerate(group):
+            if not layer.startswith("literal:"):
+                content = Path(layer).read_bytes()
+                reference = f"prompts/{digest(content)}.md"
+                (root / "prompts").mkdir(exist_ok=True)
+                (root / reference).write_bytes(content)
+                group[index] = reference
+    resolved = deepcopy(prompts)
+    groups = [resolved["layers"], *resolved.get("datasets", {}).values(), *resolved.get("samples", {}).values()]
+    for group in groups:
+        for index, layer in enumerate(group):
+            if not layer.startswith("literal:"):
+                group[index] = str(root / layer)
+    return prompts, resolved
+
+
+def write_release_archive(root: Path, output: Path, metadata: dict) -> dict:
+    metadata = {**metadata, "files": {p.relative_to(root).as_posix(): digest(p.read_bytes()) for p in sorted(root.rglob("*")) if p.is_file()}}
+    atomic_json(root / "release.json", metadata)
+    verify_release(root)
+    temporary_archive = root / ".archive.tar.gz"
+    with (
+        temporary_archive.open("wb") as stream,
+        gzip.GzipFile(fileobj=stream, mode="wb", mtime=0) as compressed,
+        tarfile.open(fileobj=compressed, mode="w") as archive,
+    ):
+        for name in sorted([*metadata["files"], "release.json"]):
+            path = root / name
+            info = archive.gettarinfo(str(path), arcname=name)
+            info.uid = info.gid = info.mtime = 0
+            info.uname = info.gname = ""
+            info.mode = 0o600 if name.startswith("bundle/private/") else 0o644
+            with path.open("rb") as handle:
+                archive.addfile(info, handle)
+    checksum = digest(temporary_archive.read_bytes())
+    os.rename(temporary_archive, output)
+    return {"version": metadata["version"], "asset": output.name, "sha256": checksum, "bytes": output.stat().st_size, "samples": metadata["samples"]}
 
 
 def audit_finauditing(bundle: Path, source: Path) -> dict:
@@ -96,19 +183,7 @@ def build_finauditing_release(bundle: Path, source: Path, config: dict, output: 
     with tempfile.TemporaryDirectory(prefix=".dcc-pack-", dir=output.parent) as temporary:
         root = Path(temporary)
         target = root / "bundle"
-        target.mkdir()
-        # Deliberate inventory: exclude locks, logs, credentials, and old reports.
-        for name in ("manifest.json", "index.json", "public/samples.jsonl", "private/gold.jsonl"):
-            path = inside(bundle, name)
-            destination = target / name
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(path, destination)
-        _, samples = verified_samples(bundle)
-        for sample in samples:
-            for asset in sample["documents"] + sample["rules"]:
-                destination = target / asset["path"]
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(inside(bundle, asset["path"]), destination)
+        copy_bundle(bundle, target)
         raw = root / "raw/FinAuditing"
         raw.mkdir(parents=True)
         source_manifest = json.loads((source / "manifest.json").read_text())
@@ -149,24 +224,10 @@ def build_finauditing_release(bundle: Path, source: Path, config: dict, output: 
         for key in ("retrieval_options", "http_timeout", "check_embedding_models", "poll_interval", "parse_timeout", "parse_batch_size"):
             if key in config["ragflow"]:
                 portable["ragflow"][key] = deepcopy(config["ragflow"][key])
-        prompts = portable["prompts"]
-        prompts.setdefault("layers", list(DEFAULT_LAYERS))
-        groups = [prompts["layers"], *prompts.get("datasets", {}).values(), *prompts.get("samples", {}).values()]
-        for group in groups:
-            for index, layer in enumerate(group):
-                if not layer.startswith("literal:"):
-                    content = Path(layer).read_bytes()
-                    reference = f"prompts/{digest(content)}.md"
-                    (root / "prompts").mkdir(exist_ok=True)
-                    (root / reference).write_bytes(content)
-                    group[index] = reference
+        portable["prompts"], resolved_prompts = freeze_prompts(root, portable)
         atomic_json(root / "config.json", portable)
         resolved = deepcopy(portable)
-        prompt_groups = [resolved["prompts"]["layers"], *resolved["prompts"].get("datasets", {}).values(), *resolved["prompts"].get("samples", {}).values()]
-        for group in prompt_groups:
-            for index, layer in enumerate(group):
-                if not layer.startswith("literal:"):
-                    group[index] = str(root / layer)
+        resolved["prompts"] = resolved_prompts
         tasks = render(target, resolved)
         originals = list(finauditing({"source": str(source)}))
         for original, task in zip(originals, tasks, strict=True):
@@ -194,27 +255,8 @@ def build_finauditing_release(bundle: Path, source: Path, config: dict, output: 
             "counts": manifest["counts"],
             "processing_audit": report,
             "ragflow": {"base_url": portable["ragflow"]["base_url"], "knowledge_base_scope": "sample", "index_ready": True},
-            "files": {path.relative_to(root).as_posix(): digest(path.read_bytes()) for path in sorted(root.rglob("*")) if path.is_file()},
         }
-        atomic_json(root / "release.json", metadata)
-        verify_release(root)
-        temporary_archive = root / ".archive.tar.gz"
-        with (
-            temporary_archive.open("wb") as stream,
-            gzip.GzipFile(fileobj=stream, mode="wb", mtime=0) as compressed,
-            tarfile.open(fileobj=compressed, mode="w") as archive,
-        ):
-            for name in sorted([*metadata["files"], "release.json"]):
-                path = root / name
-                info = archive.gettarinfo(str(path), arcname=name)
-                info.uid = info.gid = info.mtime = 0
-                info.uname = info.gname = ""
-                info.mode = 0o600 if name.startswith("bundle/private/") else 0o644
-                with path.open("rb") as handle:
-                    archive.addfile(info, handle)
-        checksum = digest(temporary_archive.read_bytes())
-        os.rename(temporary_archive, output)
-    return {"version": version, "asset": output.name, "sha256": checksum, "bytes": output.stat().st_size, "samples": metadata["samples"]}
+        return write_release_archive(root, output, metadata)
 
 
 def verify_release(root: Path) -> dict:

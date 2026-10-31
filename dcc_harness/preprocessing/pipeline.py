@@ -13,7 +13,28 @@ from pathlib import Path
 
 from . import loaders
 from .models import Asset, Sample
-from .prompts import DEFAULT_LAYERS, compose
+from .prompts import DEFAULT_INLINE_LAYERS, DEFAULT_LAYERS, compose
+
+
+def document_mode(config: dict) -> str:
+    mode = config.get("document_mode", "ragflow")
+    if mode not in {"ragflow", "inline"}:
+        raise ValueError("document_mode must be 'ragflow' or 'inline'")
+    return mode
+
+
+def inline_text(bundle: Path, documents: list[dict]) -> str:
+    try:
+        texts = [loaders.inside(bundle, doc["path"]).read_bytes().decode("utf-8") for doc in documents]
+    except UnicodeDecodeError:
+        raise ValueError("inline documents must be UTF-8 text; convert them with a processor or use RAGFlow") from None
+    if len(texts) == 1:
+        return texts[0]
+    return "\n\n".join(f"{doc['title']}:\n{text}" for doc, text in zip(documents, texts, strict=True))
+
+
+def document_inventory(item: dict) -> list[dict]:
+    return [{"id": f"document-{index}", "title": doc["title"], "sha256": doc["sha256"]} for index, doc in enumerate(item["documents"])]
 
 
 def digest(data: bytes) -> str:
@@ -71,6 +92,7 @@ def _store(root: Path, role: str, asset: Asset) -> dict:
 
 
 def prepare(config: dict, output: Path, *, samples=None, limit: int | None = None) -> dict:
+    mode = document_mode(config)
     output = Path(output).resolve()
     if output.exists():
         raise FileExistsError(f"bundle already exists; use a new output directory: {output}")
@@ -119,6 +141,7 @@ def prepare(config: dict, output: Path, *, samples=None, limit: int | None = Non
             raise ValueError("loader produced no samples")
         result = {
             "schema_version": 1,
+            "document_mode": mode,
             "samples": len(seen),
             "counts": dict(counts),
             "unique_documents": len(document_hashes),
@@ -155,15 +178,21 @@ def render(bundle: Path, config: dict) -> list[dict]:
 
     bundle = Path(bundle).resolve()
     manifest, samples = verified_samples(bundle)
+    mode = document_mode(manifest)
+    if document_mode({"document_mode": config.get("document_mode", mode)}) != mode:
+        raise ValueError("document mode differs from the prepared bundle")
     state_path = bundle / "index.json"
-    if not state_path.exists():
+    if mode == "ragflow" and not state_path.exists():
         raise RagflowError("index is not ready; run index first")
-    state = json.loads(state_path.read_text())
-    if not state.get("ready") or state["public_sha256"] != manifest["public_sha256"]:
-        raise RagflowError("index is not ready for this bundle")
-    if "ragflow" in config and state["configuration_sha256"] != digest(encoded(index_identity(manifest, config["ragflow"]))):
-        raise ValueError("render configuration differs from the completed index configuration")
-    validate_sample_scopes(state, [item["id"] for item in samples])
+    if mode == "ragflow":
+        state = json.loads(state_path.read_text())
+        if not state.get("ready") or state["public_sha256"] != manifest["public_sha256"]:
+            raise RagflowError("index is not ready for this bundle")
+        if "ragflow" in config and state["configuration_sha256"] != digest(encoded(index_identity(manifest, config["ragflow"]))):
+            raise ValueError("render configuration differs from the completed index configuration")
+        validate_sample_scopes(state, [item["id"] for item in samples])
+    elif state_path.exists():
+        raise ValueError("inline bundle must not carry a RAGFlow index")
     tasks = []
     # Dataset layers append after common defaults unless an explicit layer list
     # replaces them. Sample layers are keyed by a public sample id.
@@ -171,16 +200,19 @@ def render(bundle: Path, config: dict) -> list[dict]:
     for item in samples:
         key = digest(item["id"].encode())[:24]
         context_ref = f"public/contexts/{key}.json"
-        scope = state["scopes"][item["id"]]
+        text = inline_text(bundle, item["documents"]) if mode == "inline" else ""
         context = {
             "schema_version": 2,
-            "retrieval": {**scope, "base_url": state["base_url"]},
-            "documents": [{"id": f"document-{index}", "title": doc["title"], "sha256": doc["sha256"]} for index, doc in enumerate(item["documents"])],
+            "documents": document_inventory(item),
             "rules": [
                 {"file": f"dcc-rule-{index}{Path(rule['path']).suffix}", "title": rule["title"], "sha256": rule["sha256"]}
                 for index, rule in enumerate(item["rules"])
             ],
         }
+        if mode == "ragflow":
+            context["retrieval"] = {**state["scopes"][item["id"]], "base_url": state["base_url"]}
+        else:
+            context.update(document_mode="inline", inline_document_sha256=digest(text.encode("utf-8")))
         files = []
         for rule, public_rule in zip(item["rules"], context["rules"], strict=True):
             try:
@@ -198,25 +230,29 @@ def render(bundle: Path, config: dict) -> list[dict]:
             "question": item["question"],
             "rules": rules,
             "documents": json.dumps(context["documents"], ensure_ascii=False),
+            "document_text": text,
             "sample_metadata": json.dumps(item["public_metadata"], ensure_ascii=False),
             "context_file": "/mnt/user-data/uploads/dcc-context.json",
         }
         layers = [
-            *prompt_config.get("layers", DEFAULT_LAYERS),
+            *prompt_config.get("layers", DEFAULT_INLINE_LAYERS if mode == "inline" else DEFAULT_LAYERS),
             *prompt_config.get("datasets", {}).get(item["dataset"], []),
             *prompt_config.get("samples", {}).get(item["id"], []),
         ]
         prompt = compose(layers, variables)
-        tasks.append(
-            {
-                "id": item["id"],
-                "benchmark": "dcc",
-                "split": item["split"],
-                "prompt": prompt,
-                "files": files,
-                "metadata": {"dcc": {"dataset": item["dataset"], "context_file": context_ref, "context_sha256": digest(encoded(context))}},
-            }
-        )
+        task = {
+            "id": item["id"],
+            "benchmark": "dcc_inline" if mode == "inline" else "dcc",
+            "split": item["split"],
+            "prompt": prompt,
+            "files": files,
+            "metadata": {"dcc": {"dataset": item["dataset"], "context_file": context_ref, "context_sha256": digest(encoded(context))}},
+        }
+        if mode == "inline":
+            if text not in prompt:
+                raise ValueError("inline prompt must include the complete document_text")
+            task["document"] = text
+        tasks.append(task)
     tasks_path = bundle / "public/tasks.jsonl"
     descriptor, temporary = tempfile.mkstemp(prefix=".tasks-", dir=tasks_path.parent)
     try:

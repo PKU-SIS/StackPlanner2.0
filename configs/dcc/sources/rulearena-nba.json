@@ -1,0 +1,55 @@
+{
+  "repository": "SkyRiver-2000/RuleArena",
+  "source": "https://github.com/SkyRiver-2000/RuleArena",
+  "revision": "59f60f6b4eb93a9b6d187ec781349d4f15618903",
+  "license": "MIT",
+  "files": [
+    {
+      "path": "LICENSE",
+      "git_blob_sha1": "953e84b3e76d5d892242f0a66062d32b24625d8a",
+      "sha256": "092b7bdd17849a625533c288b1bbb03a95bb5dfd9324f4aa4990222fa2bf950f",
+      "bytes": 1068
+    },
+    {
+      "path": "README.md",
+      "git_blob_sha1": "090c35f44c921c23cac6bc6856376cf09faf3c7c",
+      "sha256": "0a3b1071c3cc27c3e837d586abd72dc2792d45f80a2100fb5773f5104adf3ec4",
+      "bytes": 4145
+    },
+    {
+      "path": "nba/auto_test.py",
+      "git_blob_sha1": "06cbfa74d0d2779eb8a730d8620f1d9920451f7a",
+      "sha256": "8a8677c36579dd945f978da8cd8eed264d5072cb719fa6f1e260ef9aceb2e29c",
+      "bytes": 18793
+    },
+    {
+      "path": "nba/reference_rules.txt",
+      "git_blob_sha1": "89995f0f8810b1ba3058c82fa11cf767ade31536",
+      "sha256": "eae4dbb7d7ec5847bb56b9280fe811ca275edc34431fad855d330cfb7d1db0ed",
+      "bytes": 98208
+    },
+    {
+      "path": "nba/annotated_problems/comp_0.json",
+      "git_blob_sha1": "2f728c45cc3368b21f6b202ceef45c8786d778ff",
+      "sha256": "4af08b38d01a60e9206865b44bca6e05bb7c37d3cb7fbb294acd489e16a8cc3c",
+      "bytes": 151605
+    },
+    {
+      "path": "nba/annotated_problems/comp_1.json",
+      "git_blob_sha1": "ff9d3f8b79c2d0367ba11dbe6744db9824b26afb",
+      "sha256": "b2fc84e1f9467505d950fa68c5db4f7e91fcbbde846a2393570a7cefac8ada33",
+      "bytes": 253628
+    },
+    {
+      "path": "nba/annotated_problems/comp_2.json",
+      "git_blob_sha1": "ac91c6ee53b61dc10544b5e6ebbb600342843c9b",
+      "sha256": "60a32c7f9c8413c1d3e529098c3788efe07c436b74a33673817f099f01108e39",
+      "bytes": 157329
+    }
+  ],
+  "counts": {
+    "comp_0": 81,
+    "comp_1": 89,
+    "comp_2": 46
+  }
+}

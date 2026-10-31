@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "dataset": "RuleArena NBA Transaction",
+  "repository": "PKU-SIS/StackPlanner2.0",
+  "tag": "dcc-rulearena-nba-v1",
+  "asset": "rulearena-nba-v1.tar.gz",
+  "sha256": "b5afb28b20b05a0138dc0c2132f57c7d4e0805b1992c0b1b06e245f863cdf3f2",
+  "bytes": 195463,
+  "samples": 216,
+  "counts": {"rulearena_nba/test": 216},
+  "complexity_counts": {"comp_0": 81, "comp_1": 89, "comp_2": 46},
+  "document_mode": "inline"
+}

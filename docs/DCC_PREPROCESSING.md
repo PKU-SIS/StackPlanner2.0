@@ -1,19 +1,28 @@
-# DCC 数据加载、预处理与 RAGFlow 建库
+# DCC 数据加载、预处理与 SP 接入
 
 这一层负责把数据集变成可供原生 SP 使用的公共任务输入，不执行 agent，也不计算评测指标。
-RuleArena NBA Transaction、CLAUSE 及未来数据集都可以复用同一条处理链；本次提供
-FinAuditing 和通用 JSONL 两个 loader，不预设其他数据集的字段或评分方式。
+目前提供 FinAuditing、RuleArena NBA Transaction 和通用 JSONL 加载器；其他数据集通过
+插件扩展，不预设其字段或评分方式。
 
 ```text
 loader(options) -> Sample
   -> processor(sample, options) -> ...
   -> prepare: 文档 / 规则 / 私有标签分离，内容哈希去重
-  -> index: RAGFlow 建库 -> 上传文档 -> 切片/索引 -> 轮询完成
+  -> document_mode=ragflow: index -> 上传文档 -> 切片/索引 -> 轮询完成
+     document_mode=inline: 完整短场景直接输入，无需 index
   -> render: 公共上下文 + 通用/数据集/样本 prompt 片段 -> SP Task JSONL
   -> native BenchmarkPlugin: 上传规则文件 + 挂载原生检索工具
 ```
 
 ## 快速使用
+
+### 短场景直接输入
+
+`document_mode: "inline"` 适用于 NBA 等短场景：prepare 后直接 render，不需要 RAGFlow。
+场景原文完整进入 prompt，规则仍以文件提供；独立插件 `native:make_inline_plugin` 使用
+`dcc_inline` benchmark，不注册检索工具。NBA 数据下载和使用见
+[RuleArena NBA 说明](DCC_RULEARENA_NBA.md)。配置未指定该字段时默认仍走 RAGFlow，既有
+FinAuditing Release 可继续使用。
 
 ### 跨服务器使用 Release 数据包
 
@@ -117,9 +126,11 @@ bundle/
 显式声明的 `public_metadata` 可进入公共输入。`tasks.jsonl` 是宿主侧 Task 清单，
 `gold` 留空，标签由评测器通过样本 ID 加载 `private/gold.jsonl`。推理侧使用
 `task.public_input()` 得到 PublicTask，仅包含公开指令和中性文件名下的文件正文，
-不包含样本 ID、split、来源路径或私有 metadata。不把 bundle 根目录挂到 agent；原生
+不包含样本 ID、split、来源路径或私有 metadata。inline 模式下，`Task.document` 和 prompt
+均保留完整场景，公共 context 只保存其哈希与文件清单，不含检索地址或知识库 ID。
+不把 bundle 根目录挂到 agent；原生
 适配器只向当前 user/thread 的 uploads 写入规则文件及公共 context。
-适配器在运行前检查索引已完成、知识库按样本独立，以及渲染时的检索范围仍与当前
+RAGFlow 适配器在运行前检查索引已完成、知识库按样本独立，以及渲染时的检索范围仍与当前
 索引一致；旧版共库任务或过期 context 不能直接带入 agent。
 这项隔离控制的是应用的数据流，不替代部署层面的文件系统权限和 sandbox 隔离。
 
@@ -196,7 +207,9 @@ RAGFlow 的 `naive` 切片、512 token 和关闭自动关键词/问题生成是�
 
 片段可以是相对配置目录的 Markdown 路径，或 `literal:...` 字符串。使用严格的
 `${variable}` 替换，未知变量会报错；字面 `$` 写成 `$$`。可用变量为 `question`、
-`rules`、`documents`、`sample_metadata`、`context_file`。数据集/样本 ID 仅供宿主选择片段，
+`rules`、`documents`、`document_text`、`sample_metadata`、`context_file`。`document_text`
+仅在 inline 模式提供完整 UTF-8 场景；RAGFlow 模式为空。inline 渲染要求完整正文确实进入 prompt。
+数据集/样本 ID 仅供宿主选择片段，
 不作为模板变量进入 agent。没有 gold、私有 metadata 或认证变量。更多公开信息由 loader 显式声明，
 通过 `sample_metadata` 注入。prompt 文件内容不递归执行模板替换。
 
@@ -276,8 +289,10 @@ Skill、规则文件上传和一个只读 REST 检索工具；不改 CentralAgen
 
 ## 发布新版本
 
-维护者先完成全量 index 和 render，再打包；`pack` 要求 FinAuditing 基线处理插件为空，
+维护者先完成全量 render（RAGFlow 模式还需要先 index），再打包；`pack` 要求 FinAuditing 基线处理插件为空，
 会逐条比较源数据与规范化后的问题、文档、规则和答案，并核对初始 prompt 包含原始任务说明。
+其他数据集通过配置中的 `release_builder: "module:function"` 注入自己的来源核对与打包逻辑，
+复用同一套归档、校验、下载与安装流程。NBA 构建器同时核对原始 zero-shot 模板和完整规则。
 
 ```bash
 python scripts/dcc_preprocess.py pack --config "$DCC_CONFIG" \
@@ -294,7 +309,7 @@ RAGFlow 实际索引保存在共享服务中，附件仅携带已完成索引的
 
 ```bash
 python -m pip install pytest ruff
-python -m pytest tests/test_dcc_preprocessing.py tests/test_dcc_releases.py -q
+python -m pytest tests/test_dcc_preprocessing.py tests/test_dcc_releases.py tests/test_dcc_rulearena.py -q
 # 原生 SP 依赖已安装时：
 python -m pytest tests/test_dcc_native.py -q --no-sp-runtime
 ruff check dcc_harness/preprocessing scripts/dcc_preprocess.py tests/test_dcc_*.py

@@ -177,7 +177,24 @@ Private GitHub downloads use `gh auth login`; service keys remain local settings
 `ragflow.index_workers` (1–16, default 1) bounds concurrent independent samples,
 uses one HTTP session per worker, and serializes resumable ledger checkpoints.
 
-Run `python -m pytest tests/test_dcc_preprocessing.py tests/test_dcc_releases.py -q`; with native SP
+Short scenarios use `document_mode: inline`: prepare -> render, without index or
+RAGFlow credentials. `native:make_inline_plugin` registers `dcc_inline`, stages
+rules/context only and exposes no retrieval tool. Complete scenario text is both
+in the prompt and PublicTask.document; the builder verifies it against public
+assets, then omits the duplicate document upload. Preserve the RAGFlow default
+and legacy schema-1 manifests without a document_mode field for FinAuditing.
+`rulearena:load` is a module:function extension pinned by
+`configs/dcc/sources/rulearena-nba.json`. Preserve all original NBA rows, complete
+CBA rules, historical salary assumptions and zero-shot output requirements. True
+means a violation; relevant_rules, offense labels, counts and complexity are host
+metadata/labels, never policy inputs. Do not fix rule IDs, append missing salary
+tables, or split complexity levels into train/validation/test. The raw evaluator
+is provenance only: read prompt constants with AST and never execute it.
+Release construction is injectable via `release_builder`; the NBA baseline checks
+source/input/label parity and uses the shared archive/download implementation.
+See `docs/DCC_RULEARENA_NBA.md` and `tests/test_dcc_rulearena.py`.
+
+Run `python -m pytest tests/test_dcc_preprocessing.py tests/test_dcc_releases.py tests/test_dcc_rulearena.py -q`; with native SP
 dependencies also run `tests/test_dcc_native.py --no-sp-runtime`. Use `ruff check` and `ruff format`
 on changed Python files. Live indexing requires an explicit RAGFlow key supplied
 by environment or a private file; keep generated bundles outside the source tree.

@@ -1,0 +1,1 @@
+Read the listed rule/reference files with the native file tools and apply them to the complete scenario supplied in this task. Follow the task's requirements and output format. Deliver the completed answer through native SP FINISH.

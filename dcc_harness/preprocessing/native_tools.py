@@ -18,6 +18,8 @@ def _retrieve_for_thread(thread_id: str, question: str, page: int, page_size: in
 
     uploads = get_paths().sandbox_uploads_dir(thread_id, user_id=get_effective_user_id())
     context = json.loads((uploads / "dcc-context.json").read_text())
+    if context.get("document_mode") == "inline":
+        raise ValueError("inline evidence is already supplied in full and does not use RAGFlow")
     config = json.loads(Path(os.environ["DCC_CONFIG"]).read_text())["ragflow"]
     # Resolve a relative private key path against the configuration, consistently
     # with the CLI. Prompt files never contain the key or its filesystem path.

@@ -204,6 +204,8 @@ def index_bundle(bundle: Path, config: dict, *, client=None, retry_failed: bool 
     """
     bundle = Path(bundle).resolve()
     manifest, samples = verified_samples(bundle)
+    if manifest.get("document_mode") == "inline":
+        raise ValueError("inline documents do not require an index; run render directly")
     identity = index_identity(manifest, config)
     configuration_sha256 = digest(encoded(identity))
     path = bundle / "index.json"

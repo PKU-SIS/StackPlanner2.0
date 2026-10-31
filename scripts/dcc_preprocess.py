@@ -13,7 +13,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from dcc_harness.preprocessing.pipeline import prepare, read_jsonl, render
+from dcc_harness.preprocessing.pipeline import (
+    document_mode,
+    extension,
+    prepare,
+    read_jsonl,
+    render,
+)
 from dcc_harness.preprocessing.ragflow import RagflowClient, index_bundle, retrieve
 
 
@@ -52,7 +58,7 @@ def bundle_lock(bundle: Path):
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    pack = commands.add_parser("pack", help="package the full baseline FinAuditing release")
+    pack = commands.add_parser("pack", help="package a baseline dataset release")
     pack.add_argument("--config", type=Path, required=True)
     pack.add_argument("--bundle", type=Path, required=True)
     pack.add_argument("--source", type=Path, required=True)
@@ -89,11 +95,16 @@ def main(argv=None) -> int:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     config = load_config(args.config.resolve()) if args.command != "status" else {}
+    if args.command in {"index", "retrieve"} and document_mode(config) == "inline":
+        raise ValueError("inline evidence does not use RAGFlow; run prepare and render directly")
     if args.command == "pack":
         from dcc_harness.preprocessing.releases import build_finauditing_release
 
+        builder = extension(config["release_builder"], {}) if config.get("release_builder") else build_finauditing_release
         with bundle_lock(args.bundle):
-            result = build_finauditing_release(args.bundle, args.source, config, args.output, version=args.version)
+            result = builder(args.bundle, args.source, config, args.output, version=args.version)
+    elif args.command == "doctor" and document_mode(config) == "inline":
+        result = {"document_mode": "inline", "ragflow_required": False}
     elif args.command == "doctor":
         client = RagflowClient(config["ragflow"])
         try:
@@ -131,6 +142,8 @@ def main(argv=None) -> int:
         from dcc_harness.preprocessing.native import context_for_task
 
         context = context_for_task(matches[0], args.bundle)
+        if context.get("document_mode") == "inline":
+            raise ValueError("inline evidence is already supplied in full and does not use retrieval")
         client = RagflowClient(config["ragflow"])
         try:
             result = retrieve(
@@ -141,7 +154,8 @@ def main(argv=None) -> int:
     else:
         result = json.loads((args.bundle / "manifest.json").read_text())
         index_path = args.bundle / "index.json"
-        result["index_ready"] = json.loads(index_path.read_text()).get("ready", False) if index_path.exists() else False
+        result["index_required"] = document_mode(result) == "ragflow"
+        result["index_ready"] = (json.loads(index_path.read_text()).get("ready", False) if index_path.exists() else False) if result["index_required"] else None
         result["tasks_rendered"] = (args.bundle / "public/tasks.jsonl").exists()
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
