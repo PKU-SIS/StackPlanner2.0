@@ -206,9 +206,21 @@ Tool contract:
   in the report-outline skill. After the first accepted tree, this tool may be
   used only for a research target explicitly authorized by new user input; it
   must not open a second automatic round.
-- `write_file` writes the host-assigned delivery path. When file delivery is
-  requested, write the complete tree object there; use `append=True` for later
-  chunks after `read_file`. Never write only `nodes`.
+- `write_file` writes the host-assigned delivery path for an initial plan.
+  When file delivery is requested there, write the complete tree object; use
+  `append=True` for later chunks after `read_file`. Never write only `nodes`.
+  `integrate_review` remains read-only and does not use `write_file`.
+- `report_update_outline_tree` is available only when revising an accepted
+  tree. Use it with the accepted `report_packet.tree.version`; send small
+  structured patches, not a whole tree. A patch may update report title,
+  requirements, nodes (merge by `node_id`), explicit removed node ids, current
+  gap outcomes, write requests, user decisions, feedback dispositions and draft
+  dispositions. Historical action fields are not replayed. `write_requests` must
+  be supplied explicitly; an empty list is an intentional clear. `finalize=true`
+  validates the merged tree and writes the host-assigned delivery file; it does
+  not accept the tree. Stage receipts are small and must not be treated as
+  accepted delivery. Initial planning and integrate_review continue to use the
+  existing file path.
 
 Initial plan:
 - Produce a compact structure sufficient to guide the fixed research round and
@@ -237,16 +249,22 @@ One fixed research round and final consolidation:
   locators before Writer receives it.
 
 Output and recovery contract:
-- Return one JSON envelope with `summary`, `artifact_content` (the full tree
-  object), `artifact_type:"outline"`, and
-  `artifact_metadata.completion_status:"complete"`. Do not wrap the envelope in
-  prose or fences and do not add a `tree` wrapper.
+- Return one JSON envelope with `summary`, `artifact_type:"outline"`, and
+  `artifact_metadata.completion_status:"complete"`. For inline planning or
+  initial file delivery, `artifact_content` is the full tree object; for a
+  staging-tool revision/final delivery, set `artifact_content=null` and declare
+  `artifact_metadata.delivery_mode="file"` with the returned candidate path.
+  Do not wrap the envelope in prose or fences and do not add a `tree` wrapper.
 - File delivery: if `report_packet.delivery.mode` is `optional_file` or
-  `required_file`, write the complete tree object to `report_packet.delivery.path`.
-  `required_file` rejects inline content. The delivery file contains only the
-  tree object, never the envelope. Return a compact envelope with
-  `artifact_content=null`, `artifact_type="outline"` and
-  `artifact_metadata.delivery_mode="file"` plus the path reference.
+  `required_file`, write the complete tree object to `report_packet.delivery.path`
+  for an initial plan. `required_file` rejects inline content. For a revise
+  action with `report_packet.delivery.staging_tool=true`, use
+  `report_update_outline_tree` instead of hand-writing the tree; its
+  `finalize=true` call writes the host delivery file after validation. In both
+  cases the delivery file contains only the tree object, never the envelope.
+  Return a compact envelope with `artifact_content=null`,
+  `artifact_type="outline"` and `artifact_metadata.delivery_mode="file"` plus
+  the path reference.
 - The tree requires `report_title`, `requirements`, `nodes`,
   `removed_node_ids`, `write_requests`, `gap_outcomes`, `user_decisions`,
   `feedback_dispositions`, and `draft_dispositions`. Writable nodes require
@@ -258,11 +276,13 @@ Output and recovery contract:
   host instruction: the current delivery file may already contain the retained
   prefix. Read its relevant tail first. If the retained file merely ends before
   the tree is closed, append only the missing suffix; if it has a mid-file error,
-  correct that part normally with the existing tools. Do not rewrite a valid
-  prefix merely to restate it, and do not treat a generated append that was not
-  executed as accepted. Never auto-fill braces, drop nodes, or submit a partial
-  tree. Final acceptance always parses complete JSON and runs the strict tree,
-  citation and business validations.
+  correct that part normally with the existing tools. On a revise action with
+  `report_packet.delivery.staging_tool=true`, do not edit the delivery tail;
+  continue the host-bound staging source and let the staging tool write the
+  final delivery. Do not rewrite a valid prefix merely to restate it, and do not
+  treat a generated append that was not executed as accepted. Never auto-fill
+  braces, drop nodes, or submit a partial tree. Final acceptance always parses
+  complete JSON and runs the strict tree, citation and business validations.
 
 </report-outline-mode>
 """.strip()

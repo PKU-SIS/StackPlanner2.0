@@ -258,7 +258,10 @@ Return one JSON envelope:
  "artifact_metadata": {"completion_status": "complete"}}
 ```
 
-`artifact_content` is the tree body itself. Do not add a `tree` wrapper, do not
+`artifact_content` is the tree body for an inline plan or an initial file-delivery
+attempt. For a staging-tool revision/final delivery, return
+`artifact_content=null` and reference the candidate written by the tool; do not
+put the full tree in the envelope. Do not add a `tree` wrapper, do not
 put `tree_version` in the tree, and do not wrap the envelope in prose or a
 fenced block. `summary`, `artifact_type`, and `artifact_metadata` stay outside
 the tree. A serialized `artifact_content` string is tolerated only when its
@@ -266,9 +269,13 @@ entire content is the tree JSON object.
 
 ### File delivery
 
-File delivery is preferred for every report Outline, including the first plan.
+File delivery is preferred for an initial plan; `integrate_review` is read-only
+and uses no delivery file. For an accepted-tree revision whose packet exposes
+`delivery.staging_tool`, use the structured staging tool described below
+instead of hand-writing the full tree.
 If `report_packet.delivery.mode` is `optional_file` or `required_file`, write
-the **complete tree object** to `report_packet.delivery.path` with `write_file`.
+the **complete tree object** to `report_packet.delivery.path` with `write_file`
+only when staging is not active.
 When the mode is `required_file`, inline tree content is rejected even if it
 looks complete. For a first plan or any tree larger than one response, use file
 chunks rather than trying to fit the whole tree into one output. The file
@@ -292,6 +299,37 @@ wrapper into it. Do not rewrite an already-valid tree merely to restate it; a
 read-back check is enough. Once file delivery is declared, do not silently use
 a different inline body; inline `artifact_content` remains the compatibility
 path when no file delivery is requested.
+
+### Structured revise staging
+
+Initial planning and `integrate_review` keep the file-delivery path above.
+When `report_packet.delivery.staging_tool` is true (an accepted-tree revision),
+use `report_update_outline_tree` instead of hand-writing the whole tree:
+
+```text
+report_update_outline_tree(
+  base_version=<report_packet.tree.version>,
+  patch={...},
+  finalize=false
+)
+```
+
+The patch may contain `report_title`, `requirements`, `upsert_nodes`,
+`remove_node_ids`, `gap_outcomes`, `write_requests`, `user_decisions`,
+`feedback_dispositions`, and `draft_dispositions`. Nodes merge by `node_id`;
+omitted fields are unchanged, empty arrays are intentional replacements, and
+omitted `write_requests` means "not supplied" rather than preserve or clear.
+Supply `write_requests` explicitly in the final action; an empty list is an
+intentional clear. Historical gap outcomes, decisions, removals, feedback and
+draft dispositions are not inherited or replayed.
+
+`finalize=true` merges into the accepted baseline, checks retained node
+identities and the supplied current outcomes, runs the existing strict tree
+validation, and writes the host-assigned delivery file. It is still a candidate,
+not acceptance. On failure the accepted tree and ledger are unchanged; the
+staging file remains for a same-action retry or an explicitly host-bound
+same-report/same-base resume. The tool receipt is not a tree and cannot be
+delivered as one.
 
 ### Required, recommended, optional
 
@@ -354,16 +392,20 @@ must cover every hard user requirement.
 ```
 
 If `report_packet.rejected_outline` is present on a `plan` or `revise` task,
-follow `report_packet.delivery.instruction`. When the host has already copied the
-candidate into the current delivery, read the relevant tail of that current
-delivery first instead of requiring a full read of the old candidate. If only
-the tail is missing, append the missing content; correct a mid-file error
-normally. Preserve valid nodes, requirements, evidence locators and completed
-updates; do not overwrite newer delivery progress, and leave the original
-candidate unchanged. Only when the host did not prefill should the old candidate
-be used as the recovery basis and written to the specified delivery path. The
-final result must still be complete JSON passing tree, citation and business
-validation; do not change this schema or move evidence preparation to Writer.
+follow `report_packet.delivery.instruction`. If
+`report_packet.delivery.staging_tool` is true, continue from the accepted
+baseline and the host-bound staging source instead of re-reading the rejected
+candidate as a whole tree; do not append to or rewrite the delivery file
+yourself. Otherwise, when the host has already copied the candidate into the
+current delivery, read the relevant tail of that current delivery first instead
+of requiring a full read of the old candidate. If only the tail is missing,
+append the missing content; correct a mid-file error normally. Preserve valid
+nodes, requirements, evidence locators and completed updates; do not overwrite
+newer delivery progress, and leave the original candidate unchanged. Only when
+the host did not prefill should the old candidate be used as the recovery basis
+and written to the specified delivery path. The final result must still be
+complete JSON passing tree, citation and business validation; do not change this
+schema or move evidence preparation to Writer.
 
 ### gap_outcomes shape
 

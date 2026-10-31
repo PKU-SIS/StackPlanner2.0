@@ -37,6 +37,7 @@ from deerflow.sp.report.ledger import (
     utc_now_iso,
 )
 from deerflow.sp.report.materials import build_fetch_material_tool, build_register_user_material_tool
+from deerflow.sp.report.outline_staging import build_outline_staging_tool
 from deerflow.sp.report.prompts import (
     REPORT_INTEGRATE_REVIEW_PROMPT,
     REPORT_OUTLINE_PROMPT,
@@ -493,14 +494,29 @@ def prepare_delegation(
             delivery_path = _outline_delivery_path(ledger.paths, action.action_id)
             protocol_error = context.state.get("sp_report_protocol_error") if isinstance(context.state, Mapping) else None
             requires_file = isinstance(protocol_error, Mapping) and bool(protocol_error.get("outline_delivery_required"))
-            instruction = (
-                "Prefer file delivery from this first Outline attempt. Write the complete tree JSON to "
-                "this host-assigned path using write_file; for later chunks use append=True after reading the "
-                "current file before each append, and leave the nodes array/root unclosed until the final chunk. "
-                "If the current file is already complete JSON but is missing accepted nodes, read it and overwrite "
-                "the full corrected tree instead of appending after its closing brackets. Do not try to fit a large "
-                "tree into one response. Return artifact_content=null and this path in artifact_metadata."
-            )
+            accepted_tree = ledger.payload.get("tree") if isinstance(ledger.payload.get("tree"), Mapping) else None
+            staging_mode = report_task == "revise" and isinstance(accepted_tree, Mapping) and bool(accepted_tree.get("path"))
+            if staging_mode:
+                instruction = (
+                    "This is a revision of the accepted Outline tree. Use report_update_outline_tree "
+                    "with the accepted tree version from report_packet.tree.version. Send only small "
+                    "structured patches; the host merges them into the accepted baseline and serializes "
+                    "the complete candidate. Do not hand-write the whole tree with write_file. "
+                    "For a final candidate, call the tool with finalize=true; it writes the host-assigned "
+                    "delivery file only after validation. Do not edit the delivery file directly. "
+                    "Do not replay historical gap_outcomes, user_decisions, removed_node_ids, feedback or "
+                    "draft dispositions. Supply write_requests explicitly (an empty list is an intentional "
+                    "clear); omission does not preserve or clear historical scheduling."
+                )
+            else:
+                instruction = (
+                    "Prefer file delivery from this first Outline attempt. Write the complete tree JSON to "
+                    "this host-assigned path using write_file; for later chunks use append=True after reading the "
+                    "current file before each append, and leave the nodes array/root unclosed until the final chunk. "
+                    "If the current file is already complete JSON but is missing accepted nodes, read it and overwrite "
+                    "the full corrected tree instead of appending after its closing brackets. Do not try to fit a large "
+                    "tree into one response. Return artifact_content=null and this path in artifact_metadata."
+                )
             if ledger.has_any_returned_gap_research():
                 instruction += (
                     " This is the fixed-round consolidation: all selected research attempts have returned. "
@@ -509,7 +525,7 @@ def prepare_delegation(
                     "targets as not_needed optional, and leave only a genuinely unsupported hard requirement "
                     "awaiting_user."
                 )
-            if requires_file:
+            if requires_file and not staging_mode:
                 instruction = (
                     "This Outline retry requires file delivery. Write the complete tree JSON to this "
                     "host-assigned path using write_file; for later chunks use append=True after reading the "
@@ -520,7 +536,17 @@ def prepare_delegation(
                     "artifact_content=null and this path in artifact_metadata."
                 )
             rejected = ledger.payload.get("rejected_outline")
-            if report_task in {"plan", "revise"} and isinstance(rejected, Mapping):
+            if report_task in {"plan", "revise"} and isinstance(rejected, Mapping) and staging_mode:
+                source_action_id = str(rejected.get("action_id") or "").strip()
+                if source_action_id:
+                    task_metadata["outline_stage_resume_action_id"] = source_action_id
+                    instruction += (
+                        " A prior rejected candidate is retained, but this revision must continue from "
+                        "the accepted baseline and its staging state. Resume the prior action's staging "
+                        "source through the host-bound resume identity; do not replay the rejected "
+                        "candidate as a whole tree."
+                    )
+            elif report_task in {"plan", "revise"} and isinstance(rejected, Mapping):
                 copied = _copy_rejected_outline_to_delivery(ledger, action, delivery_path)
                 candidate_virtual = str(rejected.get("virtual_path") or "").strip()
                 candidate_host = str(rejected.get("path") or "").strip()
@@ -550,6 +576,8 @@ def prepare_delegation(
                 "mode": "required_file" if requires_file else "optional_file",
                 "path": ledger.paths.virtual(delivery_path),
                 "instruction": instruction,
+                "staging_tool": bool(staging_mode),
+                "staging_resume_action_id": task_metadata.get("outline_stage_resume_action_id"),
             }
             task_metadata["outline_delivery_path"] = str(delivery_path)
             task_metadata["outline_delivery_required"] = requires_file
@@ -588,7 +616,16 @@ def configure_report_subagent(
     tools_by_name = {str(getattr(tool, "name", "")): tool for tool in available_tools}
     if role == "outline":
         report_task = str(task.metadata.get("report_task") or "plan").strip().lower()
+        accepted_tree = ReportLedger.load(paths).payload.get("tree")
+        staging = (
+            report_task == "revise"
+            and isinstance(accepted_tree, Mapping)
+            and bool(accepted_tree.get("path"))
+            and bool(task.metadata.get("outline_delivery_path"))
+        )
         if report_task == "integrate_review":
+            selected = [tools_by_name[name] for name in REPORT_READ_TOOLS if name in tools_by_name]
+        elif staging:
             selected = [tools_by_name[name] for name in REPORT_READ_TOOLS if name in tools_by_name]
         else:
             selected = [tools_by_name[name] for name in [*REPORT_READ_TOOLS, "write_file"] if name in tools_by_name]
@@ -596,15 +633,26 @@ def configure_report_subagent(
                 selected.append(tools_by_name["write_file"])
         if "read_file" not in tools_by_name:
             raise ReportValidationError("report outline requires a configured read_file tool to read saved materials")
-        if report_task != "integrate_review" and "write_file" not in tools_by_name:
+        if report_task != "integrate_review" and not staging and "write_file" not in tools_by_name:
             raise ReportValidationError("report outline requires write_file for file delivery")
         register_tool = None
         user_material_tool = None
+        staging_tool = None
         if report_task != "integrate_review":
             register_tool = build_register_research_request_tool(paths=paths, action_id=task.action_id)
             selected.append(register_tool)
             user_material_tool = build_register_user_material_tool(paths=paths)
             selected.append(user_material_tool)
+        if staging:
+            staging_tool = build_outline_staging_tool(
+                paths=paths,
+                action_id=task.action_id,
+                delivery_path=Path(str(task.metadata["outline_delivery_path"])),
+                resume_action_id=(
+                    str(task.metadata.get("outline_stage_resume_action_id") or "").strip() or None
+                ),
+            )
+            selected.append(staging_tool)
         prompt = REPORT_INTEGRATE_REVIEW_PROMPT if report_task == "integrate_review" else REPORT_OUTLINE_PROMPT
         disallowed_tools = list(subagent_config.disallowed_tools or [])
         if report_task == "integrate_review":
@@ -618,7 +666,7 @@ def configure_report_subagent(
             disallowed_tools=disallowed_tools,
             skills=["report-outline"],
         )
-        extra_tools = [tool for tool in (register_tool, user_material_tool) if tool is not None]
+        extra_tools = [tool for tool in (register_tool, user_material_tool, staging_tool) if tool is not None]
         return config, [*available_tools, *extra_tools], role
 
     if role == "writer":
