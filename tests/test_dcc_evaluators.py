@@ -201,6 +201,29 @@ def test_nba_empty_extraction_keeps_undefined_precision_instead_of_zero():
     json.dumps(result, allow_nan=False)
 
 
+@pytest.mark.parametrize("recover", [True, False])
+def test_nba_extraction_retries_identical_input_and_preserves_failures(fake_models, tmp_path, recover):
+    requests, responses, model = fake_models
+    names = [field["name"] for field in rulearena_nba.extraction_contract()["fields"]]
+    valid = {"answer": False, "applied_rules": {name: False for name in names}}
+    responses.extend([{}, valid if recover else {}])
+    gold = {"answer": False, "relevant_rules": [names[0]]}
+    bundle, tasks = make_bundle(tmp_path, [sample("nba", "rulearena_nba", gold, complexity=0)])
+    context = EvaluationContext(options={"bundle": str(bundle), "datasets": {"rulearena_nba": {"rule_extractor": model, "extraction_attempts": 2}}})
+    plugin.setup_evaluation(context)
+    delivery = "An analysis of the salary-cap rule. Answer: False."
+    if recover:
+        metric = plugin.score_task(tasks[0], delivery, context)
+        assert metric["accuracy"] == 1.0 and metric["extraction_attempts"] == 2
+        assert metric["extraction_failures"] == [{"attempt": 1, "error_type": "ExtractionSchemaError"}]
+    else:
+        with pytest.raises(ModelCallError, match="after 2 attempts"):
+            plugin.score_task(tasks[0], delivery, context)
+        assert context.provenance["nba_extraction_attempts"]["nba"]["status"] == "failed"
+    assert len(requests) == 2 and requests[0] == requests[1]
+    assert delivery in requests[0]["payload"]["messages"][1]["content"]
+
+
 def test_generic_offline_runner_dispatches_all_finauditing_subtasks(tmp_path, fake_models):
     _requests, responses, judge = fake_models
     responses.append("A")

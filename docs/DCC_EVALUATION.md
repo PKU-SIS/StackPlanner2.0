@@ -62,6 +62,9 @@ python scripts/evaluate_sp_benchmarks.py \
 `datasets.<名称>.judge`／`rule_extractor` 控制各自的模型、接口和凭据来源。
 NBA 仅算 Accuracy 时，删除 `rule_extractor` 配置；无需模型调用，规则指标标为 `not_requested`。
 FinMR 必须配置裁判，不会自动替换成自定义数值比较器。
+NBA 的 `extraction_attempts` 可设为 1–5，默认 5，与官方驱动的尝试上限一致；离线接入只重试
+相同交付上的规则提取，不重新运行 SP 或改写答案。每次失败及最终尝试次数会写入结果和 provenance；
+全部失败时保留评测错误。示例为自部署模型预留 8,192 个输出 token，包含可能使用的推理 token。
 
 默认要求任务、交付、公开输入哈希和推理清单完全匹配。推理失败或交付缺失时不输出完整汇总；
 诊断部分结果才使用 `--allow-partial`。结果按数据集／子任务分别汇总，标注百分比或 0–1 单位，

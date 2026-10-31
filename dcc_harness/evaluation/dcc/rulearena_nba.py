@@ -14,6 +14,10 @@ from .models import ModelCallError, model_for
 OFFICIAL = Path(__file__).resolve().parents[1] / "dcc_official"
 
 
+class ExtractionSchemaError(ModelCallError):
+    pass
+
+
 def extraction_contract() -> dict:
     return json.loads((OFFICIAL / "nba_extraction.json").read_text())
 
@@ -38,7 +42,7 @@ def extraction_schema(contract) -> dict:
 
 
 def _score(sample, label, text, options, context):
-    if set(options) - {"rule_extractor"}:
+    if set(options) - {"rule_extractor", "extraction_attempts"}:
         raise ValueError("unsupported RuleArena NBA evaluator options")
     gold = label["gold"]
     if type(gold["answer"]) is not bool:
@@ -51,6 +55,9 @@ def _score(sample, label, text, options, context):
     if "rule_extractor" not in options:
         result["rule_metrics_enabled"] = False
         return result
+    attempts = options.get("extraction_attempts", 5)
+    if type(attempts) is not int or not 1 <= attempts <= 5:
+        raise ValueError("NBA extraction_attempts must be an integer between 1 and 5")
     contract = extraction_contract()
     extractor = model_for(options["rule_extractor"], context, "rulearena_nba.rule_extractor", default_model=contract["model"])
     if extractor.config.get("api", "chat") != "chat":
@@ -59,18 +66,47 @@ def _score(sample, label, text, options, context):
     rules = "\n\n".join(inside(bundle, asset["path"]).read_text() for asset in sample["rules"])
     scenario = "\n\n".join(inside(bundle, asset["path"]).read_text() for asset in sample["documents"])
     prompt = contract["prompt_template"].replace("$reference_rules", rules).replace("$question", scenario).replace("$response", response)
-    prediction, request_hash = extractor(
-        "chat",
-        messages=[{"role": "system", "content": contract["system_prompt"]}, {"role": "user", "content": prompt}],
-        temperature=0.0,
-        response_format={"type": "json_schema", "json_schema": {"name": "Response", "strict": True, "schema": extraction_schema(contract)}},
+    names = [field["name"] for field in contract["fields"]]
+    audit = {"attempts": 0, "failures": [], "status": "pending"}
+    context.provenance.setdefault("nba_extraction_attempts", {})[sample["id"]] = audit
+    # The original driver allows five attempts. Offline evaluation retries only
+    # extraction against the SAME saved delivery; never regenerate SP answers.
+    for attempt in range(1, attempts + 1):
+        audit["attempts"] = attempt
+        try:
+            prediction, request_hash = extractor(
+                "chat",
+                messages=[{"role": "system", "content": contract["system_prompt"]}, {"role": "user", "content": prompt}],
+                temperature=0.0,
+                response_format={"type": "json_schema", "json_schema": {"name": "Response", "strict": True, "schema": extraction_schema(contract)}},
+            )
+            applied = _parse_prediction(prediction, names)
+        except ModelCallError as exc:
+            audit["failures"].append({"attempt": attempt, "error_type": type(exc).__name__})
+            if attempt == attempts:
+                audit["status"] = "failed"
+                raise ModelCallError(f"NBA rule extraction failed after {attempts} attempts; no rule metrics were produced") from None
+        else:
+            audit["status"] = "completed"
+            break
+    result.update(
+        rule_metrics_enabled=True,
+        applied_rules=applied,
+        relevant_rules=gold["relevant_rules"],
+        extraction_request_sha256=request_hash,
+        extraction_attempts=audit["attempts"],
+        extraction_failures=list(audit["failures"]),
+        evaluation_protocol="official_prompt_custom_extractor" if extractor.provenance["custom_model"] or extractor.callback else "official_gpt4o_extractor",
     )
+    return result
+
+
+def _parse_prediction(prediction, names):
     if isinstance(prediction, str):
         try:
             prediction = json.loads(prediction)
         except ValueError:
-            raise ModelCallError("NBA extractor did not return its required JSON object") from None
-    names = [field["name"] for field in contract["fields"]]
+            raise ExtractionSchemaError("NBA extractor did not return its required JSON object") from None
     if (
         not isinstance(prediction, dict)
         or set(prediction) != {"answer", "applied_rules"}
@@ -79,15 +115,8 @@ def _score(sample, label, text, options, context):
         or set(prediction["applied_rules"]) != set(names)
         or any(type(value) is not bool for value in prediction["applied_rules"].values())
     ):
-        raise ModelCallError("NBA extractor response differs from the original 55-field schema")
-    result.update(
-        rule_metrics_enabled=True,
-        applied_rules=[name for name in names if prediction["applied_rules"][name]],
-        relevant_rules=gold["relevant_rules"],
-        extraction_request_sha256=request_hash,
-        evaluation_protocol="official_prompt_custom_extractor" if extractor.provenance["custom_model"] or extractor.callback else "official_gpt4o_extractor",
-    )
-    return result
+        raise ExtractionSchemaError("NBA extractor response differs from the original 55-field schema")
+    return [name for name in names if prediction["applied_rules"][name]]
 
 
 def _numbers(value):

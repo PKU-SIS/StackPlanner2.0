@@ -3,6 +3,7 @@
     "bundle": ".benchmark-data/rulearena-nba-v1/bundle",
     "datasets": {
       "rulearena_nba": {
+        "extraction_attempts": 5,
         "rule_extractor": {
           "model": "deepseek-v4.1-flash",
           "base_url": "http://123.57.228.132:8286/api",
@@ -10,7 +11,7 @@
           "api_key_env": "DCC_JUDGE_API_KEY",
           "api_key_file_env": "DCC_JUDGE_API_KEY_FILE",
           "timeout": 120,
-          "max_tokens": 4096
+          "max_tokens": 8192
         }
       }
     }

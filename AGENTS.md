@@ -208,7 +208,9 @@ and NBA substring matching, including undefined rule metrics as null (source NaN
 FinSM source label strings are decoded with literal_eval, never eval. FinMR requires
 the official A/S/E/C judge prompt; never silently replace it with numeric matching.
 NBA rule extraction is optional and uses the original 55 Boolean fields; keep missing
-gold IDs unchanged. Model callbacks are evaluator-only, injected separately, and all
+gold IDs unchanged. Retry extraction 1–5 times against the same saved delivery;
+record failed attempts, never regenerate SP answers, and preserve exhausted retries
+as evaluation errors. Model callbacks are evaluator-only, injected separately, and all
 custom models/endpoints must be recorded alongside the official metric provenance.
 The team model is deepseek-v4.1-flash, configured by example JSON and a private key
 file/environment. No key values belong in Git or evaluation options. See

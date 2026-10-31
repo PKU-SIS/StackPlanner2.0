@@ -51,6 +51,7 @@ the official Starter Kit parsers/metrics; NBA preserves official answer matching
 and model-extracted rule Precision/Recall. Dataset evaluators and judge services
 are configured independently through `--options`; the team DeepSeek deployment
 is recorded explicitly as a custom judge. See [DCC evaluation](docs/DCC_EVALUATION.md).
+NBA rule extraction uses bounded retries on the saved delivery and records failures.
 
 ## Why SP2.0
 
