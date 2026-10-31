@@ -533,3 +533,5 @@ See the [LICENSE](../LICENSE) file in the project root.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
+
+SP Researcher uses 256 graph turns and a 40-call total tool budget (warning at 24). Other subagents retain the existing 20-call cap; repeated-tool and token guards remain active.

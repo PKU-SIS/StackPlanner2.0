@@ -309,6 +309,28 @@ class TestAgentConstruction:
         assert guard.tool_total_warn == 12
         assert guard.tool_total_hard_limit == 20
 
+    def test_sp_researcher_loop_guard_has_expanded_research_budget(self, classes):
+        from deerflow.subagents.builtins.sp_specialists import RESEARCHER_CONFIG
+
+        guard = SimpleNamespace(tool_freq_warn=30, tool_freq_hard_limit=50, warn_threshold=3, hard_limit=5)
+
+        classes["reserve_subagent_loop_guard_budget"]([guard], max_turns=RESEARCHER_CONFIG.max_turns, agent_name=RESEARCHER_CONFIG.name)
+
+        assert RESEARCHER_CONFIG.max_turns == 256
+        assert guard.tool_total_warn == 24
+        assert guard.tool_total_hard_limit == 40
+        assert guard.tool_freq_warn == 24
+        assert guard.tool_freq_hard_limit == 40
+        assert (guard.warn_threshold, guard.hard_limit) == (3, 5)
+
+    def test_other_subagents_keep_existing_tool_budget_cap(self, classes):
+        guard = SimpleNamespace(tool_freq_warn=30, tool_freq_hard_limit=50)
+
+        classes["reserve_subagent_loop_guard_budget"]([guard], max_turns=256, agent_name="sp-coder")
+
+        assert guard.tool_total_warn == 12
+        assert guard.tool_total_hard_limit == 20
+
     def test_qwen_vllm_subagent_enables_thinking_when_tools_are_bound(self, classes, base_config):
         SubagentExecutor = classes["SubagentExecutor"]
         app_config = SimpleNamespace(
@@ -345,11 +367,16 @@ class TestAgentConstruction:
 
         assert executor._should_enable_tool_thinking(app_config, [NamedTool("bash")]) is False
 
+    @pytest.mark.parametrize(("agent_name", "max_turns", "warning", "hard_limit"), [("test-agent", 10, 1, 2), ("sp-researcher", 256, 24, 40)])
     def test_create_agent_threads_explicit_app_config_to_model_and_middlewares(
         self,
         classes,
         base_config,
         monkeypatch: pytest.MonkeyPatch,
+        agent_name,
+        max_turns,
+        warning,
+        hard_limit,
     ):
         """Explicit app_config must flow into both model and middleware factories."""
         import deerflow.config as config_module
@@ -359,7 +386,8 @@ class TestAgentConstruction:
 
         app_config = SimpleNamespace(models=[SimpleNamespace(name="default-model")])
         model = object()
-        middlewares = [object()]
+        guard = SimpleNamespace(tool_freq_warn=30, tool_freq_hard_limit=50)
+        middlewares = [guard]
         agent = object()
         captured: dict[str, dict] = {}
 
@@ -394,6 +422,8 @@ class TestAgentConstruction:
             ),
         )
 
+        base_config.name = agent_name
+        base_config.max_turns = max_turns
         executor = SubagentExecutor(
             config=base_config,
             tools=[],
@@ -419,10 +449,12 @@ class TestAgentConstruction:
             "model_name": "parent-model",
             "lazy_init": True,
             "deferred_setup": None,
-            "agent_name": "test-agent",
+            "agent_name": agent_name,
         }
         assert captured["agent"]["model"] is model
         assert captured["agent"]["middleware"] is middlewares
+        assert guard.tool_total_warn == warning
+        assert guard.tool_total_hard_limit == hard_limit
         assert captured["agent"]["tools"] == []
         assert captured["agent"]["system_prompt"] is None  # system_prompt is merged into initial state messages
 
@@ -606,13 +638,20 @@ class TestAgentConstruction:
         assert isinstance(messages[1], HumanMessage)
 
     @pytest.mark.anyio
+    @pytest.mark.parametrize(("agent_name", "max_turns", "warning", "hard_limit"), [("test-agent", 10, 1, 2), ("sp-researcher", 256, 24, 40), ("sp-coder", 256, 12, 20)])
     async def test_build_initial_state_tells_tool_subagent_its_execution_budget(
         self,
         classes,
         base_config,
         monkeypatch: pytest.MonkeyPatch,
+        agent_name,
+        max_turns,
+        warning,
+        hard_limit,
     ):
         SubagentExecutor = classes["SubagentExecutor"]
+        base_config.name = agent_name
+        base_config.max_turns = max_turns
         monkeypatch.setattr(
             sys.modules["deerflow.skills.storage"],
             "get_or_new_skill_storage",
@@ -628,7 +667,7 @@ class TestAgentConstruction:
 
         system_content = state["messages"][0].content
         assert "<execution_budget>" in system_content
-        assert "hard budget of 2 total tool calls" in system_content
+        assert f"hard budget of {hard_limit} total tool calls and will warn after {warning}" in system_content
         assert "reserve calls for the source edit" in system_content
 
     @pytest.mark.anyio
@@ -898,26 +937,6 @@ class TestAsyncExecutionPath:
         assert result.error is None
         assert result.started_at is not None
         assert result.completed_at is not None
-
-    @pytest.mark.anyio
-    async def test_aexecute_provider_length_is_not_a_clean_completion(self, classes, base_config, mock_agent):
-        message = classes["AIMessage"](content='{"summary":"partial","artifact_content":"unfinished', response_metadata={"finish_reason": "length"})
-        mock_agent.astream = lambda *args, **kwargs: async_iterator([{"messages": [message]}])
-        executor = classes["SubagentExecutor"](config=base_config, tools=[], thread_id="test-thread")
-        with patch.object(executor, "_create_agent", return_value=mock_agent):
-            result = await executor._aexecute("Task")
-        assert result.stop_reason == "token_capped"
-        assert "unfinished" in result.result
-
-    @pytest.mark.anyio
-    async def test_aexecute_success_after_earlier_length_response_is_clean(self, classes, base_config, mock_agent):
-        messages = [classes["AIMessage"](content="partial", response_metadata={"finish_reason": "length"}), classes["AIMessage"](content="Complete final answer", response_metadata={"finish_reason": "stop"})]
-        mock_agent.astream = lambda *args, **kwargs: async_iterator([{"messages": messages}])
-        executor = classes["SubagentExecutor"](config=base_config, tools=[], thread_id="test-thread")
-        with patch.object(executor, "_create_agent", return_value=mock_agent):
-            result = await executor._aexecute("Task")
-        assert result.stop_reason is None
-        assert result.result == "Complete final answer"
 
     @pytest.mark.anyio
     async def test_aexecute_collects_ai_messages(self, classes, base_config, mock_agent, msg):
@@ -1271,6 +1290,26 @@ class TestAsyncExecutionPath:
         assert result.stop_reason == "turn_capped"
         assert str(base_config.max_turns) in (result.error or "")
         assert result.completed_at is not None
+
+    @pytest.mark.anyio
+    async def test_aexecute_provider_length_is_not_a_clean_completion(self, classes, base_config, mock_agent):
+        message = classes["AIMessage"](content='{"summary":"partial","artifact_content":"unfinished', response_metadata={"finish_reason": "length"})
+        mock_agent.astream = lambda *args, **kwargs: async_iterator([{"messages": [message]}])
+        executor = classes["SubagentExecutor"](config=base_config, tools=[], thread_id="test-thread")
+        with patch.object(executor, "_create_agent", return_value=mock_agent):
+            result = await executor._aexecute("Task")
+        assert result.stop_reason == "token_capped"
+        assert "unfinished" in result.result
+
+    @pytest.mark.anyio
+    async def test_aexecute_success_after_earlier_length_response_is_clean(self, classes, base_config, mock_agent):
+        messages = [classes["AIMessage"](content="partial", response_metadata={"finish_reason": "length"}), classes["AIMessage"](content="Complete final answer", response_metadata={"finish_reason": "stop"})]
+        mock_agent.astream = lambda *args, **kwargs: async_iterator([{"messages": messages}])
+        executor = classes["SubagentExecutor"](config=base_config, tools=[], thread_id="test-thread")
+        with patch.object(executor, "_create_agent", return_value=mock_agent):
+            result = await executor._aexecute("Task")
+        assert result.stop_reason is None
+        assert result.result == "Complete final answer"
 
     @pytest.mark.anyio
     async def test_aexecute_token_capped_surfaces_completed_token_capped(self, classes, base_config, mock_agent, msg):

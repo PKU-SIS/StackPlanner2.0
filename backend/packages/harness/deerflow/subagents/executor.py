@@ -47,19 +47,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _SUBAGENT_TOOL_LOOP_HARD_CAP = 20
+_SP_RESEARCHER_TOOL_LOOP_HARD_CAP = 40
 _SUBAGENT_LOOP_SHUTDOWN_RESERVED_STEPS = 6
 _SUBAGENT_GRAPH_STEPS_PER_TOOL_LOOP = 6
 _SUBAGENT_RECOVERED_EVIDENCE_MAX_CHARS = 12_000
 _SUBAGENT_RECOVERED_EVIDENCE_MAX_ITEMS = 6
 
 
-def _subagent_tool_loop_limits(max_turns: int) -> tuple[int, int]:
+def _subagent_tool_loop_limits(max_turns: int, *, agent_name: str | None = None) -> tuple[int, int]:
     """Return warning/hard tool-call limits that fit the graph-step budget."""
 
     safe_hard_limit = max(
         2,
         min(
-            _SUBAGENT_TOOL_LOOP_HARD_CAP,
+            _SP_RESEARCHER_TOOL_LOOP_HARD_CAP if agent_name == "sp-researcher" else _SUBAGENT_TOOL_LOOP_HARD_CAP,
             (max(1, int(max_turns)) - _SUBAGENT_LOOP_SHUTDOWN_RESERVED_STEPS) // _SUBAGENT_GRAPH_STEPS_PER_TOOL_LOOP,
         ),
     )
@@ -67,7 +68,7 @@ def _subagent_tool_loop_limits(max_turns: int) -> tuple[int, int]:
     return safe_warn_limit, safe_hard_limit
 
 
-def _reserve_subagent_loop_guard_budget(middlewares: list[Any], *, max_turns: int) -> None:
+def _reserve_subagent_loop_guard_budget(middlewares: list[Any], *, max_turns: int, agent_name: str | None = None) -> None:
     """Ensure loop detection can stop a tool loop before graph recursion wins.
 
     The current subagent middleware graph consumes up to six graph steps for a
@@ -79,7 +80,7 @@ def _reserve_subagent_loop_guard_budget(middlewares: list[Any], *, max_turns: in
     preserving lead-agent policy and explicit per-tool overrides.
     """
 
-    safe_warn_limit, safe_hard_limit = _subagent_tool_loop_limits(max_turns)
+    safe_warn_limit, safe_hard_limit = _subagent_tool_loop_limits(max_turns, agent_name=agent_name)
     for middleware in middlewares:
         if not hasattr(middleware, "tool_freq_hard_limit") or not hasattr(middleware, "tool_freq_warn"):
             continue
@@ -624,6 +625,7 @@ class SubagentExecutor:
         _reserve_subagent_loop_guard_budget(
             middlewares,
             max_turns=self.config.max_turns,
+            agent_name=self.config.name,
         )
         # Collect every guard middleware that exposes ``consume_stop_reason``
         # (TokenBudgetMiddleware, LoopDetectionMiddleware) so _aexecute can read
@@ -825,7 +827,7 @@ class SubagentExecutor:
         for skill_msg in skill_messages:
             system_parts.append(skill_msg.content)
         if final_tools:
-            warn_limit, hard_limit = _subagent_tool_loop_limits(self.config.max_turns)
+            warn_limit, hard_limit = _subagent_tool_loop_limits(self.config.max_turns, agent_name=self.config.name)
             system_parts.append(
                 "<execution_budget>\n"
                 f"This run has a hard budget of {hard_limit} total tool calls and will warn after {warn_limit}. "

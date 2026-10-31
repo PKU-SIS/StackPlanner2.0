@@ -930,3 +930,5 @@ See `docs/` directory for detailed documentation:
 - [PATH_EXAMPLES.md](docs/PATH_EXAMPLES.md) - Path types and usage
 - [summarization.md](docs/summarization.md) - Context summarization
 - [plan_mode_usage.md](docs/plan_mode_usage.md) - Plan mode with TodoList
+
+SP Researcher uses 256 graph turns and a 40-call total tool budget (warning at 24). Other subagents retain the existing 20-call cap; repeated-tool and token guards remain active.

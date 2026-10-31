@@ -96,7 +96,7 @@ RESEARCHER_CONFIG = SubagentConfig(
     disallowed_tools=["task", "ask_clarification", "present_files", "bash", "write_file", "str_replace"],
     skills=[],
     model="inherit",
-    max_turns=80,
+    max_turns=256,
     internal=True,
 )
 
