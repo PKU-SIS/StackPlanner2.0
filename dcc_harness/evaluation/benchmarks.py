@@ -1,7 +1,7 @@
 """Native SP delivery extraction and independent benchmark scoring.
 
 This module never chooses a specialist's answer on behalf of Central and owns
-no agent loop. The graph's accepted FINISH is the only delivery authority.
+no agent loop. Collect accepted FINISH or the native graph's visible text return.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from typing import Any
 from dcc_harness.data import PublicTask, Task
 
 PROTOCOL = "sp-native-benchmarks-v3"
+DELIVERY_CONTRACT = "native-finish-or-text-v1"
 MAX_DELIVERY_BYTES = 16 * 1024 * 1024
 
 
@@ -27,7 +28,7 @@ class DeliveryError(ValueError):
 
 
 def extract_delivery(
-    state: dict, *, thread_id: str, run_id: str
+    state: dict, *, thread_id: str, run_id: str, native_returned: bool = False
 ) -> tuple[str, dict | None]:
     if state.get("sp_pending_human_interaction"):
         raise DeliveryError("ask_human", "native SP requests human input")
@@ -35,7 +36,9 @@ def extract_delivery(
         state.get("sp_current_stage") != "finished"
         or (state.get("sp_last_handler_result") or {}).get("next_step") != "finish"
     ):
-        raise DeliveryError("unfinished", "native SP did not accept FINISH")
+        return _native_text_delivery(
+            state, run_id=run_id, native_returned=native_returned
+        ), None
     selected = state.get("sp_last_final_artifact_ref")
     if not selected:
         text = str(state.get("sp_last_run_summary") or "").strip()
@@ -135,6 +138,109 @@ def extract_delivery(
             observed_sha256=observed_hash, integrity="native_existing_file_snapshot"
         )
     return text, selected_ref
+
+
+def _native_text_delivery(state: dict, *, run_id: str, native_returned: bool) -> str:
+    # Only the inference caller can attest that astream exhausted normally.
+    # A saved/intermediate state or a timed-out graph is not a text completion.
+    if not native_returned or state.get("sp_loop_run_id") != run_id:
+        raise DeliveryError(
+            "unfinished", "native SP did not return a current-run text delivery"
+        )
+    if (
+        state.get("__interrupt__")
+        or state.get("sp_current_action")
+        or state.get("sp_active_delegate_id")
+    ):
+        raise DeliveryError(
+            "unfinished", "native SP still has interrupted or active work"
+        )
+    from deerflow.sp.agent_tools import SPFinishAvailabilityMiddleware
+    from langchain_core.messages import AIMessage
+
+    messages = state.get("messages") or []
+    latest = messages[-1] if messages else None
+    if not isinstance(latest, AIMessage):
+        raise DeliveryError("unfinished", "native return has no final Central message")
+    handler = state.get("sp_last_handler_result") or {}
+    if (
+        handler.get("next_step") != "continue"
+        or handler.get("action_type") != "THINK"
+        or not latest.id
+        or handler.get("action_id") != latest.id
+    ):
+        raise DeliveryError(
+            "unfinished", "text is not the current native Central return"
+        )
+    extra = latest.additional_kwargs
+    if extra.get("error_type"):
+        raise DeliveryError("infrastructure_error", "native model returned an error")
+    if latest.invalid_tool_calls:
+        raise DeliveryError(
+            "protocol_error", "native return contains invalid tool calls"
+        )
+    if (
+        latest.tool_calls
+        or extra.get("hide_from_ui")
+        or (extra.get("stackplanner") or {}).get("status")
+        in {"incomplete", "recovery_required", "action_capped", "blocked"}
+    ):
+        raise DeliveryError(
+            "unfinished", "native return is pending, hidden, or explicitly incomplete"
+        )
+    if latest.response_metadata.get("finish_reason") in {
+        "length",
+        "content_filter",
+        "tool_calls",
+    }:
+        raise DeliveryError(
+            "unfinished", "native model did not complete its text response"
+        )
+    budget = state.get("sp_max_loop_iterations")
+    if (
+        isinstance(budget, int)
+        and int(state.get("sp_loop_iteration") or 0) >= budget - 1
+    ):
+        raise DeliveryError(
+            "unfinished",
+            "native action budget reserved the final turn for incomplete status",
+        )
+    if (
+        state.get("sp_last_final_artifact_ref")
+        or SPFinishAvailabilityMiddleware._requires_artifact_delivery(state)
+        or SPFinishAvailabilityMiddleware._incomplete_current_report(state) is not None
+    ):
+        raise DeliveryError(
+            "unfinished", "native artifact delivery still requires accepted FINISH"
+        )
+    content = latest.content
+    text = (
+        content
+        if isinstance(content, str)
+        else "".join(
+            block if isinstance(block, str) else block.get("text", "")
+            for block in content
+            if isinstance(block, str)
+            or (
+                isinstance(block, dict)
+                and block.get("type") == "text"
+                and isinstance(block.get("text"), str)
+            )
+        )
+    )
+    if "DSML" in text:
+        raise DeliveryError(
+            "protocol_error", "native response contains unrecovered tool syntax"
+        )
+    if (
+        not text.strip()
+        or "\x00" in text
+        or len(text.encode("utf-8")) > MAX_DELIVERY_BYTES
+    ):
+        raise DeliveryError(
+            "final_parse_error", "native text delivery is empty, invalid, or oversized"
+        )
+    return text
 
 
 def parse_answer(task: Task | PublicTask, text: str) -> list:

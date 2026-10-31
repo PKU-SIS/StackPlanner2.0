@@ -1014,6 +1014,9 @@ Run `scripts/infer_sp_benchmarks.py` to collect final deliveries, then
 `scripts/evaluate_sp_benchmarks.py` to score an existing run. Input adapters receive
 only public tasks and staged UTF-8 files; labels and private metadata stay with
 the evaluator. Plugins own their scoring and aggregation, including CUAD AUPR.
+Collection accepts native text answers after normal graph return as well as
+validated FINISH deliveries, while preserving incomplete-output and artifact gates.
+The manifest records the delivery contract and results identify the delivery source.
 The former combined evaluation command is now evaluation-only; v2 run directories
 are not silently resumed as v3. See the [benchmark guide](docs/dcc_harness.md) for
 commands, plugin interfaces, completeness rules, and tests that do not execute SP2.

@@ -237,7 +237,8 @@ These apply repo-wide; module guides own the module-specific detail.
 
 ## Benchmark plugin lifecycle (DCC v3)
 
-`scripts/infer_sp_benchmarks.py` collects native SP FINISH deliveries only;
+`scripts/infer_sp_benchmarks.py` collects accepted SP FINISH deliveries and
+visible native text returns after the graph exhausts normally;
 `scripts/evaluate_sp_benchmarks.py` scores saved deliveries without executing SP.
 `dcc_harness/data.py` separates private `Task` from `PublicTask`; only the latter
 may reach prompt/input builders or answer parsers. UTF-8 inputs are staged in the
@@ -247,6 +248,14 @@ Plugins own parsing, scoring, setup/resource provenance, and aggregation; do not
 add benchmark-specific averaging branches to the shared runner. Preserve failed
 predictions as failures and require complete manifests unless diagnostic partial
 evaluation is explicitly requested. Keep native planning/delegation/FINISH intact.
+The `native-finish-or-text-v1` delivery contract is recorded separately from the
+v3 lifecycle protocol. Text collection requires the current-run Central message
+and its matching implicit THINK state; never collect an intermediate state,
+specialist/tool message, hidden reasoning, truncated output, native incomplete
+guard or action-capped response. Reuse native artifact-request/report gates:
+file deliveries still require accepted FINISH and existing integrity checks.
+Legacy manifests retain FINISH-only semantics and cannot be silently resumed
+under the new contract. Do not rewrite historical predictions in place.
 See `docs/dcc_harness.md` for the v3 API and migration from the old combined entry.
 Run root benchmark tests with `--no-sp-runtime` when real SP execution is excluded;
 this guards graph construction and skips tests marked `sp_runtime`.

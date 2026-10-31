@@ -6,10 +6,10 @@ import dataclasses
 import hashlib
 import importlib
 import importlib.metadata
-import platform
 import json
 import math
 import os
+import platform
 import time
 from collections import Counter
 from pathlib import Path
@@ -17,7 +17,11 @@ from typing import Any
 
 from dcc_harness.data import Task, validate_disjoint
 from dcc_harness.datasets.benchmark_plugins import BenchmarkPlugin, dataset_plugins
-from dcc_harness.evaluation.benchmarks import PROTOCOL, retrieval_diagnostics
+from dcc_harness.evaluation.benchmarks import (
+    DELIVERY_CONTRACT,
+    PROTOCOL,
+    retrieval_diagnostics,
+)
 
 
 @dataclasses.dataclass
@@ -132,6 +136,13 @@ def inference_summary(rows: list[dict], expected_tasks: int) -> dict:
         "prediction_coverage": len(rows) / expected_tasks if expected_tasks else 0.0,
         "completion_rate": completed / expected_tasks if expected_tasks else 0.0,
         "status_counts": dict(Counter(row["status"] for row in rows)),
+        "delivery_sources": dict(
+            Counter(
+                row.get("delivery_source", "legacy_finish")
+                for row in rows
+                if row.get("status") == "completed"
+            )
+        ),
         "complete_split": completed == expected_tasks and len(rows) == expected_tasks,
     }
 
@@ -238,6 +249,9 @@ def evaluate_run(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("protocol") != PROTOCOL or manifest.get("phase") != "inference":
         raise ValueError("evaluation requires a v3 inference manifest")
+    delivery_contract = manifest.get("delivery_contract", "finish-only-v1")
+    if delivery_contract not in {"finish-only-v1", DELIVERY_CONTRACT}:
+        raise ValueError("unsupported native delivery contract")
     expected_all = manifest.get("task_inputs")
     if not isinstance(expected_all, list) or len(
         {r["task_id"] for r in expected_all}
@@ -297,6 +311,7 @@ def evaluate_run(
     identity = {
         "protocol": PROTOCOL,
         "phase": "evaluation",
+        "inference_delivery_contract": delivery_contract,
         "inference_manifest_sha256": hashlib.sha256(
             manifest_path.read_bytes()
         ).hexdigest(),

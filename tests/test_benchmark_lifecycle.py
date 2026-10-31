@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from dcc_harness.data import Task, PublicTask, InputFile, load_tasks, validate_disjoint
+from dcc_harness.data import InputFile, PublicTask, Task, load_tasks, validate_disjoint
 from dcc_harness.datasets.benchmark_plugins import BenchmarkPlugin, stage_files
 from dcc_harness.evaluation.offline import evaluate_run
 
@@ -99,8 +99,9 @@ def test_runner_never_calls_parser_or_scorer_and_passes_native_configuration(
     tmp_path, monkeypatch
 ):
     import deerflow.sp.runtime as native
-    from dcc_harness.evaluation.benchmark_runner import Settings, run_task
     from deerflow.config.paths import get_paths
+
+    from dcc_harness.evaluation.benchmark_runner import Settings, run_task
 
     def forbidden(*args, **kwargs):
         raise AssertionError("inference must not parse or score")
@@ -185,6 +186,7 @@ def test_runner_never_calls_parser_or_scorer_and_passes_native_configuration(
 
 def saved_run(tmp_path, tasks, deliveries, statuses=None):
     import hashlib
+
     from dcc_harness.evaluation.benchmarks import PROTOCOL
     from dcc_harness.evaluation.offline import task_identity
 
@@ -237,6 +239,34 @@ def test_real_cuad_evaluation_includes_dataset_aupr_without_sp_or_api(
     assert json.loads((tmp_path / "eval/manifest.json").read_text())["judge"] is None
     again = evaluate_run([task], run_dir=root, output_dir=tmp_path / "eval-again")
     assert report == again
+
+
+@pytest.mark.parametrize("contract", ["legacy", "native", "unknown"])
+def test_evaluation_records_delivery_contract_without_rewriting_inference(
+    tmp_path, contract
+):
+    from dcc_harness.evaluation.benchmarks import DELIVERY_CONTRACT
+
+    task = sample()
+    root = saved_run(tmp_path, [task], ['["Last sentence."]'])
+    manifest = json.loads((root / "manifest.json").read_text())
+    if contract != "legacy":
+        manifest["delivery_contract"] = (
+            DELIVERY_CONTRACT if contract == "native" else "unknown-future-contract"
+        )
+        (root / "manifest.json").write_text(json.dumps(manifest))
+    before = {p.name: p.read_bytes() for p in root.iterdir()}
+    if contract == "unknown":
+        with pytest.raises(ValueError, match="delivery contract"):
+            evaluate_run([task], run_dir=root, output_dir=tmp_path / "eval")
+    else:
+        report = evaluate_run([task], run_dir=root, output_dir=tmp_path / "eval")
+        assert report["complete_split"]
+        identity = json.loads((tmp_path / "eval/manifest.json").read_text())
+        assert identity["inference_delivery_contract"] == (
+            DELIVERY_CONTRACT if contract == "native" else "finish-only-v1"
+        )
+    assert {p.name: p.read_bytes() for p in root.iterdir()} == before
 
 
 @pytest.mark.parametrize("mode", ["missing", "failed", "invalid"])
@@ -456,15 +486,19 @@ def test_infer_and_eval_cli_round_trip_selected_artifact_and_native_file_access(
     tmp_path, monkeypatch
 ):
     import hashlib
+
     import deerflow.sp.runtime as native
     from deerflow.config.paths import get_paths
     from deerflow.sandbox.sandbox_provider import (
         get_sandbox_provider,
         reset_sandbox_provider,
     )
+
+    from scripts import (
+        evaluate_sp_benchmarks as eval_cli,
+    )
     from scripts import (
         infer_sp_benchmarks as infer_cli,
-        evaluate_sp_benchmarks as eval_cli,
     )
 
     task = sample()
@@ -567,8 +601,9 @@ def test_infer_and_eval_cli_round_trip_selected_artifact_and_native_file_access(
 
 
 def test_input_error_is_recorded_without_constructing_graph(tmp_path, monkeypatch):
-    from dcc_harness.evaluation.benchmark_runner import Settings, run_task
     import deerflow.sp.runtime as native
+
+    from dcc_harness.evaluation.benchmark_runner import Settings, run_task
 
     monkeypatch.setattr(
         native,

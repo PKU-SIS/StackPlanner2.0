@@ -105,7 +105,19 @@ attempts/0000/trace.jsonl         # 原生事件流
 native-state/                   # 每用户/线程的原生 uploads、outputs 等
 ```
 
-只有原生 FINISH 接受的交付才算推理完成。指定最终 artifact 时读取完整文件并校验线程、run、状态、路径和内容哈希，不拿 Central 摘要或最后一个子 agent 的回答代替答案。没有 artifact 时使用原生接受的文本交付。合法交付里的非法 JSON 仍被收集，之后由评分阶段判定，不能触发重新推理。
+采集遵循原生 SP 的两条完成路径：通过 FINISH 校验的交付，以及原生图正常返回的可见文本答案。
+文本直答必须是当前 run 最后一条 Central 消息，并与原生 implicit THINK 状态对应；不能仅凭
+保存的中间状态推断完成。待人工处理、仍有活动动作、原生未验证草稿、动作预算耗尽、错误、
+截断或隐藏消息均不算成功。只提取可见文本块，不读取隐藏推理。
+
+要求文件交付的任务及尚未完成的报告仍必须通过 FINISH。指定最终 artifact 时读取完整文件并
+校验线程、run、状态、路径和内容哈希，不拿 Central 摘要或最后一个子 agent 的回答代替答案。
+合法交付里的非法 JSON 仍被收集，之后由评分阶段判定，不能触发重新推理。
+
+v3 manifest 通过 `delivery_contract: native-finish-or-text-v1` 明确标注这次采集修复；
+逐题结果记录 `native_returned` 与 `delivery_source`（`native_text`、`finish_text`、
+`finish_artifact`）。未标注该字段的旧 v3 运行仍按原 FINISH-only 口径保存与评分，不会自动
+补答案或改写历史文件。代码和 manifest 身份变化会拒绝直接续跑旧目录。
 
 `--resume` 只补未记录任务；配置、代码或公开输入变化时拒绝续跑。已记录失败保持原样，不自动重试；需要重新推理时使用新运行目录。已有 attempt 结果已落盘而汇总尚未追加的崩溃窗口可以恢复；中途损坏的结果行不会被静默忽略。v2 结果不能冒充 v3 续跑或评分，需显式迁移后另行审查。
 

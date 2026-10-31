@@ -1,7 +1,8 @@
 # FinAuditing 与 RuleArena NBA 评测器
 
 两者均有官方实现，已通过现有 `BenchmarkPlugin` 接到 `evaluate_sp_benchmarks.py`。
-评测只读取已保存的 SP FINISH 交付和宿主侧标签，不重新运行 SP，也不访问 RAGFlow。
+评测只读取已保存的 SP 最终交付和宿主侧标签，不重新运行 SP，也不访问 RAGFlow。
+交付可来自通过校验的 FINISH，或原生图正常返回的可见文本答案；采集不改变 SP 的决策流程。
 现有数据 Release、输入 prompt 和任务文件可直接复用。
 
 ## 官方来源与口径

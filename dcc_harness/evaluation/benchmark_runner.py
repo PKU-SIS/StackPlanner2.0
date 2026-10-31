@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-import json
 import hashlib
+import json
 import math
 import os
 import threading
@@ -205,6 +205,7 @@ async def _run_task(
         **context,
         status="unfinished",
         detail="",
+        native_returned=False,
         input_sha256=task.input_sha256(),
     )
     started = time.monotonic()
@@ -258,9 +259,23 @@ async def _run_task(
         inputs = build_inputs(plugin, task.public_input(), thread_id)
         phase = "inference"
         await asyncio.wait_for(execute(), timeout=settings.timeout)
+        result["native_returned"] = True
         phase = "delivery"
-        text, artifact = extract_delivery(state, thread_id=thread_id, run_id=run_id)
+        text, artifact = extract_delivery(
+            state, thread_id=thread_id, run_id=run_id, native_returned=True
+        )
         result.update(delivery=text, final_artifact=artifact)
+        accepted_finish = (
+            state.get("sp_current_stage") == "finished"
+            and (state.get("sp_last_handler_result") or {}).get("next_step") == "finish"
+        )
+        result["delivery_source"] = (
+            "finish_artifact"
+            if artifact
+            else "finish_text"
+            if accepted_finish
+            else "native_text"
+        )
         result["delivery_sha256"] = hashlib.sha256(text.encode()).hexdigest()
         result["status"] = "completed"
     except DeliveryError as exc:

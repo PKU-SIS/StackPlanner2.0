@@ -30,7 +30,7 @@ from dcc_harness.datasets.benchmark_plugins import (
 )
 from dcc_harness.datasets.benchmarks import load_tasks, validate_disjoint
 from dcc_harness.evaluation.benchmark_runner import Settings, run_task
-from dcc_harness.evaluation.benchmarks import PROTOCOL
+from dcc_harness.evaluation.benchmarks import DELIVERY_CONTRACT, PROTOCOL
 from dcc_harness.evaluation.offline import (
     inference_summary,
     plugin_identity,
@@ -359,6 +359,7 @@ async def main_async(args) -> int:
     identity = {
         "protocol": PROTOCOL,
         "phase": "inference",
+        "delivery_contract": DELIVERY_CONTRACT,
         "task_inputs": [task_identity(t) for t in tasks],
         "dataset_source": args.dataset_source,
         "normalized_tasks_sha256": hashlib.sha256(normalized.encode()).hexdigest(),
