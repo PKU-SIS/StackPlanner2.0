@@ -44,6 +44,7 @@ import {
   extractContentFromMessage,
   extractPresentFilesFromMessage,
   extractTextFromMessage,
+  failedSubtaskToolCallIds,
   getAssistantTurnCopyData,
   getAssistantTurnUsageMessages,
   getMessageGroups,
@@ -911,6 +912,7 @@ export function MessageList({
                 </div>
               );
             } else if (group.type === "assistant:subagent") {
+              const failedTaskIds = failedSubtaskToolCallIds(group.messages);
               const tasks = new Set<Subtask>();
               for (const message of group.messages) {
                 if (message.type === "ai") {
@@ -920,7 +922,7 @@ export function MessageList({
                       toolCall.name === "sp_delegate"
                     ) {
                       const taskId = toolCall.id;
-                      if (!taskId) {
+                      if (!taskId || failedTaskIds.has(taskId)) {
                         continue;
                       }
                       const status = derivePendingSubtaskStatus(
@@ -997,6 +999,9 @@ export function MessageList({
                     : [],
                 );
                 for (const taskId of taskIds ?? []) {
+                  if (failedTaskIds.has(taskId)) {
+                    continue;
+                  }
                   results.push(
                     <SubtaskCard
                       key={"task-group-" + taskId}

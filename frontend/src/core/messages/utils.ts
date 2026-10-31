@@ -1,5 +1,7 @@
 import type { AIMessage, Message } from "@langchain/langgraph-sdk";
 
+import { parseSubtaskResult } from "@/core/tasks/subtask-result";
+
 import { extractHumanInputRequest } from "./human-input";
 
 interface GenericMessageGroup<T = string> {
@@ -35,6 +37,41 @@ const HIDDEN_CONTROL_MESSAGE_NAMES = new Set([
   "todo_completion_reminder",
 ]);
 
+export function isStackplannerFinishSummaryMessage(message: Message): boolean {
+  if (message.type !== "ai") {
+    return false;
+  }
+  const stackplanner = (
+    message.additional_kwargs as Record<string, unknown> | undefined
+  )?.stackplanner;
+  return (
+    typeof stackplanner === "object" &&
+    stackplanner !== null &&
+    (stackplanner as { action_type?: unknown }).action_type === "FINISH"
+  );
+}
+
+export function failedSubtaskToolCallIds(messages: Message[]): Set<string> {
+  const failed = new Set<string>();
+  for (const message of messages) {
+    if (
+      message.type !== "tool" ||
+      !message.tool_call_id ||
+      (message.name !== "task" && message.name !== "sp_delegate")
+    ) {
+      continue;
+    }
+    const parsed = parseSubtaskResult(
+      extractTextFromMessage(message),
+      message.additional_kwargs as Record<string, unknown> | undefined,
+    );
+    if (parsed.status === "failed") {
+      failed.add(message.tool_call_id);
+    }
+  }
+  return failed;
+}
+
 export function getMessageGroups(messages: Message[]): MessageGroup[] {
   if (messages.length === 0) {
     return [];
@@ -59,6 +96,9 @@ export function getMessageGroups(messages: Message[]): MessageGroup[] {
 
   for (const message of messages) {
     if (isHiddenFromUIMessage(message)) {
+      continue;
+    }
+    if (isStackplannerFinishSummaryMessage(message)) {
       continue;
     }
 

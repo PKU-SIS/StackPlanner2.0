@@ -5,6 +5,7 @@ import {
   extractContentFromMessage,
   extractTextFromMessage,
   extractReasoningContentFromMessage,
+  failedSubtaskToolCallIds,
   getMessageCopyData,
   getAssistantTurnCopyData,
   getAssistantTurnUsageMessages,
@@ -14,6 +15,7 @@ import {
   hasSubagent,
   hasReasoning,
   isAssistantMessageGroupStreaming,
+  isStackplannerFinishSummaryMessage,
   stripUploadedFilesTag,
 } from "@/core/messages/utils";
 
@@ -741,4 +743,42 @@ describe("orphan tool messages", () => {
     expect(t1b).toBeDefined();
     expect(t1b?.type).toBe("tool");
   });
+});
+
+test("hides the StackPlanner finish summary from visible message groups", () => {
+  const finish = {
+    id: "sp-final",
+    type: "ai",
+    content: "报告最低验收已通过，交付当前最终报告。",
+    additional_kwargs: { stackplanner: { action_type: "FINISH" } },
+  } as Message;
+
+  expect(isStackplannerFinishSummaryMessage(finish)).toBe(true);
+  expect(getMessageGroups([finish])).toEqual([]);
+});
+
+test("identifies failed subtask tool results for hiding the failed card", () => {
+  const failed = {
+    id: "tool-failed",
+    type: "tool",
+    name: "sp_delegate",
+    tool_call_id: "task-failed",
+    content: "",
+    additional_kwargs: {
+      subagent_status: "failed",
+      subagent_error: "delegation failed",
+    },
+  } as Message;
+  const completed = {
+    id: "tool-completed",
+    type: "tool",
+    name: "sp_delegate",
+    tool_call_id: "task-completed",
+    content: "",
+    additional_kwargs: { subagent_status: "completed" },
+  } as Message;
+
+  expect(failedSubtaskToolCallIds([failed, completed])).toEqual(
+    new Set(["task-failed"]),
+  );
 });
