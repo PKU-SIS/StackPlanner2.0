@@ -1,0 +1,5 @@
+# Official FinRE classification + optional model-backed FinMR/NBA evaluation.
+scikit-learn>=1.5
+tqdm>=4.66
+numpy>=1.26
+openai>=1.66

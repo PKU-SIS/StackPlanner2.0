@@ -46,7 +46,8 @@ SP 推理使用 `bundle/public/tasks.jsonl`，注册：
 
 任务 benchmark 为 `dcc_inline`。插件将完整场景直接保留在原生输入中，只上传规则与中性命名的
 公共 context，不注册检索工具，不读取 RAGFlow 配置或 Key。模型与 SP 参数沿用
-[通用推理入口](dcc_harness.md)；本次只做数据准备与输入接入，不增加子任务评分器。
+[通用推理入口](dcc_harness.md)。离线评测已接入官方 Accuracy 和模型提取的规则 Precision／Recall，
+配置方式见 [DCC 评测器说明](DCC_EVALUATION.md)。
 
 ## 重建与扩展
 

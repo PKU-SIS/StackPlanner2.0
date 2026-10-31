@@ -46,6 +46,11 @@ RuleArena NBA Transaction is also available as a versioned Release. Its short
 scenario stays in the prompt through the generic `document_mode: inline` path;
 the complete original CBA rules are staged as a file, with no RAGFlow service or
 key required. See the [NBA data and SP input guide](docs/DCC_RULEARENA_NBA.md).
+Both DCC input plugins now expose official offline evaluators. FinAuditing uses
+the official Starter Kit parsers/metrics; NBA preserves official answer matching
+and model-extracted rule Precision/Recall. Dataset evaluators and judge services
+are configured independently through `--options`; the team DeepSeek deployment
+is recorded explicitly as a custom judge. See [DCC evaluation](docs/DCC_EVALUATION.md).
 
 ## Why SP2.0
 

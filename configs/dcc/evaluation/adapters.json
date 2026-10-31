@@ -1,0 +1,6 @@
+{
+  "finauditing_finre": "dcc_harness.evaluation.dcc.finauditing:finre_evaluator",
+  "finauditing_finmr": "dcc_harness.evaluation.dcc.finauditing:finmr_evaluator",
+  "finauditing_finsm": "dcc_harness.evaluation.dcc.finauditing:finsm_evaluator",
+  "rulearena_nba": "dcc_harness.evaluation.dcc.rulearena_nba:make_evaluator"
+}

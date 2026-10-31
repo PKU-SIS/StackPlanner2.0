@@ -283,9 +283,9 @@ inputs = build_inputs(plugin, task.public_input(), thread_id)
 Skill、规则文件上传和一个只读 REST 检索工具；不改 CentralAgent、调度器或 agent loop。
 网络请求在线程中执行，沿用 SP 的 user/thread 路径解析。
 
-本阶段插件的 `parse_answer` / `score_task` 留空，已有 `evaluate_sp_benchmarks.py` 会
-明确拒绝以该插件评测。仓库 v3 已将推理与离线评测拆开；下一阶段为 DCC 各子任务
-补齐 parser、scorer、聚合指标及标签加载，接到现有通用评测流程。
+两个插件均已接入离线评测，按数据集分发官方 parser、scorer 和汇总逻辑。
+私有标签仅在评测时由数据包加载，不改动已有任务输入或推理结果；裁判服务通过独立选项注入。
+指标口径与运行方式见 [DCC 评测器说明](DCC_EVALUATION.md)。
 
 ## 发布新版本
 

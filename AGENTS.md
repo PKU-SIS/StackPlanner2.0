@@ -154,7 +154,7 @@ registers sample-scoped `ragflow_retrieve`; each independent sample owns a
 dedicated RAGFlow knowledge base, including samples from the same source dataset
 or with identical document bytes. Related documents within one sample may share
 its base. Index schema v2 rejects the old shared-dataset ledger. The adapter does
-not modify the native agent loop and intentionally has no scorer yet. Keep private gold/source metadata and
+not modify the native agent loop. Keep private gold/source metadata and
 credentials out of uploads, prompts, and RAGFlow documents. Never broaden a
 sample's document IDs on an empty retrieval result.
 Builders consume only PublicTask and use native stage_files/build_inputs.
@@ -193,6 +193,27 @@ is provenance only: read prompt constants with AST and never execute it.
 Release construction is injectable via `release_builder`; the NBA baseline checks
 source/input/label parity and uses the shared archive/download implementation.
 See `docs/DCC_RULEARENA_NBA.md` and `tests/test_dcc_rulearena.py`.
+
+Both factories attach `evaluation.dcc.plugin` hooks to the existing offline runner.
+These load verified private bundle labels only during evaluation and dispatch by
+the host-side dataset, using `configs/dcc/evaluation/adapters.json` or per-run
+`evaluators` overrides. New factories return evaluation.dcc.Evaluator; do not add
+dataset switches or averaging branches to the shared runner. Never expose labels
+through PublicTask, parser routing or inference setup; evaluation must bind each
+task's public input hash to the selected label bundle and keep inference files read-only.
+Official FinAuditing Starter Kit excerpts and isolated NBA rule aggregation/schema
+are pinned under `evaluation/dcc_official/`, with licenses/provenance. Do not format
+or rewrite authenticated excerpts. Preserve original parsing, ranking, denominators
+and NBA substring matching, including undefined rule metrics as null (source NaN).
+FinSM source label strings are decoded with literal_eval, never eval. FinMR requires
+the official A/S/E/C judge prompt; never silently replace it with numeric matching.
+NBA rule extraction is optional and uses the original 55 Boolean fields; keep missing
+gold IDs unchanged. Model callbacks are evaluator-only, injected separately, and all
+custom models/endpoints must be recorded alongside the official metric provenance.
+The team model is deepseek-v4.1-flash, configured by example JSON and a private key
+file/environment. No key values belong in Git or evaluation options. See
+`docs/DCC_EVALUATION.md` and `tests/test_dcc_evaluators.py`; automated tests use fake
+transports only. Real-service smoke checks are separate, explicitly diagnostic runs.
 
 Run `python -m pytest tests/test_dcc_preprocessing.py tests/test_dcc_releases.py tests/test_dcc_rulearena.py -q`; with native SP
 dependencies also run `tests/test_dcc_native.py --no-sp-runtime`. Use `ruff check` and `ruff format`

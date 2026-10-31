@@ -63,7 +63,7 @@ def native_bundle(tmp_path, monkeypatch):
     return bundle, load_tasks(bundle / "public/tasks.jsonl")[0]
 
 
-def test_plugin_configures_native_tool_and_skill_without_scoring(native_bundle):
+def test_plugin_configures_native_tool_skill_and_official_evaluation_hooks(native_bundle):
     from deerflow.config.app_config import AppConfig
 
     from dcc_harness.datasets.benchmark_plugins import (
@@ -75,7 +75,9 @@ def test_plugin_configures_native_tool_and_skill_without_scoring(native_bundle):
     app = configure_dataset_app(AppConfig.from_file(str(ROOT / "configs/stackplanner_benchmarks.yaml")), plugin)
     assert "ragflow_retrieve" in {tool.name for tool in app.tools}
     assert Path(app.skills.path) == ROOT / "configs/dcc/skills"
-    assert plugin.parse_answer is None and plugin.score_task is None
+    assert callable(plugin.parse_answer) and callable(plugin.score_task)
+    assert callable(plugin.aggregate) and callable(plugin.setup_evaluation)
+    assert plugin.evaluation_resources and not plugin.requires_judge
     assert (Path(plugin.skills_path) / "public/dcc-audit/SKILL.md").exists()
 
 

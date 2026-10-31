@@ -1,0 +1,2 @@
+# Pinned excerpts preserve source whitespace for their authenticated hashes.
+*.py -whitespace

@@ -1,0 +1,62 @@
+{
+  "finauditing_revision": "ccf99d9b0a1610576f8997fb18b35076c9bbb838",
+  "rulearena_revision": "59f60f6b4eb93a9b6d187ec781349d4f15618903",
+  "files": {
+    "finre.py": {
+      "upstream_path": "StartKit/evaluateFinRE.ipynb",
+      "upstream_sha256": "52686a33183333e3cb1b08d3655ddc2ae1a75b9c9dea7552f0bf9fa682e5f7b3",
+      "excerpt_sha256": "e473717ba0473f64800bc7ad6bb1baac3b61e9a5d913a897d0f40a491e58e891",
+      "functions": [
+        "normalize_findre_pred",
+        "normalize_findre_gold",
+        "load_findre_from_jsonl",
+        "evaluate_findre"
+      ]
+    },
+    "finsm.py": {
+      "upstream_path": "StartKit/evaluateFinSM.ipynb",
+      "upstream_sha256": "32f6b55eb5781423e051b3191ade4056b7c15d63172575a214415a1cc8a18e48",
+      "excerpt_sha256": "e24d32a54b535de40197e636d116c718f7a3f1626663277b4c3a8784a3acf012",
+      "functions": [
+        "_safe_json_loads",
+        "parse_pred_to_list",
+        "parse_gold_to_list",
+        "hit_rate_at_k",
+        "recall_at_k",
+        "macro_f1_at_k",
+        "evaluate_metrics",
+        "load_finsm_from_jsonl",
+        "evaluate_finsm"
+      ]
+    },
+    "finmr.py": {
+      "upstream_path": "StartKit/evaluateFinMR.ipynb",
+      "upstream_sha256": "4970fededfc2cf8b462a0d6f912bb78e7630e61fc48e955624967eb59f343a20",
+      "excerpt_sha256": "7741bd5daf5ec38a9f018cf6f279fa13609f13be6a974901d8a7ecc44a4c3174",
+      "functions": [
+        "_strip_codeblock",
+        "parse_json_object_best_effort",
+        "normalize_two_key_obj",
+        "load_finmr_pairs_from_jsonl",
+        "get_prompt",
+        "make_openai_client",
+        "get_response",
+        "normalize_judge_label",
+        "evaluate_finmr_with_judge"
+      ]
+    },
+    "nba_extraction.json": {
+      "excerpt_sha256": "ba1923c70fe1482b3fe24adb894eeea7f6b88d5d930ba361ed09f66a065e0aab",
+      "upstream_sha256": "4e2eb89b3f2f9e9ff9373a46e9895fae099ef72e34e01b02df53361d5825f5d6",
+      "upstream_path": "nba/micro_evaluation.py"
+    },
+    "nba_metrics.py": {
+      "excerpt_sha256": "99c3b3fd05d82730a4cb66f6755757bc6589361beaa3f8e4cebf15264a54e6a2",
+      "upstream_path": "nba/auto_test.py",
+      "upstream_sha256": "8a8677c36579dd945f978da8cd8eed264d5072cb719fa6f1e260ef9aceb2e29c",
+      "functions": [
+        "metrics"
+      ]
+    }
+  }
+}

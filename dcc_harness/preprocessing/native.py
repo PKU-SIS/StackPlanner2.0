@@ -113,14 +113,15 @@ def make_inline_plugin():
         prepare_task=lambda task: task.prompt,
         prepare_inputs=prepare_inputs,
         skills_path=Path(__file__).resolve().parents[2] / "configs/dcc/skills-inline",
+        **_evaluation_hooks(),
     )
 
 
 def make_plugin():
     """Register with --dataset-plugin dcc_harness.preprocessing.native:make_plugin.
 
-    Scoring is deliberately absent. Add explicit benchmark-native parser/scorer
-    hooks in the evaluation workstream before using the evaluation runner.
+    Official evaluation adapters load verified private labels only in the offline
+    evaluation phase. No labels or model evaluator enter the policy inputs.
     """
     from deerflow.config.tool_config import ToolConfig
 
@@ -132,4 +133,18 @@ def make_plugin():
         prepare_inputs=prepare_inputs,
         skills_path=Path(__file__).resolve().parents[2] / "configs/dcc/skills",
         tools=(ToolConfig(name="ragflow_retrieve", group="dcc", use="dcc_harness.preprocessing.native_tools:ragflow_retrieve"),),
+        **_evaluation_hooks(),
     )
+
+
+def _evaluation_hooks():
+    from dcc_harness.evaluation.dcc import plugin
+
+    return {
+        "parse_answer": plugin.parse_answer,
+        "score_task": plugin.score_task,
+        "aggregate": plugin.aggregate,
+        "setup_evaluation": plugin.setup_evaluation,
+        "evaluation_resources": plugin.RESOURCES,
+        "evaluation_version": "dcc-official-adapters-v1",
+    }
