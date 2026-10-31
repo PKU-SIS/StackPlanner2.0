@@ -47,7 +47,9 @@ export function isStackplannerFinishSummaryMessage(message: Message): boolean {
   return (
     typeof stackplanner === "object" &&
     stackplanner !== null &&
-    (stackplanner as { action_type?: unknown }).action_type === "FINISH"
+    (stackplanner as { action_type?: unknown }).action_type === "FINISH" &&
+    extractTextFromMessage(message).trim() ===
+      "报告最低验收已通过，交付当前最终报告。"
   );
 }
 

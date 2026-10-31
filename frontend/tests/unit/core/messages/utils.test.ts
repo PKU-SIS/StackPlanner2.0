@@ -752,8 +752,16 @@ test("hides the StackPlanner finish summary from visible message groups", () => 
     content: "报告最低验收已通过，交付当前最终报告。",
     additional_kwargs: { stackplanner: { action_type: "FINISH" } },
   } as Message;
+  const otherFinish = {
+    id: "sp-final-other",
+    type: "ai",
+    content: "其他完成说明。",
+    additional_kwargs: { stackplanner: { action_type: "FINISH" } },
+  } as Message;
 
   expect(isStackplannerFinishSummaryMessage(finish)).toBe(true);
+  expect(isStackplannerFinishSummaryMessage(otherFinish)).toBe(false);
+  expect(getMessageGroups([finish, otherFinish])).toHaveLength(1);
   expect(getMessageGroups([finish])).toEqual([]);
 });
 
