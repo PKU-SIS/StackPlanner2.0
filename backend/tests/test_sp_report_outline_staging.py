@@ -511,3 +511,80 @@ def test_apply_after_finalize_invalidates_old_delivery_and_cap_then_resume(tmp_p
     assert final["staged"] is False
     candidate = json.loads(Path(final["delivery_path"]).read_text(encoding="utf-8"))
     assert {n["node_id"]: n for n in candidate["nodes"]}["n2"]["title"] == "staged-B"
+
+
+def _fail_outline(ctx: HandlerContext, action: SPAction, task: SPSubagentTask, status: SPSubagentStatus) -> None:
+    result = SPSubagentResult(
+        status=status,
+        result="",
+        error=f"outline {status.value}",
+        artifact_type="outline",
+        artifact_metadata={"completion_status": "partial"},
+    )
+    hooks.handle_failure(action, ctx, result, task)
+
+
+def _resume_and_accept(ctx: HandlerContext, next_action: SPAction, next_task: SPSubagentTask, expected_title: str) -> None:
+    assert next_task.metadata["outline_stage_resume_action_id"]
+    next_tool = build_outline_staging_tool(
+        paths=_paths(ctx),
+        action_id=next_action.action_id,
+        delivery_path=Path(str(next_task.metadata["outline_delivery_path"])),
+        resume_action_id=next_task.metadata["outline_stage_resume_action_id"],
+    )
+    final = json.loads(
+        next_tool.func(
+            base_version=1,
+            patch={"write_requests": []},
+            finalize=True,
+        )
+    )
+    assert final["staged"] is False
+    candidate = json.loads(Path(final["delivery_path"]).read_text(encoding="utf-8"))
+    assert {n["node_id"]: n for n in candidate["nodes"]}["n2"]["title"] == expected_title
+    accepted = _accept_delivery(ctx, next_action, next_task)
+    assert accepted.next_step == "continue", accepted.error
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert "outline_stage_progress" not in ledger.payload
+
+
+@pytest.mark.parametrize("status", [SPSubagentStatus.FAILED, SPSubagentStatus.TIMED_OUT])
+def test_failed_or_timed_out_outline_records_resume_and_next_dispatch_restores(tmp_path, status):
+    ctx = _ctx(tmp_path)
+    gap_id = _register(ctx, "a-gap")
+    _accept_baseline(ctx, [gap_id])
+    action, task, tool, _ = _revise_tool(ctx)
+    title = f"saved-{status.value}"
+    assert json.loads(tool.func(base_version=1, patch={"upsert_nodes": [{"node_id": "n2", "title": title}]}))["staged"] is True
+    _fail_outline(ctx, action, task, status)
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.payload["outline_stage_progress"]["action_id"] == "a-revise"
+
+    next_action, next_task = _delegate(ctx, f"a-after-{status.value}", "revise")
+    _resume_and_accept(ctx, next_action, next_task, title)
+
+
+def test_cancelled_outline_keeps_cancellation_semantics_without_recovery_marker(tmp_path):
+    ctx = _ctx(tmp_path)
+    gap_id = _register(ctx, "a-gap")
+    _accept_baseline(ctx, [gap_id])
+    action, task, tool, _ = _revise_tool(ctx)
+    assert json.loads(tool.func(base_version=1, patch={"upsert_nodes": [{"node_id": "n2", "title": "saved-cancelled"}]}))["staged"] is True
+    _fail_outline(ctx, action, task, SPSubagentStatus.CANCELLED)
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert "outline_stage_progress" not in ledger.payload
+    assert ledger.payload["tree"]["version"] == 1
+
+
+def test_executor_exception_via_fail_delegation_action_records_resume(tmp_path):
+    ctx = _ctx(tmp_path)
+    gap_id = _register(ctx, "a-gap")
+    _accept_baseline(ctx, [gap_id])
+    action, task, tool, _ = _revise_tool(ctx)
+    assert json.loads(tool.func(base_version=1, patch={"upsert_nodes": [{"node_id": "n2", "title": "saved-executor_exception"}]}))["staged"] is True
+    hooks.fail_delegation_action(ctx.state, action.action_id, "executor exploded", task=task)
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.payload["outline_stage_progress"]["action_id"] == "a-revise"
+
+    next_action, next_task = _delegate(ctx, "a-after-executor-exception", "revise")
+    _resume_and_accept(ctx, next_action, next_task, "saved-executor_exception")

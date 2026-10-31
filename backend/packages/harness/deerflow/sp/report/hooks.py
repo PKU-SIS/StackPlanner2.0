@@ -196,7 +196,11 @@ def _record_outline_stage_progress(ledger: ReportLedger, action: SPAction) -> No
     The stage is not accepted.  This marker only lets a later prepare_delegation
     bind the same report/base stage after a token-capped/aborted action.
     """
-    stage_path = _outline_stage_path(ledger.paths, action.action_id)
+    _record_outline_stage_progress_for_action(ledger, action.action_id)
+
+
+def _record_outline_stage_progress_for_action(ledger: ReportLedger, action_id: str) -> None:
+    stage_path = _outline_stage_path(ledger.paths, action_id)
     if not stage_path.is_file():
         return
     try:
@@ -208,7 +212,7 @@ def _record_outline_stage_progress(ledger: ReportLedger, action: SPAction) -> No
         return
     if (
         str(stage.get("report_id") or "") != ledger.paths.report_id
-        or str(stage.get("action_id") or "") != action.action_id
+        or str(stage.get("action_id") or "") != action_id
         or int(stage.get("base_version") or 0) != int(ref.get("version") or 0)
         or str(stage.get("base_sha") or "") != str(ref.get("sha256") or "")
     ):
@@ -216,7 +220,7 @@ def _record_outline_stage_progress(ledger: ReportLedger, action: SPAction) -> No
     stage_text = stage_path.read_text(encoding="utf-8")
     ledger.payload["outline_stage_progress"] = {
         "report_id": ledger.paths.report_id,
-        "action_id": action.action_id,
+        "action_id": action_id,
         "stage_path": str(stage_path),
         "stage_sha": report_store.sha256_text(stage_text),
         "base_version": int(ref.get("version") or 0),
@@ -812,23 +816,34 @@ def handle_failure(
     report_role = str(task.metadata.get("report_role") or "")
     report_task = str(task.metadata.get("report_task") or "").strip().lower()
     report_origin = str(task.metadata.get("report_acceptance_origin") or action.metadata.get("report_acceptance_origin") or "")
-    if result.status.value == "cancelled" and report_role == "outline" and report_task in {"integrate_review", "revise"} and report_origin == "harness":
+    if result.status.value == "cancelled" and report_role == "outline":
+        if report_task in {"integrate_review", "revise"} and report_origin == "harness":
+            report = report_context(context.state)
+            if report.is_active:
+                try:
+                    paths = _paths_for_context(report)
+                    with report_store.report_lock(paths):
+                        ledger = ReportLedger.load(paths)
+                        from deerflow.sp.report import acceptance as report_acceptance
+
+                        acceptance = report_acceptance.acceptance_state(ledger)
+                        acceptance["status"] = "cancelled"
+                        acceptance["pending_action_id"] = None
+                        acceptance["retry_kind"] = None
+                        ledger.save()
+                except Exception:  # noqa: BLE001 - preserve the real cancellation
+                    pass
+        return
+    if report_role == "outline":
         report = report_context(context.state)
         if report.is_active:
             try:
                 paths = _paths_for_context(report)
                 with report_store.report_lock(paths):
                     ledger = ReportLedger.load(paths)
-                    from deerflow.sp.report import acceptance as report_acceptance
-
-                    acceptance = report_acceptance.acceptance_state(ledger)
-                    acceptance["status"] = "cancelled"
-                    acceptance["pending_action_id"] = None
-                    acceptance["retry_kind"] = None
-                    ledger.save()
-            except Exception:  # noqa: BLE001 - preserve the real cancellation
+                    _record_outline_stage_progress(ledger, action)
+            except Exception:  # noqa: BLE001 - preserve the real execution failure
                 pass
-        return
     if report_role == "outline" and report_task in {"integrate_review", "revise"} and report_origin == "harness":
         report = report_context(context.state)
         if report.is_active:
@@ -888,6 +903,13 @@ def fail_delegation_action(state: Mapping[str, Any] | None, action_id: str, erro
         paths = _paths_for_context(report)
         with report_store.report_lock(paths):
             ledger = ReportLedger.load(paths)
+            if task is not None and str(task.metadata.get("report_role") or "") == "outline":
+                try:
+                    _record_outline_stage_progress_for_action(ledger, action_id)
+                except Exception:
+                    # Progress recovery is best-effort; the original executor
+                    # exception remains the authoritative failure.
+                    pass
             key = ""
             if task is not None and str(task.metadata.get("report_role") or "") == "writer":
                 key = str(task.metadata.get("report_write_key") or "").strip()
