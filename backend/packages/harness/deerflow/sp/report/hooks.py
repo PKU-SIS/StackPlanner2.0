@@ -36,6 +36,7 @@ from deerflow.sp.report.ledger import (
     gap_next_action,
     utc_now_iso,
 )
+from deerflow.sp.report.materials import _fetch_module as _tool_provider_module
 from deerflow.sp.report.materials import build_fetch_material_tool, build_register_user_material_tool
 from deerflow.sp.report.prompts import (
     REPORT_INTEGRATE_REVIEW_PROMPT,
@@ -43,12 +44,14 @@ from deerflow.sp.report.prompts import (
     REPORT_RESEARCH_PROMPT,
     REPORT_WRITER_PROMPT,
 )
+from deerflow.sp.report.search_materials import build_search_material_tool
 from deerflow.sp.report.tools import build_register_research_request_tool
 from deerflow.sp.subagents import SPSubagentResult, SPSubagentTask
 from deerflow.utils.messages import message_to_text
 
 REPORT_DELEGATE_ROLES = frozenset({"outline", "researcher", "reporter", "writer"})
 REPORT_READ_TOOLS = ("read_file", "grep", "glob", "ls")
+REPORT_RESEARCH_MAX_TURNS = 150
 REPORT_CONTEXT_MESSAGE_NAME = "sp_report_context"
 CONTEXT_INSTRUCTIONS = """
 <report-control>
@@ -613,6 +616,7 @@ def configure_report_subagent(
             tools=[str(getattr(tool, "name", "")) for tool in selected],
             disallowed_tools=disallowed_tools,
             skills=["report-outline"],
+            max_turns=max(REPORT_RESEARCH_MAX_TURNS, subagent_config.max_turns),
         )
         extra_tools = [tool for tool in (register_tool, user_material_tool) if tool is not None]
         return config, [*available_tools, *extra_tools], role
@@ -640,16 +644,23 @@ def configure_report_subagent(
         fetch_tool=fetch_tool,
     )
     selected = [tools_by_name[name] for name in REPORT_READ_TOOLS if name in tools_by_name]
+    effective_tools = list(available_tools)
     if "web_search" in tools_by_name:
-        selected.append(tools_by_name["web_search"])
+        search_tool = tools_by_name["web_search"]
+        if "deerflow.community.deepseek_tools." in _tool_provider_module(search_tool):
+            search_tool = build_search_material_tool(paths=paths, action_id=task.action_id, gap_ids=gap_ids, search_tool=search_tool)
+            effective_tools = [item for item in effective_tools if getattr(item, "name", None) != "web_search"]
+            effective_tools.append(search_tool)
+        selected.append(search_tool)
     selected.append(material_tool)
     config = replace(
         subagent_config,
         system_prompt=_join_prompt(subagent_config.system_prompt, REPORT_RESEARCH_PROMPT),
         tools=[str(getattr(tool, "name", "")) for tool in selected],
         skills=["report-research"],
+        max_turns=max(REPORT_RESEARCH_MAX_TURNS, subagent_config.max_turns),
     )
-    return config, [*available_tools, material_tool], role
+    return config, [*effective_tools, material_tool], role
 
 
 def _join_prompt(base: str | None, section: str) -> str:

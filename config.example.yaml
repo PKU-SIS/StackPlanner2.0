@@ -629,6 +629,10 @@ tool_groups:
 
 tools:
   # Web search tool (uses DuckDuckGo, no API key required)
+  # Optional DeepSeek Search/Fetch: replace the corresponding tool's `use` with
+  # deerflow.community.deepseek_tools.tools:web_search_tool / web_fetch_tool
+  # and add api_key: $DEEPSEEK_API_KEY to each. Search defaults to 10 results
+  # with bodies; report mode saves usable bodies before model-facing truncation.
   - name: web_search
     group: web
     use: deerflow.community.ddg_search.tools:web_search_tool

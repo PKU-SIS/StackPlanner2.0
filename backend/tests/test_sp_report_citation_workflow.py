@@ -25,6 +25,8 @@ def test_pre_research_contract_preserves_breadth_without_turning_counts_into_gat
         assert "uncovered themes" in contract
         assert "budget" in contract
     assert "small orientation pass" not in _normalized(REPORT_RESEARCH_PROMPT)
+    assert "the first report delegation must target researcher" in _normalized(REPORT_CENTRAL_PROMPT)
+    assert "do not skip directly to Outline" in REPORT_CENTRAL_PROMPT
 
 
 def test_research_handoff_is_cited_prose_with_saved_material_provenance():

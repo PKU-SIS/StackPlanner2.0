@@ -410,8 +410,33 @@ def test_outline_subagent_exposes_user_material_registration_tool(tmp_path):
     )
 
     assert role == "outline"
+    assert returned_config.max_turns == 150
+    assert config.max_turns == 36
     assert "report_save_user_material" in returned_config.tools
     assert any(getattr(tool, "name", "") == "report_save_user_material" for tool in returned_tools)
+
+
+def test_deepseek_search_capture_is_bound_only_to_report_researcher(tmp_path, monkeypatch):
+    from deerflow.community.deepseek_tools import tools as deepseek_tools
+
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    report = hooks.report_context(ctx.state)
+    monkeypatch.setattr(deepseek_tools, "_post", lambda *args: {"results": [{"url": "https://example.com/source", "content": "Saved by search"}]})
+    tools = [deepseek_tools.web_search_tool, _short_fetch, SimpleNamespace(name="read_file")]
+    config = SubagentConfig(name="sp-researcher", description="research", max_turns=80)
+    ordinary = SPSubagentTask(action_id="ordinary", subagent_type="researcher", task="research", description="research")
+    unchanged, original_tools, role = hooks.configure_report_subagent(ordinary, state=ctx.state, available_tools=tools, subagent_config=config)
+    assert unchanged is config and original_tools is tools and role is None
+
+    task = SPSubagentTask(action_id="a-material", subagent_type="researcher", task="research", description="research", metadata={"report_role": "researcher", "report_id": report.report_id})
+    report_config, report_tools, role = hooks.configure_report_subagent(task, state=ctx.state, available_tools=tools, subagent_config=config)
+    assert role == "researcher"
+    assert report_config.max_turns == 150 and config.max_turns == 80
+    searches = [item for item in report_tools if item.name == "web_search"]
+    assert len(searches) == 1 and searches[0] is not deepseek_tools.web_search_tool
+    assert json.loads(searches[0].invoke({"query": "query"}))["saved_count"] == 1
+    assert len(ReportLedger.load_for_context(report).materials()) == 1
 
 
 def test_outline_five_call_material_read_write_read_passes_real_loop_guard(tmp_path, monkeypatch):

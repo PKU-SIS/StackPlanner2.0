@@ -322,6 +322,12 @@ class TestAgentConstruction:
 
         assert guard.tool_total_hard_limit == 12
 
+    def test_report_150_step_budget_reaches_twenty_tool_threshold(self, classes):
+        guard = SimpleNamespace(tool_freq_warn=30, tool_freq_hard_limit=50, _tool_freq_overrides={})
+        classes["reserve_subagent_loop_guard_budget"]([guard], max_turns=150)
+        assert guard.tool_total_hard_limit == 20
+        assert guard.tool_total_warn == 12
+
     def test_qwen_vllm_subagent_enables_thinking_when_tools_are_bound(self, classes, base_config):
         SubagentExecutor = classes["SubagentExecutor"]
         app_config = SimpleNamespace(
@@ -3025,6 +3031,7 @@ class TestSubagentGuardrailAttribution:
 
         return ({"messages": [HumanMessage(content=task)]}, [], None)
 
+
 def test_empty_length_answer_marks_recovered_tool_evidence(classes):
     from deerflow.subagents.executor import _extract_final_result_details
 
@@ -3042,6 +3049,7 @@ def test_empty_length_answer_marks_recovered_tool_evidence(classes):
     assert source == "recovered_tool_evidence"
     assert "Recovered tool evidence before safety stop" in text
     assert "material body" in text
+
 
 def test_recovered_envelope_never_becomes_outline_artifact(classes):
     import json

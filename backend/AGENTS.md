@@ -245,6 +245,24 @@ precedence. Contract regressions are covered by
 `tests/test_sp_report_citation_workflow.py`; ordinary role/tool behavior and
 existing parallel-dispatch capability remain unchanged.
 
+Report-bound Researcher and Outline use a task-local `max_turns` floor of 150
+in `configure_report_subagent`, so the existing conservative tool-loop formula
+reaches its 20-call threshold without changing ordinary specialist budgets or
+shared executor guards. DeepSeek's opt-in Search/Fetch adapters live in
+`community/deepseek_tools/`; report-only `search_materials.py` wraps that Search
+instance under the existing `web_search` name and persists bodies with the
+existing source/material identity helpers before display truncation. It never
+registers snippets or empty bodies as evidence; missing bodies remain candidates.
+Keep this capture wrapper provider-scoped, replace rather than duplicate the
+tool name, and preserve host-observed execution/failure records. Tests are in
+`test_deepseek_search_tools.py`, `test_sp_report_search_materials.py`, and the
+existing report-material/executor regressions.
+Keep normal ten-result search displays below the default 12k tool-output
+externalization threshold: remove duplicated preview fields and bound provider
+summaries/excerpts while retaining every identity and the exact saved bodies.
+Large tool-result files otherwise induce read-back churn that can consume the
+same delegation budget the content-bearing search was intended to save.
+
 ### Middleware Chain
 
 Lead-agent middlewares are assembled in strict order across three functions: the shared base in `packages/harness/deerflow/agents/middlewares/tool_error_handling_middleware.py` (`_build_runtime_middlewares`, exposed via `build_lead_runtime_middlewares`), then the lead-only middlewares appended in `packages/harness/deerflow/agents/lead_agent/agent.py` (`build_middlewares`). Items marked *(optional)* are appended only when their config/runtime condition holds, so the live chain length varies.

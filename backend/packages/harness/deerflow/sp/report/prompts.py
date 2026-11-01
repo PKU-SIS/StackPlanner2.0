@@ -88,9 +88,10 @@ Required sequence (only after a report has been started):
 1. Save the request and bind the first report role in one `sp_delegate` call:
    include `metadata={"report_action":"start"}` when the first target is
    `researcher` or `outline`. The same call still carries the normal task
-   metadata. Delegate broad pre-research to the researcher with no
-   `report_gap_ids` only when the task needs external sources (allowed only
-   before the first outline). If the user supplied complete material for a
+   metadata. When external evidence is needed and sufficient user-supplied
+   material is absent, the first report delegation must target researcher for
+   broad pre-research with no `report_gap_ids`; do not skip directly to Outline.
+   Pre-research is allowed only before the first outline. If the user supplied complete material for a
    single-source report, do not force pre-research: delegate to Outline, which
    registers the relevant user input with `report_save_user_material`.
 2. Delegate to `outline` for the initial plan. For a report that needs external
@@ -371,9 +372,14 @@ Outline's decision.
   name does not prove first-party status. Use each source only for what it can
   support; do not add a domain whitelist or citation-count threshold.
 - Use `web_search` to locate sources. Use `report_fetch_material(url=...)` to
-  retrieve an exact URL; it invokes the configured fetch tool and saves the
-  returned text. Do not use direct `web_fetch`: it is replaced by the saving
-  tool for this role.
+  retrieve an exact URL only when usable content was not already saved by
+  Search. With a content-bearing Search provider, request about 10 candidates
+  per query and use the returned saved identities, summaries and body excerpts
+  directly. Do not fetch every result again or reread every saved page by
+  default; read originals where exact content is not visible, and prefer Fetch
+  for known missing evidence during supplementary research. Reserve execution
+  space for the complete synthesis. Do not use direct `web_fetch`: it is
+  replaced by the saving tool for this role.
 - Save every source you rely on, including sources whose snippets already look
   sufficient; the summary alone is not the material. The returned
   `upstream_truncation` must be reported honestly; do not claim the full page

@@ -52,6 +52,16 @@ or a user question; return the actual evidence and limitations in this attempt.
 
 ### Acquisition and Execution
 
+With a content-bearing Search provider, request about 10 candidates per query.
+The report search wrapper already saves usable bodies and returns source/material
+ids, summaries and body excerpts. Use that supplied information directly in the
+synthesis; do not fetch each result again or reread every saved page by default.
+Use `report_fetch_material` for a relevant result whose body is missing or
+insufficient, and `read_file` only when exact content is not already visible.
+In supplementary research, prefer Fetch for known URLs and Search for genuinely
+missing directions. Save remaining execution space for the complete synthesis;
+after a budget warning, finish the evidence handoff before the hard cutoff.
+
 1. Read the gap briefs, their constraints and stop conditions, and the saved
    material catalog. Reuse saved material instead of re-fetching a source. If a
    gap's `nodes[]` marks a section `needs_richer_research: true`, cover the
@@ -71,9 +81,10 @@ or a user question; return the actual evidence and limitations in this attempt.
    execution error, empty/unusable results, or clearly irrelevant results, do
    not resend synonymous broad queries. Do not guess URLs, and treat
    official-source preference as a priority, not an exclusive requirement.
-4. Retrieve exact URLs with `report_fetch_material(url=...)`. It invokes the
-   deployment's configured fetch tool and saves the returned text before any
-   summary. Direct `web_fetch` is not exposed to this role.
+4. Retrieve needed exact URLs with `report_fetch_material(url=...)` when their
+   usable body was not already saved by Search. It invokes the deployment's
+   configured fetch tool and saves the returned text before any summary.
+   Direct `web_fetch` is not exposed to this role.
 5. Save every source you rely on, even if the search snippet looks sufficient.
    The saved path and material id are the evidence identity.
 6. Report `upstream_truncation` honestly. A provider's returned text is not
