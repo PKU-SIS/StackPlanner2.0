@@ -328,6 +328,14 @@ class TestAgentConstruction:
         assert guard.tool_total_hard_limit == 20
         assert guard.tool_total_warn == 12
 
+    def test_explicit_fifty_tool_budget_does_not_change_ordinary_defaults(self, classes):
+        stage = SimpleNamespace(tool_freq_warn=30, tool_freq_hard_limit=50, _tool_freq_overrides={})
+        ordinary = SimpleNamespace(tool_freq_warn=30, tool_freq_hard_limit=50, _tool_freq_overrides={})
+        classes["reserve_subagent_loop_guard_budget"]([stage], max_turns=350, tool_call_limit=50)
+        classes["reserve_subagent_loop_guard_budget"]([ordinary], max_turns=150)
+        assert stage.tool_total_hard_limit == 50
+        assert ordinary.tool_total_hard_limit == 20
+
     def test_qwen_vllm_subagent_enables_thinking_when_tools_are_bound(self, classes, base_config):
         SubagentExecutor = classes["SubagentExecutor"]
         app_config = SimpleNamespace(

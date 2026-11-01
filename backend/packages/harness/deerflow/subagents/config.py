@@ -38,6 +38,9 @@ class SubagentConfig:
     model: str = "inherit"
     max_turns: int = 50
     timeout_seconds: int = 900
+    # Explicit stage-evaluation overrides; None preserves ordinary behavior.
+    tool_call_limit: int | None = None
+    finalize_after_tool_calls: int | None = None
     # Internal specialists are addressable by orchestration code through the
     # registry but are not advertised to, or callable from, the default lead
     # agent's generic task tool.

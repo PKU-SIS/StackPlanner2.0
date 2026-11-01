@@ -53,13 +53,13 @@ _SUBAGENT_RECOVERED_EVIDENCE_MAX_CHARS = 12_000
 _SUBAGENT_RECOVERED_EVIDENCE_MAX_ITEMS = 6
 
 
-def _subagent_tool_loop_limits(max_turns: int) -> tuple[int, int]:
+def _subagent_tool_loop_limits(max_turns: int, hard_cap: int = _SUBAGENT_TOOL_LOOP_HARD_CAP) -> tuple[int, int]:
     """Return warning/hard tool-call limits that fit the graph-step budget."""
 
     safe_hard_limit = max(
         2,
         min(
-            _SUBAGENT_TOOL_LOOP_HARD_CAP,
+            hard_cap,
             (max(1, int(max_turns)) - _SUBAGENT_LOOP_SHUTDOWN_RESERVED_STEPS) // _SUBAGENT_GRAPH_STEPS_PER_TOOL_LOOP,
         ),
     )
@@ -67,7 +67,7 @@ def _subagent_tool_loop_limits(max_turns: int) -> tuple[int, int]:
     return safe_warn_limit, safe_hard_limit
 
 
-def _reserve_subagent_loop_guard_budget(middlewares: list[Any], *, max_turns: int) -> None:
+def _reserve_subagent_loop_guard_budget(middlewares: list[Any], *, max_turns: int, tool_call_limit: int | None = None) -> None:
     """Ensure loop detection can stop a tool loop before graph recursion wins.
 
     The current subagent middleware graph consumes up to six graph steps for a
@@ -79,7 +79,7 @@ def _reserve_subagent_loop_guard_budget(middlewares: list[Any], *, max_turns: in
     preserving lead-agent policy and explicit per-tool overrides.
     """
 
-    safe_warn_limit, safe_hard_limit = _subagent_tool_loop_limits(max_turns)
+    safe_warn_limit, safe_hard_limit = _subagent_tool_loop_limits(max_turns, tool_call_limit or _SUBAGENT_TOOL_LOOP_HARD_CAP)
     for middleware in middlewares:
         if not hasattr(middleware, "tool_freq_hard_limit") or not hasattr(middleware, "tool_freq_warn"):
             continue
@@ -641,7 +641,17 @@ class SubagentExecutor:
         _reserve_subagent_loop_guard_budget(
             middlewares,
             max_turns=self.config.max_turns,
+            tool_call_limit=self.config.tool_call_limit,
         )
+        if self.config.finalize_after_tool_calls is not None:
+            from deerflow.agents.middlewares.subagent_finalization_middleware import SubagentFinalizationMiddleware
+
+            budget = app_config.subagents.get_token_budget_for(self.config.name)
+            self._finalization_middleware = SubagentFinalizationMiddleware(
+                after_tool_calls=self.config.finalize_after_tool_calls,
+                token_limit=budget.max_tokens if budget.enabled else None,
+            )
+            middlewares.insert(0, self._finalization_middleware)
         # Collect every guard middleware that exposes ``consume_stop_reason``
         # (TokenBudgetMiddleware, LoopDetectionMiddleware) so _aexecute can read
         # each after the run and surface whichever cap fired. Duck-typed
@@ -842,7 +852,7 @@ class SubagentExecutor:
         for skill_msg in skill_messages:
             system_parts.append(skill_msg.content)
         if final_tools:
-            warn_limit, hard_limit = _subagent_tool_loop_limits(self.config.max_turns)
+            warn_limit, hard_limit = _subagent_tool_loop_limits(self.config.max_turns, self.config.tool_call_limit or _SUBAGENT_TOOL_LOOP_HARD_CAP)
             system_parts.append(
                 "<execution_budget>\n"
                 f"This run has a hard budget of {hard_limit} total tool calls and will warn after {warn_limit}. "

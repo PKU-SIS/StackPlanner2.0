@@ -952,3 +952,11 @@ See `docs/` directory for detailed documentation:
 - [PATH_EXAMPLES.md](docs/PATH_EXAMPLES.md) - Path types and usage
 - [summarization.md](docs/summarization.md) - Context summarization
 - [plan_mode_usage.md](docs/plan_mode_usage.md) - Plan mode with TodoList
+
+## Isolated report stage evaluation
+
+`scripts/evaluate_report_preresearch.py` enters the native `DelegateHandler` → report hooks/Skills → `DR2SubagentExecutorAdapter` → `SubagentExecutor` chain and returns after the accepted research handoff. It excludes Central routing, Outline, Writer and delivery. Each query runs in its own process and `DEER_FLOW_HOME`; the parent uses concurrency 3 by default. Preserve failed attempts and freeze the code/configuration for each batch.
+
+`--audit --output <existing-batch>` re-scores saved outputs offline, preserving original metrics and summaries. `scripts/report_stage_metrics.py` detects file-tool errors missing from the research ledger and rejects raw JSON envelopes or truncated recovery text as successful summaries. An accepted artifact is not automatically a passing evaluation.
+
+The runner explicitly sets internal `SubagentConfig.tool_call_limit=50`, `max_turns=350` and `finalize_after_tool_calls=40`. These optional dataclass fields default to `None`; ordinary runtime behavior is unchanged. The finalization middleware removes tools before the hard cap (or at 70% of the configured total-token limit) and requests the normal result envelope with a full cited research synthesis. This is an opt-in stage experiment, not an implementation of the proposed shared 200-tool report budget. Metrics include tool errors separately from final execution errors; citation breadth is an evaluation heuristic, not a production acceptance gate. See `../docs/research-report/STAGED_STABILITY_TEST_PLAN.md` for commands and boundaries.

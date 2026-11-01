@@ -981,3 +981,9 @@ Your unwavering commitment and expertise have been the driving force behind Deer
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.com/#bytedance/deer-flow&Date)
+
+## Report pre-research stage evaluation
+
+For isolated real-model report tests, run `PYTHONPATH=.:packages/harness .venv/bin/python scripts/evaluate_report_preresearch.py --output ../logs/preresearch-NEW --concurrency 3` from `backend/` (add `--ids 31,11,97` for smoke). This uses the existing `.env` and native report Researcher, stops after the saved synthesis, and writes per-sample summaries, ledgers, citation metrics, and a batch `REPORT.md`. It makes real API calls and does not start the UI or downstream report stages. See [the staged evaluation plan](docs/research-report/STAGED_STABILITY_TEST_PLAN.md).
+
+Use `--audit --output <existing-batch>` to re-score saved outputs without API calls. Raw envelopes, truncated recovery text and file-tool errors are included in the audit; original outputs remain intact. See [the first 20-sample results](docs/research-report/PRERESEARCH_STABILITY_RESULTS_20261101.md).
