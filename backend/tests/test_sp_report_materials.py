@@ -414,6 +414,8 @@ def test_outline_subagent_exposes_user_material_registration_tool(tmp_path):
     assert returned_config.tool_call_limit == 50
     assert returned_config.finalize_after_tool_calls == 30
     assert returned_config.finalize_token_fraction == 0.5
+    assert returned_config.repair_invalid_tool_calls is True
+    assert config.repair_invalid_tool_calls is False
     assert "write_file" in returned_config.finalize_keep_tools
     assert config.max_turns == 36
     assert "report_save_user_material" in returned_config.tools

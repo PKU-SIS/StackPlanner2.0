@@ -952,7 +952,8 @@ def test_real_executor_outline_reads_saved_material_with_read_file(tmp_path, mon
     assert ledger.materials()[0]["material_id"] == material["material_id"]
 
 
-def test_outline_can_deliver_after_collection_tools_are_closed(tmp_path, monkeypatch, real_executor):
+@pytest.mark.parametrize("repair_case", ["none", "valid", "invalid"])
+def test_outline_can_deliver_after_collection_tools_are_closed(tmp_path, monkeypatch, real_executor, repair_case):
     from dataclasses import replace
 
     app_config = _app_config()
@@ -971,26 +972,43 @@ def test_outline_can_deliver_after_collection_tools_are_closed(tmp_path, monkeyp
     node = tree["nodes"][1]
     node.update(gap_ids=[], status="ready", evidence=[{"material_id": "m1", "source_ids": ["S1"], "locator": {"lines": [1, 1]}, "use": "official indicator"}])
     created = []
+    raw_results = []
 
     def factory(task):
         cfg, tools, _ = configure_report_subagent(task, state=state, available_tools=[read_file_tool, write_file_tool], subagent_config=get_subagent_config("sp-outline", app_config=app_config))
         path = ledger.paths.virtual(Path(task.metadata["outline_delivery_path"]))
-        model = FakeToolCallingModel(
-            responses=[
-                AIMessage(content="", tool_calls=[{"name": "report_read_material", "args": {"material_id": "m1"}, "id": "read-evidence", "type": "tool_call"}]),
+        broken = AIMessage(content="", invalid_tool_calls=[{"name": "report_submit_outline", "args": '{"tree":{"title":"bad "quote"}}', "id": "invalid-submit", "error": "Invalid JSON"}])
+        responses = [AIMessage(content="", tool_calls=[{"name": "report_read_material", "args": {"material_id": "m1"}, "id": "read-evidence", "type": "tool_call"}])]
+        if repair_case != "none":
+            responses.append(broken)
+        if repair_case == "invalid":
+            responses.append(broken.model_copy(update={"id": "second-invalid"}))
+        else:
+            responses.extend([
                 AIMessage(content="", tool_calls=[{"name": "report_submit_outline", "args": {"tree": tree}, "id": "submit-tree", "type": "tool_call"}]),
                 AIMessage(content=json.dumps({"summary": "Tree delivered", "artifact_content": None, "artifact_type": "outline", "artifact_metadata": {"completion_status": "complete", "delivery_mode": "file", "tree_path": path}})),
-            ]
-        )
+            ])
+        model = FakeToolCallingModel(responses=responses)
         _install_fake_model(monkeypatch, model, real_executor)
         executor = real_executor.SubagentExecutor(config=replace(cfg, finalize_after_tool_calls=1), tools=tools, app_config=app_config, parent_model="fake-model", thread_data=state["thread_data"], thread_id="t-e2e", run_id="run-e2e")
         created.append(executor)
         return executor
 
     action = SPAction.create(ActionType.DELEGATE, reason="plan", task="plan", target_agent="outline", stage="planning")
-    result = DelegateHandler(executor=DR2SubagentExecutorAdapter(factory)).handle(action, HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="t-e2e", run_id="run-e2e"))
-    assert result.error is None
-    assert ReportLedger.load(ledger.paths).payload["tree"]
+    result = DelegateHandler(executor=DR2SubagentExecutorAdapter(factory, result_observer=raw_results.append)).handle(action, HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="t-e2e", run_id="run-e2e"))
+    assert len(created) == 1
+    assert len(raw_results) == 1
+    if repair_case == "invalid":
+        assert result.next_step == "error_recoverable"
+        assert raw_results[0].stop_reason == "tool_argument_repair_failed"
+        assert not ReportLedger.load(ledger.paths).payload["tree"]
+    else:
+        assert result.error is None, result.error
+        assert ReportLedger.load(ledger.paths).payload["tree"]
+    if repair_case != "none":
+        assert created[0]._tool_argument_repair_middleware.used
+        invalids = [m for m in raw_results[0].ai_messages if m.get("invalid_tool_calls")]
+        assert invalids
     assert created[0]._finalization_middleware.trigger_reason == "tool_calls"
 
 

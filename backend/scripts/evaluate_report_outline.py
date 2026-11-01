@@ -88,7 +88,7 @@ def outline_metrics(tree, ledger, summary_sources):
     }
 
 
-def worker(directory, upstream, attempts):
+def worker(directory, upstream, attempts, replay_from=None):
     import yaml
     from dotenv import load_dotenv
 
@@ -141,6 +141,21 @@ def worker(directory, upstream, attempts):
     config = get_app_config()
     tools = get_available_tools(model_name=config.models[0].name, app_config=config)
     raws, created = [], []
+    replay_models = []
+    if replay_from is not None:
+        from outline_replay_model import ReplayThenLiveModel, load_failed_outline_turns
+
+        import deerflow.subagents.executor as executor_module
+
+        original_create = executor_module.create_chat_model
+        responses = load_failed_outline_turns(replay_from / str(query["id"]))
+
+        def create_replay(**kwargs):
+            model = ReplayThenLiveModel(responses=responses, live_model=original_create(**kwargs))
+            replay_models.append(model)
+            return model
+
+        executor_module.create_chat_model = create_replay
     current_attempt = 0
 
     def observe(step, index):
@@ -179,6 +194,7 @@ def worker(directory, upstream, attempts):
                     "finalize_after_tool_calls": cfg.finalize_after_tool_calls,
                     "keep_tools": cfg.finalize_keep_tools,
                     "token_fraction": cfg.finalize_token_fraction,
+                    "repair_invalid_tool_calls": cfg.repair_invalid_tool_calls,
                 },
             },
         )
@@ -234,6 +250,8 @@ def worker(directory, upstream, attempts):
         retrieval_calls=sum(call.get("name") in {"web_search", "web_fetch", "report_fetch_material"} for step in steps for call in step.get("tool_calls", [])),
         finalization_reasons=[getattr(getattr(item, "_finalization_middleware", None), "trigger_reason", None) for item in created],
         invalid_tool_call_count=sum(len(step.get("invalid_tool_calls", [])) for step in steps),
+        local_tool_argument_repairs=[event for executor in created for event in getattr(getattr(executor, "_tool_argument_repair_middleware", None), "events", [])],
+        replay={"enabled": replay_from is not None, "historical_model_turns": sum(item.position for item in replay_models), "live_model_turns": sum(item.live_turns for item in replay_models)},
     )
     dump(directory / "metrics.json", metrics)
 
@@ -288,10 +306,11 @@ def main():
     parser.add_argument("--attempts", type=int, default=3)
     parser.add_argument("--timeout", type=int, default=900)
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--replay-from", type=Path, help="Replay first-attempt assistant turns through a recorded bad submission, then use the live model")
     args = parser.parse_args()
     output, upstream = args.output.resolve(), args.upstream.resolve()
     if args.worker:
-        worker(output, upstream, args.attempts)
+        worker(output, upstream, args.attempts, args.replay_from.resolve() if args.replay_from else None)
         return
     if not 1 <= args.attempts <= 3:
         parser.error("attempts must be between 1 and 3")
@@ -310,6 +329,7 @@ def main():
             "model_output_cap": 32768,
             "concurrency": args.concurrency,
             "scope": "native initial Outline only; excludes Central routing, supplementary research, Writer and delivery",
+            "replay_from": str(args.replay_from.resolve()) if args.replay_from else None,
         },
     )
     snapshots = {}
@@ -329,9 +349,10 @@ def main():
             shutil.copyfile(upstream / str(sample_id) / name, directory / name)
         with (directory / "worker.log").open("w") as log:
             try:
-                result = subprocess.run(
-                    [sys.executable, str(Path(__file__).resolve()), "--worker", "--output", str(directory), "--upstream", str(upstream), "--attempts", str(args.attempts)], stdout=log, stderr=subprocess.STDOUT, timeout=args.timeout
-                )
+                command = [sys.executable, str(Path(__file__).resolve()), "--worker", "--output", str(directory), "--upstream", str(upstream), "--attempts", str(args.attempts)]
+                if args.replay_from:
+                    command.extend(["--replay-from", str(args.replay_from.resolve())])
+                result = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=args.timeout)
                 if result.returncode and not (directory / "metrics.json").exists():
                     dump(directory / "metrics.json", {"id": sample_id, "accepted": False, "error": f"worker_exit_{result.returncode}"})
             except subprocess.TimeoutExpired:

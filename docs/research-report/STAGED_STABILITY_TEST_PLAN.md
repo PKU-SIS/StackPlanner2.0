@@ -4,6 +4,8 @@
 
 初始 Outline 已接入独立测试：最终 3 条 smoke 首轮通过，正式 20 条全部通过验收，其中 19 条首轮完成、1 条第二次完成，无累计预算中断。复用原预检索产物，不重复上游；新增按材料 ID 读取与结构化候选提交，并精简重复上下文、预留交付预算。[实现与结果](OUTLINE_STAGE_STABILITY_20261101.md)。
 
+新增同次委派提交语法纠错后，原失败样本精确重放成功；原 20 条复测 20/20 首次通过，无预算中断。5 条普通工具校验错误均同次恢复；新批次未出现非法 JSON，纠错分支由精确重放验证。[详情](OUTLINE_LOCAL_REPAIR_20261101.md)。
+
 ## 原则
 
 **拆开原流程，逐阶段验收，再将合格的真实产物交给下游。**保留生产角色、Skills、工具和数据协议，不另搭一条“裸模型生成摘要”的测试流程；不让下游为上游坏产物继续消耗 token。
@@ -60,3 +62,18 @@ PYTHONPATH=.:packages/harness .venv/bin/python scripts/evaluate_report_preresear
 既有产物可用相同入口追加 `--audit` 离线复核，不调用 API，不修改 summary；原始指标另存为 `metrics.raw.json`。识别原始 JSON、截断恢复文本以及文件工具错误，避免仅因文件存在或 Handler 返回成功就判通过。
 
 “引用丰富”暂以正文至少 5 个可映射到账本的独立来源观察，不是生产门禁；实际报告来源数，排除末尾材料索引和明确标为未读的线索。自动指标不代替事实核查。工具错误与最终中断分别记录，不将成功恢复描述成全程无错误。
+
+## 补充研究与 Outline 收尾 smoke
+
+复用 `logs/outline-20-local-repair-v1` 的已验收树，先测试 11、25、97，每条把全部 open gaps 合并为一次原生 Researcher 委派。补研综述必须正常落盘、包含真实来源引用；不合格则停止该样本，不消耗下游 token。通过后调用原生 Outline revise，最多三次，保留全部拒绝记录。检查 gap 状态、证据绑定以及每个正文节点是否有有效写作任务，不以“旧树仍存在”判收尾成功。
+
+```bash
+cd backend
+PYTHONPATH=.:packages/harness .venv/bin/python scripts/evaluate_report_supplement.py \
+  --output ../logs/supplement-smoke3-NEW \
+  --upstream ../logs/outline-20-local-repair-v1 --ids 11,25,97 --concurrency 3
+```
+
+补研采用原协议，未将预检索专属 Markdown 交付补丁扩散到其他阶段。只增加独立测试入口和指标，不修改生产提示词、验收或预算。没有 open gap 的样本明确跳过补研，不人为制造任务。首轮结果保留在 `logs/supplement-smoke3-v1`。
+
+Smoke 首轮已完成：1/3 全通过；25 的引用标记不规范，97 的旧 JSON 交付解析失败并保存成截断原文，两条均停止下游。三条都无预算中断或工具错误。[结果与修复讨论范围](SUPPLEMENT_SMOKE_20261101.md)。暂不扩大到 20 条。

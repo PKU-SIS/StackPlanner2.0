@@ -639,6 +639,7 @@ def configure_report_subagent(
                 finalize_after_tool_calls=30,
                 finalize_keep_tools=["report_submit_outline", "read_file", "write_file", "report_register_research_request", "report_save_user_material"],
                 finalize_token_fraction=0.5,
+                repair_invalid_tool_calls=True,
             )
         extra_tools = [tool for tool in (register_tool, user_material_tool) if tool is not None]
         return config, [*available_tools, *extra_tools], role
@@ -1631,7 +1632,7 @@ def _accept_outline_locked(
         return _replay_result(action, context, "outline", ledger.action(action.action_id))
     execution_stop = str(result.stop_reason or "").strip() or None
     recover_delivered_file = execution_stop == "token_capped" and _outline_delivery_text(task) is not None
-    if execution_stop in {"token_capped", "turn_capped", "loop_capped"} and not recover_delivered_file:
+    if execution_stop in {"token_capped", "turn_capped", "loop_capped", "tool_argument_repair_failed"} and not recover_delivered_file:
         file_text = _outline_delivery_text(task)
         if file_text is not None:
             source_text = file_text

@@ -44,6 +44,7 @@ class SubagentConfig:
     output_format: str = "json"
     finalize_keep_tools: list[str] | None = None
     finalize_token_fraction: float = 0.7
+    repair_invalid_tool_calls: bool = False
     # Internal specialists are addressable by orchestration code through the
     # registry but are not advertised to, or callable from, the default lead
     # agent's generic task tool.
