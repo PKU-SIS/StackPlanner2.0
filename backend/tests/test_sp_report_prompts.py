@@ -224,3 +224,12 @@ def test_central_prompt_keeps_gap_closure_and_recovery_with_outline():
 def test_writer_prompt_uses_host_node_level_for_internal_headings():
     assert "node.level" in REPORT_WRITER_PROMPT
     assert "strictly below that level" in REPORT_WRITER_PROMPT
+
+
+def test_writer_treats_outline_claims_as_guidance_and_omits_unsupported_optional_facts():
+    skill = Path(__file__).resolve().parents[2] / "skills/public/report-node-writing/SKILL.md"
+    for text in (REPORT_WRITER_PROMPT, skill.read_text(encoding="utf-8")):
+        normalized = " ".join(text.split())
+        assert "node specification is guidance, not evidence" in normalized
+        assert "even if a node constraint calls it required" in normalized
+        assert "omit the unsupported claim" in normalized

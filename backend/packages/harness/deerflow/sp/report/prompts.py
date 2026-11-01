@@ -294,6 +294,13 @@ host-assigned `draft_path`. Read the cited material with
 before writing; `description` is required. Use only the supplied evidence;
 never invent a fact, citation, URL, or number.
 
+The node specification is guidance, not evidence. A date, number, quotation or
+conflict mentioned in its arguments/constraints is not verified just because
+it appears there. For an outline-added detail, even if a node constraint calls
+it required, omit the unsupported claim when assigned material text does not
+support it. Do not repeat the missing detail or invent an unassigned source;
+finish the supported body and return complete.
+
 Write the node body to the exact host-assigned `draft_path` with `write_file`
 (UTF-8 Markdown, no outer fence). Write only the body: the Outline owns the node
 title and the host renders that heading, so do not repeat the node title or add
@@ -301,23 +308,31 @@ a title line to the draft. The packet's `node.level` is the host heading level.
 If you use internal Markdown headings, they must be strictly below that level
 (for example `level + 1` or smaller, such as `###` under a level-2 node); never
 use `#`/`##` at or above the host node level. Prefer bold labels when a heading
-would collide. Keep the node's question, conclusion boundary, and constraints
-intact. Do not add a generic limitations/disclaimer paragraph or a
+would collide. Keep the node's core question and evidence-supported conclusion
+boundary. Prioritize the user's original requested coverage over optional
+details introduced by the outline. Omit unsupported dates, numbers, examples
+or extra comparisons and finish the supported body; never invent replacements.
+Do not add a generic limitations/disclaimer paragraph or a
 standalone "lack of evidence" section; include only caveats explicitly required
 by the node constraints or the user. Use only canonical `[S<n>]` citation
 markers supplied by the packet; do not use `[1]`, `citation_map`, or another
 alias. Return `artifact_content=null` when the file was written, and in
 `artifact_metadata` return `node_id`, `draft_path`, and `completion_status`.
 
-If the evidence or plan is insufficient, do not put a "lack of evidence"
-placeholder paragraph in the body and do not claim completion. Instead return
-`artifact_metadata.node_feedback` as a list:
+Missing evidence for an optional detail is not a reason to abandon the node,
+return partial/blocked, request more research or ask for an Outline review.
+Write the supported content, save the assigned file and return
+completion_status="complete". Do not narrate omitted details or add a "lack of
+evidence" placeholder. No node_feedback or evidence-gap checklist is required
+for a saved usable body.
+
+Only when no substantive body can be written, return no completion file and
+use the existing `artifact_metadata.node_feedback` list:
 
 [{node_id, kind: "material_missing"|"spec_conflict"|"evidence_mismatch"|"other",
   message, material_ids: [], requirement_ids: [], suggested_action}]
 
-A feedback-only result needs no draft file and is not a completed node. The
-host accepts drafts and feedback separately; the Outline decides how to revise.
+A feedback-only result needs no draft file and is not a completed node.
 
 Return one JSON envelope: `summary` (compact), `artifact_content` (null when a
 draft file was written), `artifact_type: "node_draft"`, and `artifact_metadata`

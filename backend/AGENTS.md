@@ -233,6 +233,13 @@ tool graph or subagent executor during state/schema imports.
 
 ### Report Research and Citation Handoff
 
+The shared `WebSearchBudgetMiddleware` uses a 50-completed-search threshold per
+agent turn, with the existing parallel-batch limit of 4 and consecutive-failure
+limit of 2. It applies to lead and subagent runtimes independently of report-only
+execution budgets. Boundary tests cover continuation after 8 and 49 completed
+searches and rejection after 50. Do not treat this as the total-tool budget or
+an API-account quota; parallel admission still observes completed history.
+
 Report citation workflow contracts live in `sp/report/prompts.py` and
 `skills/public/report-{research,outline}/SKILL.md`. Keep the injected
 `CONTEXT_INSTRUCTIONS` in `sp/report/hooks.py` aligned: Outline's selected gaps
@@ -245,7 +252,7 @@ precedence. Contract regressions are covered by
 `tests/test_sp_report_citation_workflow.py`; ordinary role/tool behavior and
 existing parallel-dispatch capability remain unchanged.
 
-Report-bound Researcher and Outline use a task-local `max_turns` floor of 150
+Report-bound Researcher, Outline and Writer use a task-local `max_turns` floor of 150
 in `configure_report_subagent`, so the existing conservative tool-loop formula
 reaches its 20-call threshold without changing ordinary specialist budgets or
 shared executor guards. DeepSeek's opt-in Search/Fetch adapters live in
@@ -262,6 +269,16 @@ externalization threshold: remove duplicated preview fields and bound provider
 summaries/excerpts while retaining every identity and the exact saved bodies.
 Large tool-result files otherwise induce read-back churn that can consume the
 same delegation budget the content-bearing search was intended to save.
+
+Report Writer acceptance is file-first: after technical-stop and assigned-path
+checks, a readable nonempty body follows the normal draft-acceptance path even
+with declared partial/blocked or node_feedback/evidence_gaps. Do not create
+feedback blockers or extra status metadata for that usable body. Feedback-only
+results retain the existing path when no usable body exists; explicit
+feedback_wanted reviews and existing final acceptance are unchanged. Keep the
+Writer Skill and REPORT_WRITER_PROMPT aligned on omitting unsupported optional
+details, finishing the supported body and avoiding omission narration. Regression
+coverage lives in test_sp_report_writing.py.
 
 ### Middleware Chain
 

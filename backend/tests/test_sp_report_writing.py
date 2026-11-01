@@ -687,6 +687,25 @@ def test_writer_uses_report_packet_only_while_ordinary_reporter_keeps_generic_in
     assert "task_memory" in ordinary_refs
 
 
+def test_report_writer_budget_is_scoped_without_changing_ordinary_reporter(tmp_path):
+    from types import SimpleNamespace
+
+    from deerflow.subagents.config import SubagentConfig
+
+    ctx = _context(tmp_path)
+    assert _outline(ctx, _tree(write_requests=[{"key": "w-budget", "node_ids": ["n2"], "feedback_wanted": False}])).next_step == "continue"
+    _, task, _ = _writer_action(ctx, "w-budget")
+    config = SubagentConfig(name="sp-reporter", description="writer", max_turns=60)
+    tools = [SimpleNamespace(name=name) for name in ("read_file", "write_file")]
+    report_config, _, role = hooks.configure_report_subagent(task, state=ctx.state, available_tools=tools, subagent_config=config)
+    assert role == "writer"
+    assert report_config.max_turns == 150
+    assert config.max_turns == 60
+    ordinary = SPSubagentTask(action_id="ordinary", subagent_type="reporter", task="write", description="write")
+    ordinary_config, ordinary_tools, role = hooks.configure_report_subagent(ordinary, state=ctx.state, available_tools=tools, subagent_config=config)
+    assert ordinary_config is config and ordinary_tools is tools and role is None
+
+
 def test_completed_write_key_without_current_draft_requires_new_key_but_coexists_with_new_one(tmp_path):
     ctx = _context(tmp_path)
     assert _outline(ctx, _tree(write_requests=[{"key": "w-old", "node_ids": ["n2"], "feedback_wanted": False}])).next_step == "continue"
@@ -975,6 +994,68 @@ def test_writer_token_cap_is_technical_and_existing_draft_is_not_accepted(tmp_pa
     assert payload["completion_status"] == "partial"
     assert payload["draft_exists"] is True
     assert payload["technical"] is True
+
+
+@pytest.mark.parametrize("declared_status", ["complete", "partial", "blocked"])
+@pytest.mark.parametrize("with_feedback", [False, True])
+def test_usable_writer_body_is_accepted_without_evidence_feedback_blockers(tmp_path, declared_status, with_feedback):
+    from deerflow.sp.report.acceptance import _body_ready
+
+    ctx = _context(tmp_path)
+    assert _outline(ctx, _tree(write_requests=[{"key": "w-n25", "node_ids": ["n2"], "feedback_wanted": False}])).next_step == "continue"
+    action, task, host = _writer_action(ctx, "w-n25")
+    content = "已提供证据支持的版本与治理信息。\n"
+    report_store.write_text_atomic(host, content)
+    feedback = [{"node_id": "n2", "kind": "material_missing", "message": "An optional date has no assigned material.", "material_ids": [], "requirement_ids": []}]
+    result = _writer_result(None, task, feedback=feedback if with_feedback else None)
+    result.completion_status = declared_status
+    result.artifact_metadata.update(completion_status=declared_status, evidence_gaps=["Optional conflicting date omitted."])
+
+    response = _accept_writer(ctx, action, task, result)
+
+    assert response.next_step == "continue", response.error
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.payload["write_requests"][0]["status"] == "completed"
+    assert ledger.payload["writes_pending"] == []
+    assert len(ledger.payload["drafts"]) == 1
+    assert Path(ledger.payload["drafts"][0]["path"]).read_text() == content
+    assert ledger.payload["feedback"] == []
+    assert not ledger.payload["outline_review_due"]
+    assert _body_ready(ledger)
+    assert not any(event.get("event_type") == "sp.report.node_feedback_recorded" for event in response.run_events)
+
+
+@pytest.mark.parametrize("problem", ["missing", "empty", "invalid_utf8", "wrong_path"])
+def test_relaxed_writer_acceptance_still_requires_a_valid_assigned_file(tmp_path, problem):
+    ctx = _context(tmp_path)
+    assert _outline(ctx, _tree(write_requests=[{"key": "w-file", "node_ids": ["n2"], "feedback_wanted": False}])).next_step == "continue"
+    action, task, host = _writer_action(ctx, "w-file")
+    if problem != "missing":
+        host.parent.mkdir(parents=True, exist_ok=True)
+        host.write_bytes(b"\xff" if problem == "invalid_utf8" else b"" if problem == "empty" else b"Supported body")
+    result = _writer_result(None, task)
+    result.artifact_metadata["completion_status"] = "partial"
+    if problem == "wrong_path":
+        result.artifact_metadata["draft_path"] = "/mnt/user-data/outputs/unassigned.md"
+
+    response = _accept_writer(ctx, action, task, result)
+
+    assert response.next_step == "error_recoverable"
+    assert not ReportLedger.load_for_context(hooks.report_context(ctx.state)).payload["drafts"]
+
+
+def test_truncated_partial_writer_with_feedback_does_not_accept_existing_file(tmp_path):
+    ctx = _context(tmp_path)
+    assert _outline(ctx, _tree(write_requests=[{"key": "w-cut", "node_ids": ["n2"], "feedback_wanted": False}])).next_step == "continue"
+    action, task, host = _writer_action(ctx, "w-cut")
+    report_store.write_text_atomic(host, "Possibly incomplete body.")
+    result = _writer_result(None, task, feedback=[{"node_id": "n2", "kind": "material_missing", "message": "missing", "material_ids": []}])
+    result.finish_reason = "length"
+
+    response = _accept_writer(ctx, action, task, result)
+
+    assert response.next_step == "error_recoverable"
+    assert not ReportLedger.load_for_context(hooks.report_context(ctx.state)).payload["drafts"]
 
 
 def test_outline_requires_explicit_report_task_after_initial_plan(tmp_path):

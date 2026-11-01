@@ -19,7 +19,7 @@ from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 
 WEB_SEARCH_TOOL_NAME = "web_search"
-MAX_WEB_SEARCHES_PER_TURN = 8
+MAX_WEB_SEARCHES_PER_TURN = 50
 MAX_PARALLEL_WEB_SEARCHES = 4
 MAX_CONSECUTIVE_WEB_SEARCH_FAILURES = 2
 

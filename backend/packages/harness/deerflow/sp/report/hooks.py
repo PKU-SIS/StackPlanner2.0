@@ -51,7 +51,7 @@ from deerflow.utils.messages import message_to_text
 
 REPORT_DELEGATE_ROLES = frozenset({"outline", "researcher", "reporter", "writer"})
 REPORT_READ_TOOLS = ("read_file", "grep", "glob", "ls")
-REPORT_RESEARCH_MAX_TURNS = 150
+REPORT_SUBAGENT_MAX_TURNS = 150
 REPORT_CONTEXT_MESSAGE_NAME = "sp_report_context"
 CONTEXT_INSTRUCTIONS = """
 <report-control>
@@ -616,7 +616,7 @@ def configure_report_subagent(
             tools=[str(getattr(tool, "name", "")) for tool in selected],
             disallowed_tools=disallowed_tools,
             skills=["report-outline"],
-            max_turns=max(REPORT_RESEARCH_MAX_TURNS, subagent_config.max_turns),
+            max_turns=max(REPORT_SUBAGENT_MAX_TURNS, subagent_config.max_turns),
         )
         extra_tools = [tool for tool in (register_tool, user_material_tool) if tool is not None]
         return config, [*available_tools, *extra_tools], role
@@ -630,6 +630,7 @@ def configure_report_subagent(
             system_prompt=REPORT_WRITER_PROMPT,
             tools=[str(getattr(tool, "name", "")) for tool in selected],
             skills=["report-node-writing"],
+            max_turns=max(REPORT_SUBAGENT_MAX_TURNS, subagent_config.max_turns),
         )
         return config, list(available_tools), role
 
@@ -658,7 +659,7 @@ def configure_report_subagent(
         system_prompt=_join_prompt(subagent_config.system_prompt, REPORT_RESEARCH_PROMPT),
         tools=[str(getattr(tool, "name", "")) for tool in selected],
         skills=["report-research"],
-        max_turns=max(REPORT_RESEARCH_MAX_TURNS, subagent_config.max_turns),
+        max_turns=max(REPORT_SUBAGENT_MAX_TURNS, subagent_config.max_turns),
     )
     return config, [*effective_tools, material_tool], role
 
@@ -1304,7 +1305,7 @@ def _accept_writer_locked(
         stop_reason = str(result.stop_reason or "").strip() or None
         finish_reason = str(result.finish_reason or "").strip() or None
         technical_reason = stop_reason
-        if technical_reason is None and finish_reason == "length" and completion_status != "complete" and not feedback_items:
+        if technical_reason is None and finish_reason == "length" and completion_status != "complete" and (draft_exists or not feedback_items):
             technical_reason = "output_length"
         if technical_reason is not None:
             error = (
@@ -1334,7 +1335,14 @@ def _accept_writer_locked(
                 draft_exists=draft_exists,
                 technical=True,
             )
-        if feedback_items:
+        declared_path = str(result.artifact_metadata.get("draft_path") or "").strip()
+        if declared_path and declared_path != virtual_path:
+            raise ReportValidationError("Writer returned a draft_path that does not match the host-assigned path")
+        content = host_path.read_text(encoding="utf-8") if draft_exists else ""
+        # A usable assigned body completes the writing request. Evidence notes
+        # or a model-declared partial status must not open a new feedback loop.
+        # Keep the existing feedback-only path when no usable body was written.
+        if feedback_items and not content.strip():
             if not isinstance(feedback_items, list):
                 raise ReportValidationError("node_feedback must be a list")
             records = report_writing.record_writer_feedback(
@@ -1384,14 +1392,8 @@ def _accept_writer_locked(
                 ],
             )
 
-        if completion_status != "complete":
-            raise ReportValidationError(f"Writer returned completion_status={completion_status} without node_feedback")
-        declared_path = str(result.artifact_metadata.get("draft_path") or "").strip()
-        if declared_path and declared_path != virtual_path:
-            raise ReportValidationError("Writer returned a draft_path that does not match the host-assigned path")
         if not draft_exists:
             raise ReportValidationError(f"Writer did not create the host-assigned draft: {virtual_path}")
-        content = host_path.read_text(encoding="utf-8")
         if not content.strip():
             raise ReportValidationError("Writer draft is empty")
         if _writer_repeats_node_title(content, basis):

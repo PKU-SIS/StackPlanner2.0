@@ -1,14 +1,14 @@
 ---
 name: report-node-writing
-description: Use inside the StackPlanner report Writer to turn one Outline node specification and its saved evidence into the node's Markdown body at the host-assigned draft path, or to return node_feedback without writing a completion draft.
+description: Use inside the StackPlanner report Writer to write one node's supported Markdown body at the assigned draft path, omitting unsupported optional details and completing the writing request without a missing-evidence feedback loop.
 ---
 
 # Report Node Writing
 
 ## Boundary
 
-Write exactly one assigned node. The Outline owns the plan and evidence
-judgement; the host owns the draft path and acceptance. Do not search, delegate,
+Write exactly one assigned node. The Outline supplies the plan; the host owns
+the draft path and acceptance. Do not search, delegate,
 re-plan the whole report, or write any other output file.
 
 ## Before Writing
@@ -18,8 +18,15 @@ re-plan the whole report, or write any other output file.
 2. Read the cited material with `read_file(description=..., path=...,
    start_line=..., end_line=..., line_numbers=true)`; `description` is required
    and line numbers are opt-in. Use only supplied evidence.
-3. Keep the node's question, argument, conclusion boundary, constraints, and
-   requirement ids intact. Do not add a new section or silently broaden scope.
+3. Keep the node's core question, supported argument/conclusion boundary and
+   requirement ids. Prioritize the user's original task over optional details
+   added by the outline. Do not add a new section or broaden scope.
+
+The node specification is guidance, not evidence. Dates, numbers, quotations
+and conflicts in the plan still need support from assigned material text. For
+an outline-added detail, even if a node constraint calls it required, omit the
+unsupported claim when that support is absent. Do not repeat the missing detail
+or invent an unassigned source; finish the supported body and return complete.
 
 ## Draft
 
@@ -37,12 +44,18 @@ Return `artifact_content=null` when the file was written and include
 `node_id`, `draft_path`, and `completion_status:"complete"` in
 `artifact_metadata`.
 
-## Feedback Instead of a Fake Completion
+## Finish the Supported Body
 
-If evidence is missing, conflicts with the spec, or the plan cannot be
-implemented without a decision, do not put "lack of evidence" or similar
-placeholder paragraphs in the body and do not claim completion. Return no
-completion draft; put `node_feedback` in `artifact_metadata`:
+Omit unsupported optional dates, numbers, examples or extra comparisons and
+write the content supported by supplied evidence. Never invent a replacement
+fact or citation. Missing evidence for an optional detail must not turn the
+whole node into partial/blocked or trigger research, a user question or an
+Outline review. Do not explain omissions in the prose or add "lack of evidence"
+paragraphs. Save the usable body and return completion_status="complete";
+node_feedback and an evidence-gap checklist are not required for that body.
+
+Only if no substantive body can be written, return no completion draft and
+use the existing `node_feedback` in `artifact_metadata`:
 
 ```json
 [{"node_id":"n3","kind":"material_missing|spec_conflict|evidence_mismatch|other",
@@ -50,5 +63,5 @@ completion draft; put `node_feedback` in `artifact_metadata`:
   "suggested_action":"..."}]
 ```
 
-Feedback is accepted separately from a draft. It does not resolve a gap or
-authorize a rewrite; the Outline decides.
+The feedback-only fallback is not a completed draft. Do not use it merely
+because a supported chapter omits an optional detail.

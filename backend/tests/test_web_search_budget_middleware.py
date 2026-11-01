@@ -4,6 +4,7 @@ import asyncio
 import json
 from types import SimpleNamespace
 
+import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from deerflow.agents.middlewares.web_search_budget_middleware import (
@@ -90,6 +91,29 @@ def test_stops_after_total_search_budget():
     )
 
     assert _error_code(result) == "WEB_SEARCH_BUDGET_EXHAUSTED"
+
+
+@pytest.mark.parametrize("completed_count", [8, 49, 50])
+def test_fifty_search_boundary_replaces_the_old_eight_search_cutoff(completed_count):
+    messages = [HumanMessage(content="Research a broad topic")]
+    for index in range(completed_count):
+        call_id = f"done-{index}"
+        messages.extend([AIMessage(content="", tool_calls=[_call(call_id, f"topic {index}")]), ToolMessage(content='{"results":[{"title":"ok"}]}', tool_call_id=call_id, name="web_search")])
+    messages.append(AIMessage(content="", tool_calls=[_call("next", "a different topic")]))
+    expected = ToolMessage(content="fresh results", tool_call_id="next", name="web_search")
+    called = []
+
+    def provider(request):
+        called.append(request.tool_call["id"])
+        return expected
+
+    result = WebSearchBudgetMiddleware().wrap_tool_call(_request("next", "a different topic", messages), provider)
+    if completed_count < 50:
+        assert result is expected
+        assert called == ["next"]
+    else:
+        assert _error_code(result) == "WEB_SEARCH_BUDGET_EXHAUSTED"
+        assert not called
 
 
 def test_skips_duplicate_and_excess_parallel_searches_in_same_model_turn():
