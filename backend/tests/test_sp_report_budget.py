@@ -93,7 +93,7 @@ def test_report_outline_360k_candidate_is_scoped_without_other_budget_changes():
     assert candidate.subagents.get_token_budget_for("sp-outline").max_tokens == 120_000
     assert candidate.subagents.get_token_budget_for("sp-researcher").max_tokens == 120_000
     assert app_config_for_report_outline(candidate, _task()) is candidate
-    assert REPORT_OUTLINE_OUTPUT_MAX_TOKENS == 16_384
+    assert REPORT_OUTLINE_OUTPUT_MAX_TOKENS == 32_768
 
     middlewares = build_subagent_runtime_middlewares(
         app_config=report_config,

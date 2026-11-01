@@ -5,7 +5,7 @@ from pathlib import Path
 from deerflow.sp.report.hooks import CONTEXT_INSTRUCTIONS
 from deerflow.sp.report.ledger import ReportLedger
 from deerflow.sp.report.packets import build_pre_research_packet, build_researcher_packet
-from deerflow.sp.report.prompts import REPORT_CENTRAL_PROMPT, REPORT_OUTLINE_PROMPT, REPORT_RESEARCH_PROMPT
+from deerflow.sp.report.prompts import REPORT_CENTRAL_PROMPT, REPORT_OUTLINE_PROMPT, REPORT_PRE_RESEARCH_PROMPT, REPORT_RESEARCH_PROMPT
 from deerflow.sp.report.store import ReportPaths
 
 
@@ -92,4 +92,4 @@ def test_one_research_packet_preserves_multiple_nodes_questions_and_original_use
     assert pre_research["pre_research"] is True
     assert pre_research["gaps"] == []
     assert request in pre_research["request"]["text"]
-    assert pre_research["instructions"] == REPORT_RESEARCH_PROMPT
+    assert pre_research["instructions"] == REPORT_PRE_RESEARCH_PROMPT

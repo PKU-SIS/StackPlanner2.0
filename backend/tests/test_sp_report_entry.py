@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from langchain.tools import tool
 from langchain_core.messages import HumanMessage
 
 from deerflow.sp.actions.handlers.base import HandlerContext
@@ -21,15 +22,27 @@ from deerflow.sp.subagents.dr2_adapter import _merge_research_continuations
 
 
 class _CapturingExecutor:
-    def __init__(self) -> None:
+    def __init__(self, state=None) -> None:
         self.task: SPSubagentTask | None = None
+        self.state = state
 
     def execute(self, task: SPSubagentTask) -> SPSubagentResult:
         self.task = task
+        if self.state is not None and task.metadata.get("report_pre_research"):
+            from deerflow.sp.report.materials import build_fetch_material_tool
+
+            @tool("web_fetch")
+            def fetch(url: str) -> str:
+                """Return a controlled source for the entry test."""
+                return "A controlled pre-research finding."
+
+            context = report_context(self.state)
+            paths = report_store.ReportPaths(context.outputs_path, context.report_id)
+            build_fetch_material_tool(paths=paths, action_id=task.action_id, gap_ids=[], fetch_tool=fetch).invoke({"url": "https://example.com/research"})
         return SPSubagentResult(
             status=SPSubagentStatus.COMPLETED,
             result="pre-research summary",
-            artifact_content="pre-research summary",
+            artifact_content="pre-research summary [S1]",
             artifact_type="research_observation",
             artifact_metadata={"completion_status": "complete", "gap_attempts": []},
         )
@@ -137,7 +150,7 @@ def _action(*, metadata: dict | None = None, target: str = "researcher") -> SPAc
 
 def test_start_metadata_starts_and_binds_same_delegation(tmp_path):
     ctx = HandlerContext(state=_state(tmp_path), stack=TaskMemoryStack(), thread_id="t1", run_id="run1")
-    executor = _CapturingExecutor()
+    executor = _CapturingExecutor(ctx.state)
     result = DelegateHandler(executor=executor).handle(
         _action(metadata={"report_action": "start"}),
         ctx,
@@ -177,7 +190,7 @@ def test_start_metadata_rejects_non_report_target(tmp_path):
 
 def test_report_outline_continuation_registers_current_run_without_resume(tmp_path):
     ctx = HandlerContext(state=_state(tmp_path), stack=TaskMemoryStack(), thread_id="t1", run_id="run-start")
-    start = DelegateHandler(executor=_CapturingExecutor()).handle(
+    start = DelegateHandler(executor=_CapturingExecutor(ctx.state)).handle(
         _action(metadata={"report_action": "start"}),
         ctx,
     )

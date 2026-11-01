@@ -58,6 +58,10 @@ ids, summaries and body excerpts. Use that supplied information directly in the
 synthesis; do not fetch each result again or reread every saved page by default.
 Use `report_fetch_material` for a relevant result whose body is missing or
 insufficient, and `read_file` only when exact content is not already visible.
+For saved evidence, prefer `report_read_material(material_id="m47", start_line=1,
+end_line=40)`: the host resolves the real path, verifies its hash, and returns
+the matching source ID and original numbered lines. Do not reconstruct or copy
+hashed material paths; reserve `read_file` for requests, summaries and other files.
 In supplementary research, prefer Fetch for known URLs and Search for genuinely
 missing directions. Save remaining execution space for the complete synthesis;
 after a budget warning, finish the evidence handoff before the hard cutoff.
@@ -107,7 +111,17 @@ after a budget warning, finish the evidence handoff before the hard cutoff.
 
 ## Output
 
-Return the normal subagent envelope. Put one detailed, theme-organized research
+For **pre-research** (`report_packet.pre_research=true`), return the complete
+theme-organized **Markdown directly** as the final answer. Do not put it inside
+JSON, quotes, a code fence or an `artifact_content` field. The host saves the
+complete body as `summary.md` and constructs metadata. This also applies when
+finalizing after a budget warning. Include real canonical [S<n>] citations next
+to supported information, material locators and source URLs; a material id m120
+does not imply a source id S120. Do not invent identifiers or list fabricated
+ranges of source ids. Use `read_file` for files; `grep` searches DIRECTORY paths
+and requires `description`. Follow the exposed tool schemas.
+
+For **supplementary research**, return the normal subagent envelope. Put one detailed, theme-organized research
 synthesis in `artifact_content`; the host saves it as `summary.md`. Write
 connected explanatory paragraphs with canonical [S<n>] citations next to the
 supported information. Explain what each relevant saved document contributes:
@@ -124,7 +138,7 @@ For a supplementary assignment, show how the information supports the assigned
 nodes/gaps. The short `summary` field remains a compact note for Central, not
 the complete evidence handoff. Do not decide whether a gap is resolved.
 
-In `artifact_metadata.gap_attempts`, return one item for every assigned gap:
+For supplementary research only, in `artifact_metadata.gap_attempts`, return one item for every assigned gap:
 
 ```json
 {"gap_id": "g1", "execution": "searched|not_attempted|technical_error",

@@ -821,7 +821,7 @@ def test_sp_executor_provider_report_outline_uses_scoped_output_cap(monkeypatch)
     provider._tools = []
     executor = provider({}, SimpleNamespace(context={"thread_id": "thread-1", "run_id": "run-1"}, stream_writer=None))
     executor.execute(SPSubagentTask(action_id="outline-1", subagent_type="outline", task="plan", description="plan", metadata={"report_role": "outline", "report_id": "r1"}))
-    assert captured["max_tokens_per_step"] == 16384
+    assert captured["max_tokens_per_step"] == 32768
 
 
 def test_sp_executor_provider_report_outline_respects_explicit_report_override(monkeypatch):

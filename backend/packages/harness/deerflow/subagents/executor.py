@@ -650,6 +650,9 @@ class SubagentExecutor:
             self._finalization_middleware = SubagentFinalizationMiddleware(
                 after_tool_calls=self.config.finalize_after_tool_calls,
                 token_limit=budget.max_tokens if budget.enabled else None,
+                output_format=self.config.output_format,
+                keep_tools=self.config.finalize_keep_tools,
+                token_fraction=self.config.finalize_token_fraction,
             )
             middlewares.insert(0, self._finalization_middleware)
         # Collect every guard middleware that exposes ``consume_stop_reason``
@@ -857,7 +860,7 @@ class SubagentExecutor:
                 "<execution_budget>\n"
                 f"This run has a hard budget of {hard_limit} total tool calls and will warn after {warn_limit}. "
                 "Batch related read-only inspection into a small number of calls. For implementation work, reserve calls for the source edit, focused tests after the latest edit, and git diff --check. "
-                "As soon as the delegated acceptance evidence is available, stop calling tools and return the required JSON result.\n"
+                f"As soon as the delegated acceptance evidence is available, stop calling tools and return the required {self.config.output_format} result.\n"
                 "</execution_budget>"
             )
         # Name the deferred MCP tools in the prompt; their schemas stay withheld

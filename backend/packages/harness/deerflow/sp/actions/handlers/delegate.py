@@ -793,6 +793,7 @@ class DelegateHandler:
                 task,
                 artifact_adapter=self._artifact_adapter,
                 delegate_entry=delegate_entry,
+                executor=self._executor,
             )
         except Exception as exc:  # noqa: BLE001 - report acceptance must fail closed
             return HandlerResult(

@@ -94,7 +94,7 @@ SP_SUBAGENT_REGISTRY_NAMES = {
 # Report Outline is the only role that must serialize a whole planning tree.
 # Keep this override separate from the shared model default and from the
 # ordinary subagent_type-based output override.
-REPORT_OUTLINE_OUTPUT_MAX_TOKENS = 16384
+REPORT_OUTLINE_OUTPUT_MAX_TOKENS = 32768
 REPORT_OUTLINE_MAX_TOKENS_KEY = "report:outline"
 
 # Host credentials are never forwarded wholesale. This allowlist is consulted
@@ -519,7 +519,7 @@ class DR2SPExecutorProvider:
             report_role = str(task.metadata.get("report_role") or "")
             if report_role == "outline":
                 # Report Outline precedence:
-                # report:outline > explicit global > report default 16384.
+                # report:outline > explicit global > report default 32768.
                 # The ordinary subagent_type map must not leak into report
                 # Outline, and the explicit global value must be restored after
                 # the ordinary role override above.

@@ -410,7 +410,11 @@ def test_outline_subagent_exposes_user_material_registration_tool(tmp_path):
     )
 
     assert role == "outline"
-    assert returned_config.max_turns == 150
+    assert returned_config.max_turns == 350
+    assert returned_config.tool_call_limit == 50
+    assert returned_config.finalize_after_tool_calls == 30
+    assert returned_config.finalize_token_fraction == 0.5
+    assert "write_file" in returned_config.finalize_keep_tools
     assert config.max_turns == 36
     assert "report_save_user_material" in returned_config.tools
     assert any(getattr(tool, "name", "") == "report_save_user_material" for tool in returned_tools)

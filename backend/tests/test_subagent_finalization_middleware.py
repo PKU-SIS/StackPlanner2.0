@@ -34,3 +34,21 @@ def test_token_warning_reserves_a_final_model_call_before_hard_stop():
     assert prepared.tools == []
     assert middleware.trigger_reason == "token_reserve"
     assert prepared.messages[-1] is message
+
+
+def test_markdown_research_finalization_never_reintroduces_json_contract():
+    middleware = SubagentFinalizationMiddleware(after_tool_calls=1, output_format="markdown")
+    prepared = middleware._prepare(Request(messages=[SystemMessage(content="Research role"), ToolMessage(content="Evidence [S1]", tool_call_id="s")], tools=["search"]))
+    assert prepared.tools == []
+    assert "complete Markdown" in prepared.messages[0].content
+    assert "normal final JSON envelope" not in prepared.messages[0].content
+
+
+def test_outline_closes_collection_but_keeps_delivery_tools_before_token_cap():
+    middleware = SubagentFinalizationMiddleware(after_tool_calls=30, token_limit=1000, token_fraction=0.5, keep_tools=["read_file", "write_file", "report_register_research_request"])
+    message = AIMessage(content="Evidence collected", usage_metadata={"input_tokens": 510, "output_tokens": 10, "total_tokens": 520})
+    request = Request(messages=[SystemMessage(content="Outline"), message], tools=[SimpleNamespace(name=name) for name in ["report_read_material", "read_file", "write_file", "report_register_research_request"]])
+    prepared = middleware._prepare(request)
+    assert [item.name for item in prepared.tools] == ["read_file", "write_file", "report_register_research_request"]
+    assert "complete tree" in prepared.messages[0].content
+    assert middleware.trigger_reason == "token_reserve"

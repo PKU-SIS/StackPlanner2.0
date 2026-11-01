@@ -95,7 +95,7 @@ def build_search_material_tool(*, paths: report_store.ReportPaths, action_id: st
     """Bind a content-bearing provider to one real report research action."""
 
     @tool("web_search", parse_docstring=True)
-    def web_search(query: str, max_results: Annotated[int, Field(ge=1, le=50)] = 10) -> str:
+    def web_search(query: Annotated[str, Field(min_length=1, max_length=128)], max_results: Annotated[int, Field(ge=1, le=50)] = 10) -> str:
         """Search and save available page bodies as citable materials in one call.
 
         Use the returned summaries and body excerpts directly for the synthesis.

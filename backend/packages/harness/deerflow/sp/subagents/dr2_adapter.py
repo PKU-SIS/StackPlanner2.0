@@ -133,6 +133,9 @@ def _json_safe(value: Any) -> Any:
 def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
     """Render a structured SP task for a DR2 subagent prompt."""
     task.validate_protocol()
+    from deerflow.sp.report.research_delivery import MARKDOWN_OUTPUT_INSTRUCTION, is_markdown_research
+
+    markdown = is_markdown_research(task)
     payload = {
         "protocol": task.protocol_payload(),
         "action_id": task.action_id,
@@ -158,11 +161,17 @@ def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
                 "narrower interpretation from the latest delegated wording; report a gap or request "
                 "recovery when the contract is not satisfied."
             ),
-            "Return the task_result envelope fields implied by protocol.message_type. Do not expose private chain-of-thought; report only observable actions, evidence, tests, files, and blockers.",
-            "Honor the subagent output contract: return compact JSON with summary, artifact_content, artifact_type, and artifact_metadata.",
-            'Set artifact_metadata.completion_status to "complete", "partial", or "blocked", and list unmet requirements in artifact_metadata.evidence_gaps.',
-            "Use artifact_metadata.filename for a desired text-artifact filename. Use artifact_metadata.created_paths only for absolute /mnt/user-data/outputs/... files that were actually created by a file tool.",
-            "Full reports, outlines, research bodies, and other large text belong in artifact_content, never in summary.",
+            *(
+                [MARKDOWN_OUTPUT_INSTRUCTION]
+                if markdown
+                else [
+                    "Return the task_result envelope fields implied by protocol.message_type. Do not expose private chain-of-thought; report only observable actions, evidence, tests, files, and blockers.",
+                    "Honor the subagent output contract: return compact JSON with summary, artifact_content, artifact_type, and artifact_metadata.",
+                    'Set artifact_metadata.completion_status to "complete", "partial", or "blocked", and list unmet requirements in artifact_metadata.evidence_gaps.',
+                    "Use artifact_metadata.filename for a desired text-artifact filename. Use artifact_metadata.created_paths only for absolute /mnt/user-data/outputs/... files that were actually created by a file tool.",
+                    "Full reports, outlines, research bodies, and other large text belong in artifact_content, never in summary.",
+                ]
+            ),
         ]
     )
 
@@ -656,6 +665,10 @@ def _last_model_finish_reason(ai_messages: Any) -> str | None:
 
 def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = None) -> SPSubagentResult:
     """Normalize DR2 SubagentResult-like objects into SPSubagentResult."""
+    from deerflow.sp.report.research_delivery import is_markdown_research, normalize_markdown_research
+
+    if is_markdown_research(task):
+        return normalize_markdown_research(result, task)
     raw_status = getattr(result, "status", None)
     status_value = getattr(raw_status, "value", raw_status)
     try:

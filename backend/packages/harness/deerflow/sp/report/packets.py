@@ -15,6 +15,7 @@ from deerflow.sp.report.ledger import ReportLedger, ReportValidationError, gap_n
 from deerflow.sp.report.prompts import REPORT_RESEARCH_PROMPT
 
 OUTLINE_SUMMARY_MAX_CHARS = 24_000
+OUTLINE_INITIAL_SUMMARY_MAX_CHARS = 64_000
 OUTLINE_TREE_MAX_CHARS = 80_000
 RESEARCH_INPUT_MAX_CHARS = 4_000
 
@@ -68,6 +69,12 @@ def _material_entry(material: Mapping[str, Any]) -> dict[str, Any]:
         "preview": material.get("preview"),
         "fetched_at": material.get("fetched_at"),
     }
+
+
+def _outline_material_entry(material: Mapping[str, Any]) -> dict[str, Any]:
+    # Keep every identity and provenance item. Body previews and long hashed
+    # paths are redundant with the cited synthesis and stable-ID read tool.
+    return {key: material.get(key) for key in ("material_id", "source_id", "input_id", "source_kind", "title", "url", "chars", "lines", "content_scope", "upstream_truncation", "fetched_at") if material.get(key) is not None}
 
 
 def _gap_nodes(gap: Mapping[str, Any], ledger: ReportLedger) -> list[dict[str, Any]]:
@@ -329,7 +336,9 @@ def build_outline_packet(ledger: ReportLedger) -> dict[str, Any]:
         if not isinstance(item, Mapping):
             continue
         text, error = _read_text(item.get("path"))
-        truncated = len(text) > OUTLINE_SUMMARY_MAX_CHARS
+        action = ledger.action(str(item.get("action_id") or "")) or {}
+        limit = OUTLINE_INITIAL_SUMMARY_MAX_CHARS if action.get("kind") == "pre_research" else OUTLINE_SUMMARY_MAX_CHARS
+        truncated = len(text) > limit
         summaries.append(
             {
                 "action_id": item.get("action_id"),
@@ -337,7 +346,7 @@ def build_outline_packet(ledger: ReportLedger) -> dict[str, Any]:
                 "path": item.get("virtual_path"),
                 "artifact_id": item.get("artifact_id"),
                 "chars": len(text),
-                "content": text[:OUTLINE_SUMMARY_MAX_CHARS],
+                "content": text[:limit],
                 "content_truncated": truncated,
                 "error": error,
             }
@@ -402,7 +411,7 @@ def build_outline_packet(ledger: ReportLedger) -> dict[str, Any]:
             "error": request_error,
         },
         "inputs": inputs,
-        "materials": [_material_entry(item) for item in ledger.materials()],
+        "materials": [_outline_material_entry(item) for item in ledger.materials()],
         "material_catalog_path": ledger.paths.virtual(ledger.paths.catalog),
         "summaries": summaries,
         "tree": (
@@ -470,6 +479,8 @@ def build_researcher_packet(ledger: ReportLedger, gap_ids: Iterable[str], *, act
 def build_pre_research_packet(ledger: ReportLedger, *, action_id: str) -> dict[str, Any]:
     """Build the orientation/research packet used before the first outline."""
     request_text, request_error = _read_text(ledger.paths.request)
+    from deerflow.sp.report.prompts import REPORT_PRE_RESEARCH_PROMPT
+
     return {
         "report_id": ledger.payload.get("report_id"),
         "action_id": action_id,
@@ -492,7 +503,7 @@ def build_pre_research_packet(ledger: ReportLedger, *, action_id: str) -> dict[s
         "materials": [_material_entry(item) for item in ledger.materials()],
         "material_catalog_path": ledger.paths.virtual(ledger.paths.catalog),
         "gaps": [],
-        "instructions": REPORT_RESEARCH_PROMPT,
+        "instructions": REPORT_PRE_RESEARCH_PROMPT,
     }
 
 

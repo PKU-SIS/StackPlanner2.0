@@ -28,6 +28,7 @@ def test_ten_bodies_are_saved_by_one_search_without_fetch(tmp_path):
         return json.dumps({"results": [{"url": f"https://example.com/{i}", "title": f"Source {i}", "summary": "Relevant analysis " * 300, "content": f"# Source {i}\r\n" + "Evidence\n" * 1000} for i in range(10)]})
 
     wrapper = build_search_material_tool(paths=ledger.paths, action_id="a1", gap_ids=[], search_tool=search)
+    assert wrapper.args_schema.model_json_schema()["properties"]["query"]["maxLength"] == 128
     raw = wrapper.invoke({"query": "protocols"})
     assert len(raw) <= 10_000
     first = json.loads(raw)

@@ -498,8 +498,9 @@ def prepare_delegation(
             protocol_error = context.state.get("sp_report_protocol_error") if isinstance(context.state, Mapping) else None
             requires_file = isinstance(protocol_error, Mapping) and bool(protocol_error.get("outline_delivery_required"))
             instruction = (
-                "Prefer file delivery from this first Outline attempt. Write the complete tree JSON to "
-                "this host-assigned path using write_file; use append=True for later chunks and read_file "
+                "Prefer report_submit_outline(tree=the_complete_object) from this first Outline attempt; "
+                "the host serializes it at this assigned file path. As a fallback write the complete tree JSON "
+                "using write_file; use append=True for later chunks and read_file "
                 "before appending. Do not try to fit a large tree into one response. Return "
                 "artifact_content=null and this path in artifact_metadata."
             )
@@ -513,8 +514,9 @@ def prepare_delegation(
                 )
             if requires_file:
                 instruction = (
-                    "This Outline retry requires file delivery. Write the complete tree JSON to this "
-                    "host-assigned path using write_file; use append=True for later chunks and read_file "
+                    "This Outline retry requires file delivery. Prefer report_submit_outline(tree=the_complete_object) "
+                    "to stage it at the host-assigned path. As a fallback use write_file with complete tree JSON; "
+                    "use append=True for later chunks and read_file "
                     "before appending. Do not return the tree inline and do not omit any awaiting_outline "
                     "gap from gap_outcomes. Return artifact_content=null and this path in artifact_metadata."
                 )
@@ -585,12 +587,18 @@ def configure_report_subagent(
         raise ReportValidationError("reporter must be bound as a writer delegation with report_write_key")
     paths = report_store.ReportPaths(report.outputs_path, report.report_id)  # type: ignore[arg-type]
     tools_by_name = {str(getattr(tool, "name", "")): tool for tool in available_tools}
+    if role in {"outline", "researcher"} and not task.metadata.get("report_summary_repair"):
+        from deerflow.sp.report.read_material import build_read_material_tool
+
+        read_material_tool = build_read_material_tool(paths=paths)
+        tools_by_name["report_read_material"] = read_material_tool
+        available_tools = [*available_tools, read_material_tool]
     if role == "outline":
         report_task = str(task.metadata.get("report_task") or "plan").strip().lower()
         if report_task == "integrate_review":
-            selected = [tools_by_name[name] for name in REPORT_READ_TOOLS if name in tools_by_name]
+            selected = [tools_by_name[name] for name in [*REPORT_READ_TOOLS, "report_read_material"] if name in tools_by_name]
         else:
-            selected = [tools_by_name[name] for name in [*REPORT_READ_TOOLS, "write_file"] if name in tools_by_name]
+            selected = [tools_by_name[name] for name in [*REPORT_READ_TOOLS, "report_read_material", "write_file"] if name in tools_by_name]
             if "write_file" in tools_by_name and tools_by_name["write_file"] not in selected:
                 selected.append(tools_by_name["write_file"])
         if "read_file" not in tools_by_name:
@@ -604,6 +612,11 @@ def configure_report_subagent(
             selected.append(register_tool)
             user_material_tool = build_register_user_material_tool(paths=paths)
             selected.append(user_material_tool)
+            from deerflow.sp.report.submit_outline import build_submit_outline_tool
+
+            submit_tool = build_submit_outline_tool(paths=paths, delivery_path=Path(str(task.metadata.get("outline_delivery_path") or _outline_delivery_path(paths, task.action_id))))
+            selected.append(submit_tool)
+            available_tools = [*available_tools, submit_tool]
         prompt = REPORT_INTEGRATE_REVIEW_PROMPT if report_task == "integrate_review" else REPORT_OUTLINE_PROMPT
         disallowed_tools = list(subagent_config.disallowed_tools or [])
         if report_task == "integrate_review":
@@ -618,6 +631,15 @@ def configure_report_subagent(
             skills=["report-outline"],
             max_turns=max(REPORT_SUBAGENT_MAX_TURNS, subagent_config.max_turns),
         )
+        if report_task != "integrate_review":
+            config = replace(
+                config,
+                max_turns=max(350, config.max_turns),
+                tool_call_limit=50,
+                finalize_after_tool_calls=30,
+                finalize_keep_tools=["report_submit_outline", "read_file", "write_file", "report_register_research_request", "report_save_user_material"],
+                finalize_token_fraction=0.5,
+            )
         extra_tools = [tool for tool in (register_tool, user_material_tool) if tool is not None]
         return config, [*available_tools, *extra_tools], role
 
@@ -634,6 +656,13 @@ def configure_report_subagent(
         )
         return config, list(available_tools), role
 
+    from deerflow.sp.report.prompts import REPORT_PRE_RESEARCH_PROMPT
+    from deerflow.sp.report.research_delivery import REPAIR_OUTPUT_INSTRUCTION, is_markdown_research
+
+    markdown = is_markdown_research(task)
+    if markdown and task.metadata.get("report_summary_repair"):
+        return replace(subagent_config, system_prompt=REPAIR_OUTPUT_INSTRUCTION, tools=[], skills=[], output_format="markdown", max_turns=20), [], role
+
     fetch_tool = tools_by_name.get("web_fetch")
     if fetch_tool is None:
         raise ReportValidationError("report research requires a configured web_fetch tool")
@@ -644,7 +673,7 @@ def configure_report_subagent(
         gap_ids=gap_ids,
         fetch_tool=fetch_tool,
     )
-    selected = [tools_by_name[name] for name in REPORT_READ_TOOLS if name in tools_by_name]
+    selected = [tools_by_name[name] for name in [*REPORT_READ_TOOLS, "report_read_material"] if name in tools_by_name]
     effective_tools = list(available_tools)
     if "web_search" in tools_by_name:
         search_tool = tools_by_name["web_search"]
@@ -656,9 +685,10 @@ def configure_report_subagent(
     selected.append(material_tool)
     config = replace(
         subagent_config,
-        system_prompt=_join_prompt(subagent_config.system_prompt, REPORT_RESEARCH_PROMPT),
+        system_prompt=REPORT_PRE_RESEARCH_PROMPT if markdown else _join_prompt(subagent_config.system_prompt, REPORT_RESEARCH_PROMPT),
         tools=[str(getattr(tool, "name", "")) for tool in selected],
         skills=["report-research"],
+        output_format="markdown" if markdown else subagent_config.output_format,
         max_turns=max(REPORT_SUBAGENT_MAX_TURNS, subagent_config.max_turns),
     )
     return config, [*effective_tools, material_tool], role
@@ -676,6 +706,7 @@ def handle_success(
     *,
     artifact_adapter: SPArtifactAdapter,
     delegate_entry: StackMemoryEntry,
+    executor: Any = None,
 ) -> HandlerResult | None:
     role = str(task.metadata.get("report_role") or "")
     if role == "outline":
@@ -683,6 +714,13 @@ def handle_success(
             return _accept_integrate_review(action, context, result, task, artifact_adapter=artifact_adapter, delegate_entry=delegate_entry)
         return _accept_outline(action, context, result, task, artifact_adapter=artifact_adapter, delegate_entry=delegate_entry)
     if role == "researcher":
+        from deerflow.sp.report.research_delivery import is_markdown_research, prepare_delivery
+
+        if is_markdown_research(task):
+            ledger = ledger_for_state(context.state)
+            previous = ledger.action(action.action_id)
+            if previous is None or previous.get("status") != "completed":
+                result = prepare_delivery(result, task, ledger, executor)
         return _accept_research(action, context, result, task, artifact_adapter=artifact_adapter, delegate_entry=delegate_entry)
     if role == "writer":
         return _accept_writer(action, context, result, task, artifact_adapter=artifact_adapter, delegate_entry=delegate_entry)
@@ -1912,6 +1950,24 @@ def _accept_research_locked(
     if previous is not None and previous.get("status") == "completed":
         return _replay_result(action, context, "researcher", previous)
     summary = result.artifact_content if isinstance(result.artifact_content, str) else None
+    from deerflow.sp.report.research_delivery import delivery_issues, is_markdown_research
+
+    if is_markdown_research(task):
+        issues = list(result.artifact_metadata.get("research_delivery_issues") or [])
+        issues.extend(delivery_issues(summary or "", {str(item.get("source_id")) for item in ledger.materials()}))
+        if issues:
+            report_store.write_text_atomic(ledger.paths.summary_file(action.action_id).parent / "diagnostics/rejected.md", summary or "")
+            ledger.fail_research_action(action.action_id, "; ".join(dict.fromkeys(issues)))
+            ledger.save()
+            return _rejection(
+                action,
+                context,
+                "Pre-research summary delivery failed after at most one tool-free correction: "
+                + "; ".join(dict.fromkeys(issues))
+                + ". This attempt is closed. Do not automatically re-dispatch research; retained materials remain available to Outline.",
+                reason="invalid_pre_research_summary",
+                technical=True,
+            )
     if not summary or not summary.strip():
         summary = result.result if isinstance(result.result, str) and result.result.strip() else None
     if not summary:
@@ -1920,9 +1976,7 @@ def _accept_research_locked(
         return _rejection(
             action,
             context,
-            "Report research returned no usable summary; this assigned attempt is closed. "
-            "Do not re-dispatch it automatically; let Outline judge existing saved materials and "
-            "only ask the user if a hard requirement remains unsupported.",
+            "Report research returned no usable summary; this assigned attempt is closed. Do not re-dispatch it automatically; let Outline judge existing saved materials and only ask the user if a hard requirement remains unsupported.",
             reason="empty_research_summary",
         )
     try:
@@ -1937,6 +1991,8 @@ def _accept_research_locked(
             stop_reason=result.stop_reason,
         )
         summary_path = report_store.write_research_summary(ledger.paths, action.action_id, summary)
+        if is_markdown_research(task) and summary_path.read_text(encoding="utf-8") != summary.rstrip() + "\n":
+            raise report_store.ReportStoreError("Saved pre-research summary differs from the complete delivered body")
         artifact = artifact_adapter.write_text_artifact(
             summary,
             artifact_type="research_observation",

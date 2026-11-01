@@ -952,9 +952,52 @@ def test_real_executor_outline_reads_saved_material_with_read_file(tmp_path, mon
     assert ledger.materials()[0]["material_id"] == material["material_id"]
 
 
+def test_outline_can_deliver_after_collection_tools_are_closed(tmp_path, monkeypatch, real_executor):
+    from dataclasses import replace
+
+    app_config = _app_config()
+    state = _state(tmp_path)
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    ledger.begin_research_action("seed", [], allow_empty=True, kind="pre_research")
+    ledger.save()
+
+    @tool("web_fetch")
+    def seed_fetch(url: str) -> str:
+        """Return controlled evidence."""
+        return "FY2024 solvency is 123.4%."
+
+    build_fetch_material_tool(paths=ledger.paths, action_id="seed", gap_ids=[], fetch_tool=seed_fetch).invoke({"url": "https://example.com/evidence"})
+    tree = _tree()
+    node = tree["nodes"][1]
+    node.update(gap_ids=[], status="ready", evidence=[{"material_id": "m1", "source_ids": ["S1"], "locator": {"lines": [1, 1]}, "use": "official indicator"}])
+    created = []
+
+    def factory(task):
+        cfg, tools, _ = configure_report_subagent(task, state=state, available_tools=[read_file_tool, write_file_tool], subagent_config=get_subagent_config("sp-outline", app_config=app_config))
+        path = ledger.paths.virtual(Path(task.metadata["outline_delivery_path"]))
+        model = FakeToolCallingModel(
+            responses=[
+                AIMessage(content="", tool_calls=[{"name": "report_read_material", "args": {"material_id": "m1"}, "id": "read-evidence", "type": "tool_call"}]),
+                AIMessage(content="", tool_calls=[{"name": "report_submit_outline", "args": {"tree": tree}, "id": "submit-tree", "type": "tool_call"}]),
+                AIMessage(content=json.dumps({"summary": "Tree delivered", "artifact_content": None, "artifact_type": "outline", "artifact_metadata": {"completion_status": "complete", "delivery_mode": "file", "tree_path": path}})),
+            ]
+        )
+        _install_fake_model(monkeypatch, model, real_executor)
+        executor = real_executor.SubagentExecutor(config=replace(cfg, finalize_after_tool_calls=1), tools=tools, app_config=app_config, parent_model="fake-model", thread_data=state["thread_data"], thread_id="t-e2e", run_id="run-e2e")
+        created.append(executor)
+        return executor
+
+    action = SPAction.create(ActionType.DELEGATE, reason="plan", task="plan", target_agent="outline", stage="planning")
+    result = DelegateHandler(executor=DR2SubagentExecutorAdapter(factory)).handle(action, HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="t-e2e", run_id="run-e2e"))
+    assert result.error is None
+    assert ReportLedger.load(ledger.paths).payload["tree"]
+    assert created[0]._finalization_middleware.trigger_reason == "tool_calls"
+
+
 def test_real_executor_toolnode_concurrent_material_calls_keep_both(tmp_path, monkeypatch, real_executor):
     app_config = _app_config()
     state = _state(tmp_path)
+    complete_body = "# Orientation\n\n" + '中文 “引号” and "English quotations" remain complete [S1] [S2].\n' * 1000
 
     @tool("web_fetch")
     async def controlled_fetch(url: str) -> str:
@@ -987,17 +1030,7 @@ def test_real_executor_toolnode_concurrent_material_calls_keep_both(tmp_path, mo
                         },
                     ],
                 ),
-                AIMessage(
-                    content=json.dumps(
-                        {
-                            "summary": "orientation saved",
-                            "artifact_content": "# Orientation\n\nTwo controlled materials saved.",
-                            "artifact_type": "research_observation",
-                            "artifact_metadata": {"completion_status": "complete"},
-                        },
-                        ensure_ascii=False,
-                    )
-                ),
+                AIMessage(content=complete_body),
             ]
         ),
         real_executor,
@@ -1022,6 +1055,87 @@ def test_real_executor_toolnode_concurrent_material_calls_keep_both(tmp_path, mo
     assert {item["source_id"] for item in ledger.materials()} == {"S1", "S2"}
     assert {item["material_id"] for item in ledger.materials()} == {"m1", "m2"}
     assert ledger.action("a-concurrent-material")["status"] == "completed"
+    assert ledger.paths.summary_file("a-concurrent-material").read_text() == complete_body.rstrip() + "\n"
+
+
+def test_real_pre_research_repairs_citations_once_with_no_tools_or_new_round(tmp_path, monkeypatch, real_executor):
+    app_config = _app_config()
+    state = _state(tmp_path)
+
+    @tool("web_fetch")
+    def fetch(url: str) -> str:
+        """Return one controlled evidence page."""
+        return "Official controlled observation."
+
+    body = '# Research\n\nThe source calls it "an observation" [S1].'
+    _install_fake_model(
+        monkeypatch,
+        FakeToolCallingModel(
+            responses=[
+                AIMessage(content="", tool_calls=[{"name": "report_fetch_material", "args": {"url": "https://example.com/evidence"}, "id": "fetch-repair", "type": "tool_call"}]),
+                AIMessage(content="# Research\nA supported finding [S99]."),
+                AIMessage(content=body),
+            ]
+        ),
+        real_executor,
+    )
+    factory = _executor_factory(state, app_config, [fetch], "sp-researcher", real_executor)
+    created = []
+
+    def capture(task):
+        executor = factory(task)
+        created.append(executor)
+        return executor
+
+    handler = DelegateHandler(executor=DR2SubagentExecutorAdapter(capture))
+    action = SPAction.create(ActionType.DELEGATE, action_id="a-repair", reason="research", task="research", target_agent="researcher", stage="research")
+    result = handler.handle(action, HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="t-e2e", run_id="run-e2e"))
+    assert result.next_step == "continue", result.error
+    assert len(created) == 2
+    assert created[1].config.tools == []
+    assert created[1].config.skills == []
+    assert created[1].tools == []
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    assert len(ledger.payload["actions"]) == 1
+    assert len(ledger.materials()) == 1
+    assert ledger.paths.summary_file(action.action_id).read_text() == body + "\n"
+    assert (ledger.paths.summary_file(action.action_id).parent / "diagnostics/repair-started.json").exists()
+
+
+def test_pre_research_summary_write_corruption_is_a_technical_failure(tmp_path, monkeypatch, real_executor):
+    app_config = _app_config()
+    state = _state(tmp_path)
+
+    @tool("web_fetch")
+    def fetch(url: str) -> str:
+        """Return one controlled evidence page."""
+        return "Official controlled observation."
+
+    _install_fake_model(
+        monkeypatch,
+        FakeToolCallingModel(
+            responses=[
+                AIMessage(content="", tool_calls=[{"name": "report_fetch_material", "args": {"url": "https://example.com/evidence"}, "id": "fetch-corrupt", "type": "tool_call"}]),
+                AIMessage(content="# Research\nThe complete finding [S1]."),
+            ]
+        ),
+        real_executor,
+    )
+
+    def corrupt(paths, action_id, text):
+        path = paths.summary_file(action_id)
+        report_store.write_text_atomic(path, text[:8])
+        return path
+
+    monkeypatch.setattr(report_store, "write_research_summary", corrupt)
+    handler = DelegateHandler(executor=DR2SubagentExecutorAdapter(_executor_factory(state, app_config, [fetch], "sp-researcher", real_executor)))
+    action = SPAction.create(ActionType.DELEGATE, action_id="a-corrupt", reason="research", task="research", target_agent="researcher", stage="research")
+    result = handler.handle(action, HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="t-e2e", run_id="run-e2e"))
+    assert result.next_step == "error_recoverable"
+    assert "differs from the complete delivered body" in result.error
+    ledger = ReportLedger.load_for_context(hooks.report_context(state))
+    assert ledger.action(action.action_id)["status"] == "failed"
+    assert not ledger.payload["summaries"]
 
 
 def test_real_executor_integration_review_and_first_finish(tmp_path, monkeypatch, real_executor):

@@ -183,12 +183,15 @@ def worker(sample_dir):
         # Visible responses only; exclude provider-private reasoning fields.
         public = {k: step[k] for k in ("type", "name", "status", "tool_call_id", "content", "tool_calls", "usage_metadata") if k in step}
         with (sample_dir / "steps.jsonl").open("a") as stream:
-            stream.write(json.dumps({"index": index, **public}, ensure_ascii=False, default=str) + "\n")
+            stream.write(json.dumps({"execution": len(executors), "index": index, **public}, ensure_ascii=False, default=str) + "\n")
 
     def factory(task):
         cfg, scoped, role = configure_report_subagent(task, state=state, available_tools=tools, subagent_config=get_subagent_config("sp-researcher", app_config=app_config))
         assert role == "researcher"
-        cfg = replace(cfg, max_turns=350, tool_call_limit=50, finalize_after_tool_calls=40)
+        if not task.metadata.get("report_summary_repair"):
+            cfg = replace(cfg, max_turns=350, tool_call_limit=50, finalize_after_tool_calls=40)
+        with (sample_dir / "executions.jsonl").open("a") as stream:
+            stream.write(json.dumps({"repair": bool(task.metadata.get("report_summary_repair")), "output_format": cfg.output_format, "max_turns": cfg.max_turns, "tools": cfg.tools}) + "\n")
         executor = SubagentExecutor(
             config=cfg,
             tools=scoped,
@@ -211,7 +214,7 @@ def worker(sample_dir):
         stage="research",
         reason="Isolated native pre-research stage evaluation",
         task=sample["prompt"],
-        expected_output="Complete the report pre-research evidence handoff as a detailed theme-organized, cited Markdown synthesis in artifact_content; do not produce an outline or final report.",
+        expected_output="Complete the report pre-research evidence handoff as a detailed theme-organized, cited Markdown synthesis directly; do not produce an outline or final report.",
         metadata={"report_action": "start"},
     )
     started = time.monotonic()
@@ -239,8 +242,9 @@ def worker(sample_dir):
         topic=sample["topic"],
         language=sample["language"],
         elapsed_seconds=round(time.monotonic() - started, 1),
-        finalization_reason=getattr(getattr(executors[-1], "_finalization_middleware", None), "trigger_reason", None) if executors else None,
-        token_usage_records=getattr(raw, "token_usage_records", []),
+        finalization_reason=next((getattr(getattr(item, "_finalization_middleware", None), "trigger_reason", None) for item in executors if getattr(getattr(item, "_finalization_middleware", None), "trigger_reason", None)), None),
+        token_usage_records=[record for item in raw_results for record in getattr(item, "token_usage_records", [])],
+        executions=len(executors),
         tool_calls=sum(len(json.loads(line).get("tool_calls", [])) for line in (sample_dir / "steps.jsonl").read_text().splitlines()) if (sample_dir / "steps.jsonl").exists() else 0,
     )
     dump(sample_dir / "metrics.json", metrics)

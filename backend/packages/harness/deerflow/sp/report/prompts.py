@@ -216,6 +216,10 @@ Tool contract:
 - `write_file` writes the host-assigned delivery path. When file delivery is
   requested, write the complete tree object there; use `append=True` for later
   chunks after `read_file`. Never write only `nodes`.
+- Prefer `report_submit_outline(tree={...})` for a complete structured tree.
+  The host serializes and stages it at the assigned path, returning validation
+  diagnostics without bypassing final acceptance. Do not encode its tree
+  argument as a string. After success return the compact file-delivery envelope.
 
 Initial plan:
 - Produce a compact structure sufficient to guide the fixed research round and
@@ -431,6 +435,26 @@ Outline's decision.
 - Use artifact_type "research_observation".
 </report-research-mode>
 """.strip()
+
+
+REPORT_PRE_RESEARCH_PROMPT = (
+    REPORT_RESEARCH_PROMPT.split("- Return one detailed, theme-organized research synthesis", 1)[0]
+    + """
+- For this pre-research pass, return the complete Markdown research synthesis
+  directly as the final answer. Do not use a JSON envelope or artifact_content.
+  The host saves the complete body as summary.md and constructs result metadata.
+  Use theme-organized explanatory paragraphs with canonical [S<n>] citations,
+  source URLs and material locators. Preserve useful detail and source diversity.
+  No gaps are assigned; do not emit gap_attempts or decide evidence sufficiency.
+- Use read_file for a saved file. grep accepts a DIRECTORY path, not a file;
+  include its required description. Inspect tool schemas before calling them.
+- Prefer report_read_material(material_id="m47", start_line=1, end_line=40)
+  for saved evidence. It resolves hashed paths and returns verified source IDs
+  and original numbered lines. Use read_file for non-material files.
+- Do not delegate, ask the user, or expose private chain-of-thought.
+</report-research-mode>
+""".strip()
+)
 
 
 REPORT_INTEGRATE_REVIEW_PROMPT = """

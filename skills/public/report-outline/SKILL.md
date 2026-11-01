@@ -20,10 +20,19 @@ requirement merely to shorten the plan.
 
 ## Read Before Planning
 
+Prefer `report_submit_outline(tree={...})` to stage the complete tree object.
+The host serializes it, retains invalid proposals for correction and returns
+the assigned delivery path. Return the compact file-delivery envelope after
+submission; the normal report acceptance gate still decides acceptance. Do not
+encode the tree into a JSON string. `write_file` remains a fallback for chunks.
+
 1. Read the request and every user input in the packet, including corrections.
-2. Read the saved-material catalog. Open the material paths whose exact wording,
-   period, scope, or numbers the current decision depends on. For exact
-   locations use `read_file(description=..., path=..., start_line=...,
+2. Read the saved-material catalog. For exact evidence use
+   `report_read_material(material_id="m47", start_line=1, end_line=40)`.
+   The host resolves the file and verifies its hash; returned `source_id` and
+   original line numbers are the evidence identity. Do not copy hashed paths.
+   For summaries, the tree delivery file and other non-material files use
+   `read_file(description=..., path=..., start_line=...,
    end_line=..., line_numbers=true)`; `description` is required and line
    numbers are opt-in so ordinary reads stay unchanged.
 3. Read every research summary as a cited, theme-organized synthesis of the
