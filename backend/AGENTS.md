@@ -231,6 +231,20 @@ tool graph or subagent executor during state/schema imports.
 - `subagent_enabled` - Enable task delegation tool
 - `debug_trace_enabled` - Opt a run into enhanced execution-context capture for the Web UI trace page
 
+### Report Research and Citation Handoff
+
+Report citation workflow contracts live in `sp/report/prompts.py` and
+`skills/public/report-{research,outline}/SKILL.md`. Keep the injected
+`CONTEXT_INSTRUCTIONS` in `sp/report/hooks.py` aligned: Outline's selected gaps
+are normally sent in one Researcher delegation with multiple `report_gap_ids`.
+Pre-research hands off a detailed theme-organized cited synthesis through
+`artifact_content` / `summary.md`; its 10–20-document target and Outline's
+3–5-source-per-main-node guideline are soft coverage goals, never new ledger or
+finish gates. Existing source-only requests and runtime execution budgets take
+precedence. Contract regressions are covered by
+`tests/test_sp_report_citation_workflow.py`; ordinary role/tool behavior and
+existing parallel-dispatch capability remain unchanged.
+
 ### Middleware Chain
 
 Lead-agent middlewares are assembled in strict order across three functions: the shared base in `packages/harness/deerflow/agents/middlewares/tool_error_handling_middleware.py` (`_build_runtime_middlewares`, exposed via `build_lead_runtime_middlewares`), then the lead-only middlewares appended in `packages/harness/deerflow/agents/lead_agent/agent.py` (`build_middlewares`). Items marked *(optional)* are appended only when their config/runtime condition holds, so the live chain length varies.

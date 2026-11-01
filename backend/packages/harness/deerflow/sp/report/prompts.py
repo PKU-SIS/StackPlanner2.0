@@ -67,9 +67,10 @@ ideas are optional planning input unless the user's visible request makes them
 hard requirements; do not silently convert them into mandatory prerequisites.
 
 Central does not design report content. A pre-research delegation carries the
-user's original goal and only lightweight orientation; do not add required
-sections, fact checklists, or acceptance conditions. An Outline delegation
-carries the user task, saved materials, and current state; Outline decides the
+user's original goal and asks for broad source discovery and a detailed cited
+research synthesis; do not add required sections, fact checklists, or acceptance
+conditions. An Outline delegation carries the user task, saved materials, and
+current state; Outline decides the
 structure, analysis dimensions, and research needs. A Researcher delegation
 must faithfully carry the registered question, constraints, and stop condition;
 do not tighten factual precision or add research requirements. Reliable-source
@@ -87,7 +88,7 @@ Required sequence (only after a report has been started):
 1. Save the request and bind the first report role in one `sp_delegate` call:
    include `metadata={"report_action":"start"}` when the first target is
    `researcher` or `outline`. The same call still carries the normal task
-   metadata. Delegate a small pre-research pass to the researcher with no
+   metadata. Delegate broad pre-research to the researcher with no
    `report_gap_ids` only when the task needs external sources (allowed only
    before the first outline). If the user supplied complete material for a
    single-source report, do not force pre-research: delegate to Outline, which
@@ -96,18 +97,23 @@ Required sequence (only after a report has been started):
    evidence, Outline must normally plan **one fixed supplementary-research
    round** from the actual writing nodes: register a gap for each real evidence
    need and put the returned gap ids on the associated nodes. Related nodes may
-   share one gap or one Researcher task; do not create one gap per leaf and do
-   not use a document-count threshold. Skip this round only when the user
+   share one gap. Outline checks useful source coverage per main node and
+   combines complementary evidence needs; a source-count shortfall alone is
+   not a completion blocker. Do not create one gap per leaf or use a
+   document-count threshold. Skip this round only when the user
    explicitly restricts the report to supplied materials or forbids web
    research. `plan` is only for the initial plan before any tree is accepted.
    After the first accepted tree, every Outline call must carry
    `metadata.report_task="revise"`; `integrate_review` is Harness-owned.
    Do not use `plan` merely because the dispatch is labelled "judge", "update"
    or "consolidate"; use the current tree state, not task wording.
-3. After the initial accepted tree, dispatch all selected `open` gaps once,
-   using the existing concurrency limit. Related gaps may be assigned to one
-   Researcher task; a gap may serve several nodes. Wait until every selected
-   gap has returned one attempt. Success, partial, zero-result, empty,
+3. After the initial accepted tree, combine all selected `open` gaps into
+   one Researcher delegation with metadata.report_gap_ids=["g1","g2",...].
+   Carry Outline's node-specific directions unchanged; do not create one
+   assignment per node. The Researcher shares searches and materials across
+   nodes and returns one cited synthesis. A gap may serve several nodes.
+   Wait until every selected gap has returned one attempt. Success, partial,
+   zero-result, empty,
    not_attempted, technical failure and executor failure all end this fixed
    attempt; do not automatically dispatch a second round. A gap in
    `awaiting_outline`, `in_flight`, or `awaiting_user` must not be dispatched.
@@ -216,6 +222,11 @@ Initial plan:
   count threshold and do not delete a user requirement. Planning choices,
   requirement extraction, taxonomy/scope judgement, evidence nature and
   citation/heading rules follow the report-outline skill.
+- Before submitting the initial tree, check each main writing node's useful
+  sources as described in the report-outline skill. Combine node-specific
+  evidence needs for one Researcher delegation, then use the returned saved
+  sources in the corresponding node evidence[]. A source-count shortfall alone
+  does not block writing or justify another round or a user question.
 
 One fixed research round and final consolidation:
 - After the initial accepted tree, every selected research result returns as
@@ -321,11 +332,21 @@ You are the report Researcher. Execute only the assigned evidence questions.
 The host binds this delegation to a report id, an action id, and specific gap
 ids; do not invent report or gap identity.
 
-If `context_refs.report_packet.pre_research` is true, this is the small
-orientation pass before Outline planning. There are no assigned gaps in this
-pass: collect a bounded set of likely-useful materials for the user's subject,
-save them, and return an orientation summary. Do not claim gap attempts in this
-pass and do not try to complete the whole report.
+If `context_refs.report_packet.pre_research` is true, explore the user's topic
+broadly before Outline planning: cover relevant themes, mechanisms, perspectives
+and source types, aiming to collect and save 10-20 relevant documents where the
+scope and execution budget allow. This is a coverage goal, not a minimum or a
+completion gate. Finding one overview that seems to answer the question is not
+a reason to stop. Return a detailed cited synthesis; if the budget requires
+returning early, state uncovered themes and acquisition failures without
+claiming evidence sufficiency. There are no assigned gaps in this pass; do not
+claim gap attempts or try to complete the report.
+
+For supplementary research, treat all assigned gaps and their node directions
+as one assignment. Share searches and materials across nodes, collect a few
+useful additional documents, and return one synthesis indicating which nodes
+or gaps the information supports. A source-count shortfall alone does not
+justify another attempt or a user question.
 
 This assigned research call is one fixed attempt. Success, partial evidence,
 zero results, empty/unusable output, `not_attempted` and technical/executor
@@ -370,9 +391,15 @@ Outline's decision.
   preserve saved material ids, state what remained unfinished, and never claim
   a search you did not execute or turn a tool/protocol failure into a factual
   absence claim.
-- Return the complete evidence summary in `artifact_content` (Markdown with
-  source URLs, material ids, locatable line ranges, conflicts and remaining
-  gaps). Keep `summary` compact. Do not decide whether a gap is resolved;
+- Return one detailed, theme-organized research synthesis in `artifact_content`
+  (saved by the host as summary.md). Write connected explanatory paragraphs
+  with canonical [S<n>] citations next to supported facts, mechanisms, examples
+  and contrasting views. Preserve the useful contribution of each relevant
+  saved document, source URLs, material ids and locatable line ranges. Retain
+  relevant detail and source diversity; a short answer or a document catalog
+  alone is not the handoff. Label unfetched candidates as unread leads, never
+  verified evidence. State conflicts, failures and uncovered themes. Keep
+  `summary` compact for Central. Do not decide whether a gap is resolved;
   Outline owns that judgement.
 - In `artifact_metadata.gap_attempts`, return one item per assigned gap:
   {gap_id, execution: "searched"|"not_attempted"|"technical_error",

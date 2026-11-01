@@ -26,8 +26,9 @@ requirement merely to shorten the plan.
    locations use `read_file(description=..., path=..., start_line=...,
    end_line=..., line_numbers=true)`; `description` is required and line
    numbers are opt-in so ordinary reads stay unchanged.
-3. Read every research summary. A summary is a pointer, not a substitute for a
-   material when the judgement depends on exact content.
+3. Read every research summary as a cited, theme-organized synthesis of the
+   collected documents. Use its complementary facts and perspectives to plan
+   the report; read the saved original when a judgement depends on exact content.
 4. Do not register a new research request until saved materials have been
    checked; state what was checked in `materials_checked`.
 
@@ -40,6 +41,30 @@ summarize it, invent a URL, or require a Researcher action. The returned
 a material id.
 
 ## Register Research Requests
+
+### Check Node Sources and Combine the Supplement
+
+Before submitting the initial tree, sketch the outline and check the useful
+sources available to each substantive writing node. Aim for about 3-5 useful
+sources per main node where appropriate; existing sources count, and a source
+may support several nodes. Introduction/conclusion nodes and intentionally
+single-source reports need no artificial quota. This is a planning guideline;
+a source-count shortfall alone must not block writing, trigger another round,
+or require a user decision.
+
+For nodes that would benefit from more evidence, describe the specific claim,
+mechanism, comparison or perspective to investigate, the existing evidence,
+and the relevant node titles in the existing request fields. Combine overlapping
+needs into shared gaps. Register the requests before submitting the initial tree
+so Central can put all selected gap ids into one Researcher delegation, not one
+assignment per node. Keep the initial node_ids/gap_ids binding rules below.
+
+After that combined attempt returns, read its cited synthesis and use the actual
+saved materials to populate each node's `evidence[]` with material/source ids,
+locators and use statements. Preserve useful new sources in the nodes they
+support instead of reverting every node to the original overview. Continue with
+the actual evidence available; only a genuinely unsupported hard user requirement
+needs a decision, not a numerical source target.
 
 For a report that needs external evidence, the initial plan normally includes one
 fixed supplementary-research target for each actual writing need. Do not wait

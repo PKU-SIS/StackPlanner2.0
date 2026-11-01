@@ -54,10 +54,11 @@ CONTEXT_INSTRUCTIONS = """
 <report-control>
 This is derived control state from the active report ledger, injected before
 your model call. Do not edit the ledger by writing files. Use gap ids exactly.
-Dispatch every selected `open` gap in one research batch up to the existing
-concurrency limit; if more remain, use further batches without calling Outline
-between them. Wait until every selected gap has returned one attempt (success,
-partial, timeout, or technical failure), then call Outline once to judge all
+Combine every selected `open` gap and its node-specific directions into one
+Researcher delegation with all selected report_gap_ids. Share retrieval across
+nodes instead of issuing one assignment per node. Wait until every selected
+gap has returned one attempt (success, partial, timeout, or technical failure),
+then call Outline once to judge all
 `awaiting_outline` gaps together. Do not call Outline after each result. An
 `open` gap that reappears after a technical failure is a returned observation,
 not an automatic re-dispatch. A gap in `awaiting_outline`, `in_flight`, or

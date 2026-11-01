@@ -76,7 +76,7 @@ def test_research_prompt_distinguishes_searched_from_sufficiency():
 def test_central_prompt_keeps_content_design_with_outline():
     normalized = " ".join(REPORT_CENTRAL_PROMPT.split())
     assert "Central does not design report content" in normalized
-    assert "lightweight orientation" in normalized
+    assert "broad source discovery" in normalized
     assert "must faithfully carry the registered question, constraints, and stop condition" in normalized
     assert "not a user requirement or an exclusive source/delivery threshold" in normalized
     assert '"recently released" does not become "determine the exact day' in normalized

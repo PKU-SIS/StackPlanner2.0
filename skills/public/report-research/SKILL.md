@@ -1,6 +1,6 @@
 ---
 name: report-research
-description: Use inside the StackPlanner report Researcher to answer host-assigned evidence questions, save every relied-upon fetch as a readable material, and report per-gap execution honestly without deciding whether a gap is resolved.
+description: Use inside the StackPlanner report Researcher for broad pre-research or one combined node-specific research assignment, saving relevant materials and handing Outline a detailed theme-organized synthesis with citations and honest per-gap execution.
 ---
 
 # Report Research
@@ -21,6 +21,36 @@ real execution and materials; do not turn a failed/substituted attempt into
 `searched` or fabricate a round.
 
 ## Work
+
+### Broad Pre-research
+
+When `context_refs.report_packet.pre_research` is true, explore the user's
+subject across its relevant dimensions, mechanisms, perspectives, and source
+types before Outline plans the report. Aim to collect and save 10-20 relevant
+documents when the topic and available execution budget support that breadth.
+This is a coverage goal, not a minimum or a reason to repeat failed searches.
+Respect a supplied-material-only request and the actual task scope.
+
+Finding one overview that appears to answer the question is not a stopping
+condition. Follow useful documentation links and complementary sources; several
+similar queries or pages repeating the same content do not establish breadth.
+Prefer authoritative evidence for technical claims while retaining useful
+independent analysis and implementation examples unless the user restricts
+sources. Finish when the relevant themes are covered or the host budget requires
+returning; state uncovered themes and acquisition failures without claiming
+evidence sufficiency. Do not claim unread search hits as collected documents.
+
+### Combined Supplementary Research
+
+After Outline planning, one assignment may carry several gaps and writing
+nodes. Read them together, merge overlapping searches, and collect a few useful
+documents for the supplied directions. Reuse sources across nodes when relevant.
+Return one research synthesis for the whole assignment, identifying the nodes
+or gap ids each topic supports. Preserve each assigned gap's actual execution
+status. A source-count shortfall alone does not justify another research round
+or a user question; return the actual evidence and limitations in this attempt.
+
+### Acquisition and Execution
 
 1. Read the gap briefs, their constraints and stop conditions, and the saved
    material catalog. Reuse saved material instead of re-fetching a source. If a
@@ -66,9 +96,22 @@ real execution and materials; do not turn a failed/substituted attempt into
 
 ## Output
 
-Return the normal subagent envelope. Put the complete evidence summary in
-`artifact_content` (Markdown; source URLs; material ids; locatable line ranges;
-conflicts; remaining gaps). Keep `summary` compact.
+Return the normal subagent envelope. Put one detailed, theme-organized research
+synthesis in `artifact_content`; the host saves it as `summary.md`. Write
+connected explanatory paragraphs with canonical [S<n>] citations next to the
+supported information. Explain what each relevant saved document contributes:
+facts, mechanisms, examples, contrasting views, and relationships. Retain relevant
+detail and source diversity instead of compressing everything into a short
+answer or replacing the synthesis with a document catalog. Let length follow
+useful information within the execution budget.
+
+Preserve source URLs, material ids and locatable line ranges in the synthesis,
+for example `... [S2] (m2, lines 12-28)`. Use only host-assigned source identities;
+unfetched candidates must be labelled separately as unread leads, not cited as
+verified evidence. State conflicts, acquisition failures and uncovered themes.
+For a supplementary assignment, show how the information supports the assigned
+nodes/gaps. The short `summary` field remains a compact note for Central, not
+the complete evidence handoff. Do not decide whether a gap is resolved.
 
 In `artifact_metadata.gap_attempts`, return one item for every assigned gap:
 
