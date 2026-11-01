@@ -52,6 +52,9 @@ and model-extracted rule Precision/Recall. Dataset evaluators and judge services
 are configured independently through `--options`; the team DeepSeek deployment
 is recorded explicitly as a custom judge. See [DCC evaluation](docs/DCC_EVALUATION.md).
 NBA rule extraction uses bounded retries on the saved delivery and records failures.
+An optional NBA [train/test partition](docs/DCC_RULEARENA_NBA.md#内部训练测试划分可选)
+provides 173 training and 43 test samples in independent bundles; the original
+216-task baseline remains unchanged.
 The team DeepSeek examples explicitly disable provider thinking for evaluation;
 this setting is recorded independently from SP inference configuration.
 

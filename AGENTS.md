@@ -194,6 +194,15 @@ Release construction is injectable via `release_builder`; the NBA baseline check
 source/input/label parity and uses the shared archive/download implementation.
 See `docs/DCC_RULEARENA_NBA.md` and `tests/test_dcc_rulearena.py`.
 
+Optional future train/test definitions live in `configs/dcc/splits/`. The NBA
+80/20 definition groups identical team/player backgrounds (including changed
+operations), stratifies by difficulty and Boolean label, and pins source hashes
+plus seed 42. `scripts/dcc_split.py export` creates separate inline train/test
+bundles; it must never rewrite the baseline bundle, Release or running manifest.
+Only host split/group fields change; verify identical public-input hashes and
+disjoint scenario families. Group/stratum keys are trusted module:function
+extensions. Definitions are custom internal splits, not the official benchmark.
+
 Both factories attach `evaluation.dcc.plugin` hooks to the existing offline runner.
 These load verified private bundle labels only during evaluation and dispatch by
 the host-side dataset, using `configs/dcc/evaluation/adapters.json` or per-run

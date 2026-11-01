@@ -49,6 +49,44 @@ SP 推理使用 `bundle/public/tasks.jsonl`，注册：
 [通用推理入口](dcc_harness.md)。离线评测已接入官方 Accuracy 和模型提取的规则 Precision／Recall，
 配置方式见 [DCC 评测器说明](DCC_EVALUATION.md)。
 
+## 内部训练/测试划分（可选）
+
+项目内部划分固定在 [`rulearena-nba-80-20-v1.json`](../configs/dcc/splits/rulearena-nba-80-20-v1.json)，
+采用约 **80% 训练 / 20% 测试**，seed 为 **42**。这是后续训练评测使用的自定义划分；
+原始 Release、默认 loader 和本次 216 题全量 baseline 继续使用原有协议。
+
+| 难度 | 训练集 | 测试集 |
+| --- | ---: | ---: |
+| comp_0 | 65 | 16 |
+| comp_1 | 71 | 18 |
+| comp_2 | 37 | 9 |
+| 合计 | **173** | **43** |
+
+相同球队、球员背景的题目整组分配，即使操作不同也不跨集合。216 题形成 188 个背景组，
+训练 151 组、测试 37 组；完整重复场景自然也在同一侧。组内保留所有原始样本，
+再按难度及违规/合规标签尽量保持比例；分配不使用任何 SP 实验输出或成绩。
+难度 2 只有一条合规样本，本版本将它保留在训练集，测试集该难度的 9 题均为违规题。
+
+下载原始 Release 后，用下面的命令生成独立数据包；不需要模型或 RAGFlow：
+
+```bash
+python scripts/dcc_split.py export \
+  --bundle .benchmark-data/rulearena-nba-v1/bundle \
+  --definition configs/dcc/splits/rulearena-nba-80-20-v1.json \
+  --output .benchmark-data/rulearena-nba-80-20-v1
+```
+
+生成的 `train/` 与 `test/` 都是完整、独立的 bundle，各有 `public/tasks.jsonl` 和
+`private/gold.jsonl`。例如测试时把 `DCC_BUNDLE` 和评测 options 中的 `bundle` 指向
+`.benchmark-data/rulearena-nba-80-20-v1/test`，任务路径使用该目录的 `public/tasks.jsonl`。
+训练侧只包含训练样本的文档和标签；规则、问题、prompt、答案不改写，公开输入指纹与原包一致。
+只有宿主 `split` 和 `group_id` 随划分设置，分组信息不进入 agent prompt。
+
+导出会校验源数据指纹及固定分配，拒绝覆盖已有目录或写入源 bundle。
+后续需要新版本时可用 `dcc_split.py create`，通过 `--seed`、`--train-fraction` 或
+可信的 `--group-key module:function`／`--stratum-key module:function` 扩展，保留独立版本。
+当前导出入口支持 inline 文档模式。
+
 ## 重建与扩展
 
 下载包中的 `raw/RuleArenaNBA` 就是可重建的数据源。新建输出目录运行：
