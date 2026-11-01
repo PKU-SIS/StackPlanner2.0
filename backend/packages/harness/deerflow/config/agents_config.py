@@ -72,13 +72,13 @@ class GitHubAgentConfig(BaseModel):
     # "fall back to mention_login / agent name", which is fine when those
     # match the bot identity, but should be set explicitly when they differ.
     bot_login: str | None = None
-    # Override the default github-channel ``recursion_limit`` (250). GitHub
+    # Override the default github-channel ``recursion_limit`` (512). GitHub
     # runs are autonomous and long-running by nature — clone, explore, edit,
     # test, push, comment — but the right ceiling varies a lot by workload:
     # a review-only agent might be happy at 50, a multi-file refactor agent
-    # might need 500+. Setting None means "use the channel default (250)".
+    # might need 500+. Setting None means "use the channel default (512)".
     # Any positive integer is honored verbatim — including values below the
-    # channel default and below the global 100-step floor — so an explicit
+    # channel default and below the default 512-step budget — so an explicit
     # safety setting like ``recursion_limit: 50`` halts the agent at 50
     # super-steps as configured. Values <=0 are ignored (treated as None)
     # — a negative/zero limit would halt the agent before the first step.

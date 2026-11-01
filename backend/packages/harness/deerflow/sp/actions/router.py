@@ -6,6 +6,7 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from deerflow.agents.thread_state import sp_action_count
 from deerflow.sp.actions.events import make_sp_event
 from deerflow.sp.actions.handlers import (
     AskHumanHandler,
@@ -30,6 +31,7 @@ from deerflow.sp.memory import (
 )
 from deerflow.sp.memory.stack import DEFAULT_SUMMARIZE_MIN_PROGRESS_ENTRIES
 from deerflow.sp.subagents import SPSubagentExecutorProtocol
+from deerflow.sp.subagents.dr2_adapter import observation_requires_code_recovery
 
 DEFAULT_MAX_LOOP_ITERATIONS = 20
 MAX_IDEMPOTENCY_LEDGER_ENTRIES = 100
@@ -450,7 +452,7 @@ class ActionRouter:
             (entry for entry in reversed(stack.entries) if entry.action == "observe" and entry.actor == "coder" and (not run_id or entry.run_id in {None, run_id})),
             None,
         )
-        if observation is None:
+        if observation is None or not observation_requires_code_recovery(observation.metadata):
             return
         completion_status = str(observation.metadata.get("completion_status") or "").strip().lower()
         gaps = observation.metadata.get("evidence_gaps")
@@ -1095,10 +1097,7 @@ class ActionRouter:
 
     @staticmethod
     def _loop_iteration_for_run(state: Mapping[str, Any], run_id: str | None) -> int:
-        state_run_id = state.get("sp_loop_run_id")
-        if run_id and state_run_id and str(state_run_id) != run_id:
-            return 0
-        return int(state.get("sp_loop_iteration") or 0)
+        return sp_action_count(state, run_id)
 
     def _build_state_update(
         self,

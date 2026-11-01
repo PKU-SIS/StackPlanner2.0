@@ -2,7 +2,7 @@
 
 import logging
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from deerflow.config.token_budget_config import TokenBudgetConfig
 
@@ -25,6 +25,8 @@ def default_subagent_token_budget() -> TokenBudgetConfig:
 
 class SubagentOverrideConfig(BaseModel):
     """Per-agent configuration overrides."""
+
+    model_config = ConfigDict(extra="forbid")
 
     timeout_seconds: int | None = Field(
         default=None,
@@ -77,7 +79,7 @@ class CustomSubagentConfig(BaseModel):
         description="Model to use - 'inherit' uses parent's model",
     )
     max_turns: int = Field(
-        default=50,
+        default=480,
         ge=1,
         description="Maximum number of agent turns before stopping",
     )

@@ -43,6 +43,7 @@ from langgraph.runtime import Runtime
 
 from deerflow.agents.middlewares._bounded_dict import BoundedDict
 from deerflow.config.token_budget_config import TokenBudgetConfig
+from deerflow.utils.token_estimation import estimate_message_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,7 @@ class TokenBudgetMiddleware(AgentMiddleware[AgentState]):
         self._lock = threading.Lock()
 
         # Keyed strictly by run_id (clobber-safe) and bounded (leak-safe)
+        self._estimated: BoundedDict[str, bool] = BoundedDict(1000)
         self._warned: BoundedDict[str, bool] = BoundedDict(1000)
         self._pending_warnings: BoundedDict[str, list[str]] = BoundedDict(1000)
         self._seen_messages: BoundedDict[str, dict[str, tuple[int, int]]] = BoundedDict(1000)
@@ -84,6 +86,7 @@ class TokenBudgetMiddleware(AgentMiddleware[AgentState]):
     def reset(self) -> None:
         with self._lock:
             self._warned.clear()
+            self._estimated.clear()
             self._pending_warnings.clear()
             self._seen_messages.clear()
             self._cumulative_usage.clear()
@@ -112,6 +115,7 @@ class TokenBudgetMiddleware(AgentMiddleware[AgentState]):
     def _clear_run_state(self, run_id: str) -> None:
         with self._lock:
             self._warned.pop(run_id, None)
+            self._estimated.pop(run_id, None)
             self._pending_warnings.pop(run_id, None)
             self._seen_messages.pop(run_id, None)
             self._cumulative_usage.pop(run_id, None)
@@ -202,15 +206,23 @@ class TokenBudgetMiddleware(AgentMiddleware[AgentState]):
             seen = self._seen_messages.setdefault(run_id, {})
             usage_accum = self._cumulative_usage.setdefault(run_id, TokenUsage())
 
-            for msg in messages:
-                if isinstance(msg, AIMessage) and msg.id and hasattr(msg, "usage_metadata"):
+            for index, msg in enumerate(messages):
+                if isinstance(msg, AIMessage):
                     usage = msg.usage_metadata or {}
 
                     input_tokens = usage.get("input_tokens", 0)
                     output_tokens = usage.get("output_tokens", 0)
 
+                    message_id = msg.id or f"anonymous-{index}"
+                    unmetered = not usage or (input_tokens or 0) + (output_tokens or 0) <= 0
+                    if unmetered and message_id not in seen and not msg.additional_kwargs.get("stackplanner_generated"):
+                        input_tokens = estimate_message_tokens(messages[:index])
+                        output_tokens = estimate_message_tokens([msg])
+                        self._estimated[run_id] = True
+                    elif unmetered and message_id in seen:
+                        continue
                     # Check what previously recorded for this exact message
-                    prev_input, prev_output = seen.get(msg.id, (0, 0))
+                    prev_input, prev_output = seen.get(message_id, (0, 0))
 
                     # Calculate if any new tokens were added (handles retroactive subagent tokens)
                     diff_input = max(0, input_tokens - prev_input)
@@ -220,7 +232,7 @@ class TokenBudgetMiddleware(AgentMiddleware[AgentState]):
                         usage_accum.input += diff_input
                         usage_accum.output += diff_output
                         usage_accum.total += diff_input + diff_output
-                        seen[msg.id] = (input_tokens, output_tokens)
+                        seen[message_id] = (input_tokens, output_tokens)
 
             if usage_accum.total <= 0:
                 return None
@@ -252,6 +264,8 @@ class TokenBudgetMiddleware(AgentMiddleware[AgentState]):
                 # ``consume_stop_reason``.
                 self._stop_reason[run_id] = "token_capped"
                 stop_text = _BUDGET_EXCEEDED_MSG.format(reason=trigger_reason, used=trigger_used, budget=trigger_budget)
+                if self._estimated.get(run_id):
+                    stop_text += " Token usage is estimated because the provider omitted usage metadata."
                 return self._build_hard_stop_update(last_msg, stop_text)
 
             if highest_fraction >= self._config.warn_threshold and not self._warned.get(run_id, False):

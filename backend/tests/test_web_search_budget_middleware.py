@@ -135,3 +135,43 @@ def test_allows_normal_search_in_sync_and_async_paths():
         return await middleware.awrap_tool_call(request, handler)
 
     assert asyncio.run(run()) is expected
+
+
+def test_async_parallel_batch_reserves_remaining_search_budget():
+    async def run():
+        messages = [HumanMessage(content="Research")]
+        for i in range(7):
+            messages += [AIMessage(content="", tool_calls=[_call(f"old-{i}", f"query {i}")]), ToolMessage(content="ok", name="web_search", tool_call_id=f"old-{i}")]
+        batch = [_call(f"new-{i}", f"new query {i}") for i in range(4)]
+        messages.append(AIMessage(content="", tool_calls=batch))
+        invoked = []
+        middleware = WebSearchBudgetMiddleware()
+
+        async def handler(request):
+            invoked.append(request.tool_call["id"])
+            await asyncio.sleep(0)
+            return ToolMessage(content="ok", name="web_search", tool_call_id=request.tool_call["id"])
+
+        results = await asyncio.gather(*(middleware.awrap_tool_call(_request(c["id"], c["args"]["query"], messages), handler) for c in reversed(batch)))
+        assert invoked == ["new-0"]
+        assert sum(r.status == "error" for r in results) == 3
+
+    asyncio.run(run())
+
+
+def test_blank_parallel_queries_each_reserve_a_search_slot():
+    messages = [HumanMessage(content="Research")]
+    for i in range(6):
+        messages += [AIMessage(content="", tool_calls=[_call(f"old-{i}", f"query {i}")]), ToolMessage(content="ok", name="web_search", tool_call_id=f"old-{i}")]
+    batch = [_call(f"new-{i}", " " * i) for i in range(4)]
+    messages.append(AIMessage(content="", tool_calls=batch))
+    invoked = []
+
+    def handler(request):
+        invoked.append(request.tool_call["id"])
+        return ToolMessage(content="ok", name="web_search", tool_call_id=request.tool_call["id"])
+
+    guard = WebSearchBudgetMiddleware()
+    results = [guard.wrap_tool_call(_request(call["id"], call["args"]["query"], messages), handler) for call in reversed(batch)]
+    assert invoked == ["new-1", "new-0"]
+    assert sum(result.status == "error" for result in results) == 2

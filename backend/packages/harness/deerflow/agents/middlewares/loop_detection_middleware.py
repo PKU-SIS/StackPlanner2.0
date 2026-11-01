@@ -247,10 +247,10 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         self.tool_total_warn = tool_total_warn
         self.tool_total_hard_limit = tool_total_hard_limit
         self._lock = threading.Lock()
-        self._history: OrderedDict[str, list[str]] = OrderedDict()
-        self._warned: dict[str, set[str]] = defaultdict(set)
-        self._tool_freq: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-        self._tool_freq_warned: dict[str, set[str]] = defaultdict(set)
+        self._history: OrderedDict[tuple[str, str], list[str]] = OrderedDict()
+        self._warned: dict[tuple[str, str], set[str]] = defaultdict(set)
+        self._tool_freq: dict[tuple[str, str], dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        self._tool_freq_warned: dict[tuple[str, str], set[str]] = defaultdict(set)
         self._tool_total: dict[tuple[str, str], int] = defaultdict(int)
         self._tool_total_warned: set[tuple[str, str]] = set()
         # Per-thread/run queue of warnings to inject at the next model call.
@@ -324,11 +324,11 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
             self._tool_freq.pop(evicted_id, None)
             self._tool_freq_warned.pop(evicted_id, None)
             for key in list(self._tool_total):
-                if key[0] == evicted_id:
+                if key == evicted_id:
                     self._tool_total.pop(key, None)
                     self._tool_total_warned.discard(key)
             for key in list(self._pending_warnings):
-                if key[0] == evicted_id:
+                if key == evicted_id:
                     self._drop_pending_warning_key_locked(key)
             logger.debug("Evicted loop tracking for thread %s (LRU)", evicted_id)
 
@@ -399,7 +399,7 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         if not tool_calls:
             return None, False
 
-        thread_id = self._get_thread_id(runtime)
+        thread_id = self._pending_key(runtime)
         call_hash = _hash_tool_calls(tool_calls)
 
         with self._lock:
@@ -430,11 +430,11 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
             # None. Keying by run avoids carrying one task's tool use into a
             # later invocation on the same thread.
             if self.tool_total_warn is not None or self.tool_total_hard_limit is not None:
-                run_key = (thread_id, self._get_run_id(runtime))
+                run_key = thread_id
                 self._tool_total[run_key] += len(tool_calls)
                 total_count = self._tool_total[run_key]
 
-                if self.tool_total_hard_limit is not None and total_count >= self.tool_total_hard_limit:
+                if self.tool_total_hard_limit is not None and total_count > self.tool_total_hard_limit:
                     logger.error(
                         "Total tool-call hard limit reached — forcing stop",
                         extra={
@@ -617,6 +617,10 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         pending_key = self._pending_key(runtime)
         with self._lock:
             self._drop_pending_warning_key_locked(pending_key)
+            self._history.pop(pending_key, None)
+            self._warned.pop(pending_key, None)
+            self._tool_freq.pop(pending_key, None)
+            self._tool_freq_warned.pop(pending_key, None)
             self._tool_total.pop(pending_key, None)
             self._tool_total_warned.discard(pending_key)
 
@@ -701,10 +705,12 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         """Clear tracking state. If thread_id given, clear only that thread."""
         with self._lock:
             if thread_id:
-                self._history.pop(thread_id, None)
-                self._warned.pop(thread_id, None)
-                self._tool_freq.pop(thread_id, None)
-                self._tool_freq_warned.pop(thread_id, None)
+                for key in list(self._history):
+                    if key[0] == thread_id:
+                        self._history.pop(key, None)
+                        self._warned.pop(key, None)
+                        self._tool_freq.pop(key, None)
+                        self._tool_freq_warned.pop(key, None)
                 for key in list(self._tool_total):
                     if key[0] == thread_id:
                         self._tool_total.pop(key, None)

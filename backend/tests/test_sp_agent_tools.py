@@ -572,6 +572,7 @@ def test_verification_behavior_regression_recovers_to_writable_implementation():
         metadata={
             "target_agent": "coder",
             "completion_status": "partial",
+            "requires_implementation": True,
             "evidence_gaps": ["Existing regression test behavior is incompatible with the patch."],
         },
     )
@@ -1033,6 +1034,7 @@ def test_plain_success_claim_for_partial_coder_artifact_becomes_recovery_delegat
         result_ref="partial-code-1",
         metadata={
             "completion_status": "partial",
+            "requires_implementation": True,
             "evidence_gaps": ["The '-3--1,2' test still fails."],
             "target_agent": "coder",
         },

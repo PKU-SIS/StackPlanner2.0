@@ -16,6 +16,9 @@ from langchain_core.messages import AIMessage
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_CENTRAL_TIMEOUT_SECONDS = 240.0
+DEFAULT_CENTRAL_RETRY_TIMEOUT_SECONDS = 240.0
+
 
 class SPCentralModelTimeout(TimeoutError):
     """Raised only when both the initial Central request and its retry stall."""
@@ -49,8 +52,8 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
     def __init__(
         self,
         *,
-        initial_timeout_seconds: float = 90.0,
-        retry_timeout_seconds: float = 60.0,
+        initial_timeout_seconds: float = DEFAULT_CENTRAL_TIMEOUT_SECONDS,
+        retry_timeout_seconds: float = DEFAULT_CENTRAL_RETRY_TIMEOUT_SECONDS,
         retry_max_tokens: int = 2048,
     ) -> None:
         super().__init__()
@@ -108,6 +111,8 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
     def _retry_request(self, request: ModelRequest, *, expand_tokens: bool = False) -> ModelRequest:
         settings = dict(getattr(request, "model_settings", {}) or {})
         current_max_tokens = settings.get("max_tokens")
+        if not isinstance(current_max_tokens, int) or current_max_tokens <= 0:
+            current_max_tokens = getattr(getattr(request, "model", None), "max_tokens", None)
         if isinstance(current_max_tokens, int) and current_max_tokens > 0:
             settings["max_tokens"] = max(current_max_tokens, self.retry_max_tokens) if expand_tokens else min(current_max_tokens, self.retry_max_tokens)
         else:

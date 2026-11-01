@@ -162,6 +162,7 @@ def _build_runtime_middlewares(
     from deerflow.agents.middlewares.input_sanitization_middleware import InputSanitizationMiddleware
     from deerflow.agents.middlewares.llm_error_handling_middleware import LLMErrorHandlingMiddleware
     from deerflow.agents.middlewares.thread_data_middleware import ThreadDataMiddleware
+    from deerflow.agents.middlewares.tool_call_budget_middleware import RunToolBudgetMiddleware
     from deerflow.agents.middlewares.tool_output_budget_middleware import ToolOutputBudgetMiddleware
     from deerflow.agents.middlewares.tool_result_sanitization_middleware import ToolResultSanitizationMiddleware
     from deerflow.agents.middlewares.uploaded_file_search_guard import UploadedFileSearchGuardMiddleware
@@ -169,8 +170,9 @@ def _build_runtime_middlewares(
     from deerflow.sandbox.middleware import SandboxMiddleware
 
     # Layer 1 — outermost wrap_model_call wrappers (listed outer→inner).
-    # InputSanitizationMiddleware is first so it becomes the outermost
-    # wrapper — sanitised messages are what every inner middleware sees.
+    # RunToolBudgetMiddleware admits each dispatch before any tool guard.
+    # InputSanitizationMiddleware is the outermost model wrapper, so
+    # sanitised messages are what every inner model middleware sees.
     # ToolResultSanitizationMiddleware mirrors that guardrail for the other
     # untrusted-content entry point: remote tool results (web_fetch /
     # web_search) get the same framework/injection-tag neutralization. It sits
@@ -178,6 +180,7 @@ def _build_runtime_middlewares(
     # the raw tool output first; the budget wrapper then truncates the already
     # neutralized text.
     outer_wrappers: list[AgentMiddleware] = [
+        RunToolBudgetMiddleware(getattr(app_config, "max_tool_calls_per_run", 200)),
         InputSanitizationMiddleware(),
         ToolOutputBudgetMiddleware.from_app_config(app_config),
         ToolResultSanitizationMiddleware(),
@@ -286,6 +289,7 @@ def build_subagent_runtime_middlewares(
     deferred_setup: "DeferredToolSetup | None" = None,
     agent_name: str | None = None,
     memory_agent_name: str | None = None,
+    budgets: dict[str, int] | None = None,
 ) -> list[AgentMiddleware]:
     """Middlewares shared by subagent runtime before subagent-only middlewares."""
     if app_config is None:
@@ -299,6 +303,17 @@ def build_subagent_runtime_middlewares(
         include_dangling_tool_call_patch=True,
         lazy_init=lazy_init,
     )
+
+    from deerflow.agents.middlewares.tool_call_budget_middleware import ToolCallBudgetMiddleware
+    from deerflow.agents.middlewares.web_search_budget_middleware import WebSearchBudgetMiddleware
+
+    budgets = budgets or {}
+    # Registered first => after_model runs last, counting only calls that the
+    # other safety guards actually admitted. Never conditional on loop detection.
+    middlewares.insert(0, ToolCallBudgetMiddleware(budgets.get("max_tool_calls", 50)))
+    for middleware in middlewares:
+        if isinstance(middleware, WebSearchBudgetMiddleware):
+            middleware.max_searches = min(8, budgets.get("max_searches", 8))
 
     # Read-only recall needs the same DR2 long-term-memory snapshot that the
     # lead receives. Do not attach MemoryMiddleware here: that middleware
@@ -360,6 +375,13 @@ def build_subagent_runtime_middlewares(
     # parallel subagents cannot cross-contaminate even though they share the
     # parent thread_id/run_id in context.
     token_budget_config = app_config.subagents.get_token_budget_for(agent_name) if agent_name is not None else app_config.subagents.token_budget
+    token_updates: dict[str, int] = {}
+    for name in ("max_tokens", "max_input_tokens", "max_output_tokens"):
+        if name in budgets:
+            configured = getattr(token_budget_config, name) if token_budget_config.enabled else None
+            token_updates[name] = min(configured, budgets[name]) if configured is not None else budgets[name]
+    if token_updates:
+        token_budget_config = token_budget_config.model_copy(update={**token_updates, "enabled": True})
     if token_budget_config.enabled:
         from deerflow.agents.middlewares.token_budget_middleware import TokenBudgetMiddleware
 

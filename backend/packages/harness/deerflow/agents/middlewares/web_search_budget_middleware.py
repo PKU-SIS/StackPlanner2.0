@@ -83,7 +83,8 @@ def _completed_searches(messages: list[Any]) -> list[tuple[str, ToolMessage]]:
         if not isinstance(message, ToolMessage) or str(message.name or "") != WEB_SEARCH_TOOL_NAME:
             continue
         call_id = str(message.tool_call_id or "")
-        completed.append((query_by_call_id.get(call_id, ""), message))
+        if not message.additional_kwargs.get("web_search_guard") and not message.additional_kwargs.get("web_search_cache_hit"):
+            completed.append((query_by_call_id.get(call_id, ""), message))
     return completed
 
 
@@ -108,14 +109,17 @@ def _guard_message(request: ToolCallRequest, *, code: str, message: str, status:
         tool_call_id=str(request.tool_call.get("id") or "web-search-guard"),
         name=WEB_SEARCH_TOOL_NAME,
         status=status,
+        additional_kwargs={"web_search_guard": True},
     )
 
 
 class WebSearchBudgetMiddleware(AgentMiddleware):
     """Cache exact searches and stop failed or excessive search loops."""
 
-    @staticmethod
-    def _short_circuit(request: ToolCallRequest) -> ToolMessage | None:
+    def __init__(self, max_searches: int = MAX_WEB_SEARCHES_PER_TURN):
+        self.max_searches = min(MAX_WEB_SEARCHES_PER_TURN, max_searches)
+
+    def _short_circuit(self, request: ToolCallRequest) -> ToolMessage | None:
         if str(request.tool_call.get("name") or "") != WEB_SEARCH_TOOL_NAME:
             return None
 
@@ -171,7 +175,14 @@ class WebSearchBudgetMiddleware(AgentMiddleware):
                 code="WEB_SEARCH_ATTEMPTS_EXHAUSTED",
                 message=("web_search failed repeatedly in this turn. Stop retrying, use available/local evidence, and report that live search is unavailable."),
             )
-        if len(completed) >= MAX_WEB_SEARCHES_PER_TURN:
+        # Every sibling sees the same pre-batch state. Reserve earlier unique,
+        # uncached siblings deterministically, independent of completion order.
+        cached_queries = {q for q, result in completed if not _is_failed_search(result)}
+        earlier = parallel[: current_index or 0]
+        earlier_queries = {q for _, q in earlier if q and q not in cached_queries}
+        # Blank queries are not cacheable/deduplicated; each still dispatches.
+        reservations = len(earlier_queries) + sum(not q for _, q in earlier)
+        if len(completed) + reservations >= self.max_searches:
             return _guard_message(
                 request,
                 code="WEB_SEARCH_BUDGET_EXHAUSTED",

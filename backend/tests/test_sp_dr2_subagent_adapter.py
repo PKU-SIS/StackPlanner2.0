@@ -63,7 +63,7 @@ def _sp_task() -> SPSubagentTask:
     )
 
 
-def test_coder_verification_task_requires_implementation_by_default():
+def test_coder_verification_task_does_not_require_source_mutation():
     task = SPSubagentTask(
         action_id="act-1",
         subagent_type="coder",
@@ -73,7 +73,7 @@ def test_coder_verification_task_requires_implementation_by_default():
         metadata={"stage": "verification"},
     )
 
-    assert coder_task_requires_implementation(task) is True
+    assert coder_task_requires_implementation(task) is False
 
 
 def test_render_sp_subagent_prompt_carries_structured_context():
@@ -1000,7 +1000,7 @@ def test_coder_implementation_claim_accepts_non_test_source_change():
                         {
                             "id": "write-source",
                             "name": "str_replace",
-                            "args": {"path": "/mnt/user-data/workspace/src/flask/config.py", "old_string": "def from_file", "new_string": "def from_file"},
+                            "args": {"path": "/mnt/user-data/workspace/src/flask/config.py", "old_string": "def from_file(self, filename):", "new_string": 'def from_file(self, filename, mode="r"):'},
                         }
                     ],
                 },

@@ -21,6 +21,7 @@ class ModelConfig(BaseModel):
         default=None,
         description="Structured output version for OpenAI responses content, e.g. responses/v1",
     )
+    context_window: int | None = Field(default=None, ge=1, description="Actual server context-window capacity in tokens; harness metadata, never sent as a provider parameter.")
     supports_thinking: bool = Field(default_factory=lambda: False, description="Whether the model supports thinking")
     supports_reasoning_effort: bool = Field(default_factory=lambda: False, description="Whether the model supports reasoning effort")
     when_thinking_enabled: dict | None = Field(

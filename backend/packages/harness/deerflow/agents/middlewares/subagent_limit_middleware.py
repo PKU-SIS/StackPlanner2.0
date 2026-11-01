@@ -14,12 +14,12 @@ from deerflow.subagents.executor import MAX_CONCURRENT_SUBAGENTS
 logger = logging.getLogger(__name__)
 
 # Valid range for max_concurrent_subagents
-MIN_SUBAGENT_LIMIT = 2
+MIN_SUBAGENT_LIMIT = 1
 MAX_SUBAGENT_LIMIT = 4
 
 
 def _clamp_subagent_limit(value: int) -> int:
-    """Clamp subagent limit to valid range [2, 4]."""
+    """Clamp subagent limit to valid range [1, 4]."""
     return max(MIN_SUBAGENT_LIMIT, min(MAX_SUBAGENT_LIMIT, value))
 
 
@@ -32,7 +32,7 @@ class SubagentLimitMiddleware(AgentMiddleware[AgentState]):
 
     Args:
         max_concurrent: Maximum number of concurrent subagent calls allowed.
-            Defaults to MAX_CONCURRENT_SUBAGENTS (3). Clamped to [2, 4].
+            Defaults to MAX_CONCURRENT_SUBAGENTS (3). Clamped to [1, 4].
         tool_names: Tool names that represent subagent delegation. The normal
             DeerFlow lead uses ``task``; StackPlanner uses ``sp_delegate``.
     """

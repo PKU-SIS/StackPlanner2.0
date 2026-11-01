@@ -19,6 +19,23 @@ def _make_runtime():
     return runtime
 
 
+def test_scoped_usage_is_attributed_to_the_matching_run():
+    task_module = importlib.import_module("deerflow.tools.builtins.task_tool")
+    first = {"thread_id": "usage-a", "run_id": "run-a"}
+    second = {"thread_id": "usage-b", "run_id": "run-b"}
+    for context, total in ((first, 12), (second, 120)):
+        task_module._cache_subagent_usage("same-call", {"input_tokens": total, "output_tokens": 0, "total_tokens": total}, context=context)
+    for context, total in ((first, 12), (second, 120)):
+        messages = [
+            AIMessage(content="", tool_calls=[{"id": "same-call", "name": "task", "args": {}, "type": "tool_call"}]),
+            ToolMessage(content="done", tool_call_id="same-call", name="task"),
+            AIMessage(content="finished"),
+        ]
+        update = TokenUsageMiddleware().after_model({"messages": messages}, MagicMock(context=context))
+        dispatch = next(message for message in update["messages"] if message.tool_calls)
+        assert dispatch.usage_metadata["total_tokens"] == total
+
+
 class TestTokenUsageMiddleware:
     def test_logs_cache_token_details(self, caplog):
         middleware = TokenUsageMiddleware()
@@ -265,7 +282,7 @@ class TestTokenUsageMiddleware:
         monkeypatch.setattr(
             task_tool_module,
             "pop_cached_subagent_usage",
-            lambda tool_call_id: cached_usage.pop(tool_call_id, None),
+            lambda tool_call_id, **kwargs: cached_usage.pop(tool_call_id, None),
         )
 
         result = middleware.after_model({"messages": messages}, _make_runtime())

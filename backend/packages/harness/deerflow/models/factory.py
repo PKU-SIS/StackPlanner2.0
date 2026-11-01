@@ -36,6 +36,7 @@ def _vllm_disable_chat_template_kwargs(chat_template_kwargs: dict) -> dict:
 _OPENAI_COMPAT_USE_PATHS = (
     "langchain_openai:ChatOpenAI",
     "deerflow.models.patched_openai:PatchedChatOpenAI",
+    "deerflow.models.vllm_provider:VllmChatModel",
 )
 
 
@@ -208,6 +209,7 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
             # display) — must never reach the provider client, which would
             # forward unknown kwargs into the completion request payload.
             "pricing",
+            "context_window",
         },
     )
     # Compute effective when_thinking_enabled by merging in the `thinking` shortcut field.

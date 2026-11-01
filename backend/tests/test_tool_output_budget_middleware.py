@@ -860,8 +860,9 @@ class TestMiddlewareChainIntegration:
         # ToolOutputBudgetMiddleware is the first wrap_tool_call handler.
         from deerflow.agents.middlewares.input_sanitization_middleware import InputSanitizationMiddleware
 
-        assert isinstance(middlewares[0], InputSanitizationMiddleware)
-        assert isinstance(middlewares[1], ToolOutputBudgetMiddleware)
+        # Hard call budgets wrap execution, then input sanitization and output limits.
+        input_index = next(i for i, m in enumerate(middlewares) if isinstance(m, InputSanitizationMiddleware))
+        assert isinstance(middlewares[input_index + 1], ToolOutputBudgetMiddleware)
 
     def test_budget_middleware_in_lead_chain(self):
         from deerflow.agents.middlewares.tool_error_handling_middleware import build_lead_runtime_middlewares
@@ -871,8 +872,9 @@ class TestMiddlewareChainIntegration:
 
         from deerflow.agents.middlewares.input_sanitization_middleware import InputSanitizationMiddleware
 
-        assert isinstance(middlewares[0], InputSanitizationMiddleware)
-        assert isinstance(middlewares[1], ToolOutputBudgetMiddleware)
+        # Hard call budgets wrap execution, then input sanitization and output limits.
+        input_index = next(i for i, m in enumerate(middlewares) if isinstance(m, InputSanitizationMiddleware))
+        assert isinstance(middlewares[input_index + 1], ToolOutputBudgetMiddleware)
 
 
 # ===========================================================================

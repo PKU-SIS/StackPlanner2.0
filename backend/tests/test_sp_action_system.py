@@ -443,6 +443,7 @@ def test_router_normalizes_recovery_to_coder_when_source_implementation_is_missi
         metadata={
             "target_agent": "coder",
             "completion_status": "partial",
+            "requires_implementation": True,
             "evidence_gaps": ["Coder claimed the implementation was complete, but no non-test source file was changed."],
         },
     )
@@ -493,6 +494,7 @@ def test_router_keeps_partial_implemented_patch_with_coder_for_verification():
         metadata={
             "target_agent": "coder",
             "completion_status": "partial",
+            "requires_implementation": True,
             "evidence_gaps": ["Native focused tests are blocked by an incompatible host dependency."],
             "implementation_verification": {"passed": True, "changed_source_paths": ["pkg/core.py"]},
         },
@@ -537,6 +539,7 @@ def test_router_infers_missing_revision_target_from_latest_partial_specialist():
         stage="implementation",
         metadata={
             "completion_status": "partial",
+            "requires_implementation": True,
             "evidence_gaps": ["Native tests are blocked by the host environment."],
             "implementation_verification": {"passed": True},
         },
@@ -577,6 +580,7 @@ def test_router_keeps_partial_verification_with_coder_without_implementation_met
         stage="verification",
         metadata={
             "completion_status": "partial",
+            "requires_implementation": True,
             "evidence_gaps": ["Verification tests remain unavailable."],
         },
     )
@@ -2622,7 +2626,7 @@ def test_reporter_literal_acceptance_guard_marks_missing_report_partial_and_retr
                     status=SPSubagentStatus.COMPLETED,
                     result="Draft report written.",
                     task_id="report-partial",
-                    artifact_content="# Report\n\nUses `POLICY-V3`.",
+                    artifact_content="# 审计报告\n\n本报告采用 `POLICY-V3`。",
                     artifact_type="report_revision",
                     artifact_metadata={
                         "completion_status": "complete",
@@ -2633,7 +2637,7 @@ def test_reporter_literal_acceptance_guard_marks_missing_report_partial_and_retr
                     status=SPSubagentStatus.COMPLETED,
                     result="Corrected report written.",
                     task_id="report-complete",
-                    artifact_content=("# Report\n\nUses `POLICY-V3` and preserves `AURORA-AUDIT-1`."),
+                    artifact_content=("# 审计报告\n\n本报告采用 `POLICY-V3` 并保留 `AURORA-AUDIT-1`。"),
                     artifact_type="report_revision",
                     artifact_metadata={
                         "completion_status": "complete",
@@ -2887,7 +2891,7 @@ def test_reporter_acceptance_allows_superseded_id_in_labeled_history(
             status=SPSubagentStatus.COMPLETED,
             result="Report written.",
             task_id="report-historical-reference",
-            artifact_content=("# Report\n\nUses `POLICY-V3`.\n\n| Identifier | Status |\n| --- | --- |\n| `OLD-R7` | Superseded historical action |"),
+            artifact_content=("# 审计报告\n\n本报告采用 `POLICY-V3`。\n\n| Identifier | Status |\n| --- | --- |\n| `OLD-R7` | Superseded historical action |"),
             artifact_type="report_revision",
             artifact_metadata={
                 "completion_status": "complete",

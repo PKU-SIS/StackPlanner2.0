@@ -141,6 +141,7 @@ class AppConfig(BaseModel):
     )
     token_usage: TokenUsageConfig = Field(default_factory=TokenUsageConfig, description="Token usage tracking configuration")
     token_budget: TokenBudgetConfig = Field(default_factory=TokenBudgetConfig, description="Token Budget tracking and limits configuration.")
+    max_tool_calls_per_run: int = Field(default=200, ge=1, description="Shared tool-dispatch ceiling across Central, subagents and retries in one run.")
     max_recursion_limit: int = Field(
         default=1000,
         ge=1,

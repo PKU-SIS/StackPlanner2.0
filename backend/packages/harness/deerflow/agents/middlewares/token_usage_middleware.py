@@ -267,7 +267,7 @@ def _build_attribution(message: AIMessage, todos: list[Todo]) -> dict[str, Any]:
 class TokenUsageMiddleware(AgentMiddleware):
     """Logs token usage from model responses and annotates the AI step."""
 
-    def _apply(self, state: AgentState) -> dict | None:
+    def _apply(self, state: AgentState, runtime: Runtime | None = None) -> dict | None:
         messages = state.get("messages", [])
         if not messages:
             return None
@@ -288,7 +288,7 @@ class TokenUsageMiddleware(AgentMiddleware):
                 if not isinstance(tool_msg, ToolMessage) or not tool_msg.tool_call_id:
                     break
 
-                subagent_usage = pop_cached_subagent_usage(tool_msg.tool_call_id)
+                subagent_usage = pop_cached_subagent_usage(tool_msg.tool_call_id, context=getattr(runtime, "context", None))
                 if subagent_usage:
                     # Search backward from the ToolMessage to find the AIMessage
                     # that dispatched it.  A single model response can dispatch
@@ -351,8 +351,8 @@ class TokenUsageMiddleware(AgentMiddleware):
 
     @override
     def after_model(self, state: AgentState, runtime: Runtime) -> dict | None:
-        return self._apply(state)
+        return self._apply(state, runtime)
 
     @override
     async def aafter_model(self, state: AgentState, runtime: Runtime) -> dict | None:
-        return self._apply(state)
+        return self._apply(state, runtime)

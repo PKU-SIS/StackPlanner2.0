@@ -33,12 +33,14 @@ from deerflow.agents.human_input import read_human_input_response
 from deerflow.agents.thread_state import (
     MAX_CONSUMED_TOOL_OBSERVATION_IDS,
     SP_CONCURRENT_MERGE_MODE_KEY,
+    sp_action_count,
 )
 from deerflow.sp.actions import ActionType, ActionValidationError, SPAction, build_default_action_router
 from deerflow.sp.actions.router import SP_SUMMARY_TURN_RESERVED_KEY
 from deerflow.sp.hitl import record_human_feedback
 from deerflow.sp.memory import StackMemoryEntry, TaskMemoryStack
 from deerflow.sp.subagents import SPSubagentExecutorProtocol
+from deerflow.sp.subagents.dr2_adapter import observation_requires_code_recovery
 from deerflow.subagents.status_contract import (
     SUBAGENT_STOP_REASON_VALUES,
     make_subagent_additional_kwargs,
@@ -763,7 +765,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         """Return whether a completed coder artifact still needs a fresh check."""
 
         metadata = ref.get("metadata")
-        if not isinstance(metadata, Mapping):
+        if not isinstance(metadata, Mapping) or not observation_requires_code_recovery(metadata):
             return False
         if str(metadata.get("delegate_stage") or "") not in {"implementation", "revision"}:
             return False
@@ -816,9 +818,10 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 if not gaps and latest_observation.failure_note:
                     gaps = [latest_observation.failure_note]
                 gap_text = "; ".join(gaps[:5]) or ("the delegated acceptance criteria remain incomplete")
-                verification_only = target == "coder" and str(latest_observation.stage or "") == "verification" and not _verification_found_behavior_failure(latest_observation)
+                code_contract = target == "coder" and observation_requires_code_recovery(latest_observation.metadata)
+                verification_only = code_contract and str(latest_observation.stage or "") == "verification" and not _verification_found_behavior_failure(latest_observation)
                 implementation_evidence = latest_observation.metadata.get("implementation_verification")
-                if target == "coder" and isinstance(implementation_evidence, Mapping) and implementation_evidence.get("passed") is True and not _verification_found_behavior_failure(latest_observation):
+                if code_contract and isinstance(implementation_evidence, Mapping) and implementation_evidence.get("passed") is True and not _verification_found_behavior_failure(latest_observation):
                     # The source mutation already exists. A retry whose only
                     # missing evidence is execution belongs to the read-only
                     # verification stage; requiring another source write here
@@ -855,6 +858,8 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                         "file changed, reopen the original implementation path "
                         "and complete that change first."
                     )
+                    if code_contract
+                    else " For data processing, preserve the existing task contract and validate the requested data output; do not introduce source edits or software tests."
                     if target == "coder"
                     else ""
                 )
@@ -1256,7 +1261,8 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             )
             return {"messages": [guarded]}
 
-        verification_only = target_agent == "coder" and str(observation.stage or "") == "verification" and not _verification_found_behavior_failure(observation)
+        code_contract = target_agent == "coder" and observation_requires_code_recovery(observation.metadata)
+        verification_only = code_contract and str(observation.stage or "") == "verification" and not _verification_found_behavior_failure(observation)
         stage = {
             "coder": "implementation",
             "researcher": "research",
@@ -1277,7 +1283,12 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             "recovery_attempt": attempts + 1,
         }
         if target_agent == "coder":
-            if verification_only:
+            metadata["requires_implementation"] = code_contract and not verification_only
+            if not code_contract:
+                metadata["task_kind"] = observation.metadata.get("task_kind", "data_processing")
+                metadata["tool_names"] = ["read_file", "write_file", "bash"]
+                task += " Preserve the data-processing contract; validate the requested output without introducing source edits or software tests."
+            elif verification_only:
                 metadata.update(
                     {
                         "verification_only": True,
@@ -1386,9 +1397,9 @@ class SPActionBudgetMiddleware(AgentMiddleware[AgentState]):
     @hook_config(can_jump_to=["end"])
     def before_model(self, state: AgentState, runtime: Any) -> dict[str, Any] | None:
         del runtime
-        iteration = int(state.get("sp_loop_iteration") or 0) if isinstance(state, Mapping) else 0
+        iteration = sp_action_count(state) if isinstance(state, Mapping) else 0
         if iteration < self._max_actions:
-            return None
+            return {"sp_loop_iteration": iteration} if iteration != int(state.get("sp_loop_iteration") or 0) else None
         latest = SPFinishAvailabilityMiddleware._latest_visible_human_message(state)
         use_chinese = latest is not None and bool(_CJK_TEXT_PATTERN.search(message_to_text(latest)))
         content = (
@@ -1422,7 +1433,7 @@ class SPActionBudgetMiddleware(AgentMiddleware[AgentState]):
 
     def _filter_request(self, request: ModelRequest) -> ModelRequest:
         state = request.state if isinstance(request.state, Mapping) else {}
-        iteration = int(state.get("sp_loop_iteration") or 0)
+        iteration = sp_action_count(state)
         if iteration < self._max_actions - 1:
             return request
 
@@ -1451,6 +1462,24 @@ class SPActionBudgetMiddleware(AgentMiddleware[AgentState]):
                 )
             )
         return request.override(tools=active_tools, messages=messages)
+
+    def after_model(self, state: AgentState, runtime: Any) -> dict | None:
+        from deerflow.agents.middlewares.tool_call_metadata import clone_ai_message_with_tool_calls
+
+        messages = state.get("messages", [])
+        if not messages or not isinstance(messages[-1], AIMessage):
+            return None
+        latest = messages[-1]
+        remaining = max(0, self._max_actions - sp_action_count(state))
+        controls = [call for call in latest.tool_calls if call.get("name") in SP_CONTROL_TOOL_NAMES]
+        if len(controls) <= remaining:
+            return None
+        admitted = {id(call) for call in controls[:remaining]}
+        calls = [call for call in latest.tool_calls if call.get("name") not in SP_CONTROL_TOOL_NAMES or id(call) in admitted]
+        return {"messages": [clone_ai_message_with_tool_calls(latest, calls)]}
+
+    async def aafter_model(self, state: AgentState, runtime: Any) -> dict | None:
+        return self.after_model(state, runtime)
 
     def wrap_model_call(
         self,

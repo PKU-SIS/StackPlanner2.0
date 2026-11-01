@@ -781,6 +781,76 @@ SP2.0's StackPlanner mode keeps the CentralAgent at the orchestration layer: it 
 
 StackPlanner passes authoritative pinned feedback to every specialist outside the clipped task-memory view. It also materializes bounded task-brief bodies for Outline, outline bodies for Researcher, and outline/research/perception/data/prior-report bodies for Reporter, so stage handoffs use the source content rather than only a path or summary. Reports use an evidence-grounded Markdown workflow with source preservation, tables, supplied-image reuse, explicit limitations, version lineage, and pinned human-feedback inheritance; long reports may be written directly as unique downloadable Markdown files. Code specialists default to scoped local read/write/replace/execute tools; network tools require an explicit Central delegation. The action router corrects a mistaken Researcher delegation for self-contained exact arithmetic or exhaustive assignment/combinatorial work to Coder, while external-source requests remain with Researcher. Coder writes source separately from test execution so stdout cannot overwrite the deliverable, and combinatorial enumeration uses canonical backtracking rather than factorial full permutations. When an expected output is supplied, the coder must encode it as an assertion or exact comparison that exits non-zero on failure; merely printing an example is not verification. Common interpreter labels such as `python`, `python3`, and `node` are normalized to the sandbox `bash` execution tool instead of being treated as unavailable tools. When a coding task asks for execution, tests, or verification, a `complete` claim is accepted only when the subagent trace contains a successful execution result after the latest source edit. `sp_finish` validates both the exact selected artifact and its requested family (`report` or `generated_file`) before ending a file-producing task; a completed current-run artifact is immediately routed to that terminal action. Bounded previews of structured result files (`.txt`, `.json`, `.csv`, and similar) ground the FINISH instruction, terminal memory entry, and visible response, preventing a stale CentralAgent conclusion from contradicting the generated result.
 
+Each delegated subagent has an independent hard ceiling of **50 tool calls**
+and **8 web-search provider calls**. Parallel batches consume the remaining
+slots in order, including blank search attempts; disabling loop detection does not disable these ceilings.
+Delegations may narrow these limits with `metadata.budgets.max_tool_calls`
+and `max_searches`, and may also set `max_turns`, `timeout_seconds`, and
+cumulative token limits (`max_tokens`, `max_input_tokens`, `max_output_tokens`).
+Unknown or invalid budget fields are rejected. A shared, atomic
+`max_tool_calls_per_run: 200` ceiling includes Central actions, every child,
+and failed/retried tool dispatches; new delegations cannot reset it. A truncated
+batch records a capped result even when the model immediately finishes.
+Built-in children default to 480 graph steps and the Gateway/embedded/IM
+entrypoints to 512, independently of the call ceilings. Central action counts
+include every sibling in a parallel batch. Loop detection is scoped to each run,
+so a previous turn cannot consume the next turn's repetition allowance.
+Background executions allocate collision-safe internal IDs, and token-usage
+caches are scoped by thread and run. Model tool-call IDs remain stable in
+public progress events and tool responses. Cancellation interrupts a stalled
+async model without waiting for another graph event, cancels queued work before
+setup, and preserves usage already reported by completed model calls.
+
+Automatic compaction now defaults in the example configuration to a 64,000-token
+trigger, keeping up to 16,000 recent tokens and reading up to 32,768 tokens for
+summarization. The main model's actual window clamps both fractional and absolute
+thresholds, with output and formatting headroom reserved. The compressor also
+reserves space for its own summary output. Declare an actual
+server capacity with `models[].context_window` or a model `profile`; increasing
+harness retention does not change a model server's context capacity. Missing
+provider usage falls back to explicitly labeled estimates for token budgets.
+Central decision/retry timeouts default to 240 seconds to allow long-context
+prefill; `sp_central_timeout_seconds` and `sp_central_retry_timeout_seconds`
+in runtime configuration can narrow or expand them. Blank or unusable summaries
+skip compaction and preserve both the original messages and existing summary.
+An explicit `trim_tokens_to_summarize: null` disables summary-input trimming.
+
+Default harness limits are deliberately independent; a deadline or cumulative
+budget can stop a task before it reaches its tool-call ceiling.
+
+| Parameter | Default | Purpose |
+| --- | --- | --- |
+| Child tool / web-search calls | 50 / 8 | Hard per-delegation admission ceilings |
+| Complete-run tool calls | 200 | One atomic counter across Central, children and retries |
+| Parallel delegations | 3 (configurable 1–4) | Bound concurrent work; generic background scheduler has 3 workers |
+| Central control actions | 20 | Separate orchestration limit, with a terminal-action slot |
+| Child / lead graph steps | 480 / 512 | Allow middleware steps around tool execution; server lead ceiling 1000 |
+| Child wall-clock / host bash command | 1800s / 120s | Bound total subtask time and each foreground command |
+| Central initial / retry request | 240s / 240s | Long-context prefill allowance; one retry per decision |
+| Compaction trigger / retained history | 64000 / 16000 tokens | Clamp to the selected model and configured output caps |
+| Summary input / output reserve / safety margin | 32768 / 8192 / 2048 tokens | Bound compression input and reserve room for completion/formatting |
+| Child cumulative token backstop | 2000000, warning at 70% | Sum repeated input/output across calls; independent of context capacity |
+
+Compaction reserves the larger configured output cap across thinking modes and
+honors Central runtime output overrides. Context estimates and unmetered-usage
+backstops account for CJK density without fetching a tokenizer. These are
+estimates; provider usage remains authoritative. The template leaves the separate
+lead token budget disabled, so 200 calls is an invocation limit, not a token or
+currency limit. Tune enabled token budgets against measured workloads. Custom loop-frequency
+thresholds are preserved; only the default 50-call frequency threshold reserves
+one extra proposal slot for the independent child tool budget.
+
+Coder delegations distinguish `metadata.task_kind="software_change"`,
+`"data_processing"`, and `"inspection"`. Filtering, calculations and data exports
+retain execution tools without requiring repository source edits or software
+tests. Software verification checks an existing change without requiring another
+source edit. Chinese report acceptance checks narrative prose while preserving
+original data tables, URLs, inline code and citations. Verification must be
+dispatched after the latest source edit completes; a parallel sibling test is
+insufficient. Shell checks reject failure-masking suffixes while recognizing
+multiline commands, quoted Python expressions and here-document assertions.
+Collection-only, version/help and test-listing commands do not establish a test pass.
+
 For local Qwen/vLLM deployments, `VllmChatModel` also recovers Qwen `<tool_call>` blocks returned as ordinary reasoning/content when the vLLM server has no compatible automatic tool parser. The live StackPlanner policy check can be rerun from `backend/` with `uv run python scripts/evaluate_sp_qwen_actions.py --async-mode`; add `--thinking --scenario current_information_routes_to_research` for a focused reasoning-mode check.
 
 ### Execution Debug Trace

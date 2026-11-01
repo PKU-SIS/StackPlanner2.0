@@ -214,7 +214,7 @@ class TestMiddlewareRegistration:
         summary_sentinel = object()
 
         monkeypatch.setattr(lead_agent_module, "build_lead_runtime_middlewares", lambda *, app_config, lazy_init=True: [])
-        monkeypatch.setattr(lead_agent_module, "_create_summarization_middleware", lambda *, app_config=None: summary_sentinel)
+        monkeypatch.setattr(lead_agent_module, "_create_summarization_middleware", lambda *, app_config=None, main_model_name=None, output_token_limit=None: summary_sentinel)
         monkeypatch.setattr(lead_agent_module, "_create_todo_list_middleware", lambda is_plan_mode: None)
 
         middlewares = lead_agent_module.build_middlewares(

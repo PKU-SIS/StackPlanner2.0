@@ -76,6 +76,8 @@ class SPSubagentTask:
         if not isinstance(self.budgets, dict):
             raise ValueError("SP A2A task budgets must be an object")
         for name, value in self.budgets.items():
+            if name not in {"max_tool_calls", "max_searches", "max_turns", "timeout_seconds", "max_tokens", "max_input_tokens", "max_output_tokens"}:
+                raise ValueError(f"Unsupported SP A2A budget: {name!r}")
             if not isinstance(name, str) or not name.strip():
                 raise ValueError("SP A2A task budget names must be non-empty strings")
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:

@@ -40,6 +40,7 @@ def mock_app_config():
 
     config = MagicMock()
     config.models = [model]
+    config.max_tool_calls_per_run = 200
     config.token_usage.enabled = False
     config.skills.deferred_discovery = False
     config.skills.container_path = "/mnt/skills"

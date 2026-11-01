@@ -74,6 +74,10 @@ Rules:
   the existing DR2 SubagentExecutor and returns a compact result plus artifact refs.
   Delegate search, browsing, and source verification to `researcher`; shell,
   code execution, data processing, and file inspection/writes to `coder`;
+  set metadata.task_kind="data_processing" and requires_implementation=false
+  for filtering, calculations, transformations, and data exports. These tasks
+  need execution/output checks, not repository edits or software test suites.
+  Use task_kind="software_change" only when the user requested a source change;
   document or image perception to `perception`; structured writing to `reporter`;
   and outline-only work to `outline`.
 - For a concrete repository repair, delegate one bounded coder contract that
