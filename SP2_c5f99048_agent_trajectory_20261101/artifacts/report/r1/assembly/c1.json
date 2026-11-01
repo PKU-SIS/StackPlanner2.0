@@ -1,0 +1,531 @@
+{
+  "base_digest": "3f685367d4349b2f142974c18394eee1d1d20e25ca940e1ed18cc7de52dac2a3",
+  "candidate_id": "c1",
+  "candidate_sha256": "7ca361c37a3700ff886251a22564b4fba8bc5ed4a4ee0e6d58bec5037655989f",
+  "citation_map": [
+    {
+      "draft_id": "d1",
+      "node_id": "n2",
+      "offset": 140,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d1",
+      "node_id": "n2",
+      "offset": 207,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d1",
+      "node_id": "n2",
+      "offset": 317,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d1",
+      "node_id": "n2",
+      "offset": 516,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d4",
+      "node_id": "n4",
+      "offset": 141,
+      "source_id": "S2"
+    },
+    {
+      "draft_id": "d4",
+      "node_id": "n4",
+      "offset": 235,
+      "source_id": "S2"
+    },
+    {
+      "draft_id": "d4",
+      "node_id": "n4",
+      "offset": 292,
+      "source_id": "S3"
+    },
+    {
+      "draft_id": "d4",
+      "node_id": "n4",
+      "offset": 469,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d4",
+      "node_id": "n4",
+      "offset": 562,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d5",
+      "node_id": "n5",
+      "offset": 119,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d5",
+      "node_id": "n5",
+      "offset": 279,
+      "source_id": "S4"
+    },
+    {
+      "draft_id": "d5",
+      "node_id": "n5",
+      "offset": 380,
+      "source_id": "S4"
+    },
+    {
+      "draft_id": "d5",
+      "node_id": "n5",
+      "offset": 478,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d5",
+      "node_id": "n5",
+      "offset": 547,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d2",
+      "node_id": "n6",
+      "offset": 74,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d2",
+      "node_id": "n6",
+      "offset": 164,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d2",
+      "node_id": "n6",
+      "offset": 266,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d2",
+      "node_id": "n6",
+      "offset": 394,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d2",
+      "node_id": "n6",
+      "offset": 484,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d3",
+      "node_id": "n7",
+      "offset": 38,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d3",
+      "node_id": "n7",
+      "offset": 174,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d3",
+      "node_id": "n7",
+      "offset": 280,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d3",
+      "node_id": "n7",
+      "offset": 375,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d3",
+      "node_id": "n7",
+      "offset": 470,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d3",
+      "node_id": "n7",
+      "offset": 577,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d6",
+      "node_id": "n9",
+      "offset": 189,
+      "source_id": "S4"
+    },
+    {
+      "draft_id": "d6",
+      "node_id": "n9",
+      "offset": 264,
+      "source_id": "S4"
+    },
+    {
+      "draft_id": "d6",
+      "node_id": "n9",
+      "offset": 405,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d6",
+      "node_id": "n9",
+      "offset": 520,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d6",
+      "node_id": "n9",
+      "offset": 641,
+      "source_id": "S4"
+    },
+    {
+      "draft_id": "d6",
+      "node_id": "n9",
+      "offset": 717,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d6",
+      "node_id": "n9",
+      "offset": 833,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d7",
+      "node_id": "n11",
+      "offset": 226,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d7",
+      "node_id": "n11",
+      "offset": 354,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d7",
+      "node_id": "n11",
+      "offset": 429,
+      "source_id": "S4"
+    },
+    {
+      "draft_id": "d7",
+      "node_id": "n11",
+      "offset": 567,
+      "source_id": "S4"
+    },
+    {
+      "draft_id": "d7",
+      "node_id": "n11",
+      "offset": 665,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d7",
+      "node_id": "n11",
+      "offset": 776,
+      "source_id": "S4"
+    },
+    {
+      "draft_id": "d7",
+      "node_id": "n11",
+      "offset": 817,
+      "source_id": "S4"
+    },
+    {
+      "draft_id": "d7",
+      "node_id": "n11",
+      "offset": 926,
+      "source_id": "S4"
+    },
+    {
+      "draft_id": "d8",
+      "node_id": "n13",
+      "offset": 57,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d8",
+      "node_id": "n13",
+      "offset": 218,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d8",
+      "node_id": "n13",
+      "offset": 302,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d8",
+      "node_id": "n13",
+      "offset": 391,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d8",
+      "node_id": "n13",
+      "offset": 533,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d9",
+      "node_id": "n14",
+      "offset": 108,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d9",
+      "node_id": "n14",
+      "offset": 214,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d9",
+      "node_id": "n14",
+      "offset": 293,
+      "source_id": "S4"
+    },
+    {
+      "draft_id": "d9",
+      "node_id": "n14",
+      "offset": 404,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d9",
+      "node_id": "n14",
+      "offset": 623,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d9",
+      "node_id": "n14",
+      "offset": 896,
+      "source_id": "S1"
+    },
+    {
+      "draft_id": "d9",
+      "node_id": "n14",
+      "offset": 900,
+      "source_id": "S4"
+    }
+  ],
+  "edits_applied": [],
+  "inputs_digest": "b4e005f92268a255e8619c250d4b1b70a6db7e50a86e5121d4321e12577ae5b0",
+  "report_title": "A2A 协议与 MCP 协议的差异、联系及创新定位研究报告",
+  "sections": [
+    {
+      "body": "",
+      "draft_id": null,
+      "kind": "section",
+      "level": 2,
+      "node_id": "n1",
+      "parent_id": null,
+      "title": "引言：A2A 与 MCP 的协议定位背景"
+    },
+    {
+      "applicable_fingerprint": "09135ab40350e68eaaee2faf72b564314cfd49221934c80e1aaff8a9f61524af",
+      "body": "本报告围绕 Google 近期推出的 A2A（Agent2Agent）协议与 MCP（Model Context Protocol）协议展开。根据官方文档的定位，两者同属开放标准：MCP 用于让用户将 agent 连接到工具与数据，而 A2A 则用于让 agent 相互连接并协作[S1]。官方进一步指出，这两种标准相互补充——开发者既可通过 MCP 暴露可移植的工具，也可通过 A2A 暴露可互操作的 agent[S1]。\n\n在此基础上，本报告的研究目标与覆盖范围如下：\n\n- **差异与联系**：详细解释 A2A 与 MCP 在定位、职责与交互对象上的差异，以及两者在构建 agent 应用时形成的互补联系（对应要求 req1）。[S1]\n- **A2A 的创新之处**：从协议设计角度阐述 A2A 区别于既有互操作方案（尤其是 MCP 面向工具/数据而非 agent 协作）的创新特性（对应要求 req2）。\n- **要解决的具体问题**：阐明 A2A 专门针对的、agent 间可直接互操作与协作所面临的现实问题（对应要求 req3）。\n\n本报告将结论组织为一份带来源引用的研究报告，所有事实性陈述均通过规范的来源标记（以 [S1] 形式）进行可追溯引用（对应要求 req4）。研究范围聚焦于协议本身的定位与设计，不涉及具体实现细节的全面测评。",
+      "draft_id": "d1",
+      "draft_sha256": "6568de0a92eaed7547281078c8b31230396834b7d2286c59ab41fc2f0f1cc795",
+      "kind": "writable",
+      "level": 3,
+      "node_id": "n2",
+      "parent_id": "n1",
+      "title": "报告范围与研究目标"
+    },
+    {
+      "body": "",
+      "draft_id": null,
+      "kind": "section",
+      "level": 2,
+      "node_id": "n3",
+      "parent_id": null,
+      "title": "A2A 与 MCP 的差异与联系"
+    },
+    {
+      "applicable_fingerprint": "15edb30055783400f69e154b9b5c4fbaca8ed54537e0ac1e6698ee4c4b7145aa",
+      "body": "Model Context Protocol（MCP）是一个用于将 AI 应用连接到外部系统的**开放标准**，它让 Claude、ChatGPT 等 AI 应用能够接入数据源（如本地文件、数据库）、工具（如搜索引擎、计算器）与工作流（如专门的提示词），从而获取关键信息并执行任务 [S2]。这一连接的标准化意义，常被类比为 AI 应用的 \"USB-C 端口\"——正如 USB-C 为电子设备互联提供了统一方式，MCP 为 AI 应用接入外部系统提供了一致的标准化通道 [S2]。\n\n从规范层面看，MCP 是一个开放协议，旨在实现 **LLM 应用与外部数据源及工具之间无缝集成** [S3]。这一定义点明了其作用域：它运作在应用程序（尤其是基于 LLM 的应用）与其所需的各类外部资源之间。\n\n在此基础上，A2A 官方文档给出了与 A2A 相对照的定位表述：MCP 用于 **agent 到工具的通信**（agent-to-tool communication），它标准化的是一个 agent 如何连接其工具、API 与资源以获取信息 [S1]。与之相对，A2A 则用于 agent 到 agent 的通信，作为通用、去中心化的标准让相互独立的 agent（包括使用 MCP 的 agent）彼此发现、委派任务并共享结果 [S1]。\n\n综合而言，MCP 标准化的核心在于 **agent 到工具的通信层**——让单个 agent 获取其工作所需的工具、API 与资源。它将\"应用与外部系统\"的连接统一起来，而把\"agent 与 agent\"之间的协作交给互补的层次处理，这也为后续分析 A2A 与 MCP 如何分工互补提供了基准。",
+      "draft_id": "d4",
+      "draft_sha256": "e5b938854f9484e91519945bd0a1e6dba2aabbbdfb9b304c437944d7ea3cb6ce",
+      "kind": "writable",
+      "level": 3,
+      "node_id": "n4",
+      "parent_id": "n3",
+      "title": "MCP 的作用范围：Agent 到工具的通信"
+    },
+    {
+      "applicable_fingerprint": "7e1012a4f49de667c82dcf3b53ad86e559a760ef7099e497ce7167c2da56b2cf",
+      "body": "**Agent2Agent（A2A）协议**是一个开放的 agent 间通信标准，旨在实现不同 AI agent 之间无缝的通信与协作。在使用不同框架、由不同厂商构建的 agent 生态中，A2A 提供了一种通用的 agent 互操作语言[S1]。\n\n从作用方向看，A2A 被定位为**横向（horizontal）互联层**。相比起加深单个 agent 能力、在一个统一架构内运转的纵向连接，A2A 连接的是跨边界的独立 agent——对方可能属于另一个团队、另一个部门或一个合作伙伴组织。你的 agent 需要主动去发现这些 agent、与其协商并交换信息[S4]。这种横向连接不只是简单地向另一个 agent 询问状态更新，而更接近人与人之间的协作方式：agent 之间互相接通、交换上下文，并根据交流结果决定是深入协作，还是被指引到更合适的地方去完成工作[S4]。\n\n技术上，A2A 作为一条通用、去中心化的标准，让相互独立的 agent 能够**发现彼此、委派任务并共享结果**，即便这些 agent 各自通过 MCP 等其他手段获得能力也不受影响[S1]。正是基于这一作用范围，A2A 与 MCP 并不构成竞争——它们解决的是两种不同的问题，并被设计为协同工作的互补协议，而非相互替代[S1]。",
+      "draft_id": "d5",
+      "draft_sha256": "f4f02110ac5a1eeb173f248817d9fc757ed50bf2a76f4bd1819623174bd8b072",
+      "kind": "writable",
+      "level": 3,
+      "node_id": "n5",
+      "parent_id": "n3",
+      "title": "A2A 的作用范围：Agent 到 Agent 的协作"
+    },
+    {
+      "applicable_fingerprint": "7539ebbc5c27963b603841dc2a1f3c6fd62fed356349a105acba234c250d1697",
+      "body": "A2A 与 MCP 之间并非竞争关系，而是高度互补的两种协议。官方文档明确指出，两者\"不是竞争者，而是高度互补\"，解决的问题不同且被设计为可协同工作[S1]。\n\n两者的分工核心在于所面向的连接对象不同：\n\n- **MCP 面向 agent 到工具的通信**：它标准化了单个 agent 如何连接到其工具、API 与资源以获取信息[S1]。\n- **A2A 面向 agent 到 agent 的通信**：作为通用、去中心化的标准，A2A 让相互独立的 agent——包括使用 MCP 的 agent——能够互相发现、委托任务并共享结果[S1]。\n\n在工作流中，两者通常配合使用。典型的协作方式是：先用 MCP 为单个 agent 装备其完成任务所需的具体工具（例如访问 GitHub 仓库或 SQL 数据库），再用 A2A 让这个专用 agent 与其他框架中的 agent 进行安全的协作[S1]。\n\n综上，MCP 解决的是 \"agent 到工具\"的连接问题，A2A 解决的是 \"agent 到 agent\" 的协作问题，二者设计为正交且协同的关系，各有分工、互为补充[S1]。",
+      "draft_id": "d2",
+      "draft_sha256": "dfa495eb854c905f2f0f581e8568af96a4dd2acc9e8722ae81eb0fa28262b407",
+      "kind": "writable",
+      "level": 3,
+      "node_id": "n6",
+      "parent_id": "n3",
+      "title": "A2A 与 MCP 的互补关系与分工协作"
+    },
+    {
+      "applicable_fingerprint": "ed73cde75308a7bc5fb5e9c80fbb9d6db0b344cdd649d2ad2355f82515077ad2",
+      "body": "A2A 是一个边界明确、聚焦的协议，官方明确规定了它**不**试图成为什么 [S1]。理解这些“否定边界”有助于厘清它和 MCP 的分工。\n\n**不是 agent 开发套件。** A2A 不像 LangGraph、CrewAI 或 ADK 那样用于构建 agent 应用；它是这些工具构建出的 agent 之间的通信层，连接用任意框架开发的智能体 [S1]。\n\n**不是子 agent 或工具调用协议。** A2A 不规定 agent 如何与自己的子 agent 对话，也不规定如何调用工具——这类内部机制应使用开发者所选框架的原生原语，或交由 MCP 处理 [S1]。\n\n**不是 MCP 的替代品。** MCP 标准化的是 agent 到工具的通信，而 A2A 标准化的是 agent 到 agent 的通信；两者是互补关系，而非竞争或替代关系 [S1]。\n\n**不是即时消息应用。** A2A 不像 Slack、Discord、WhatsApp 或 Telegram 那样面向人，它是一个供自主 agent 之间进行的机器到机器协议 [S1]。\n\n综上，A2A 有明确的应用边界：它不做 agent 开发、不规定工具调用、不替代 MCP，也不是消息应用。这些边界共同强化了它专注于 agent 间通信的定位，也正是理解它与 MCP 分工的关键所在 [S1]。",
+      "draft_id": "d3",
+      "draft_sha256": "8ec2df879172aade75decf62afa5b3ee1d100d20c553fbe3bfba3c734f790537",
+      "kind": "writable",
+      "level": 3,
+      "node_id": "n7",
+      "parent_id": "n3",
+      "title": "A2A 不是什么：边界界定"
+    },
+    {
+      "body": "",
+      "draft_id": null,
+      "kind": "section",
+      "level": 2,
+      "node_id": "n8",
+      "parent_id": null,
+      "title": "A2A 协议的创新之处"
+    },
+    {
+      "applicable_fingerprint": "c18f6094c334450ab3be92aacbc86316052488312b5d1409f7bb48ed6b19bbd9",
+      "body": "A2A 协议的创新集中于几个相互支撑的面向，与仅深化单个 agent 能力的方案形成对比。整体来看，A2A 设计在横向的 agent-to-agent 层面展开：如果说 MCP 是「垂直」地深化单一 agent，为其不断追加工具、资源或技能，那么 A2A 则是「水平」地连接多个 agent——它们可能属于不同团队、部门甚至合作伙伴组织，agent 之间相互发现、协商并交换信息[S4]。二者的定位可概括为「MCP 给深度、A2A 给广度」：两者配合使用时，MCP 赋予每个 agent 深度，而 A2A 为系统带来跨边界影响力[S4]。A2A 的独特创新体现在以下四个面向。\n\n**互操作性：跨框架的组合系统。** A2A 使构建在不同平台上的 agent 能够彼此连接，官方文档明确列出 LangGraph、CrewAI、Semantic Kernel 及自定义方案等目标，从而组合出强大的复合 AI 系统[S1]。这避免了厂商锁定的碎片化，让异构 agent 在同一声明中互通。\n\n**复杂工作流：委派、信息交换与协调行动。** A2A 支持 agent 委派子任务、交换信息并协调行动，以解决单个 agent 无法单独应对的复杂问题[S1]。协议落实到操作层面，可标准化多个独立、通常不透明的 AI agent 以对等方身份通信与协作；在应用级协议上赋予 agent 相互发现、协商交互、管理共享任务以及交换对话上下文与复杂数据的能力，并天然覆盖客户服务、旅行调度等常见场景[S4]。\n\n**安全与不透明：兼顾安全与知识产权。** agent 之间的交互无需共享内部记忆、工具或专有逻辑，从而在协作的同时维护安全并保护知识产权[S1]。这意味着协作可以在不暴露各自实现细节的前提下进行，是面向跨组织边界的务实设计。\n\n**可扩展：核心稳定与能力增生。** agent 的能力可通过正式的协议扩展与自定义绑定来增加，并由分层的晋升机制加以治理，使得核心保持稳定[S1]。这种「扩展而不动摇核心」的工程机制，保证了协议在持续演化中的长期可用性。\n\n综上，A2A 的创新体现在跨框架互操作、复杂工作流的委派协作、安全不透明的 agent 交互，以及通过正式扩展维持核心稳定的工程机制上。四个面向共同构成 A2A 相对既有 agent 集成方案的核心差异。",
+      "draft_id": "d6",
+      "draft_sha256": "4cae51a4fb2c216c91e697e86a627de6fdc4d1fa4604ad2fdde703ce77c1d317",
+      "kind": "writable",
+      "level": 3,
+      "node_id": "n9",
+      "parent_id": "n8",
+      "title": "A2A 的核心创新面向"
+    },
+    {
+      "body": "",
+      "draft_id": null,
+      "kind": "section",
+      "level": 2,
+      "node_id": "n10",
+      "parent_id": null,
+      "title": "A2A 专门要解决的具体问题"
+    },
+    {
+      "applicable_fingerprint": "310acee51c82c78d275faddd9d6b4e07c66db68b0bc6d7d105335a74398f584c",
+      "body": "A2A 协议专门被设计用来解决异构 agent 互操作、复杂问题的多 agent 协同，以及协作中安全不透明保护这三类具体问题，并作为互补层填补 agent 到 agent 通信的空档。\n\n**异构 agent 的统一互操作标准。** 在由不同框架、不同厂商构建的 agent 生态中，A2A 为 seamless agent 互操作提供通用语言。世界上的 agent 采用多样的框架并由不同厂商构建，A2A 正是为了给这种异构环境提供统一的通信标准 [S1]。\n\n**复杂问题的多 agent 协同。** 单一 agent 无法解决所有复杂问题，因此需要多 agent 委派子任务、交换信息、协调行动。A2A 使 agent 能够委派子任务、交换信息并协调行动，以解决单个 agent 无法完成的复杂问题 [S1]。这种协作常常跨越组织边界——另一个 agent 可能属于另一个团队、部门或伙伴组织，你的 agent 需要向外发现它们、进行协商并交换信息 [S4]。修车厂示例直观地展示了这一能力：客户通过 A2A 与 Shop Manager agent 对话，Shop Manager 与 Mechanic agent 委派诊断任务，Mechanic 再通过 A2A 与外部 Parts Supplier agent 协商下单 [S4]。\n\n**协作中安全不透明的保护。** agent 之间协作时，双方无需暴露内部记忆、工具或专有逻辑，从而保证安全性并保护知识产权。这正是 \"Secure & Opaque\" 的设计取向 [S1]。\n\n**作为互补层填补 agent 到 agent 通信空档。** MCP 是垂直的，它加深单个 agent，让 agent 连接自己的工具与资源；A2A 是水平的，它在边界之外连接 agent 与 agent [S4]。两者互补：MCP 让每个 agent 有深度，A2A 让整个系统有广度 [S4]。修车厂示例显示，Mechanic agent 内部用 MCP 调用诊断扫描仪、维修手册、升降机等工具，而 Shop Manager、Mechanic 与 Parts Supplier 之间通过 A2A 对话 [S4]。因此 A2A 填补了 MCP 仅覆盖 agent 到工具、而不覆盖 agent 到 agent 通信的这一层空档。",
+      "draft_id": "d7",
+      "draft_sha256": "db153a8ec8fa0c9dfed9b01b46e9ea3553986374f243777e931f099a12e8f2b5",
+      "kind": "writable",
+      "level": 3,
+      "node_id": "n11",
+      "parent_id": "n10",
+      "title": "A2A 设计针对的问题"
+    },
+    {
+      "body": "",
+      "draft_id": null,
+      "kind": "section",
+      "level": 2,
+      "node_id": "n12",
+      "parent_id": null,
+      "title": "协议治理与开源及结论"
+    },
+    {
+      "applicable_fingerprint": "b5b6b6892c360370d81235627764f894d41e6b65342b70bc86c9113ff896606a",
+      "body": "A2A 是一个开放、多厂商治理的协议。它最初由 Google 开发，并捐赠给了 Linux Foundation [S1]。捐赠后，A2A 由一个技术指导委员会（Technical Steering Committee）负责治理与维护，该委员会的成员来自 AWS、Cisco、Google、IBM Research、Microsoft、Salesforce、SAP 和 ServiceNow 等多家厂商，同时得到广泛的合作伙伴社区支持 [S1]。这意味着 A2A 并非由单一公司控制，而是通过多方参与的开放治理机制演进。\n\n在许可证方面，A2A 采用 Apache License 2.0 开源许可发布 [S1]。Apache 2.0 是一种宽松型开源许可证，允许使用者自由使用、修改和分发，并欢迎社区提交贡献，因此降低了集成该协议的门槛，也与其开放源码、跨厂商共建的定位保持一致 [S1]。\n\n综合来看，A2A 由 Google 发起开发、捐赠给 Linux Foundation，由多家厂商代表组成的技术指导委员会共同治理，并以 Apache License 2.0 开源。这种多厂商共治与宽松许可的设计，为协议作为跨企业 Agent 交互的开放标准奠定了基础 [S1]。",
+      "draft_id": "d8",
+      "draft_sha256": "0a6a70c89d413463a7655d93cf69a63c3cb3d413b1bd3ecc51db356f222be9da",
+      "kind": "writable",
+      "level": 3,
+      "node_id": "n13",
+      "parent_id": "n12",
+      "title": "A2A 的治理、开源与许可证"
+    },
+    {
+      "applicable_fingerprint": "842ee0d90252c032f2b2ef9dba8ffde7bc65e96ad9ae6897e012b1dbca5ff5ab",
+      "body": "综合以上各节，A2A 与 MCP 可以被归结为两类互补的互联问题：MCP 解决的是 **agent 到工具**，A2A 解决的是 **agent 到 agent**。二者并非竞争对手，而是被设计成协同工作的两层协议 [S1]。MCP 标准化了单个 agent 接入其工具、API 与资源以获取信息的连接方式；而 A2A 作为通用的去中心化标准，让彼此独立（包括使用 MCP 的）的 agent 能够互相发现、委派任务并共享结果 [S1]。在 AI agent 开发中，这两类协议分别聚焦\"连接 agent 与工具/资源\"和\"实现 agent 之间的协作\"，处理的是不同但高度互补的需求 [S4]。\n\n**关于差异与联系。** 二者的分工清晰：MCP 装备单个 agent 以完成其任务所需的具体工具（如访问 GitHub 仓库或 SQL 数据库），而 A2A 让这些专门的 agent 跨不同框架安全地协作 [S1]。因此联系在于它们处于同一 agent 体系的不同层面，实际部署中常常协同使用——MCP 负责横向打通 agent 与工具，A2A 负责纵向打通 agent 与 agent。\n\n**关于创新之处。** A2A 的主要创新体现在三方面：一是作为开放的去中心化标准实现**跨框架互操作**，使来自不同厂商的异构 agent 能在统一规范下互联；二是支持**复杂工作流**的编排与委派，agent 之间可以相互发现、传递任务与共享结果 [S1]；三是其**安全与不透明机制**，允许 agent 在协作过程中按需保护内部信息，同时保持协作的安全边界。\n\n**关于要解决的问题。** A2A 专门针对当前生态中的空档——既有协议（如 MCP）只解决了 agent 与工具之间的互联，缺少一个标准化的、面向**异构 agent 互操作**的层；A2A 着力填补多供应商、多框架环境下 agent 无法直接协作的空档，同时解决**多 agent 协作**时的发现、委派、结果共享，以及**协作安全**问题。整体上，A2A 是专为多厂商异构 agent 的互操作与协作需求而设计的互补方案 [S1][S4]。",
+      "draft_id": "d9",
+      "draft_sha256": "af6130f7c8aacabfbaeca9a33b17eeaca2f261dbc63b0cd4fd2b8fed51efd56c",
+      "kind": "writable",
+      "level": 3,
+      "node_id": "n14",
+      "parent_id": "n12",
+      "title": "总结：差异、联系、创新与问题"
+    }
+  ],
+  "source_table": [
+    {
+      "material_versions": [
+        {
+          "chars": 7390,
+          "created_at": null,
+          "lines": 141,
+          "material_id": "m1",
+          "path": "/mnt/user-data/outputs/report/r1/materials/S1/22e2e93233e2f45b593661bd228bb9fb3f41841a34829ab5f1cf65624130ea0a.txt",
+          "sha256": "22e2e93233e2f45b593661bd228bb9fb3f41841a34829ab5f1cf65624130ea0a"
+        }
+      ],
+      "source_id": "S1",
+      "title": "A2A Protocol official documentation",
+      "url": "https://a2a-protocol.org/latest/"
+    },
+    {
+      "material_versions": [
+        {
+          "chars": 3411,
+          "created_at": null,
+          "lines": 63,
+          "material_id": "m2",
+          "path": "/mnt/user-data/outputs/report/r1/materials/S2/17bf734c7cc2b4ce2385199657ef12dda5b0adae07c5aff1fb56499ae1b7d4f1.txt",
+          "sha256": "17bf734c7cc2b4ce2385199657ef12dda5b0adae07c5aff1fb56499ae1b7d4f1"
+        }
+      ],
+      "source_id": "S2",
+      "title": "Model Context Protocol official documentation — Introduction",
+      "url": "https://modelcontextprotocol.io/"
+    },
+    {
+      "material_versions": [
+        {
+          "chars": 5501,
+          "created_at": null,
+          "lines": 136,
+          "material_id": "m3",
+          "path": "/mnt/user-data/outputs/report/r1/materials/S3/9b811c6b272f8d694496d290e78e6693def5a70c3bdbf04cb2a8d2e2f0e3baaf.txt",
+          "sha256": "9b811c6b272f8d694496d290e78e6693def5a70c3bdbf04cb2a8d2e2f0e3baaf"
+        }
+      ],
+      "source_id": "S3",
+      "title": "Model Context Protocol specification — Introduction",
+      "url": "https://modelcontextprotocol.io/specification/2025-06-18"
+    },
+    {
+      "material_versions": [
+        {
+          "chars": 8111,
+          "created_at": null,
+          "lines": 147,
+          "material_id": "m4",
+          "path": "/mnt/user-data/outputs/report/r1/materials/S4/d0f076ebe5bcec631a32a4273b7aaca1b2a937f22baa0c868462b902c9fbe906.txt",
+          "sha256": "d0f076ebe5bcec631a32a4273b7aaca1b2a937f22baa0c868462b902c9fbe906"
+        }
+      ],
+      "source_id": "S4",
+      "title": "A2A Protocol — A2A and MCP: deeper dive",
+      "url": "https://a2a-protocol.org/latest/topics/a2a-and-mcp/"
+    }
+  ],
+  "tree_version": 2
+}

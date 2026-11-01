@@ -1,0 +1,16 @@
+{
+  "artifact_id": "spart_e50ac450e5e7f391",
+  "base_digest": "3f685367d4349b2f142974c18394eee1d1d20e25ca940e1ed18cc7de52dac2a3",
+  "candidate_id": "c1",
+  "chars": 7133,
+  "created_at": "2026-10-31T12:52:46+00:00",
+  "inputs_digest": "b4e005f92268a255e8619c250d4b1b70a6db7e50a86e5121d4321e12577ae5b0",
+  "is_current": true,
+  "path": "<RUNTIME>/home/users/<USER_ID>/threads/c5f99048-1b1c-4d16-a02e-885caf51e05e/user-data/outputs/report/r1/final/report-1.md",
+  "review_id": "rv1",
+  "sha256": "7ca361c37a3700ff886251a22564b4fba8bc5ed4a4ee0e6d58bec5037655989f",
+  "status": "current",
+  "tree_version": 2,
+  "version": 1,
+  "virtual_path": "/mnt/user-data/outputs/report/r1/final/report-1.md"
+}

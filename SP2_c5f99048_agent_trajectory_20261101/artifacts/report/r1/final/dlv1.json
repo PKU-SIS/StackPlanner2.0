@@ -1,0 +1,15 @@
+{
+  "action_id": "spact_sp-fixed-c0-finish-r1-rv1",
+  "candidate_id": "c1",
+  "delivered_at": "2026-10-31T12:52:46+00:00",
+  "delivery_id": "dlv1",
+  "final_artifact_id": "spart_e50ac450e5e7f391",
+  "final_path": "/mnt/user-data/outputs/report/r1/final/report-1.md",
+  "final_report_id": "c1",
+  "final_version": 1,
+  "inputs_digest": "b4e005f92268a255e8619c250d4b1b70a6db7e50a86e5121d4321e12577ae5b0",
+  "review_id": "rv1",
+  "run_id": "a7728c0a-a8f9-4cad-b4c1-ba0013c1d952",
+  "sha256": "7ca361c37a3700ff886251a22564b4fba8bc5ed4a4ee0e6d58bec5037655989f",
+  "status": "delivered"
+}

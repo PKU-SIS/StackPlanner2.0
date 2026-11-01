@@ -1,0 +1,9 @@
+# Report request
+
+
+
+## User input 1
+
+Please provide a detailed explanation of the differences and connections between Google's recently released A2A protocol and the MCP protocol. Furthermore, elaborate on the innovative aspects of the A2A protocol and the specific problems it is designed to address.
+
+请将结果组织为一份带来源引用的研究报告，并交付最终报告文件。

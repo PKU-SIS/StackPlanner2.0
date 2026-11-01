@@ -1,0 +1,693 @@
+{
+  "action_id": "spact_call_bcc66f48d1ab41acb99be482",
+  "base_sha": "c75daa3baa8b151b544893e61dbd0aaf706bef717eecc4197a7107e415d8a70d",
+  "base_version": 1,
+  "candidate": {
+    "draft_dispositions": [],
+    "feedback_dispositions": [],
+    "gap_outcomes": [
+      {
+        "evidence_material_ids": [
+          "m2",
+          "m3",
+          "m1"
+        ],
+        "gap_id": "g1",
+        "outcome": "resolved",
+        "reason": "m2/S2（MCP 官网入门，第 7-11 行）与 m3/S3（MCP 规范，第 4-8、25-45 行）给出 MCP 官方定义、作用范围与设计目标，配合 m1 的 A2A 侧表述（第 93-98 行）支撑对称比较。"
+      },
+      {
+        "evidence_material_ids": [
+          "m4",
+          "m1"
+        ],
+        "gap_id": "g2",
+        "outcome": "resolved",
+        "reason": "m4/S4（A2A 官方 deeper dive，第 16-33、53-64、96-138 行）给出 A2A 的横向 agent-to-agent 创新、委派/协同能力及具体问题示例，配合 m1 第 27-38 行共同支撑创新与问题章节。"
+      }
+    ],
+    "nodes": [
+      {
+        "gap_ids": [],
+        "kind": "section",
+        "needs_richer_research": false,
+        "node_id": "n1",
+        "parent_id": null,
+        "relations": [],
+        "title": "引言：A2A 与 MCP 的协议定位背景"
+      },
+      {
+        "argument": [
+          "MCP 是将 agent 连接到工具和数据的开放标准",
+          "A2A 是将 agent 互相连接并进行协作的开放标准",
+          "报告旨在阐明两者的差异、联系、A2A 的创新与要解决的问题"
+        ],
+        "conclusion": "本报告围绕 A2A 与 MCP 的差异和联系、A2A 的创新之处及其要解决的具体问题进行来源可追溯的阐述。",
+        "constraints": {
+          "must_cite": [
+            "S1"
+          ],
+          "scope": "protocol focus"
+        },
+        "evidence": [
+          {
+            "locator": {
+              "lines": [
+                8,
+                10
+              ]
+            },
+            "material_id": "m1",
+            "source_ids": [
+              "S1"
+            ],
+            "use": "m1 第 8-10 行给出 MCP 连接工具与数据、A2A 连接 agent 的官方定位，用于引言界定范围"
+          }
+        ],
+        "gap_ids": [],
+        "kind": "writable",
+        "node_id": "n2",
+        "parent_id": "n1",
+        "question": "本报告需要回答哪些问题，覆盖哪些内容？",
+        "relations": [],
+        "requirement_ids": [
+          "req1",
+          "req2",
+          "req3",
+          "req4"
+        ],
+        "status": "ready",
+        "title": "报告范围与研究目标"
+      },
+      {
+        "gap_ids": [],
+        "kind": "section",
+        "needs_richer_research": true,
+        "node_id": "n3",
+        "parent_id": null,
+        "relations": [],
+        "title": "A2A 与 MCP 的差异与联系"
+      },
+      {
+        "argument": [
+          "MCP 是连接 AI 应用与外部数据源、工具与工作流的开放标准",
+          "MCP 标准化 agent 与工具、API 及外部资源的连接（agent-to-tool 层）",
+          "MCP 官方入门与规范（m2/m3）与 A2A 官方文档（m1）的定位需对称对照"
+        ],
+        "conclusion": "MCP 标准化的核心是 agent 到工具的通信——让单个 agent 获取其工作所需的工具、API 与资源。",
+        "constraints": {
+          "must_be_symmetric": true,
+          "must_cite": [
+            "S1",
+            "S2",
+            "S3"
+          ]
+        },
+        "evidence": [
+          {
+            "locator": {
+              "lines": [
+                7,
+                11
+              ]
+            },
+            "material_id": "m2",
+            "source_ids": [
+              "S2"
+            ],
+            "use": "m2 第 7-11 行给出 MCP 开放标准定义、连接数据/工具/工作流范围及 USB-C 定位"
+          },
+          {
+            "locator": {
+              "lines": [
+                4,
+                8
+              ]
+            },
+            "material_id": "m3",
+            "source_ids": [
+              "S3"
+            ],
+            "use": "m3 第 4-8 行给出 MCP 规范定义：连接 LLM 应用与外部数据源和工具的开放协议"
+          },
+          {
+            "locator": {
+              "lines": [
+                95,
+                96
+              ]
+            },
+            "material_id": "m1",
+            "source_ids": [
+              "S1"
+            ],
+            "use": "m1 第 95-96 行给出 MCP 为 agent-to-tool 通信的官方表述"
+          }
+        ],
+        "gap_ids": [
+          "g1"
+        ],
+        "kind": "writable",
+        "node_id": "n4",
+        "parent_id": "n3",
+        "question": "MCP 协议的定义、作用范围和设计定位是什么？",
+        "relations": [],
+        "requirement_ids": [
+          "req1"
+        ],
+        "status": "ready",
+        "title": "MCP 的作用范围：Agent 到工具的通信"
+      },
+      {
+        "argument": [
+          "A2A 是 agent 间的开放标准，用于互操作与协作",
+          "A2A 是横向（horizontal）的 agent 互联层，连接跨团队/部门/组织边界的独立 agent",
+          "A2A 绝非 MCP 的替代品"
+        ],
+        "conclusion": "A2A 是 agent 与 agent 之间通信的开放标准，让独立 agent 相互发现、委派任务并共享结果，是 MCP 的互补而非替代。",
+        "constraints": {
+          "must_cite": [
+            "S1",
+            "S4"
+          ],
+          "no_extrapolation": true
+        },
+        "evidence": [
+          {
+            "locator": {
+              "lines": [
+                15,
+                15
+              ]
+            },
+            "material_id": "m1",
+            "source_ids": [
+              "S1"
+            ],
+            "use": "m1 第 15 行给出 A2A 作为 agent 互操作开放标准的定义"
+          },
+          {
+            "locator": {
+              "lines": [
+                96,
+                96
+              ]
+            },
+            "material_id": "m1",
+            "source_ids": [
+              "S1"
+            ],
+            "use": "m1 第 96 行给出 A2A 为 agent-to-agent 通信、可发现、可委派任务的表述"
+          },
+          {
+            "locator": {
+              "lines": [
+                16,
+                24
+              ]
+            },
+            "material_id": "m4",
+            "source_ids": [
+              "S4"
+            ],
+            "use": "m4 第 16-24 行给出 A2A 为横向层、连接跨组织边界独立 agent 的定位"
+          }
+        ],
+        "gap_ids": [
+          "g1"
+        ],
+        "kind": "writable",
+        "node_id": "n5",
+        "parent_id": "n3",
+        "question": "A2A 协议的定义、作用范围和设计定位是什么？",
+        "relations": [],
+        "requirement_ids": [
+          "req1",
+          "req2",
+          "req3"
+        ],
+        "status": "ready",
+        "title": "A2A 的作用范围：Agent 到 Agent 的协作"
+      },
+      {
+        "argument": [
+          "A2A 官方文档明示两者不是竞争者而是高度互补",
+          "MCP 解决 agent 到工具的问题，A2A 解决 agent 到 agent 的问题",
+          "示例：用 MCP 装备单个 agent 所需工具，用 A2A 让该专用 agent 与其他框架的 agent 安全协作"
+        ],
+        "conclusion": "A2A 与 MCP 高度互补而非竞争：MCP 面向 agent 与工具的连接，A2A 面向 agent 与 agent 的协作，二者设计为协同工作。",
+        "constraints": {
+          "must_cite": [
+            "S1"
+          ],
+          "no_extrapolation": true
+        },
+        "evidence": [
+          {
+            "locator": {
+              "lines": [
+                93,
+                98
+              ]
+            },
+            "material_id": "m1",
+            "source_ids": [
+              "S1"
+            ],
+            "use": "m1 第 93-98 行官方互补框架：MCP 为 agent-to-tool，A2A 为 agent-to-agent，及二者配合示例"
+          }
+        ],
+        "gap_ids": [],
+        "kind": "writable",
+        "node_id": "n6",
+        "parent_id": "n3",
+        "question": "A2A 与 MCP 之间是竞争还是互补？两者如何分工协作？",
+        "relations": [],
+        "requirement_ids": [
+          "req1"
+        ],
+        "status": "ready",
+        "title": "A2A 与 MCP 的互补关系与分工协作"
+      },
+      {
+        "argument": [
+          "A2A 不是 agent 开发套件，而是 agent 之间通信层",
+          "A2A 不是子 agent 或工具调用协议，不规定如何调用工具",
+          "A2A 不是 MCP 的替代品；也不是即时消息应用"
+        ],
+        "conclusion": "A2A 是有明确边界的协议：它不做 agent 开发、不做工具调用、不替代 MCP，也不是消息应用；这强化了它专注 agent 间通信的定位。",
+        "constraints": {
+          "must_cite": [
+            "S1"
+          ]
+        },
+        "evidence": [
+          {
+            "locator": {
+              "lines": [
+                122,
+                127
+              ]
+            },
+            "material_id": "m1",
+            "source_ids": [
+              "S1"
+            ],
+            "use": "m1 第 122-127 行给出 A2A 不是什么以及不替代 MCP 的官方边界说明"
+          }
+        ],
+        "gap_ids": [],
+        "kind": "writable",
+        "node_id": "n7",
+        "parent_id": "n3",
+        "question": "A2A 明确不承担哪些角色？这些边界如何帮助理解它与 MCP 的分工？",
+        "relations": [],
+        "requirement_ids": [
+          "req1",
+          "req3"
+        ],
+        "status": "ready",
+        "title": "A2A 不是什么：边界界定"
+      },
+      {
+        "gap_ids": [],
+        "kind": "section",
+        "needs_richer_research": true,
+        "node_id": "n8",
+        "parent_id": null,
+        "relations": [],
+        "title": "A2A 协议的创新之处"
+      },
+      {
+        "argument": [
+          "互操作性：连接跨不同平台框架（LangGraph、CrewAI、Semantic Kernel、自定义）的 agent 构建组合系统",
+          "复杂工作流：让 agent 委派子任务、交换信息、协调行动以解决单个 agent 无法解决的问题",
+          "安全与不透明：agent 交互无需共享内部记忆、工具或专有逻辑，维护安全与知识产权",
+          "可扩展：通过正式扩展与自定义绑定增加能力，核心保持稳定"
+        ],
+        "conclusion": "A2A 的创新集中体现在跨框架互操作、复杂工作流委派协作、安全不透明的 agent 交互，以及通过扩展保持核心稳定的工程机制。",
+        "constraints": {
+          "must_cite": [
+            "S1",
+            "S4"
+          ]
+        },
+        "evidence": [
+          {
+            "locator": {
+              "lines": [
+                27,
+                38
+              ]
+            },
+            "material_id": "m1",
+            "source_ids": [
+              "S1"
+            ],
+            "use": "m1 第 27-38 行列出 A2A 关键特性：互操作、复杂工作流、安全不透明、可扩展"
+          },
+          {
+            "locator": {
+              "lines": [
+                16,
+                33
+              ]
+            },
+            "material_id": "m4",
+            "source_ids": [
+              "S4"
+            ],
+            "use": "m4 第 16-33 行给出 A2A 横向 agent-to-agent 层创新及「MCP 给深度、A2A 给广度」的定位"
+          },
+          {
+            "locator": {
+              "lines": [
+                53,
+                64
+              ]
+            },
+            "material_id": "m4",
+            "source_ids": [
+              "S4"
+            ],
+            "use": "m4 第 53-64 行给出应用级协议：agent 以对等方发现、协商、管理共享任务并交换上下文的创新"
+          }
+        ],
+        "gap_ids": [
+          "g2",
+          "g1"
+        ],
+        "kind": "writable",
+        "node_id": "n9",
+        "parent_id": "n8",
+        "question": "A2A 协议相对于既有方案的创新之处包括哪些方面？",
+        "relations": [],
+        "requirement_ids": [
+          "req2"
+        ],
+        "status": "ready",
+        "title": "A2A 的核心创新面向"
+      },
+      {
+        "gap_ids": [],
+        "kind": "section",
+        "needs_richer_research": true,
+        "node_id": "n10",
+        "parent_id": null,
+        "relations": [],
+        "title": "A2A 专门要解决的具体问题"
+      },
+      {
+        "argument": [
+          "异构框架与多厂商构建的 agent 之间缺乏统一通信标准的互操作问题",
+          "复杂问题需要多 agent 委派子任务、交换信息、协调行动而单 agent 无法完成的协作问题",
+          "agent 协作中保护内部记忆、工具与专有逻辑的安全与知识产权问题",
+          "作为互补层，弥补 MCP 仅覆盖 agent 到工具而不覆盖 agent 到 agent 的空档"
+        ],
+        "conclusion": "A2A 专门解决异构 agent 缺乏统一互操作标准、复杂问题需多 agent 协同、以及协作中安全不透明保护这三类具体问题，并填补 agent 到 agent 通信这一层空档。",
+        "constraints": {
+          "must_cite": [
+            "S1",
+            "S4"
+          ],
+          "no_extrapolation": true
+        },
+        "evidence": [
+          {
+            "locator": {
+              "lines": [
+                15,
+                15
+              ]
+            },
+            "material_id": "m1",
+            "source_ids": [
+              "S1"
+            ],
+            "use": "m1 第 15 行点明多框架多厂商 agent 缺乏通用语言的互操作问题"
+          },
+          {
+            "locator": {
+              "lines": [
+                32,
+                35
+              ]
+            },
+            "material_id": "m1",
+            "source_ids": [
+              "S1"
+            ],
+            "use": "m1 第 32-35 行给出复杂工作流委派与安全不透明的设计目标"
+          },
+          {
+            "locator": {
+              "lines": [
+                16,
+                24
+              ]
+            },
+            "material_id": "m4",
+            "source_ids": [
+              "S4"
+            ],
+            "use": "m4 第 16-24 行给出 agent 分属不同团队/部门/伙伴组织、需跨边界发现协商交换信息的协作问题"
+          },
+          {
+            "locator": {
+              "lines": [
+                96,
+                138
+              ]
+            },
+            "material_id": "m4",
+            "source_ids": [
+              "S4"
+            ],
+            "use": "m4 第 96-138 行以修车厂示例展示 A2A 解决的委派、跨 agent 协同与工具分工问题"
+          }
+        ],
+        "gap_ids": [
+          "g2"
+        ],
+        "kind": "writable",
+        "node_id": "n11",
+        "parent_id": "n10",
+        "question": "A2A 协议专门被设计用来解决哪些具体问题？",
+        "relations": [],
+        "requirement_ids": [
+          "req3"
+        ],
+        "status": "ready",
+        "title": "A2A 设计针对的问题"
+      },
+      {
+        "gap_ids": [],
+        "kind": "section",
+        "needs_richer_research": false,
+        "node_id": "n12",
+        "parent_id": null,
+        "relations": [],
+        "title": "协议治理与开源及结论"
+      },
+      {
+        "argument": [
+          "A2A 最初由 Google 开发并捐赠给 Linux Foundation",
+          "由包含 AWS、Cisco、Google、IBM Research、Microsoft、Salesforce、SAP、ServiceNow 代表的技术指导委员会维护",
+          "采用 Apache License 2.0 开源许可"
+        ],
+        "conclusion": "A2A 由 Google 开发、捐赠给 Linux Foundation，由多家厂商组成的技术指导委员会治理，并以 Apache License 2.0 开放。",
+        "constraints": {
+          "must_cite": [
+            "S1"
+          ]
+        },
+        "evidence": [
+          {
+            "locator": {
+              "lines": [
+                132,
+                141
+              ]
+            },
+            "material_id": "m1",
+            "source_ids": [
+              "S1"
+            ],
+            "use": "m1 第 132-141 行给出治理、捐赠与 Apache 2.0 许可以及技术指导委员会成员"
+          }
+        ],
+        "gap_ids": [],
+        "kind": "writable",
+        "node_id": "n13",
+        "parent_id": "n12",
+        "question": "A2A 协议由谁开发、如何治理、采用何种开源许可？",
+        "relations": [],
+        "requirement_ids": [
+          "req2",
+          "req4"
+        ],
+        "status": "ready",
+        "title": "A2A 的治理、开源与许可证"
+      },
+      {
+        "argument": [
+          "MCP 为 agent 到工具的通信层，A2A 为 agent 到 agent 的通信层，二者互补而非竞争",
+          "A2A 的创新在于跨框架互操作、复杂工作流与安全不透明机制",
+          "A2A 专门解决异构 agent 互操作、多 agent 协作与协作安全的空档"
+        ],
+        "conclusion": "A2A 与 MCP 分别解决 agent 到工具与 agent 到 agent 两类互联问题，互补协作；A2A 以互操作、复杂工作流与安全不透明为主要创新，专门服务于多厂商异构 agent 的互操作与协作需求。",
+        "constraints": {
+          "must_cite": [
+            "S1",
+            "S4"
+          ],
+          "synthesize": true
+        },
+        "evidence": [
+          {
+            "locator": {
+              "lines": [
+                93,
+                98
+              ]
+            },
+            "material_id": "m1",
+            "source_ids": [
+              "S1"
+            ],
+            "use": "m1 第 93-98 行互补框架用于总结结论"
+          },
+          {
+            "locator": {
+              "lines": [
+                3,
+                9
+              ]
+            },
+            "material_id": "m4",
+            "source_ids": [
+              "S4"
+            ],
+            "use": "m4 第 3-9 行给出 A2A 与 MCP 处理不同但高度互补需求的总结依据"
+          }
+        ],
+        "gap_ids": [
+          "g1",
+          "g2"
+        ],
+        "kind": "writable",
+        "node_id": "n14",
+        "parent_id": "n12",
+        "question": "如何统一概括 A2A 与 MCP 的差异联系、A2A 的创新与要解决的问题？",
+        "relations": [],
+        "requirement_ids": [
+          "req1",
+          "req2",
+          "req3",
+          "req4"
+        ],
+        "status": "ready",
+        "title": "总结：差异、联系、创新与问题"
+      }
+    ],
+    "removed_node_ids": [],
+    "report_title": "A2A 协议与 MCP 协议的差异、联系及创新定位研究报告",
+    "requirements": [
+      {
+        "hard": true,
+        "id": "req1",
+        "input_id": "u1",
+        "text": "详细解释 Google 近期发布的 A2A（Agent2Agent）协议与 MCP（Model Context Protocol）协议的差异与联系"
+      },
+      {
+        "hard": true,
+        "id": "req2",
+        "input_id": "u1",
+        "text": "阐述 A2A 协议的创新之处"
+      },
+      {
+        "hard": true,
+        "id": "req3",
+        "input_id": "u1",
+        "text": "阐述 A2A 协议专门要解决的具体问题"
+      },
+      {
+        "hard": true,
+        "id": "req4",
+        "input_id": "u1",
+        "text": "将结果组织为一份带来源引用的研究报告并交付最终报告文件"
+      }
+    ],
+    "user_decisions": [],
+    "write_requests": [
+      {
+        "feedback_wanted": false,
+        "key": "w-n2",
+        "node_ids": [
+          "n2"
+        ]
+      },
+      {
+        "feedback_wanted": false,
+        "key": "w-n6",
+        "node_ids": [
+          "n6"
+        ]
+      },
+      {
+        "feedback_wanted": false,
+        "key": "w-n7",
+        "node_ids": [
+          "n7"
+        ]
+      },
+      {
+        "feedback_wanted": false,
+        "key": "w-n4",
+        "node_ids": [
+          "n4"
+        ]
+      },
+      {
+        "feedback_wanted": false,
+        "key": "w-n5",
+        "node_ids": [
+          "n5"
+        ]
+      },
+      {
+        "feedback_wanted": false,
+        "key": "w-n9",
+        "node_ids": [
+          "n9"
+        ]
+      },
+      {
+        "feedback_wanted": false,
+        "key": "w-n11",
+        "node_ids": [
+          "n11"
+        ]
+      },
+      {
+        "feedback_wanted": false,
+        "key": "w-n13",
+        "node_ids": [
+          "n13"
+        ]
+      },
+      {
+        "feedback_wanted": false,
+        "key": "w-n14",
+        "node_ids": [
+          "n14"
+        ]
+      }
+    ]
+  },
+  "delivery_sha": "80fd11940f2e22477a88bbbc047a978686caaf687a99eeb696a319a457ba6d26",
+  "finalized": true,
+  "report_id": "r1",
+  "resumed_from": null,
+  "write_requests_set": true
+}

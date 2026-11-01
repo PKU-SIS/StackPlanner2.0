@@ -1,0 +1,152 @@
+# Chronological event timeline
+
+- `001` 2026-10-31 12:41:08.134978 **subagent.start** subagent.start | task_id=spact_call_1d0fcff3c7df4d5aa3eb73af | desc=Recall relevant long-term memory for the StackPlanner CentralAgent. Use DeerFlow's existing memory context and memory to
+- `003` 2026-10-31 12:41:15.557582 **subagent.end** subagent.end | task_id=spact_call_1d0fcff3c7df4d5aa3eb73af | status=completed
+- `004` 2026-10-31 12:41:21.472400 **subagent.start** subagent.start | task_id=call_7eaed66837394b78a57947a7 | desc=Pre-research orientation for a source-cited research report comparing Google's A2A (Agent2Agent) protocol and the MCP (M
+- `018` 2026-10-31 12:44:05.006872 **subagent.end** subagent.end | task_id=call_7eaed66837394b78a57947a7 | status=completed
+- `019` 2026-10-31 12:44:10.095696 **subagent.start** subagent.start | task_id=call_7168985c51f0404dbfdefb75 | desc=Plan an evidence-aware report tree that answers the user's request: a detailed, source-cited comparison of Google's A2A 
+- `036` 2026-10-31 12:45:49.887554 **subagent.end** subagent.end | task_id=call_7168985c51f0404dbfdefb75 | status=completed
+- `037` 2026-10-31 12:41:05.788086 **run.start** run.start | 
+- `038` 2026-10-31 12:41:05.864403 **llm.request** llm.request | 
+- `039` 2026-10-31 12:41:05.864721 **llm.human.input** llm.human.input | 
+- `041` 2026-10-31 12:41:15.560078 **sp.action.created** sp.action.created | action_id=spact_call_1d0fcff3c7df4d5aa3eb73af
+- `042` 2026-10-31 12:41:15.560101 **sp.handler.started** sp.handler.started | action_id=spact_call_1d0fcff3c7df4d5aa3eb73af
+- `043` 2026-10-31 12:41:15.560116 **sp.memory.recall.started** sp.memory.recall.started | action_id=spact_call_1d0fcff3c7df4d5aa3eb73af
+- `044` 2026-10-31 12:41:15.560130 **sp.memory.recall.completed** sp.memory.recall.completed | action_id=spact_call_1d0fcff3c7df4d5aa3eb73af
+- `045` 2026-10-31 12:41:15.560143 **sp.handler.completed** sp.handler.completed | action_id=spact_call_1d0fcff3c7df4d5aa3eb73af
+- `046` 2026-10-31 12:41:15.604577 **llm.request** llm.request | 
+- `048` 2026-10-31 12:44:05.024167 **sp.action.created** sp.action.created | action_id=spact_call_7eaed66837394b78a57947a7
+- `049` 2026-10-31 12:44:05.024194 **sp.handler.started** sp.handler.started | action_id=spact_call_7eaed66837394b78a57947a7
+- `050` 2026-10-31 12:44:05.024209 **sp.delegate.completed** sp.delegate.completed | action_id=spact_call_7eaed66837394b78a57947a7
+- `051` 2026-10-31 12:44:05.024224 **sp.report.research_accepted** sp.report.research_accepted | action_id=spact_call_7eaed66837394b78a57947a7
+- `052` 2026-10-31 12:44:05.024237 **sp.artifact.created** sp.artifact.created | action_id=spact_call_7eaed66837394b78a57947a7
+- `053` 2026-10-31 12:44:05.024250 **sp.handler.completed** sp.handler.completed | action_id=spact_call_7eaed66837394b78a57947a7
+- `054` 2026-10-31 12:44:05.091371 **llm.request** llm.request | 
+- `056` 2026-10-31 12:45:49.927456 **sp.action.created** sp.action.created | action_id=spact_call_7168985c51f0404dbfdefb75
+- `057` 2026-10-31 12:45:49.927531 **sp.handler.started** sp.handler.started | action_id=spact_call_7168985c51f0404dbfdefb75
+- `058` 2026-10-31 12:45:49.927556 **sp.delegate.completed** sp.delegate.completed | action_id=spact_call_7168985c51f0404dbfdefb75
+- `059` 2026-10-31 12:45:49.927574 **sp.report.outline_accepted** sp.report.outline_accepted | action_id=spact_call_7168985c51f0404dbfdefb75
+- `060` 2026-10-31 12:45:49.927590 **sp.artifact.created** sp.artifact.created | action_id=spact_call_7168985c51f0404dbfdefb75
+- `061` 2026-10-31 12:45:49.927607 **sp.handler.completed** sp.handler.completed | action_id=spact_call_7168985c51f0404dbfdefb75
+- `062` 2026-10-31 12:45:56.680002 **subagent.start** subagent.start | task_id=call_97936b7f7aeb45478f8bd318 | desc=Answer registered research gap g2: What are A2A's innovative aspects relative to existing approaches (especially MCP), a
+- `064` 2026-10-31 12:45:56.693275 **subagent.start** subagent.start | task_id=call_2b9e6c93c3074e4aa1af5c98 | desc=Answer registered research gap g1: According to the MCP official specification (Model Context Protocol), what is MCP's d
+- `080` 2026-10-31 12:46:37.095785 **subagent.end** subagent.end | task_id=call_2b9e6c93c3074e4aa1af5c98 | status=completed
+- `092` 2026-10-31 12:48:54.312222 **subagent.end** subagent.end | task_id=call_97936b7f7aeb45478f8bd318 | status=completed | stop_reason=token_capped
+- `093` 2026-10-31 12:49:01.730952 **subagent.start** subagent.start | task_id=call_bcc66f48d1ab41acb99be482 | desc=Consolidate the accepted tree (v1) given the returned research results for gaps g1 and g2. Judge the returned evidence f
+- `103` 2026-10-31 12:49:46.699381 **subagent.end** subagent.end | task_id=call_bcc66f48d1ab41acb99be482 | status=completed
+- `104` 2026-10-31 12:45:50.066469 **llm.request** llm.request | 
+- `106` 2026-10-31 12:46:37.117659 **sp.action.created** sp.action.created | action_id=spact_call_2b9e6c93c3074e4aa1af5c98
+- `107` 2026-10-31 12:46:37.117681 **sp.handler.started** sp.handler.started | action_id=spact_call_2b9e6c93c3074e4aa1af5c98
+- `108` 2026-10-31 12:46:37.117694 **sp.delegate.completed** sp.delegate.completed | action_id=spact_call_2b9e6c93c3074e4aa1af5c98
+- `109` 2026-10-31 12:46:37.117708 **sp.report.research_accepted** sp.report.research_accepted | action_id=spact_call_2b9e6c93c3074e4aa1af5c98
+- `110` 2026-10-31 12:46:37.117721 **sp.artifact.created** sp.artifact.created | action_id=spact_call_2b9e6c93c3074e4aa1af5c98
+- `111` 2026-10-31 12:46:37.117734 **sp.handler.completed** sp.handler.completed | action_id=spact_call_2b9e6c93c3074e4aa1af5c98
+- `112` 2026-10-31 12:48:54.341505 **sp.action.created** sp.action.created | action_id=spact_call_97936b7f7aeb45478f8bd318
+- `113` 2026-10-31 12:48:54.341533 **sp.handler.started** sp.handler.started | action_id=spact_call_97936b7f7aeb45478f8bd318
+- `114` 2026-10-31 12:48:54.341554 **sp.delegate.completed** sp.delegate.completed | action_id=spact_call_97936b7f7aeb45478f8bd318
+- `115` 2026-10-31 12:48:54.341567 **sp.report.research_accepted** sp.report.research_accepted | action_id=spact_call_97936b7f7aeb45478f8bd318
+- `116` 2026-10-31 12:48:54.341580 **sp.artifact.created** sp.artifact.created | action_id=spact_call_97936b7f7aeb45478f8bd318
+- `117` 2026-10-31 12:48:54.341593 **sp.handler.completed** sp.handler.completed | action_id=spact_call_97936b7f7aeb45478f8bd318
+- `118` 2026-10-31 12:48:54.469405 **llm.request** llm.request | 
+- `120` 2026-10-31 12:49:46.742084 **sp.action.created** sp.action.created | action_id=spact_call_bcc66f48d1ab41acb99be482
+- `121` 2026-10-31 12:49:46.742118 **sp.handler.started** sp.handler.started | action_id=spact_call_bcc66f48d1ab41acb99be482
+- `122` 2026-10-31 12:49:46.742139 **sp.delegate.completed** sp.delegate.completed | action_id=spact_call_bcc66f48d1ab41acb99be482
+- `123` 2026-10-31 12:49:46.742159 **sp.report.outline_accepted** sp.report.outline_accepted | action_id=spact_call_bcc66f48d1ab41acb99be482
+- `124` 2026-10-31 12:49:46.742221 **sp.artifact.created** sp.artifact.created | action_id=spact_call_bcc66f48d1ab41acb99be482
+- `125` 2026-10-31 12:49:46.742279 **sp.handler.completed** sp.handler.completed | action_id=spact_call_bcc66f48d1ab41acb99be482
+- `126` 2026-10-31 12:49:56.149923 **subagent.start** subagent.start | task_id=call_04b308272e1043dc93e3976d | desc=Write the node body for node n2 per its Outline node specification and saved evidence from the accepted tree v2. Body on
+- `133` 2026-10-31 12:50:06.670787 **subagent.end** subagent.end | task_id=call_04b308272e1043dc93e3976d | status=completed
+- `134` 2026-10-31 12:50:11.006445 **subagent.start** subagent.start | task_id=call_8e62461a2f43401393136a47 | desc=Write the node body for node n6 per its Outline node specification and saved evidence from the accepted tree v2. Body on
+- `143` 2026-10-31 12:50:22.336862 **subagent.end** subagent.end | task_id=call_8e62461a2f43401393136a47 | status=completed
+- `144` 2026-10-31 12:50:25.790006 **subagent.start** subagent.start | task_id=call_5445e6a38c104163846a515a | desc=Write the node body for node n7 per its Outline node specification and saved evidence from the accepted tree v2. Body on
+- `151` 2026-10-31 12:50:36.133995 **subagent.end** subagent.end | task_id=call_5445e6a38c104163846a515a | status=completed
+- `152` 2026-10-31 12:49:46.872057 **llm.request** llm.request | 
+- `154` 2026-10-31 12:50:06.683482 **sp.action.created** sp.action.created | action_id=spact_call_04b308272e1043dc93e3976d
+- `155` 2026-10-31 12:50:06.683492 **sp.handler.started** sp.handler.started | action_id=spact_call_04b308272e1043dc93e3976d
+- `156` 2026-10-31 12:50:06.683499 **sp.delegate.completed** sp.delegate.completed | action_id=spact_call_04b308272e1043dc93e3976d
+- `157` 2026-10-31 12:50:06.683505 **sp.report.draft_accepted** sp.report.draft_accepted | action_id=spact_call_04b308272e1043dc93e3976d
+- `158` 2026-10-31 12:50:06.683512 **sp.artifact.created** sp.artifact.created | action_id=spact_call_04b308272e1043dc93e3976d
+- `159` 2026-10-31 12:50:06.683518 **sp.handler.completed** sp.handler.completed | action_id=spact_call_04b308272e1043dc93e3976d
+- `160` 2026-10-31 12:50:06.806272 **llm.request** llm.request | 
+- `162` 2026-10-31 12:50:22.361963 **sp.action.created** sp.action.created | action_id=spact_call_8e62461a2f43401393136a47
+- `163` 2026-10-31 12:50:22.361986 **sp.handler.started** sp.handler.started | action_id=spact_call_8e62461a2f43401393136a47
+- `164` 2026-10-31 12:50:22.362000 **sp.delegate.completed** sp.delegate.completed | action_id=spact_call_8e62461a2f43401393136a47
+- `165` 2026-10-31 12:50:22.362014 **sp.report.draft_accepted** sp.report.draft_accepted | action_id=spact_call_8e62461a2f43401393136a47
+- `166` 2026-10-31 12:50:22.362026 **sp.artifact.created** sp.artifact.created | action_id=spact_call_8e62461a2f43401393136a47
+- `167` 2026-10-31 12:50:22.362039 **sp.handler.completed** sp.handler.completed | action_id=spact_call_8e62461a2f43401393136a47
+- `168` 2026-10-31 12:50:22.495689 **llm.request** llm.request | 
+- `170` 2026-10-31 12:50:36.146673 **sp.action.created** sp.action.created | action_id=spact_call_5445e6a38c104163846a515a
+- `171` 2026-10-31 12:50:36.146685 **sp.handler.started** sp.handler.started | action_id=spact_call_5445e6a38c104163846a515a
+- `172` 2026-10-31 12:50:36.146713 **sp.delegate.completed** sp.delegate.completed | action_id=spact_call_5445e6a38c104163846a515a
+- `173` 2026-10-31 12:50:36.146722 **sp.report.draft_accepted** sp.report.draft_accepted | action_id=spact_call_5445e6a38c104163846a515a
+- `174` 2026-10-31 12:50:36.146729 **sp.artifact.created** sp.artifact.created | action_id=spact_call_5445e6a38c104163846a515a
+- `175` 2026-10-31 12:50:36.146735 **sp.handler.completed** sp.handler.completed | action_id=spact_call_5445e6a38c104163846a515a
+- `176` 2026-10-31 12:50:40.262356 **subagent.start** subagent.start | task_id=call_4ed615e8ae314d2ba25c8f07 | desc=Write the node body for node n4 per its Outline node specification and saved evidence from the accepted tree v2. Body on
+- `185` 2026-10-31 12:50:53.945672 **subagent.end** subagent.end | task_id=call_4ed615e8ae314d2ba25c8f07 | status=completed
+- `186` 2026-10-31 12:50:57.553452 **subagent.start** subagent.start | task_id=call_07796ccc436446c8ae015d6b | desc=Write the node body for node n5 per its Outline node specification and saved evidence from the accepted tree v2. Body on
+- `194` 2026-10-31 12:51:09.223218 **subagent.end** subagent.end | task_id=call_07796ccc436446c8ae015d6b | status=completed
+- `195` 2026-10-31 12:51:13.262026 **subagent.start** subagent.start | task_id=call_2403c41b807b47309a152ca6 | desc=Write the node body for node n9 per its Outline node specification and saved evidence from the accepted tree v2. Body on
+- `204` 2026-10-31 12:51:28.767195 **subagent.end** subagent.end | task_id=call_2403c41b807b47309a152ca6 | status=completed
+- `205` 2026-10-31 12:50:36.207665 **llm.request** llm.request | 
+- `207` 2026-10-31 12:50:53.960242 **sp.action.created** sp.action.created | action_id=spact_call_4ed615e8ae314d2ba25c8f07
+- `208` 2026-10-31 12:50:53.960251 **sp.handler.started** sp.handler.started | action_id=spact_call_4ed615e8ae314d2ba25c8f07
+- `209` 2026-10-31 12:50:53.960256 **sp.delegate.completed** sp.delegate.completed | action_id=spact_call_4ed615e8ae314d2ba25c8f07
+- `210` 2026-10-31 12:50:53.960261 **sp.report.draft_accepted** sp.report.draft_accepted | action_id=spact_call_4ed615e8ae314d2ba25c8f07
+- `211` 2026-10-31 12:50:53.960266 **sp.artifact.created** sp.artifact.created | action_id=spact_call_4ed615e8ae314d2ba25c8f07
+- `212` 2026-10-31 12:50:53.960271 **sp.handler.completed** sp.handler.completed | action_id=spact_call_4ed615e8ae314d2ba25c8f07
+- `213` 2026-10-31 12:50:54.020441 **llm.request** llm.request | 
+- `215` 2026-10-31 12:51:09.240365 **sp.action.created** sp.action.created | action_id=spact_call_07796ccc436446c8ae015d6b
+- `216` 2026-10-31 12:51:09.240374 **sp.handler.started** sp.handler.started | action_id=spact_call_07796ccc436446c8ae015d6b
+- `217` 2026-10-31 12:51:09.240380 **sp.delegate.completed** sp.delegate.completed | action_id=spact_call_07796ccc436446c8ae015d6b
+- `218` 2026-10-31 12:51:09.240387 **sp.report.draft_accepted** sp.report.draft_accepted | action_id=spact_call_07796ccc436446c8ae015d6b
+- `219` 2026-10-31 12:51:09.240394 **sp.artifact.created** sp.artifact.created | action_id=spact_call_07796ccc436446c8ae015d6b
+- `220` 2026-10-31 12:51:09.240400 **sp.handler.completed** sp.handler.completed | action_id=spact_call_07796ccc436446c8ae015d6b
+- `221` 2026-10-31 12:51:09.377238 **llm.request** llm.request | 
+- `223` 2026-10-31 12:51:28.787773 **sp.action.created** sp.action.created | action_id=spact_call_2403c41b807b47309a152ca6
+- `224` 2026-10-31 12:51:28.787787 **sp.handler.started** sp.handler.started | action_id=spact_call_2403c41b807b47309a152ca6
+- `225` 2026-10-31 12:51:28.787812 **sp.delegate.completed** sp.delegate.completed | action_id=spact_call_2403c41b807b47309a152ca6
+- `226` 2026-10-31 12:51:28.787827 **sp.report.draft_accepted** sp.report.draft_accepted | action_id=spact_call_2403c41b807b47309a152ca6
+- `227` 2026-10-31 12:51:28.787837 **sp.artifact.created** sp.artifact.created | action_id=spact_call_2403c41b807b47309a152ca6
+- `228` 2026-10-31 12:51:28.787846 **sp.handler.completed** sp.handler.completed | action_id=spact_call_2403c41b807b47309a152ca6
+- `229` 2026-10-31 12:51:32.354657 **subagent.start** subagent.start | task_id=call_a05424c6bf574631bf05bccf | desc=Write the node body for node n11 per its Outline node specification and saved evidence from the accepted tree v2. Body o
+- `237` 2026-10-31 12:51:45.530502 **subagent.end** subagent.end | task_id=call_a05424c6bf574631bf05bccf | status=completed
+- `238` 2026-10-31 12:51:49.291926 **subagent.start** subagent.start | task_id=call_f68f1c51bdba401b82e169d5 | desc=Write the node body for node n13 per its Outline node specification and saved evidence from the accepted tree v2. Body o
+- `247` 2026-10-31 12:52:01.208815 **subagent.end** subagent.end | task_id=call_f68f1c51bdba401b82e169d5 | status=completed
+- `248` 2026-10-31 12:52:05.486961 **subagent.start** subagent.start | task_id=call_a163f3120579411b940df474 | desc=Write the node body for node n14 per its Outline node specification and saved evidence from the accepted tree v2. Body o
+- `256` 2026-10-31 12:52:19.041405 **subagent.end** subagent.end | task_id=call_a163f3120579411b940df474 | status=completed
+- `257` 2026-10-31 12:51:28.934793 **llm.request** llm.request | 
+- `259` 2026-10-31 12:51:45.543217 **sp.action.created** sp.action.created | action_id=spact_call_a05424c6bf574631bf05bccf
+- `260` 2026-10-31 12:51:45.543224 **sp.handler.started** sp.handler.started | action_id=spact_call_a05424c6bf574631bf05bccf
+- `261` 2026-10-31 12:51:45.543229 **sp.delegate.completed** sp.delegate.completed | action_id=spact_call_a05424c6bf574631bf05bccf
+- `262` 2026-10-31 12:51:45.543234 **sp.report.draft_accepted** sp.report.draft_accepted | action_id=spact_call_a05424c6bf574631bf05bccf
+- `263` 2026-10-31 12:51:45.543240 **sp.artifact.created** sp.artifact.created | action_id=spact_call_a05424c6bf574631bf05bccf
+- `264` 2026-10-31 12:51:45.543245 **sp.handler.completed** sp.handler.completed | action_id=spact_call_a05424c6bf574631bf05bccf
+- `265` 2026-10-31 12:51:45.820108 **llm.request** llm.request | 
+- `267` 2026-10-31 12:52:01.223633 **sp.action.created** sp.action.created | action_id=spact_call_f68f1c51bdba401b82e169d5
+- `268` 2026-10-31 12:52:01.223644 **sp.handler.started** sp.handler.started | action_id=spact_call_f68f1c51bdba401b82e169d5
+- `269` 2026-10-31 12:52:01.223650 **sp.delegate.completed** sp.delegate.completed | action_id=spact_call_f68f1c51bdba401b82e169d5
+- `270` 2026-10-31 12:52:01.223656 **sp.report.draft_accepted** sp.report.draft_accepted | action_id=spact_call_f68f1c51bdba401b82e169d5
+- `271` 2026-10-31 12:52:01.223662 **sp.artifact.created** sp.artifact.created | action_id=spact_call_f68f1c51bdba401b82e169d5
+- `272` 2026-10-31 12:52:01.223668 **sp.handler.completed** sp.handler.completed | action_id=spact_call_f68f1c51bdba401b82e169d5
+- `273` 2026-10-31 12:52:01.302167 **llm.request** llm.request | 
+- `275` 2026-10-31 12:52:19.072073 **sp.action.created** sp.action.created | action_id=spact_call_a163f3120579411b940df474
+- `276` 2026-10-31 12:52:19.072089 **sp.handler.started** sp.handler.started | action_id=spact_call_a163f3120579411b940df474
+- `277` 2026-10-31 12:52:19.072130 **sp.delegate.completed** sp.delegate.completed | action_id=spact_call_a163f3120579411b940df474
+- `278` 2026-10-31 12:52:19.072148 **sp.report.draft_accepted** sp.report.draft_accepted | action_id=spact_call_a163f3120579411b940df474
+- `279` 2026-10-31 12:52:19.072160 **sp.artifact.created** sp.artifact.created | action_id=spact_call_a163f3120579411b940df474
+- `280` 2026-10-31 12:52:19.072172 **sp.handler.completed** sp.handler.completed | action_id=spact_call_a163f3120579411b940df474
+- `281` 2026-10-31 12:52:19.272587 **subagent.start** subagent.start | task_id=sp-fixed-c0-review-r1 | desc=Harness fixed minimum acceptance of the current assembled report candidate. Use the existing report_packet and existing 
+- `285` 2026-10-31 12:52:46.274310 **subagent.end** subagent.end | task_id=sp-fixed-c0-review-r1 | status=completed
+- `286` 2026-10-31 12:52:46.296442 **sp.action.created** sp.action.created | action_id=spact_sp-fixed-c0-review-r1
+- `287` 2026-10-31 12:52:46.296453 **sp.handler.started** sp.handler.started | action_id=spact_sp-fixed-c0-review-r1
+- `288` 2026-10-31 12:52:46.296459 **sp.delegate.completed** sp.delegate.completed | action_id=spact_sp-fixed-c0-review-r1
+- `289` 2026-10-31 12:52:46.296465 **sp.report.integration_review_ready** sp.report.integration_review_ready | action_id=spact_sp-fixed-c0-review-r1
+- `290` 2026-10-31 12:52:46.296471 **sp.artifact.created** sp.artifact.created | action_id=spact_sp-fixed-c0-review-r1
+- `291` 2026-10-31 12:52:46.296478 **sp.handler.completed** sp.handler.completed | action_id=spact_sp-fixed-c0-review-r1
+- `292` 2026-10-31 12:52:46.397569 **sp.action.created** sp.action.created | action_id=spact_sp-fixed-c0-finish-r1-rv1
+- `293` 2026-10-31 12:52:46.397577 **sp.handler.started** sp.handler.started | action_id=spact_sp-fixed-c0-finish-r1-rv1
+- `294` 2026-10-31 12:52:46.397584 **sp.finish.accepted** sp.finish.accepted | action_id=spact_sp-fixed-c0-finish-r1-rv1
+- `295` 2026-10-31 12:52:46.397590 **sp.handler.completed** sp.handler.completed | action_id=spact_sp-fixed-c0-finish-r1-rv1
+- `296` 2026-10-31 12:52:46.419885 **sp.memory.auto_summarized** sp.memory.auto_summarized | 
+- `297` 2026-10-31 12:52:46.438215 **run.end** run.end | 
+- `298` 2026-10-31 12:52:46.503208 **workspace_changes** workspace_changes

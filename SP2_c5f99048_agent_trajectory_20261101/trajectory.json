@@ -1,0 +1,259 @@
+{
+ "schema": "sp2.agent_trajectory.v1",
+ "thread": {
+  "thread_id": "c5f99048-1b1c-4d16-a02e-885caf51e05e",
+  "assistant_id": null,
+  "display_name": "汇报case",
+  "status": "idle",
+  "metadata_json": "{}",
+  "created_at": "2026-10-31 12:41:05.569267",
+  "updated_at": "2026-10-31 13:05:19.305700"
+ },
+ "run": {
+  "run_id": "a7728c0a-a8f9-4cad-b4c1-ba0013c1d952",
+  "thread_id": "c5f99048-1b1c-4d16-a02e-885caf51e05e",
+  "assistant_id": "stackplanner",
+  "status": "success",
+  "model_name": "deep-research-model",
+  "multitask_strategy": "reject",
+  "metadata_json": "{\"debug_trace_enabled\": false}",
+  "kwargs_json": "{\"input\": {\"messages\": [{\"type\": \"human\", \"content\": [{\"type\": \"text\", \"text\": \"Please provide a detailed explanation of the differences and connections between Google's recently released A2A protocol and the MCP protocol. Furthermore, elaborate on the innovative aspects of the A2A protocol and the specific problems it is designed to address.\\n\\n请将结果组织为一份带来源引用的研究报告，并交付最终报告文件。\"}], \"additional_kwargs\": {}}]}, \"config\": {\"recursion_limit\": 1000}}",
+  "error": null,
+  "message_count": 15,
+  "first_human_message": "--- BEGIN USER INPUT ---\nPlease provide a detailed explanation of the differences and connections between Google's recently released A2A protocol and the MCP protocol. Furthermore, elaborate on the innovative aspects of the A2A protocol and the specific problems it is designed to address.\n\n请将结果组织为一份带来源引用的研究报告，并交付最终报告文件。\n--- END USER INPUT ---",
+  "last_ai_message": "w-n13 completed (draft d8 for node n13), matching the current task memory (node_draft=8, drafts d1–d8 complete). One writer request remains pending: **w-n14** (node n14). This is the last write in the current queue.\n\nLet me dispatch w-n14.",
+  "total_input_tokens": 1232765,
+  "total_output_tokens": 45171,
+  "total_tokens": 1277936,
+  "llm_call_count": 14,
+  "lead_agent_tokens": 271742,
+  "subagent_tokens": 1006194,
+  "middleware_tokens": 0,
+  "token_usage_by_model": "{\"deepseek-v4-flash-0731\": {\"input_tokens\": 1187684, \"output_tokens\": 44463, \"total_tokens\": 1232147, \"cache_read_tokens\": 819200}, \"deepseek-flash\": {\"input_tokens\": 45081, \"output_tokens\": 708, \"total_tokens\": 45789, \"cache_read_tokens\": 26624}}",
+  "follow_up_to_run_id": null,
+  "created_at": "2026-10-31 12:41:05.683812",
+  "updated_at": "2026-10-31 12:52:46.510099"
+ },
+ "counts": {
+  "events": 298,
+  "subagent_steps": 134,
+  "subagent_starts": 16,
+  "llm_responses": 14
+ },
+ "subagents": [
+  {
+   "task_id": "spact_call_1d0fcff3c7df4d5aa3eb73af",
+   "type": "memory_recaller",
+   "status": "completed",
+   "stop_reason": null,
+   "usage": {
+    "input_tokens": 4880,
+    "output_tokens": 698,
+    "total_tokens": 5578
+   },
+   "steps": 1,
+   "description": "Recall relevant long-term memory for the StackPlanner CentralAgent.\nUse DeerFlow's existing memory context and memory tools available to this subagent.\nDo not write, update, promote, or mutate long-term memory.\nQuery: A2A protocol Google, M"
+  },
+  {
+   "task_id": "call_7eaed66837394b78a57947a7",
+   "type": "researcher",
+   "status": "completed",
+   "stop_reason": null,
+   "usage": {
+    "input_tokens": 52628,
+    "output_tokens": 2406,
+    "total_tokens": 55034
+   },
+   "steps": 13,
+   "description": "Pre-research orientation for a source-cited research report comparing Google's A2A (Agent2Agent) protocol and the MCP (Model Context Protocol) protocol. The report must explain: (1) the differences and connections between A2A and MCP, (2) t"
+  },
+  {
+   "task_id": "call_7168985c51f0404dbfdefb75",
+   "type": "outline",
+   "status": "completed",
+   "stop_reason": null,
+   "usage": {
+    "input_tokens": 197514,
+    "output_tokens": 11236,
+    "total_tokens": 208750
+   },
+   "steps": 16,
+   "description": "Plan an evidence-aware report tree that answers the user's request: a detailed, source-cited comparison of Google's A2A (Agent2Agent) protocol versus the MCP (Model Context Protocol) protocol, covering (1) the differences and connections be"
+  },
+  {
+   "task_id": "call_97936b7f7aeb45478f8bd318",
+   "type": "researcher",
+   "status": "completed",
+   "stop_reason": "token_capped",
+   "usage": {
+    "input_tokens": 165569,
+    "output_tokens": 3771,
+    "total_tokens": 169340
+   },
+   "steps": 16,
+   "description": "Answer registered research gap g2: What are A2A's innovative aspects relative to existing approaches (especially MCP), and what specific problems is A2A designed to solve (agent interconnectivity, interoperability, delegation, security non-"
+  },
+  {
+   "task_id": "call_2b9e6c93c3074e4aa1af5c98",
+   "type": "researcher",
+   "status": "completed",
+   "stop_reason": null,
+   "usage": {
+    "input_tokens": 102492,
+    "output_tokens": 3415,
+    "total_tokens": 105907
+   },
+   "steps": 11,
+   "description": "Answer registered research gap g1: According to the MCP official specification (Model Context Protocol), what is MCP's definition, scope of use, and positioning (agent-to-tool standardization), and what is its stated relationship/connection"
+  },
+  {
+   "task_id": "call_bcc66f48d1ab41acb99be482",
+   "type": "outline",
+   "status": "completed",
+   "stop_reason": null,
+   "usage": {
+    "input_tokens": 168257,
+    "output_tokens": 5422,
+    "total_tokens": 173679
+   },
+   "steps": 9,
+   "description": "Consolidate the accepted tree (v1) given the returned research results for gaps g1 and g2. Judge the returned evidence for both gaps together, read all saved materials, resolve/no-register the gaps, place the actually used material ids, cit"
+  },
+  {
+   "task_id": "call_04b308272e1043dc93e3976d",
+   "type": "reporter",
+   "status": "completed",
+   "stop_reason": null,
+   "usage": {
+    "input_tokens": 17929,
+    "output_tokens": 839,
+    "total_tokens": 18768
+   },
+   "steps": 6,
+   "description": "Write the node body for node n2 per its Outline node specification and saved evidence from the accepted tree v2. Body only (host emits the title). Use canonical [S] citation ids. Do not write the title or a heading."
+  },
+  {
+   "task_id": "call_8e62461a2f43401393136a47",
+   "type": "reporter",
+   "status": "completed",
+   "stop_reason": null,
+   "usage": {
+    "input_tokens": 24689,
+    "output_tokens": 850,
+    "total_tokens": 25539
+   },
+   "steps": 8,
+   "description": "Write the node body for node n6 per its Outline node specification and saved evidence from the accepted tree v2. Body only (host emits the title). Use canonical [S] citation ids. Do not write the title or a heading."
+  },
+  {
+   "task_id": "call_5445e6a38c104163846a515a",
+   "type": "reporter",
+   "status": "completed",
+   "stop_reason": null,
+   "usage": {
+    "input_tokens": 18090,
+    "output_tokens": 822,
+    "total_tokens": 18912
+   },
+   "steps": 6,
+   "description": "Write the node body for node n7 per its Outline node specification and saved evidence from the accepted tree v2. Body only (host emits the title). Use canonical [S] citation ids. Do not write the title or a heading."
+  },
+  {
+   "task_id": "call_4ed615e8ae314d2ba25c8f07",
+   "type": "reporter",
+   "status": "completed",
+   "stop_reason": null,
+   "usage": {
+    "input_tokens": 20901,
+    "output_tokens": 1252,
+    "total_tokens": 22153
+   },
+   "steps": 8,
+   "description": "Write the node body for node n4 per its Outline node specification and saved evidence from the accepted tree v2. Body only (host emits the title). Use canonical [S] citation ids. Do not write the title or a heading."
+  },
+  {
+   "task_id": "call_07796ccc436446c8ae015d6b",
+   "type": "reporter",
+   "status": "completed",
+   "stop_reason": null,
+   "usage": {
+    "input_tokens": 23665,
+    "output_tokens": 970,
+    "total_tokens": 24635
+   },
+   "steps": 7,
+   "description": "Write the node body for node n5 per its Outline node specification and saved evidence from the accepted tree v2. Body only (host emits the title). Use canonical [S] citation ids. Do not write the title or a heading."
+  },
+  {
+   "task_id": "call_2403c41b807b47309a152ca6",
+   "type": "reporter",
+   "status": "completed",
+   "stop_reason": null,
+   "usage": {
+    "input_tokens": 21475,
+    "output_tokens": 1344,
+    "total_tokens": 22819
+   },
+   "steps": 8,
+   "description": "Write the node body for node n9 per its Outline node specification and saved evidence from the accepted tree v2. Body only (host emits the title). Use canonical [S] citation ids. Do not write the title or a heading."
+  },
+  {
+   "task_id": "call_a05424c6bf574631bf05bccf",
+   "type": "reporter",
+   "status": "completed",
+   "stop_reason": null,
+   "usage": {
+    "input_tokens": 25707,
+    "output_tokens": 1224,
+    "total_tokens": 26931
+   },
+   "steps": 7,
+   "description": "Write the node body for node n11 per its Outline node specification and saved evidence from the accepted tree v2. Body only (host emits the title). Use canonical [S] citation ids. Do not write the title or a heading."
+  },
+  {
+   "task_id": "call_f68f1c51bdba401b82e169d5",
+   "type": "reporter",
+   "status": "completed",
+   "stop_reason": null,
+   "usage": {
+    "input_tokens": 24753,
+    "output_tokens": 936,
+    "total_tokens": 25689
+   },
+   "steps": 8,
+   "description": "Write the node body for node n13 per its Outline node specification and saved evidence from the accepted tree v2. Body only (host emits the title). Use canonical [S] citation ids. Do not write the title or a heading."
+  },
+  {
+   "task_id": "call_a163f3120579411b940df474",
+   "type": "reporter",
+   "status": "completed",
+   "stop_reason": null,
+   "usage": {
+    "input_tokens": 20368,
+    "output_tokens": 1150,
+    "total_tokens": 21518
+   },
+   "steps": 7,
+   "description": "Write the node body for node n14 per its Outline node specification and saved evidence from the accepted tree v2. Body only (host emits the title). Use canonical [S] citation ids. Do not write the title or a heading."
+  },
+  {
+   "task_id": "sp-fixed-c0-review-r1",
+   "type": "outline",
+   "status": "completed",
+   "stop_reason": null,
+   "usage": {
+    "input_tokens": 78497,
+    "output_tokens": 2445,
+    "total_tokens": 80942
+   },
+   "steps": 3,
+   "description": "Harness fixed minimum acceptance of the current assembled report candidate. Use the existing report_packet and existing integration-review JSON contract. Only major required-content omissions and placeholder replacement of required content "
+  }
+ ],
+ "artifacts": {
+  "ledger": "artifacts/report/r1/ledger.json",
+  "final_report": "artifacts/report/r1/final/report-1.md",
+  "tree_v2": "artifacts/report/r1/tree/2.json",
+  "review": "artifacts/report/r1/review/rv1.json"
+ }
+}

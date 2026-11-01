@@ -1,0 +1,46 @@
+{
+  "action_id": "spact_sp-fixed-c0-review-r1",
+  "base_digest": "3f685367d4349b2f142974c18394eee1d1d20e25ca940e1ed18cc7de52dac2a3",
+  "candidate_id": "c1",
+  "candidate_sha256": "7ca361c37a3700ff886251a22564b4fba8bc5ed4a4ee0e6d58bec5037655989f",
+  "covered_requirement_ids": [
+    "req1",
+    "req2",
+    "req3",
+    "req4"
+  ],
+  "created_at": "2026-10-31T12:52:46+00:00",
+  "edits": [],
+  "findings": [
+    {
+      "draft_ids": [
+        "d9"
+      ],
+      "kind": "consistency",
+      "message": "在总结章节'关于差异与联系'中，'MCP 负责横向打通 agent 与工具，A2A 负责纵向打通 agent 与 agent' 将横向/纵向标签反置。文档主体及素材 S4 均表述 'MCP 是垂直的(vertical)、A2A 是水平的(horizontal)'。该行含义（MCP→工具、A2A→agent）正确且有引用，仅为标签方向的行文不一致，不影响结论与引用身份，属可读性建议。",
+      "node_ids": [
+        "n14"
+      ],
+      "severity": "advisory"
+    },
+    {
+      "draft_ids": [
+        "d4",
+        "d5"
+      ],
+      "kind": "duplication",
+      "message": "n4 (MCP 作用范围) 与 n5 (A2A 作用范围) 为对称对照，各自都引用 agent-to-tool/agent-to-agent 的对比表述，存在轻微重叠；属章节安排的正常对称结构，非阻塞。",
+      "node_ids": [
+        "n4",
+        "n5"
+      ],
+      "severity": "advisory"
+    }
+  ],
+  "inputs_digest": "b4e005f92268a255e8619c250d4b1b70a6db7e50a86e5121d4321e12577ae5b0",
+  "outcome": "deliver",
+  "review_id": "rv1",
+  "reviewed_candidate_sha256": "7ca361c37a3700ff886251a22564b4fba8bc5ed4a4ee0e6d58bec5037655989f",
+  "status": "ready",
+  "tree_version": 2
+}
