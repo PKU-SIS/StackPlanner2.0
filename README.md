@@ -60,6 +60,8 @@ with 882 training and 220 test samples. Shared evidence documents, including
 cross-subtask reuse, stay together; existing sample-scoped RAGFlow indexes are reused.
 The team DeepSeek examples explicitly disable provider thinking for evaluation;
 this setting is recorded independently from SP inference configuration.
+An optional [NBA audit execution profile](docs/DCC_NBA_BASELINE_DIAGNOSIS.md)
+addresses intermediate-file delivery and data-check recovery while preserving the original baseline and scorer.
 
 ## Why SP2.0
 

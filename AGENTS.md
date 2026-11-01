@@ -193,6 +193,10 @@ is provenance only: read prompt constants with AST and never execute it.
 Release construction is injectable via `release_builder`; the NBA baseline checks
 source/input/label parity and uses the shared archive/download implementation.
 See `docs/DCC_RULEARENA_NBA.md` and `tests/test_dcc_rulearena.py`.
+`preprocessing.rulearena-nba.audit-v1.json` is an opt-in execution-prompt variant;
+it preserves the original scenarios/rules/labels/template, adds no domain facts,
+and requires a new bundle/run. Never resume a baseline with changed prompts or
+score intermediate evidence as the final audit. See `docs/DCC_NBA_BASELINE_DIAGNOSIS.md`.
 
 Optional future train/test definitions live in `configs/dcc/splits/`. The NBA
 80/20 definition groups identical team/player backgrounds (including changed

@@ -77,6 +77,13 @@ deer-flow/
 
 ### SP Acceptance Checks
 
+Text-analysis tasks must not be forced to FINISH merely because a specialist
+completed an incidental file/report; preserve explicit artifact delivery and
+independent source-change verification. For explicit data-processing Coder work,
+business CHECK/FAIL findings are not program regressions. Real exceptions,
+nonzero status, masked exits and unresolved evidence gaps still block acceptance.
+Regression anchors are `test_sp_agent_tools.py` and `test_sp_dr2_subagent_adapter.py`.
+
 SP acceptance invariants: use `subagents.status_contract.model_response_stop_reason`
 for the final assistant response's provider truncation signal, and preserve it as
 `token_capped`; earlier truncated attempts do not invalidate a later successful

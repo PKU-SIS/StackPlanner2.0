@@ -398,6 +398,29 @@ def test_completed_report_from_previous_delegate_forces_exact_finish():
     assert "do not ask another question" in instruction.content
 
 
+@pytest.mark.parametrize("role,artifact_type", [("coder", "generated_file"), ("reporter", "report")])
+def test_incidental_step_artifact_does_not_force_finish_of_text_analysis(role, artifact_type):
+    human = HumanMessage(content="Apply the supplied audit rules to every operation and return the final decision in text.")
+    state = {
+        "messages": [human],
+        "sp_loop_run_id": "run-1",
+        "sp_last_handler_result": {"action_type": "DELEGATE", "action_id": "extract-1", "target_agent": role, "next_step": "continue"},
+        "sp_current_artifact_refs": {
+            artifact_type: {
+                "artifact_id": "rule-excerpt",
+                "type": artifact_type,
+                "run_id": "run-1",
+                "is_current": True,
+                "metadata": {"completion_status": "complete", "delegate_action_id": "extract-1", "finalization_preview": "Only a rule excerpt; no audit conclusion."},
+            }
+        },
+    }
+    request = _ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=[human])
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
+    assert {tool.name for tool in filtered.tools} != {"sp_finish"}
+    assert not any(getattr(message, "name", None) in {"sp_report_finalization_required", "sp_artifact_finalization_required"} for message in filtered.messages)
+
+
 def test_completed_coder_artifact_from_previous_delegate_forces_exact_finish():
     middleware = SPFinishAvailabilityMiddleware()
     request = _ModelRequestStub(
@@ -603,9 +626,7 @@ def test_partial_data_processing_recovery_preserves_its_acceptance_contract():
     instruction = filtered.messages[-1].content
     assert '"coder_task_kind": "data_processing"' in instruction
     assert "source implementation recovery" not in instruction
-    update = middleware.after_model(
-        {**state, "messages": [*state["messages"], AIMessage(content="The data table is complete.")]}, SimpleNamespace(context={"run_id": "run-1"})
-    )
+    update = middleware.after_model({**state, "messages": [*state["messages"], AIMessage(content="The data table is complete.")]}, SimpleNamespace(context={"run_id": "run-1"}))
     recovery = update["messages"][0].tool_calls[0]["args"]
     assert recovery["metadata"]["coder_task_kind"] == "data_processing"
     assert recovery["metadata"]["requires_implementation"] is False

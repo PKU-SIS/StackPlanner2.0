@@ -80,6 +80,30 @@ def nba_source(tmp_path, monkeypatch):
     return source, cfg
 
 
+def test_audit_execution_profile_preserves_all_original_data_and_task_instructions(nba_source, tmp_path):
+    _, cfg = nba_source
+    original = tmp_path / "baseline"
+    prepare(cfg, original)
+    render(original, cfg)
+    variant = tmp_path / "audit-variant"
+    updated = deepcopy(cfg)
+    profile = load_config(ROOT / "configs/dcc/preprocessing.rulearena-nba.audit-v1.json")
+    updated["prompts"]["layers"] = profile["prompts"]["layers"]
+    prepare(updated, variant)
+    render(variant, updated)
+    assert (original / "public/samples.jsonl").read_bytes() == (variant / "public/samples.jsonl").read_bytes()
+    assert (original / "private/gold.jsonl").read_bytes() == (variant / "private/gold.jsonl").read_bytes()
+    original_tasks = load_tasks(original / "public/tasks.jsonl")
+    tasks = load_tasks(variant / "public/tasks.jsonl")
+    assert [t.id for t in tasks] == [t.id for t in original_tasks]
+    for task, before in zip(tasks, original_tasks, strict=True):
+        assert task.document == before.document and task.files == before.files
+        assert 'coder_task_kind="data_processing"' in task.prompt
+        assert "one Python or shell command" in task.prompt
+        assert "historical Salary Cap is $140,588,000" in task.prompt
+        assert "Answer: True. Illegal Operation: X. Problematic Team: Y." in task.prompt
+
+
 def test_loader_preserves_official_scenario_gold_and_duplicate_samples(nba_source):
     source, cfg = nba_source
     samples = list(rulearena.load(cfg["loader_options"]))

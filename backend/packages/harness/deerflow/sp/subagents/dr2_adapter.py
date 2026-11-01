@@ -281,16 +281,19 @@ def _message_text(value: Any) -> str:
     return "" if value is None else str(value)
 
 
-def _tool_result_succeeded(value: Any) -> bool:
+def _tool_result_succeeded(value: Any, *, allow_negative_findings: bool = False) -> bool:
+    # A data audit may successfully find a noncompliant row. Runtime errors
+    # and nonzero process status still fail; domain CHECK/FAIL text alone is
+    # not evidence that the checking program malfunctioned.
     text = _message_text(value).strip()
     lowered = text.lower()
-    if lowered.startswith("error:") or "traceback (most recent call last)" in lowered or "assertionerror" in lowered or "permission denied" in lowered or _OBSERVABLE_FALSE_CHECK_PATTERN.search(text):
+    if lowered.startswith("error:") or "traceback (most recent call last)" in lowered or "assertionerror" in lowered or "permission denied" in lowered or (not allow_negative_findings and _OBSERVABLE_FALSE_CHECK_PATTERN.search(text)):
         return False
     exit_codes = [int(match.group(1)) for pattern in _EXIT_STATUS_PATTERNS for match in pattern.finditer(text)]
     return not exit_codes or exit_codes[-1] == 0
 
 
-def _coder_reported_behavior_failure(raw_result: Any, ai_messages: Any) -> bool:
+def _coder_reported_behavior_failure(raw_result: Any, ai_messages: Any, *, allow_negative_findings: bool = False) -> bool:
     # Treat the subagent's final report and observable tool results as
     # evidence. Intermediate assistant narration is deliberative text: models
     # frequently say "the test failed because the host dependency is
@@ -298,7 +301,7 @@ def _coder_reported_behavior_failure(raw_result: Any, ai_messages: Any) -> bool:
     # that narration into the verdict caused valid patches to be mislabeled as
     # regressions and sent into an unrelated recovery loop.
     raw_text = _message_text(raw_result)
-    if _OBSERVABLE_FALSE_CHECK_PATTERN.search(raw_text):
+    if not allow_negative_findings and _OBSERVABLE_FALSE_CHECK_PATTERN.search(raw_text):
         return True
     if _BEHAVIOR_FAILURE_REPORT_PATTERN.search(raw_text) and not _ENVIRONMENT_BLOCKER_REPORT_PATTERN.search(raw_text):
         return True
@@ -311,7 +314,7 @@ def _coder_reported_behavior_failure(raw_result: Any, ai_messages: Any) -> bool:
     for text in tool_texts:
         if _ENVIRONMENT_BLOCKER_REPORT_PATTERN.search(text) and not _OBSERVABLE_FALSE_CHECK_PATTERN.search(text):
             continue
-        if _OBSERVABLE_FALSE_CHECK_PATTERN.search(text) or _BEHAVIOR_FAILURE_REPORT_PATTERN.search(text):
+        if (not allow_negative_findings and _OBSERVABLE_FALSE_CHECK_PATTERN.search(text)) or _BEHAVIOR_FAILURE_REPORT_PATTERN.search(text):
             return True
     return False
 
@@ -629,6 +632,7 @@ def _execution_verification(
     ai_messages: Any,
     *,
     reject_masked_commands: bool = False,
+    allow_negative_findings: bool = False,
 ) -> dict[str, int | bool | None]:
     calls: dict[str, tuple[str, int, Mapping[str, Any] | None]] = {}
     latest_source_write_index: int | None = None
@@ -656,7 +660,7 @@ def _execution_verification(
         call = calls.get(call_id)
         if call is not None:
             tool_name = tool_name or call[0]
-        if not _tool_result_succeeded(message.get("content")):
+        if not _tool_result_succeeded(message.get("content"), allow_negative_findings=allow_negative_findings):
             continue
         if tool_name in _FILE_WRITE_TOOLS:
             latest_source_write_index = index
@@ -801,7 +805,7 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         if "disclosed_limitations" in artifact_metadata:
             limitations = artifact_metadata["disclosed_limitations"]
             artifact_metadata["disclosed_limitations"] = list(dict.fromkeys(str(item).strip() for item in limitations if str(item).strip()))[:12] if isinstance(limitations, list) else []
-        if task is not None and task.subagent_type == "coder" and _coder_reported_behavior_failure(raw_result, ai_messages):
+        if task is not None and task.subagent_type == "coder" and _coder_reported_behavior_failure(raw_result, ai_messages, allow_negative_findings=is_data_processing_coder(task.metadata)):
             artifact_metadata["completion_status"] = "partial"
             if _BEHAVIOR_FAILURE_GAP not in artifact_metadata["evidence_gaps"]:
                 artifact_metadata["evidence_gaps"].append(_BEHAVIOR_FAILURE_GAP)
@@ -818,7 +822,8 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
             if _NO_RESPONSE_GAP not in artifact_metadata["evidence_gaps"]:
                 artifact_metadata["evidence_gaps"].append(_NO_RESPONSE_GAP)
         if _coder_requires_execution_evidence(task):
-            verification = _execution_verification(ai_messages, reject_masked_commands=is_data_processing_coder(task.metadata))
+            data_processing = is_data_processing_coder(task.metadata)
+            verification = _execution_verification(ai_messages, reject_masked_commands=data_processing, allow_negative_findings=data_processing)
             artifact_metadata["execution_verification"] = verification
             if not verification["passed"]:
                 if artifact_metadata["completion_status"] == "complete":

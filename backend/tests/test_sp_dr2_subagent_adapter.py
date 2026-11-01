@@ -78,6 +78,33 @@ def test_coder_verification_task_requires_implementation_by_default():
     assert coder_task_requires_implementation(task) is True
 
 
+@pytest.mark.parametrize("output,expected_status", [("CHECK cap: FAIL\nexit code: 0", "complete"), ("CHECK cap: FAIL\nexit code: 1", "partial"), ("Traceback (most recent call last):\nAssertionError", "partial")])
+def test_data_audit_negative_finding_is_not_a_software_test_failure(output, expected_status):
+    task = _sp_task()
+    task.subagent_type = "coder"
+    task.stage = "verification"
+    task.metadata = {"stage": "verification", "coder_task_kind": "data_processing", "requires_implementation": False}
+    executor = FakeDR2Executor(
+        FakeDR2Result(
+            status="completed",
+            result=json.dumps(
+                {
+                    "summary": "The checked transaction violates the cap.",
+                    "artifact_content": "CHECK cap: FAIL\nAnswer: True. Illegal Operation: A. Problematic Team: B.",
+                    "artifact_metadata": {"completion_status": "complete", "evidence_gaps": []},
+                }
+            ),
+            ai_messages=[
+                {"type": "ai", "tool_calls": [{"id": "audit", "name": "bash", "args": {"command": "python -c 'print(\"CHECK cap: FAIL\")'"}}]},
+                {"type": "tool", "name": "bash", "tool_call_id": "audit", "content": output},
+            ],
+        )
+    )
+    result = DR2SubagentExecutorAdapter(lambda _: executor).execute(task)
+    assert result.artifact_metadata["completion_status"] == expected_status
+    assert result.artifact_metadata["execution_verification"]["passed"] is (expected_status == "complete")
+
+
 def test_data_processing_coder_accepts_execution_without_source_patch_or_pytest():
     task = _sp_task()
     task.subagent_type = "coder"
