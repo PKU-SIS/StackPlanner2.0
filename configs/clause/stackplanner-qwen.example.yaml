@@ -1,5 +1,5 @@
-# Qwen/vLLM example; set endpoint/model/key through infer CLI environment.
-# Verify model context capacity before increasing the character-based file limit.
+# Qwen/vLLM example; endpoint/model/key are supplied through infer CLI.
+# Verify model context capacity before changing the character-based read limit.
 config_version: 20
 log_level: info
 models:
@@ -47,3 +47,7 @@ skills:
   container_path: /mnt/skills
 summarization:
   enabled: true
+subagents:
+  agents:
+    sp-reporter:
+      max_turns: 128
