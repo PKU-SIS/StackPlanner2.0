@@ -234,7 +234,12 @@ async def main_async(args) -> int:
                 {
                     "protocol": PROTOCOL,
                     "benchmark": check_plugin.name,
-                    "tools": [t.name for t in tools],
+                    "tools": [
+                        t.name
+                        for t in tools
+                        if t.name not in {"sp_ask_human", "ask_clarification"}
+                    ],
+                    "non_interactive": True,
                     "host_bash": app.sandbox.allow_host_bash,
                     "model": args.model,
                     "base_url": args.base_url,

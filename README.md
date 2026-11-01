@@ -1019,6 +1019,8 @@ the evaluator. Plugins own their scoring and aggregation, including CUAD AUPR.
 Collection accepts native text answers after normal graph return as well as
 validated FINISH deliveries, while preserving incomplete-output and artifact gates.
 The manifest records the delivery contract and results identify the delivery source.
+Benchmark runs are non-interactive by default: human-question tools are disabled,
+and unresolved evidence or verification gaps remain explicit failures.
 The former combined evaluation command is now evaluation-only; v2 run directories
 are not silently resumed as v3. See the [benchmark guide](docs/dcc_harness.md) for
 commands, plugin interfaces, completeness rules, and tests that do not execute SP2.

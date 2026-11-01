@@ -18,10 +18,18 @@ def _action(action_type: ActionType | str, **kwargs):
 
 def test_data_processing_delegation_does_not_inherit_software_contract():
     stack = TaskMemoryStack()
-    stack.append_delegate("Implement an earlier software fix", run_id="run-1", stage="implementation", metadata={"target_agent": "coder", "requires_implementation": True})
-    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Data checked.", artifact_metadata={"completion_status": "complete"}))
+    stack.append_delegate(
+        "Implement an earlier software fix", run_id="run-1", stage="implementation", metadata={"target_agent": "coder", "requires_implementation": True}
+    )
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Data checked.", artifact_metadata={"completion_status": "complete"})
+    )
     action = _action(
-        ActionType.DELEGATE, target_agent="coder", task="Filter the supplied CSV and check row counts. Do not edit project source.", stage="verification", metadata={"coder_task_kind": "data_processing", "tool_names": ["read_file", "bash"]}
+        ActionType.DELEGATE,
+        target_agent="coder",
+        task="Filter the supplied CSV and check row counts. Do not edit project source.",
+        stage="verification",
+        metadata={"coder_task_kind": "data_processing", "tool_names": ["read_file", "bash"]},
     )
 
     result = build_default_action_router(delegate_executor=executor).execute(action, state={"sp_task_memory": stack.to_dict()}, run_id="run-1")
@@ -45,7 +53,9 @@ def test_software_coder_result_cannot_downgrade_its_acceptance_contract(tmp_path
         )
     )
     result = build_default_action_router(delegate_executor=executor).execute(
-        _action(ActionType.DELEGATE, target_agent="coder", task="Fix parser source implementation.", stage="implementation"), state=_thread_state_with_outputs(tmp_path), run_id="run-1"
+        _action(ActionType.DELEGATE, target_agent="coder", task="Fix parser source implementation.", stage="implementation"),
+        state=_thread_state_with_outputs(tmp_path),
+        run_id="run-1",
     )
     observation = TaskMemoryStack.from_dict(result.state_update["sp_task_memory"]).entries[-1]
 
@@ -63,10 +73,19 @@ def test_data_processing_recovery_does_not_turn_into_source_implementation(recov
         actor="coder",
         run_id="run-1",
         stage="verification",
-        metadata={"target_agent": "coder", "coder_task_kind": "data_processing", "completion_status": "partial", "evidence_gaps": ["One required record is still missing."]},
+        metadata={
+            "target_agent": "coder",
+            "coder_task_kind": "data_processing",
+            "completion_status": "partial",
+            "evidence_gaps": ["One required record is still missing."],
+        },
     )
-    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Checked missing record.", artifact_metadata={"completion_status": "complete"}))
-    action = _action(ActionType.DELEGATE, target_agent="coder", task="Recheck the missing record without editing source.", stage="verification", metadata=recovery_metadata)
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Checked missing record.", artifact_metadata={"completion_status": "complete"})
+    )
+    action = _action(
+        ActionType.DELEGATE, target_agent="coder", task="Recheck the missing record without editing source.", stage="verification", metadata=recovery_metadata
+    )
 
     build_default_action_router(delegate_executor=executor).execute(action, state={"sp_task_memory": stack.to_dict()}, run_id="run-1")
 
@@ -89,7 +108,13 @@ def test_data_processing_recovery_does_not_turn_into_source_implementation(recov
 def test_report_language_ignores_original_data_code_and_urls(data_block):
     from deerflow.sp.actions.handlers.delegate import _report_language_alignment_gaps
 
-    task = SPSubagentTask(action_id="language", subagent_type="reporter", task="Write the answer", description="Language check", context_refs={"original_query": "请列出符合条件的条目，保留原始字段值。"})
+    task = SPSubagentTask(
+        action_id="language",
+        subagent_type="reporter",
+        task="Write the answer",
+        description="Language check",
+        context_refs={"original_query": "请列出符合条件的条目，保留原始字段值。"},
+    )
     report = "# 答案\n\n以下数据已经按题目条件筛选核对，表格字段保留来源原文，引用用于逐行核查。\n\n" + data_block
 
     assert _report_language_alignment_gaps(report, task=task) == []
@@ -98,8 +123,19 @@ def test_report_language_ignores_original_data_code_and_urls(data_block):
 def test_report_language_still_rejects_english_narrative_with_chinese_data():
     from deerflow.sp.actions.handlers.delegate import _report_language_alignment_gaps
 
-    task = SPSubagentTask(action_id="language", subagent_type="reporter", task="Write the report", description="Language check", context_refs={"original_query": "请根据材料撰写中文分析报告。"})
-    report = "# Analysis\n\n" + "The evidence supports these conclusions and recommendations. " * 15 + "\n\n| 字段 | 值 |\n| --- | --- |\n" + "| 中文 | 中文数据 |\n" * 50
+    task = SPSubagentTask(
+        action_id="language",
+        subagent_type="reporter",
+        task="Write the report",
+        description="Language check",
+        context_refs={"original_query": "请根据材料撰写中文分析报告。"},
+    )
+    report = (
+        "# Analysis\n\n"
+        + "The evidence supports these conclusions and recommendations. " * 15
+        + "\n\n| 字段 | 值 |\n| --- | --- |\n"
+        + "| 中文 | 中文数据 |\n" * 50
+    )
 
     assert _report_language_alignment_gaps(report, task=task)
 
@@ -107,13 +143,22 @@ def test_report_language_still_rejects_english_narrative_with_chinese_data():
 def test_report_language_preserves_original_citation_labels():
     from deerflow.sp.actions.handlers.delegate import _report_language_alignment_gaps
 
-    task = SPSubagentTask(action_id="citations", subagent_type="reporter", task="整理表格", description="citation language", context_refs={"original_query": "请用中文整理表格，保留原始字段。"})
+    task = SPSubagentTask(
+        action_id="citations",
+        subagent_type="reporter",
+        task="整理表格",
+        description="citation language",
+        context_refs={"original_query": "请用中文整理表格，保留原始字段。"},
+    )
     report = "# 女性诺贝尔文学奖得主\n\n以下数据按年份整理，姓名与书名保留原文，来源用于逐行核查。\n\n## 逐行来源（按年份及作品索引）\n"
     report += "\n".join(f"- 1909 Selma Lagerlof — Gosta Berlings saga / Osynliga lankar / Antikrists mirakler：https://example.org/{i}" for i in range(30))
     assert _report_language_alignment_gaps(report, task=task) == []
     english = "# Analysis\n" + "The evidence supports these conclusions and recommendations. " * 20 + "\nhttps://example.org"
     assert _report_language_alignment_gaps(english, task=task)
-    english_in_sources = "# 分析\n以下为根据来源撰写的分析报告。\n## Sources\n- [Reference](https://example.org) " + "The evidence supports these conclusions and recommendations. " * 20
+    english_in_sources = (
+        "# 分析\n以下为根据来源撰写的分析报告。\n## Sources\n- [Reference](https://example.org) "
+        + "The evidence supports these conclusions and recommendations. " * 20
+    )
     assert _report_language_alignment_gaps(english_in_sources, task=task)
     assert _report_language_alignment_gaps("# 分析\n" + "以下为根据来源撰写的分析报告。" * 20 + "\n## Sources\n- https://", task=task) == []
 
@@ -121,7 +166,9 @@ def test_report_language_preserves_original_citation_labels():
 def test_report_reference_check_does_not_treat_url_paths_as_identifiers():
     from deerflow.sp.actions.handlers.delegate import _report_literal_provenance_gaps
 
-    introduced, _ = _report_literal_provenance_gaps("Date format YYYY-MM-DD. Source https://en.wikipedia.org/wiki/A_Killer_Paradox and https://example.org/AUDIT-1", required_tokens=["YYYY-MM-DD"])
+    introduced, _ = _report_literal_provenance_gaps(
+        "Date format YYYY-MM-DD. Source https://en.wikipedia.org/wiki/A_Killer_Paradox and https://example.org/AUDIT-1", required_tokens=["YYYY-MM-DD"]
+    )
     assert introduced == []
 
 
@@ -130,13 +177,28 @@ def test_report_reference_authorization_uses_evidence_not_previous_report(tmp_pa
     from deerflow.sp.artifacts import SPArtifactAdapter
 
     state = {**_thread_state_with_outputs(tmp_path), "messages": [HumanMessage(content="Preserve `POLICY-V3`; do not invent audit IDs.")]}
-    source = SPArtifactAdapter().write_text_artifact("Source contains `EUR_HAB`; optional field `PC_GDP`.", artifact_type=source_type, state=state, thread_id="thread-1", run_id="run-1")
+    source = SPArtifactAdapter().write_text_artifact(
+        "Source contains `EUR_HAB`; optional field `PC_GDP`.", artifact_type=source_type, state=state, thread_id="thread-1", run_id="run-1"
+    )
     state.update(source.state_update)
     executor = FakeSubagentExecutor(
-        SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Report ready", artifact_content="# Report\nUses POLICY-V3 and EUR_HAB.", artifact_type="report_revision", artifact_metadata={"completion_status": "complete"})
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Report ready",
+            artifact_content="# Report\nUses POLICY-V3 and EUR_HAB.",
+            artifact_type="report_revision",
+            artifact_metadata={"completion_status": "complete"},
+        )
     )
     result = build_default_action_router(delegate_executor=executor).execute(
-        _action(ActionType.DELEGATE, target_agent="reporter", task="Write report", stage="revision", input_refs=[source.metadata.artifact_id], metadata={"revision_reason": "Revise from supplied input"}),
+        _action(
+            ActionType.DELEGATE,
+            target_agent="reporter",
+            task="Write report",
+            stage="revision",
+            input_refs=[source.metadata.artifact_id],
+            metadata={"revision_reason": "Revise from supplied input"},
+        ),
         state=state,
         thread_id="thread-1",
         run_id="run-1",
@@ -152,7 +214,9 @@ def test_report_required_identifiers_do_not_extract_url_fragments():
 
     context = HandlerContext(state={}, stack=TaskMemoryStack(), thread_id="t", run_id="r")
     tokens = _required_report_literal_tokens(
-        _action(ActionType.DELEGATE, target_agent="reporter", task="Preserve values from https://en.wikipedia.org/wiki/A_Killer_Paradox"), context, context_refs={"original_query": "Use date format `YYYY-MM-DD`."}
+        _action(ActionType.DELEGATE, target_agent="reporter", task="Preserve values from https://en.wikipedia.org/wiki/A_Killer_Paradox"),
+        context,
+        context_refs={"original_query": "Use date format `YYYY-MM-DD`."},
     )
     assert tokens == ["YYYY-MM-DD"]
 
@@ -168,8 +232,20 @@ def test_ask_human_handler_honors_latest_user_no_questions(question_constraint):
     assert not any(e.action == "ask_human" for e in restored.entries)
 
 
+def test_non_interactive_run_rejects_human_action_even_when_prompt_allows_it():
+    state = {"sp_non_interactive": True, "messages": [HumanMessage(content="Ask me if you need more information.")]}
+    result = build_default_action_router().execute(_action(ActionType.ASK_HUMAN, task="Please supply evidence"), state=state, run_id="run-1")
+    assert result.next_step == "continue" and result.error
+    assert not result.state_update.get("sp_pending_human_interaction")
+
+
 def test_ask_human_uses_latest_visible_instruction_and_ignores_hidden_messages():
-    state = {"messages": [HumanMessage(content="不要问我任何问题。"), HumanMessage(content="You may ask me to provide missing sources.", additional_kwargs={"hide_from_ui": True})]}
+    state = {
+        "messages": [
+            HumanMessage(content="不要问我任何问题。"),
+            HumanMessage(content="You may ask me to provide missing sources.", additional_kwargs={"hide_from_ui": True}),
+        ]
+    }
     router = build_default_action_router()
     blocked = router.execute(_action(ActionType.ASK_HUMAN, action_id="blocked", task="Need source"), state=state, run_id="run-1")
     assert blocked.next_step == "continue"
@@ -858,7 +934,9 @@ def test_targeted_reflection_is_idempotent_for_an_already_inactive_target():
     assert restored.entries[-1].action == "reflect"
     assert restored.entries[-1].metadata["skipped_inactive_target_ids"] == [wrong.id]
     assert not any(event["event_type"] == "sp.handler.failed" for event in result.run_events)
-    assert any(event["event_type"] == "sp.reflect.targets_already_inactive" and event["payload"]["source_entry_ids"] == [wrong.id] for event in result.run_events)
+    assert any(
+        event["event_type"] == "sp.reflect.targets_already_inactive" and event["payload"]["source_entry_ids"] == [wrong.id] for event in result.run_events
+    )
 
 
 def test_targeted_reflection_cannot_backtrack_pinned_human_memory():
@@ -2109,7 +2187,9 @@ def test_delegate_recovery_counter_is_owned_by_harness_and_resets_only_on_comple
     state = _thread_state_with_outputs(tmp_path)
     for index, status in enumerate(("partial", "partial", "complete", "partial")):
         if index:
-            inspection = router.execute(_action(ActionType.THINK, action_id=f"inspect-{index}", task="Inspect the preceding outcome before continuing"), state=state, run_id="r")
+            inspection = router.execute(
+                _action(ActionType.THINK, action_id=f"inspect-{index}", task="Inspect the preceding outcome before continuing"), state=state, run_id="r"
+            )
             state.update(inspection.state_update)
         executor.result = SPSubagentResult(
             status=SPSubagentStatus.COMPLETED,
@@ -2118,7 +2198,18 @@ def test_delegate_recovery_counter_is_owned_by_harness_and_resets_only_on_comple
             artifact_type="research_observation",
             artifact_metadata={"completion_status": status, "evidence_gaps": ["Required data missing"] if status == "partial" else [], "recovery_attempt": 0},
         )
-        result = router.execute(_action(ActionType.DELEGATE, action_id=f"research-{index}", target_agent="researcher", task="Retrieve required data", stage="research", metadata={"recovery_attempt": 0}), state=state, run_id="r")
+        result = router.execute(
+            _action(
+                ActionType.DELEGATE,
+                action_id=f"research-{index}",
+                target_agent="researcher",
+                task="Retrieve required data",
+                stage="research",
+                metadata={"recovery_attempt": 0},
+            ),
+            state=state,
+            run_id="r",
+        )
         state.update(result.state_update)
         observation = TaskMemoryStack.from_dict(state["sp_task_memory"]).entries[-1]
         expected = (1, 2, 3, 1)[index]
@@ -2135,12 +2226,24 @@ def test_report_preserves_disclosed_limits_without_waiving_blocking_gaps(tmp_pat
             result="Table assembled",
             artifact_content="# Products\n\n| Brand | Product | ABV |\n| --- | --- | --- |\n| Bacardi | Rum | / |\n\nSource limitation: " + limitation,
             artifact_type="report_revision",
-            artifact_metadata={"completion_status": "partial" if blocking_gap else "complete", "evidence_gaps": [blocking_gap] if blocking_gap else [], "disclosed_limitations": [limitation]},
+            artifact_metadata={
+                "completion_status": "partial" if blocking_gap else "complete",
+                "evidence_gaps": [blocking_gap] if blocking_gap else [],
+                "disclosed_limitations": [limitation],
+            },
         )
     )
     router = build_default_action_router(delegate_executor=executor)
     result = router.execute(
-        _action(ActionType.DELEGATE, action_id="product-report", target_agent="reporter", task="Create the product table. Use '/' for missing information.", stage="reporting"), state=_thread_state_with_outputs(tmp_path), run_id="r"
+        _action(
+            ActionType.DELEGATE,
+            action_id="product-report",
+            target_agent="reporter",
+            task="Create the product table. Use '/' for missing information.",
+            stage="reporting",
+        ),
+        state=_thread_state_with_outputs(tmp_path),
+        run_id="r",
     )
     ref = result.state_update["sp_current_artifact_refs"]["report_revision"]
     observation = TaskMemoryStack.from_dict(result.state_update["sp_task_memory"]).entries[-1]
@@ -2150,7 +2253,16 @@ def test_report_preserves_disclosed_limits_without_waiving_blocking_gaps(tmp_pat
     assert ref["metadata"]["completion_status"] == ("partial" if blocking_gap else "complete")
     if not blocking_gap:
         state = {**_thread_state_with_outputs(tmp_path), **result.state_update}
-        finish = router.execute(_action(ActionType.FINISH, action_id="finish-products", task="Product table delivered", metadata={"final_artifact_ref": ref["artifact_id"], "required_artifact_type": "report"}), state=state, run_id="r")
+        finish = router.execute(
+            _action(
+                ActionType.FINISH,
+                action_id="finish-products",
+                task="Product table delivered",
+                metadata={"final_artifact_ref": ref["artifact_id"], "required_artifact_type": "report"},
+            ),
+            state=state,
+            run_id="r",
+        )
         assert finish.next_step == "finish"
 
 
@@ -2288,7 +2400,9 @@ def test_perception_acceptance_converts_decision_critical_gaps_to_questions(
             status=SPSubagentStatus.COMPLETED,
             result="Task brief normalized.",
             task_id="perception-missing-inputs",
-            artifact_content=("Objective: Create a board report.\n\nDecision-Critical Missing Information: reporting period, region metrics, and the source documents."),
+            artifact_content=(
+                "Objective: Create a board report.\n\nDecision-Critical Missing Information: reporting period, region metrics, and the source documents."
+            ),
             artifact_type="perception_observation",
             artifact_metadata={
                 "completion_status": "complete",
@@ -2312,7 +2426,9 @@ def test_perception_acceptance_converts_decision_critical_gaps_to_questions(
 
     ref = result.state_update["sp_current_artifact_refs"]["perception_observation"]
     assert ref["metadata"]["task_ready"] is False
-    assert ref["metadata"]["clarification_questions"] == [("Please provide or confirm the following decision-critical information before I continue: reporting period, region metrics, and the source documents.")]
+    assert ref["metadata"]["clarification_questions"] == [
+        ("Please provide or confirm the following decision-critical information before I continue: reporting period, region metrics, and the source documents.")
+    ]
 
 
 def test_perception_acceptance_infers_inputs_for_unsourced_report_request(
@@ -2620,7 +2736,10 @@ def test_self_contained_exact_enumeration_is_rerouted_from_researcher_to_coder(
         "str_replace",
         "bash",
     ]
-    assert any(event["event_type"] == "sp.delegate.target_normalized" and event["payload"]["from_target"] == "researcher" and event["payload"]["to_target"] == "coder" for event in result.run_events)
+    assert any(
+        event["event_type"] == "sp.delegate.target_normalized" and event["payload"]["from_target"] == "researcher" and event["payload"]["to_target"] == "coder"
+        for event in result.run_events
+    )
 
 
 def test_read_only_external_api_retrieval_is_rerouted_from_coder_to_researcher(
@@ -3183,7 +3302,9 @@ def test_reporter_acceptance_guard_rejects_claims_under_no_data_constraint(
             status=SPSubagentStatus.COMPLETED,
             result="Report written.",
             task_id="report-no-data-fabrication",
-            artifact_content=("# Report\n\n- The North Region outperformed the other regions.\n- The West Region had the highest churn rate.\n\n## Limitations\nActual values were not provided."),
+            artifact_content=(
+                "# Report\n\n- The North Region outperformed the other regions.\n- The West Region had the highest churn rate.\n\n## Limitations\nActual values were not provided."
+            ),
             artifact_type="report_revision",
             artifact_metadata={
                 "completion_status": "complete",
@@ -3291,11 +3412,19 @@ def test_reporter_acceptance_guard_allows_unknowns_under_no_data_constraint(
 def test_no_data_report_does_not_clear_an_unmet_deliverable_requirement(tmp_path, gaps, checks):
     report = "# Report\n\n" + "Actual data was not provided. Values are unknown; recommendations depend on future data. " * 4
     executor = FakeSubagentExecutor(
-        SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Draft only", artifact_content=report, artifact_type="report_revision", artifact_metadata={"completion_status": "partial", "evidence_gaps": gaps, "quality_checks": checks})
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Draft only",
+            artifact_content=report,
+            artifact_type="report_revision",
+            artifact_metadata={"completion_status": "partial", "evidence_gaps": gaps, "quality_checks": checks},
+        )
     )
     state = {**_thread_state_with_outputs(tmp_path), "messages": [HumanMessage(content="No actual values were provided. Create a report with an appendix.")]}
 
-    result = build_default_action_router(delegate_executor=executor).execute(_action(ActionType.DELEGATE, action_id="missing-appendix", target_agent="reporter", task="Write the report", stage="reporting"), state=state, run_id="r")
+    result = build_default_action_router(delegate_executor=executor).execute(
+        _action(ActionType.DELEGATE, action_id="missing-appendix", target_agent="reporter", task="Write the report", stage="reporting"), state=state, run_id="r"
+    )
 
     ref = result.state_update["sp_current_artifact_refs"]["report_revision"]
     assert ref["metadata"]["completion_status"] == "partial"
@@ -3473,7 +3602,9 @@ def test_reporter_requires_explicit_user_supplied_boundary_adjustment(tmp_path):
     )
     state = {
         **_thread_state_with_outputs(tmp_path),
-        "messages": [HumanMessage(content=("<uploaded_files>inventory only</uploaded_files>\n请修订刚才的报告。最小边界改进只是把流失率降低0.1个百分点到5.0%。"))],
+        "messages": [
+            HumanMessage(content=("<uploaded_files>inventory only</uploaded_files>\n请修订刚才的报告。最小边界改进只是把流失率降低0.1个百分点到5.0%。"))
+        ],
         "sp_task_memory": TaskMemoryStack(
             entries=[
                 StackMemoryEntry(

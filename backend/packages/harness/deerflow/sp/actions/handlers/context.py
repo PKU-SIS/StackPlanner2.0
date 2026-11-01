@@ -23,13 +23,23 @@ MAX_HANDLER_TASK_CONTRACT_CHARS = 12_000
 
 
 def allows_human_interaction(state: Mapping[str, Any]) -> bool:
-    """Use the latest visible human instruction for every ASK_HUMAN path."""
+    """Honor caller-owned interaction policy before visible user instructions."""
+    if state.get("sp_non_interactive") is True:
+        return False
     for message in reversed(state.get("messages") or []):
         data = message if isinstance(message, Mapping) else vars(message)
-        if (data.get("type") or data.get("role")) not in {"human", "user"} or data.get("name") == "sp_task_memory_context" or (data.get("additional_kwargs") or {}).get("hide_from_ui") is True:
+        if (
+            (data.get("type") or data.get("role")) not in {"human", "user"}
+            or data.get("name") == "sp_task_memory_context"
+            or (data.get("additional_kwargs") or {}).get("hide_from_ui") is True
+        ):
             continue
         text = message_to_text(message)
-        return not re.search(r"\b(?:do not|don't|don’t)\s+ask\s+(?:me\s+)?(?:any\s+)?(?:(?:follow-up|clarifying|further)\s+)?questions?\b|(?:不要|不用|无需)(?:再)?(?:向我|问我|问问题|询问|提问)", text, re.I)
+        return not re.search(
+            r"\b(?:do not|don't|don’t)\s+ask\s+(?:me\s+)?(?:any\s+)?(?:(?:follow-up|clarifying|further)\s+)?questions?\b|(?:不要|不用|无需)(?:再)?(?:向我|问我|问问题|询问|提问)",
+            text,
+            re.I,
+        )
     return True
 
 
@@ -130,9 +140,13 @@ def _visible_user_inputs(state: Mapping[str, Any]) -> list[str]:
 
 def _mandatory_requirements(context: HandlerContext) -> dict[str, Any] | None:
     """Preserve authoritative human constraints outside compact task memory."""
-    eligible = [entry for entry in context.stack.entries if entry.action == "feedback" and entry.status in {"active", "pinned"} and (not context.run_id or entry.run_id in {None, context.run_id} or entry.status == "pinned")][
-        -MAX_HANDLER_REQUIREMENT_ENTRIES:
-    ]
+    eligible = [
+        entry
+        for entry in context.stack.entries
+        if entry.action == "feedback"
+        and entry.status in {"active", "pinned"}
+        and (not context.run_id or entry.run_id in {None, context.run_id} or entry.status == "pinned")
+    ][-MAX_HANDLER_REQUIREMENT_ENTRIES:]
     if not eligible:
         return None
 

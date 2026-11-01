@@ -126,6 +126,7 @@ class TaskMemoryMiddleware(AgentMiddleware[ThreadState]):
         max_active_chars: int = 12000,
         inject_context: bool = True,
         manage_run_boundary: bool = True,
+        non_interactive: bool | None = None,
     ) -> None:
         super().__init__()
         self._context_builder = context_builder or PromptContextBuilder()
@@ -134,11 +135,14 @@ class TaskMemoryMiddleware(AgentMiddleware[ThreadState]):
         self._max_active_chars = max_active_chars
         self._inject_context = inject_context
         self._manage_run_boundary = manage_run_boundary
+        self._non_interactive = non_interactive
 
     @override
     def before_agent(self, state: ThreadState, runtime: Runtime) -> dict[str, Any] | None:
         stack = self._restore_stack(state, runtime)
         update: dict[str, Any] = {}
+        if self._non_interactive is not None:
+            update["sp_non_interactive"] = self._non_interactive
         # Make the conversation boundary explicit for CentralAgent. This is
         # intentionally state-based, not inferred from task keywords.
         if state.get("messages"):
@@ -149,7 +153,11 @@ class TaskMemoryMiddleware(AgentMiddleware[ThreadState]):
             # durable short-term continuity and human authority; abandoned raw
             # execution steps must not steer the new task.
             stack = TaskMemoryStack(
-                (entry for entry in stack.entries if entry.status == "pinned" or entry.priority == "critical" or (entry.status == "active" and entry.action in {"summarize", "finish"})),
+                (
+                    entry
+                    for entry in stack.entries
+                    if entry.status == "pinned" or entry.priority == "critical" or (entry.status == "active" and entry.action in {"summarize", "finish"})
+                ),
                 max_size=stack.max_size,
                 max_history_size=stack.max_history_size,
             )
@@ -307,7 +315,10 @@ class TaskMemoryMiddleware(AgentMiddleware[ThreadState]):
             latest_user = _latest_visible_user_message(state)
             if latest_user is not None:
                 source_message_id = str(getattr(latest_user, "id", None) or "")
-                already_recorded = any(entry.action == "user_request" and entry.run_id == run_id and str(entry.metadata.get("source_message_id") or "") == source_message_id for entry in stack.entries)
+                already_recorded = any(
+                    entry.action == "user_request" and entry.run_id == run_id and str(entry.metadata.get("source_message_id") or "") == source_message_id
+                    for entry in stack.entries
+                )
                 if not already_recorded:
                     stack.append(
                         StackMemoryEntry(

@@ -72,6 +72,16 @@ def test_before_agent_leaves_empty_state_untouched():
     assert result is None
 
 
+def test_interaction_policy_is_caller_owned_and_reset_for_each_run():
+    runtime = Runtime(context={"thread_id": "thread-1", "run_id": "run-1"})
+    state = {"messages": [HumanMessage(content="Analyze the evidence.")], "sp_non_interactive": False}
+    update = TaskMemoryMiddleware(non_interactive=True).before_agent(state, runtime)
+    assert update["sp_non_interactive"] is True
+    state.update(update)
+    update = TaskMemoryMiddleware(non_interactive=False).before_agent(state, Runtime(context={"thread_id": "thread-1", "run_id": "run-2"}))
+    assert update["sp_non_interactive"] is False
+
+
 def test_before_agent_marks_the_first_user_message_as_new_conversation():
     result = TaskMemoryMiddleware().before_agent(
         {"messages": [HumanMessage(content="帮我安排周末行程", id="user-1")]},

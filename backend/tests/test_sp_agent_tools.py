@@ -306,6 +306,28 @@ def test_perception_gaps_force_ask_human_before_delegation_or_search():
     assert "Which internal metrics" in instruction.content
 
 
+def test_non_interactive_perception_gap_does_not_force_human_question():
+    request = _ModelRequestStub(
+        tools=build_sp_control_tools(),
+        state={
+            "sp_non_interactive": True,
+            "sp_loop_run_id": "run-1",
+            "sp_current_artifact_refs": {
+                "perception_observation": {
+                    "artifact_id": "brief-1",
+                    "type": "perception_observation",
+                    "run_id": "run-1",
+                    "metadata": {"task_ready": False, "clarification_questions": ["Please provide more evidence."]},
+                }
+            },
+        },
+        messages=[HumanMessage(content="Analyze the supplied evidence.")],
+    )
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
+    assert "sp_ask_human" not in {tool.name for tool in filtered.tools}
+    assert all(getattr(message, "name", None) != "sp_clarification_required" for message in filtered.messages)
+
+
 def test_perception_clarification_guard_preserves_chinese_user_language():
     middleware = SPFinishAvailabilityMiddleware()
     request = _ModelRequestStub(
@@ -561,8 +583,18 @@ def test_partial_data_processing_recovery_preserves_its_acceptance_contract():
     stack = TaskMemoryStack()
     metadata = {"target_agent": "coder", "coder_task_kind": "data_processing", "requires_implementation": False}
     stack.append_delegate("Filter the source data", run_id="run-1", stage="verification", metadata=metadata)
-    stack.append_observe("One required row is missing.", actor="coder", run_id="run-1", stage="verification", metadata={**metadata, "completion_status": "partial", "evidence_gaps": ["One required row is missing."]})
-    state = {"sp_loop_run_id": "run-1", "sp_task_memory": stack.to_dict(), "messages": [HumanMessage(content="Filter the records and return the complete table.")]}
+    stack.append_observe(
+        "One required row is missing.",
+        actor="coder",
+        run_id="run-1",
+        stage="verification",
+        metadata={**metadata, "completion_status": "partial", "evidence_gaps": ["One required row is missing."]},
+    )
+    state = {
+        "sp_loop_run_id": "run-1",
+        "sp_task_memory": stack.to_dict(),
+        "messages": [HumanMessage(content="Filter the records and return the complete table.")],
+    }
     middleware = SPFinishAvailabilityMiddleware()
     request = _ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=state["messages"])
 
@@ -571,7 +603,9 @@ def test_partial_data_processing_recovery_preserves_its_acceptance_contract():
     instruction = filtered.messages[-1].content
     assert '"coder_task_kind": "data_processing"' in instruction
     assert "source implementation recovery" not in instruction
-    update = middleware.after_model({**state, "messages": [*state["messages"], AIMessage(content="The data table is complete.")]}, SimpleNamespace(context={"run_id": "run-1"}))
+    update = middleware.after_model(
+        {**state, "messages": [*state["messages"], AIMessage(content="The data table is complete.")]}, SimpleNamespace(context={"run_id": "run-1"})
+    )
     recovery = update["messages"][0].tool_calls[0]["args"]
     assert recovery["metadata"]["coder_task_kind"] == "data_processing"
     assert recovery["metadata"]["requires_implementation"] is False
@@ -1421,12 +1455,26 @@ def _partial_report_request(gap, *, question="Create a report", attempts=1):
     stack = TaskMemoryStack()
     for _ in range(attempts):
         stack.append_delegate("report", run_id="r", metadata={"target_agent": "reporter"})
-    stack.append_observe("partial report", actor="reporter", run_id="r", result_ref="report-1", metadata={"target_agent": "reporter", "completion_status": "partial", "evidence_gaps": [gap]})
+    stack.append_observe(
+        "partial report",
+        actor="reporter",
+        run_id="r",
+        result_ref="report-1",
+        metadata={"target_agent": "reporter", "completion_status": "partial", "evidence_gaps": [gap]},
+    )
     state = {
         "messages": [HumanMessage(content=question)],
         "sp_loop_run_id": "r",
         "sp_task_memory": stack.to_dict(),
-        "sp_current_artifact_refs": {"report": {"artifact_id": "report-1", "type": "report", "run_id": "r", "is_current": True, "metadata": {"completion_status": "partial", "evidence_gaps": [gap]}}},
+        "sp_current_artifact_refs": {
+            "report": {
+                "artifact_id": "report-1",
+                "type": "report",
+                "run_id": "r",
+                "is_current": True,
+                "metadata": {"completion_status": "partial", "evidence_gaps": [gap]},
+            }
+        },
     }
     return _ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=state["messages"])
 
@@ -1453,7 +1501,16 @@ def test_report_recovery_dispatches_by_missing_capability(gap, target):
         assert '"coder_task_kind": "data_processing"' in instruction
 
 
-@pytest.mark.parametrize("question", ["Create a report. Don't ask me any questions.", "生成报告，不要问我问题。", "生成报告，不要问问题。", "Create a report. Don't ask follow-up questions.", "Do not ask any clarifying questions."])
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Create a report. Don't ask me any questions.",
+        "生成报告，不要问我问题。",
+        "生成报告，不要问问题。",
+        "Create a report. Don't ask follow-up questions.",
+        "Do not ask any clarifying questions.",
+    ],
+)
 def test_noninteractive_exhausted_report_preserves_incomplete_outcome(question):
     request = _partial_report_request("Missing citation", question=question, attempts=3)
     middleware = SPFinishAvailabilityMiddleware()
@@ -1472,7 +1529,13 @@ def test_noninteractive_exhausted_report_preserves_incomplete_outcome(question):
 def test_report_recovery_returns_to_reporter_with_new_evidence_reference():
     request = _partial_report_request("HTTP 429, needs external sources")
     stack = TaskMemoryStack.from_dict(request.state["sp_task_memory"])
-    stack.append_observe("New evidence obtained", actor="researcher", run_id="r", result_ref="evidence-2", metadata={"target_agent": "researcher", "completion_status": "complete"})
+    stack.append_observe(
+        "New evidence obtained",
+        actor="researcher",
+        run_id="r",
+        result_ref="evidence-2",
+        metadata={"target_agent": "researcher", "completion_status": "complete"},
+    )
     request.state["sp_task_memory"] = stack.to_dict()
     instruction = SPFinishAvailabilityMiddleware()._filter_request(request).messages[-1].content
     assert 'target_agent="reporter"' in instruction
@@ -1500,7 +1563,14 @@ def test_partial_report_does_not_reclassify_software_recovery_as_data_processing
 def test_report_missing_software_test_preserves_patch_and_software_contract():
     request = _partial_report_request("Regression test script not executed")
     stack = TaskMemoryStack()
-    stack.append_observe("Patch implemented", actor="coder", stage="implementation", run_id="r", result_ref="patch-1", metadata={"target_agent": "coder", "coder_task_kind": "software_change", "completion_status": "complete"})
+    stack.append_observe(
+        "Patch implemented",
+        actor="coder",
+        stage="implementation",
+        run_id="r",
+        result_ref="patch-1",
+        metadata={"target_agent": "coder", "coder_task_kind": "software_change", "completion_status": "complete"},
+    )
     for entry in TaskMemoryStack.from_dict(request.state["sp_task_memory"]).entries:
         stack.entries.append(entry)
     request.state["sp_task_memory"] = stack.to_dict()
@@ -1533,8 +1603,18 @@ def test_completed_research_subtasks_do_not_exhaust_new_reading_recovery():
         stack.append_delegate(tour, run_id="r", stage="research", metadata={"target_agent": "researcher"})
         stack.append_observe(tour, actor="researcher", run_id="r", stage="research", metadata={"completion_status": "complete"})
     stack.append_delegate("Read Eras dates", run_id="r", stage="research", metadata={"target_agent": "researcher"})
-    stack.append_observe("Dates not reached", actor="researcher", run_id="r", stage="research", metadata={"target_agent": "researcher", "completion_status": "blocked", "evidence_gaps": ["Required tour dates not read"]})
-    state = {"messages": [HumanMessage(content="Generate a downloadable Markdown file with the complete concert table.")], "sp_loop_run_id": "r", "sp_task_memory": stack.to_dict()}
+    stack.append_observe(
+        "Dates not reached",
+        actor="researcher",
+        run_id="r",
+        stage="research",
+        metadata={"target_agent": "researcher", "completion_status": "blocked", "evidence_gaps": ["Required tour dates not read"]},
+    )
+    state = {
+        "messages": [HumanMessage(content="Generate a downloadable Markdown file with the complete concert table.")],
+        "sp_loop_run_id": "r",
+        "sp_task_memory": stack.to_dict(),
+    }
 
     filtered = SPFinishAvailabilityMiddleware()._filter_request(_ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=state["messages"]))
 
@@ -1561,7 +1641,13 @@ def test_changing_stage_does_not_reset_an_unresolved_recovery_chain():
     stack = TaskMemoryStack()
     for stage in ("implementation", "verification", "revision"):
         stack.append_delegate("Repair same data script", run_id="r", stage=stage, metadata={"target_agent": "coder"})
-        stack.append_observe("Rows still missing", actor="coder", run_id="r", stage=stage, metadata={"target_agent": "coder", "completion_status": "partial", "evidence_gaps": ["Required rows missing"]})
+        stack.append_observe(
+            "Rows still missing",
+            actor="coder",
+            run_id="r",
+            stage=stage,
+            metadata={"target_agent": "coder", "completion_status": "partial", "evidence_gaps": ["Required rows missing"]},
+        )
     state = {"sp_loop_run_id": "r", "sp_task_memory": stack.to_dict()}
 
     filtered = SPFinishAvailabilityMiddleware()._filter_request(_ModelRequestStub(tools=build_sp_control_tools(), state=state))

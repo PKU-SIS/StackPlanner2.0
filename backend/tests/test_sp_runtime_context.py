@@ -2,6 +2,7 @@
 
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -37,6 +38,27 @@ def _app_config():
             guaranteed_token_budget=100,
         ),
     )
+
+
+@pytest.mark.parametrize("non_interactive", [True, False])
+def test_native_factory_filters_human_tool_and_records_runtime_policy(monkeypatch, tmp_path, non_interactive):
+    from deerflow.config.app_config import AppConfig
+    from deerflow.sp.runtime import make_sp_agent
+
+    captured = {}
+
+    def factory(config, **kwargs):
+        captured.update(config=config, **kwargs)
+        return SimpleNamespace()
+
+    monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path / "native"))
+    monkeypatch.setattr("deerflow.agents.lead_agent.agent._make_lead_agent", factory)
+    app = AppConfig.from_file(str(Path(__file__).resolve().parents[2] / "configs/stackplanner_benchmarks.yaml"))
+    graph = make_sp_agent({"configurable": {"non_interactive": non_interactive}}, app_config=app)
+    names = {tool.name for tool in captured["extra_tools"]}
+    assert ("sp_ask_human" not in names) == non_interactive
+    assert graph.metadata["non_interactive"] is non_interactive
+    assert captured["config"]["configurable"]["non_interactive"] is non_interactive
 
 
 def test_runtime_context_keeps_long_term_memory_on_demand(monkeypatch):

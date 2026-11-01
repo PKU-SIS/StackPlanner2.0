@@ -417,12 +417,16 @@ class DR2SPExecutorProvider:
                 "sp_protect_test_files",
                 configurable.get("sp_protect_test_files"),
             )
-            protect_test_files = raw_protect_tests.strip().lower() in {"1", "true", "yes", "on"} if isinstance(raw_protect_tests, str) else bool(raw_protect_tests)
+            protect_test_files = (
+                raw_protect_tests.strip().lower() in {"1", "true", "yes", "on"} if isinstance(raw_protect_tests, str) else bool(raw_protect_tests)
+            )
             _infer_task_skill_selection(
                 task,
                 available_skill_names=self.available_skill_names,
             )
             available_tools = self._available_tools()
+            if state.get("sp_non_interactive") is True:
+                available_tools = [tool for tool in available_tools if getattr(tool, "name", None) not in {"sp_ask_human", "ask_clarification"}]
             # The A2A request allowlist is authoritative for this delegation.
             # It can only narrow the role defaults; it never grants Central a
             # tool and never bypasses the role/disallowed-tool checks below.
@@ -629,6 +633,7 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
     """
     resolved_app_config = app_config or get_app_config()
     runtime = _runtime_config(config)
+    non_interactive = bool(runtime.get("non_interactive", False))
     from deerflow.runtime.user_context import get_effective_user_id
 
     raw_user_id = runtime.get("user_id")
@@ -668,6 +673,7 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
             "central_tool_mode": "sp_actions_only",
             "sp_agent_name": central_context.agent_name or "default",
             "available_skills": sorted(central_context.available_skill_names) if central_context.available_skill_names is not None else None,
+            "non_interactive": non_interactive,
         }
     )
     sp_config = dict(config)
@@ -682,6 +688,7 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
             # task/todo tools must not be injected by the reused lead factory.
             "subagent_enabled": False,
             "is_plan_mode": False,
+            "non_interactive": non_interactive,
         }
     )
     sp_config["configurable"] = configurable
@@ -696,6 +703,13 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
         user_id=user_id,
     )
     prompt_sections = [CENTRAL_AGENT_ACTION_PROMPT]
+    if non_interactive:
+        prompt_sections.append(
+            "<sp-execution-mode>\nThis run is non-interactive. Human clarification is unavailable. "
+            "Do not ask the user questions or request approval. Recover tool errors autonomously within the existing budgets. "
+            "Use the supplied evidence; never invent missing facts. If required evidence remains unavailable, "
+            "end honestly as incomplete rather than claiming success.\n</sp-execution-mode>"
+        )
     prompt_sections.append(
         f"<sp-delegation-limit>\nEmit at most {max_parallel_delegates} sibling sp_delegate calls in one model turn. If more work remains, inspect the first batch and delegate the next batch afterward.\n</sp-delegation-limit>"
     )
@@ -713,9 +727,9 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
     graph = _make_lead_agent(
         sp_config,
         app_config=resolved_app_config,
-        extra_tools=build_sp_control_tools(),
+        extra_tools=[tool for tool in build_sp_control_tools() if not non_interactive or tool.name != "sp_ask_human"],
         extra_middlewares=[
-            TaskMemoryMiddleware(context_builder=PromptContextBuilder(), inject_context=True),
+            TaskMemoryMiddleware(context_builder=PromptContextBuilder(), inject_context=True, non_interactive=non_interactive),
             # SP keeps long-term memory out of CentralAgent's prompt, but it
             # must still persist stable user context after a completed run.
             # This explicit write-only middleware reuses DeerFlow's scoped,

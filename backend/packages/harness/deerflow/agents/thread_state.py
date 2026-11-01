@@ -547,6 +547,7 @@ class ThreadState(AgentState):
     summary_text: NotRequired[str | None]
     # Caller-owned public acceptance contract; handlers already propagate its allowlist.
     sp_task_contract: Annotated[NotRequired[dict[str, Any] | None], merge_sp_last_value]
+    sp_non_interactive: NotRequired[bool]
     sp_task_memory: Annotated[SPTaskMemoryState | None, merge_sp_task_memory]
     sp_consumed_tool_observation_ids: ConsumedToolObservationIdsField
     sp_current_stage: Annotated[NotRequired[str | None], merge_sp_last_value]

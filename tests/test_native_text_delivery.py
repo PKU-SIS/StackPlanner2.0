@@ -208,6 +208,9 @@ def test_real_native_graph_direct_answer_is_collected(tmp_path, monkeypatch):
 
     class Model(FakeMessagesListChatModel):
         def bind_tools(self, tools, **kwargs):
+            assert not {"sp_ask_human", "ask_clarification"} & {
+                tool.name for tool in tools
+            }
             return self
 
     monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path / "native"))
@@ -237,3 +240,8 @@ def test_real_native_graph_direct_answer_is_collected(tmp_path, monkeypatch):
     assert result["delivery"] == '["California law"]'
     assert result["delivery_source"] == "native_text"
     assert result["native_returned"] is True
+    import json
+
+    state = json.loads((tmp_path / "attempt/state.json").read_text())
+    assert state["sp_non_interactive"] is True
+    assert not state.get("sp_pending_human_interaction")

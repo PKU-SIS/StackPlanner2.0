@@ -24,6 +24,11 @@ python -B scripts/evaluate_sp_benchmarks.py \
 
 推理参数显式覆盖原生配置中的对应模型设置，并记录在 manifest；`--seed` 默认不固定，指定后传给模型。`--max-actions` 限制在原生支持范围（当前 2–20），越界直接报错而非被原生静默夹取。只接受一个明确记录的模型配置，避免其他角色/摘要使用未记录的模型。保留 `--thinking`、`--recover-qwen-tool-calls`，工具和技能仍由原生角色权限筛选。
 
+benchmark 默认 `non_interactive=true`，不提供 `sp_ask_human`／`ask_clarification`。
+原生 Perception 和恢复流程不会强制转人工；可自行恢复的工具错误继续按已有预算处理，
+仍缺证据或未通过验证时保留未完成状态，不编造答案。此配置写入 manifest，改变交互策略
+必须新建运行目录，不能混入旧轮次结果。
+
 `infer_sp_benchmarks.py --check-config --benchmark cuad` 只检查配置，不调用模型。`--check-search` 会访问检索服务，需单独明确运行。推理阶段不需要 Judge。WideSearch 的评分阶段才要求 `--judge-base-url`、`--judge-model`（也支持对应环境变量）；`--exact-proxy` 是明确标记的替代诊断协议，不能称为原始 Judge 成绩。CUAD 和 CLAUSE 都不需要 Judge；CLAUSE 的 BERTScore 使用本地固定编码器。
 
 可以在一个任务清单中混合多个 benchmark，按任务的 `benchmark` 选择插件，仍串行执行。评分用 `--benchmark NAME` 选择其中一种；不指定则评价全部。两阶段都用 `--dataset-plugin package.module:plugin_or_factory` 注册自定义插件。

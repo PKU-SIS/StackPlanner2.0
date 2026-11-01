@@ -251,6 +251,7 @@ tool graph or subagent executor during state/schema imports.
 
 **Runtime Configuration** (via `config.configurable`):
 - `thinking_enabled` - Enable model's extended thinking
+- `non_interactive` - Trusted caller execution policy. SP removes human-question tools, persists `sp_non_interactive` per run, and guards direct ASK_HUMAN plus Perception/recovery paths. Unresolved gaps stay incomplete; later interactive runs explicitly reset the flag. Benchmark callers enable this by default.
 - `model_name` - Select specific LLM model
 - `is_plan_mode` - Enable TodoList middleware
 - `subagent_enabled` - Enable task delegation tool

@@ -246,6 +246,8 @@ def test_runner_passes_only_public_input_to_native_factory(
         captured["config"]["configurable"]["sp_max_actions"] == settings.max_iterations
     )
     assert captured["config"]["context"]["user_id"] == result["user_id"]
+    assert captured["config"]["context"]["non_interactive"] is True
+    assert captured["config"]["configurable"]["non_interactive"] is True
     assert "PRIVATE_" not in str(captured["inputs"])
     assert (tmp_path / "attempt" / "trace.jsonl").is_file()
 

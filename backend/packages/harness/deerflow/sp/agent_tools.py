@@ -480,14 +480,21 @@ class SPAcknowledgementMiddleware(AgentMiddleware[AgentState]):
             (
                 message
                 for message in reversed(messages)
-                if isinstance(message, HumanMessage) and getattr(message, "name", None) != "sp_task_memory_context" and not (isinstance(message.additional_kwargs, Mapping) and message.additional_kwargs.get("hide_from_ui") is True)
+                if isinstance(message, HumanMessage)
+                and getattr(message, "name", None) != "sp_task_memory_context"
+                and not (isinstance(message.additional_kwargs, Mapping) and message.additional_kwargs.get("hide_from_ui") is True)
             ),
             None,
         )
         if latest is None:
             return None
         text = message_to_text(latest).strip()
-        if not text or not _ACKNOWLEDGEMENT_ONLY_PATTERN.search(text) or _ACKNOWLEDGEMENT_NEGATION_PATTERN.search(text) or _IMMEDIATE_DELIVERABLE_PATTERN.search(text):
+        if (
+            not text
+            or not _ACKNOWLEDGEMENT_ONLY_PATTERN.search(text)
+            or _ACKNOWLEDGEMENT_NEGATION_PATTERN.search(text)
+            or _IMMEDIATE_DELIVERABLE_PATTERN.search(text)
+        ):
             return None
         acknowledgement = "收到。" if re.search(r"[\u3400-\u9fff]", text) else "Acknowledged."
         return {
@@ -550,7 +557,9 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             (
                 message
                 for message in reversed(messages)
-                if isinstance(message, HumanMessage) and getattr(message, "name", None) != "sp_task_memory_context" and not (isinstance(message.additional_kwargs, Mapping) and message.additional_kwargs.get("hide_from_ui") is True)
+                if isinstance(message, HumanMessage)
+                and getattr(message, "name", None) != "sp_task_memory_context"
+                and not (isinstance(message.additional_kwargs, Mapping) and message.additional_kwargs.get("hide_from_ui") is True)
             ),
             None,
         )
@@ -605,7 +614,13 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             return None
         current_run_id = str(state.get("sp_loop_run_id") or "").strip()
         for key, ref in refs.items():
-            if key == "_history" or not isinstance(ref, Mapping) or str(ref.get("type") or "") not in _REPORT_ARTIFACT_TYPES or not ref.get("is_current", True) or _artifact_is_complete(ref):
+            if (
+                key == "_history"
+                or not isinstance(ref, Mapping)
+                or str(ref.get("type") or "") not in _REPORT_ARTIFACT_TYPES
+                or not ref.get("is_current", True)
+                or _artifact_is_complete(ref)
+            ):
                 continue
             if current_run_id and ref.get("run_id") and str(ref.get("run_id")) != current_run_id:
                 continue
@@ -788,7 +803,11 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             re.I,
         ):
             return "researcher"
-        if re.search(r"(?:script|calculation|data.processing).{0,64}(?:not executed|not validated|execution|assertion)|脚本.{0,32}(?:未执行|执行失败)|计算.{0,16}(?:错误|未验证)", text, re.I):
+        if re.search(
+            r"(?:script|calculation|data.processing).{0,64}(?:not executed|not validated|execution|assertion)|脚本.{0,32}(?:未执行|执行失败)|计算.{0,16}(?:错误|未验证)",
+            text,
+            re.I,
+        ):
             return "coder"
         return "reporter"
 
@@ -889,9 +908,16 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                     gaps = [latest_observation.failure_note]
                 gap_text = "; ".join(gaps[:5]) or ("the delegated acceptance criteria remain incomplete")
                 data_processing = target == "coder" and is_data_processing_coder(latest_observation.metadata)
-                verification_only = target == "coder" and str(latest_observation.stage or "") == "verification" and not _verification_found_behavior_failure(latest_observation)
+                verification_only = (
+                    target == "coder" and str(latest_observation.stage or "") == "verification" and not _verification_found_behavior_failure(latest_observation)
+                )
                 implementation_evidence = latest_observation.metadata.get("implementation_verification")
-                if target == "coder" and isinstance(implementation_evidence, Mapping) and implementation_evidence.get("passed") is True and not _verification_found_behavior_failure(latest_observation):
+                if (
+                    target == "coder"
+                    and isinstance(implementation_evidence, Mapping)
+                    and implementation_evidence.get("passed") is True
+                    and not _verification_found_behavior_failure(latest_observation)
+                ):
                     # The source mutation already exists. A retry whose only
                     # missing evidence is execution belongs to the read-only
                     # verification stage; requiring another source write here
@@ -962,6 +988,10 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
 
     def _filter_request(self, request: ModelRequest) -> ModelRequest:
         state = request.state if isinstance(request.state, Mapping) else {}
+        if not self._allows_human_recovery(state):
+            request = request.override(
+                tools=[candidate for candidate in request.tools if getattr(candidate, "name", None) not in {"sp_ask_human", "ask_clarification"}]
+            )
         previous = state.get("sp_last_handler_result")
         if isinstance(previous, Mapping) and previous.get("policy_checkpoint") == "same_target_requires_intermediate_control_action":
             # The router records a rejected duplicate as an effective THINK
@@ -996,7 +1026,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 )
             return request.override(tools=active_tools, messages=messages)
         clarification_questions = self._pending_perception_questions(state)
-        if clarification_questions:
+        if clarification_questions and self._allows_human_recovery(state):
             active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) == "sp_ask_human"]
             messages = list(request.messages)
             if not any(getattr(message, "name", None) == _SP_CLARIFICATION_REQUIRED_MESSAGE_NAME for message in messages):
@@ -1010,7 +1040,11 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 latest_visible = self._latest_visible_human_message(state)
                 if latest_visible is None:
                     latest_visible = self._latest_visible_human_message({"messages": request.messages})
-                language_instruction = " The latest user wrote in Chinese, so ask in Chinese." if latest_visible is not None and _CJK_TEXT_PATTERN.search(message_to_text(latest_visible)) else " Match the latest visible user's language."
+                language_instruction = (
+                    " The latest user wrote in Chinese, so ask in Chinese."
+                    if latest_visible is not None and _CJK_TEXT_PATTERN.search(message_to_text(latest_visible))
+                    else " Match the latest visible user's language."
+                )
                 messages.append(
                     HumanMessage(
                         name=_SP_CLARIFICATION_REQUIRED_MESSAGE_NAME,
@@ -1061,7 +1095,9 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) == "sp_delegate"]
                 messages = list(request.messages)
                 if not any(getattr(message, "name", None) == _SP_CODE_VERIFICATION_MESSAGE_NAME for message in messages):
-                    artifact_id = str(completed_deliverable.get("artifact_id") or completed_deliverable.get("virtual_path") or completed_deliverable.get("artifact_url") or "")
+                    artifact_id = str(
+                        completed_deliverable.get("artifact_id") or completed_deliverable.get("virtual_path") or completed_deliverable.get("artifact_url") or ""
+                    )
                     messages.append(
                         HumanMessage(
                             name=_SP_CODE_VERIFICATION_MESSAGE_NAME,
@@ -1084,7 +1120,9 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) == "sp_finish"]
             messages = list(request.messages)
             if not any(getattr(message, "name", None) == _SP_ARTIFACT_FINALIZATION_MESSAGE_NAME for message in messages):
-                artifact_id = str(completed_deliverable.get("artifact_id") or completed_deliverable.get("virtual_path") or completed_deliverable.get("artifact_url") or "")
+                artifact_id = str(
+                    completed_deliverable.get("artifact_id") or completed_deliverable.get("virtual_path") or completed_deliverable.get("artifact_url") or ""
+                )
                 artifact_type = str(completed_deliverable.get("type") or "generated_file")
                 metadata = completed_deliverable.get("metadata")
                 preview = metadata.get("finalization_preview") if isinstance(metadata, Mapping) and not metadata.get("finalization_preview_truncated") else None
@@ -1113,18 +1151,26 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                     )
                 )
             return request.override(tools=active_tools, messages=messages)
-        finish_rejected = isinstance(previous, Mapping) and previous.get("action_type") == ActionType.FINISH.value and previous.get("next_step") == "error_recoverable"
+        finish_rejected = (
+            isinstance(previous, Mapping) and previous.get("action_type") == ActionType.FINISH.value and previous.get("next_step") == "error_recoverable"
+        )
         has_finalizable_artifact = self._has_finalizable_artifact(state)
         requires_artifact = self._requires_artifact_delivery(state)
         incomplete_current_report = self._incomplete_current_report(state)
         latest_delegate_observation = self._latest_delegate_observation(state)
-        latest_delegate_status = str(latest_delegate_observation.metadata.get("completion_status") or "").strip().lower() if latest_delegate_observation is not None else ""
+        latest_delegate_status = (
+            str(latest_delegate_observation.metadata.get("completion_status") or "").strip().lower() if latest_delegate_observation is not None else ""
+        )
         # Incompleteness is durable run state, not a property of only the
         # immediately preceding action.  A THINK/REFLECT after a partial
         # delegation must not make the recovery gate disappear and reopen
         # arbitrary actions; only a newer complete observation clears it.
         delegate_incomplete = latest_delegate_status in {"partial", "blocked"}
-        code_recovery = bool(delegate_incomplete and latest_delegate_observation is not None and str(latest_delegate_observation.metadata.get("target_agent") or latest_delegate_observation.actor or "") == "coder")
+        code_recovery = bool(
+            delegate_incomplete
+            and latest_delegate_observation is not None
+            and str(latest_delegate_observation.metadata.get("target_agent") or latest_delegate_observation.actor or "") == "coder"
+        )
         recovery_role, recovery_attempts, recovery_limit = self._report_recovery_budget(state)
         if incomplete_current_report is not None and recovery_attempts >= recovery_limit:
             allow_human = self._allows_human_recovery(state)
@@ -1151,7 +1197,11 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                             )
                             + "that the latest partial artifact was retained, "
                             "state the unresolved quality gap. "
-                            + ("Ask for the minimum decision or evidence needed to continue. " if allow_human else "Do not present the incomplete draft as an accepted final deliverable. ")
+                            + (
+                                "Ask for the minimum decision or evidence needed to continue. "
+                                if allow_human
+                                else "Do not present the incomplete draft as an accepted final deliverable. "
+                            )
                             + "Match the latest visible user's "
                             f"language. Unresolved gap: {gap_text}\n"
                             "</sp-report-recovery-exhausted>"
@@ -1219,7 +1269,9 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                     )
                 )
             return request.override(tools=active_tools, messages=messages)
-        artifact_recovery = incomplete_current_report is not None or ((finish_rejected or delegate_incomplete) and not has_finalizable_artifact and (requires_artifact or code_recovery))
+        artifact_recovery = incomplete_current_report is not None or (
+            (finish_rejected or delegate_incomplete) and not has_finalizable_artifact and (requires_artifact or code_recovery)
+        )
         if artifact_recovery:
             active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) == "sp_delegate"]
             messages = list(request.messages)
@@ -1394,7 +1446,9 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         call_seed = f"{message_id}:{target_agent}:{attempts + 1}"
         call_id = f"sp-recovery-{hashlib.sha256(call_seed.encode('utf-8')).hexdigest()[:16]}"
         if use_chinese:
-            recovery_content = f"正在执行第 {attempts + 1} 次有界恢复验证。为避免已生成内容从界面消失，下面保留临时草稿；验证完成前请勿视为最终结果：\n\n{draft_text}"
+            recovery_content = (
+                f"正在执行第 {attempts + 1} 次有界恢复验证。为避免已生成内容从界面消失，下面保留临时草稿；验证完成前请勿视为最终结果：\n\n{draft_text}"
+            )
         else:
             recovery_content = f"Bounded recovery attempt {attempts + 1} is running. The draft below is preserved so generated content does not disappear; do not treat it as final until verification completes:\n\n{draft_text}"
         guarded = latest.model_copy(
@@ -1485,7 +1539,9 @@ class SPActionBudgetMiddleware(AgentMiddleware[AgentState]):
         content = (
             f"本轮已达到 {self._max_actions} 次中枢动作上限，任务尚未形成可安全交付的已验证结果。我已停止继续循环；请重试，或缩小任务范围后继续。"
             if use_chinese
-            else (f"This run reached its {self._max_actions}-action CentralAgent limit without a safely deliverable verified result. I stopped the loop; please retry or narrow the task scope.")
+            else (
+                f"This run reached its {self._max_actions}-action CentralAgent limit without a safely deliverable verified result. I stopped the loop; please retry or narrow the task scope."
+            )
         )
         return {
             "jump_to": "end",
@@ -1589,7 +1645,12 @@ def _has_parallel_nonterminal_sp_action(
     latest_ai = next((message for message in reversed(messages) if isinstance(message, AIMessage)), None)
     if latest_ai is None:
         return False
-    return any(str(call.get("id") or "") != current_tool_call_id and str(call.get("name") or "") in SP_CONTROL_TOOL_NAMES and str(call.get("name") or "") != "sp_finish" for call in latest_ai.tool_calls)
+    return any(
+        str(call.get("id") or "") != current_tool_call_id
+        and str(call.get("name") or "") in SP_CONTROL_TOOL_NAMES
+        and str(call.get("name") or "") != "sp_finish"
+        for call in latest_ai.tool_calls
+    )
 
 
 def _summary_model_turn_id(state: Mapping[str, Any]) -> str:
@@ -1719,7 +1780,9 @@ def _infer_missing_delegate_task(payload: dict[str, Any]) -> str | None:
             "Inspect the existing work, make the smallest required non-test source change, and "
             "run focused checks plus git diff --check after the final edit."
         ),
-        ("researcher", "research"): ("Continue the current research task using the supplied input_refs and return concise, source-backed evidence with explicit gaps."),
+        ("researcher", "research"): (
+            "Continue the current research task using the supplied input_refs and return concise, source-backed evidence with explicit gaps."
+        ),
         ("perception", "perception"): ("Inspect the supplied local inputs and return the decision-relevant facts without editing them."),
         ("outline", "planning"): ("Create the requested outline from the current task context and supplied input_refs."),
         ("reporter", "reporting"): ("Synthesize the requested final report from the supplied input_refs without inventing evidence."),
@@ -1786,7 +1849,11 @@ def _normalize_model_string_list(value: Any) -> list[str] | None:
                 value = decoded
     if isinstance(value, Mapping):
         identifier = next(
-            (value.get(key) for key in ("artifact_id", "entry_id", "id", "ref", "virtual_path") if isinstance(value.get(key), str) and str(value.get(key)).strip()),
+            (
+                value.get(key)
+                for key in ("artifact_id", "entry_id", "id", "ref", "virtual_path")
+                if isinstance(value.get(key), str) and str(value.get(key)).strip()
+            ),
             None,
         )
         values = [identifier] if identifier is not None else []
@@ -2149,7 +2216,9 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
             messages.append(
                 AIMessage(
                     id=f"sp-final:{tool_call_id}",
-                    content=(str(result.state_update.get("sp_last_run_summary") or "").strip() or (action.task if action is not None else None) or "Task completed."),
+                    content=(
+                        str(result.state_update.get("sp_last_run_summary") or "").strip() or (action.task if action is not None else None) or "Task completed."
+                    ),
                     additional_kwargs={
                         "stackplanner": {
                             "action_type": ActionType.FINISH.value,
@@ -2387,7 +2456,9 @@ class SPThinkLabelMiddleware(AgentMiddleware[AgentState]):
             thread_id=_thread_id(runtime),
             run_id=_run_id(runtime),
         )
-        observed_tool_call_ids = {str(entry.metadata.get("tool_call_id")) for entry in stack.entries if entry.action == "observe" and entry.metadata.get("tool_call_id")}
+        observed_tool_call_ids = {
+            str(entry.metadata.get("tool_call_id")) for entry in stack.entries if entry.action == "observe" and entry.metadata.get("tool_call_id")
+        }
         observed_keys = {str(entry.metadata.get("observation_key")) for entry in stack.entries if entry.metadata.get("observation_key")}
         consumed_ids = [str(tool_call_id) for tool_call_id in (state.get("sp_consumed_tool_observation_ids") or []) if tool_call_id]
         consumed_id_set = set(consumed_ids)

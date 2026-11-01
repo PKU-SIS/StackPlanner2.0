@@ -260,6 +260,12 @@ guard or action-capped response. Reuse native artifact-request/report gates:
 file deliveries still require accepted FINISH and existing integrity checks.
 Legacy manifests retain FINISH-only semantics and cannot be silently resumed
 under the new contract. Do not rewrite historical predictions in place.
+Benchmark Settings default to `non_interactive=true`. The native factory removes
+`sp_ask_human` and clarification tools, persists caller-owned `sp_non_interactive`
+for handler/Perception/recovery gates, and clears that policy on a later interactive
+run. Missing evidence must remain an explicit incomplete result; never invent it
+or force a successful FINISH. Changed interaction policy requires a new run and
+must not be mixed with earlier interactive predictions.
 See `docs/dcc_harness.md` for the v3 API and migration from the old combined entry.
 Run root benchmark tests with `--no-sp-runtime` when real SP execution is excluded;
 this guards graph construction and skips tests marked `sp_runtime`.

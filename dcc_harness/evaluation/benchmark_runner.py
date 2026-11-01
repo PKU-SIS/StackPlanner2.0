@@ -73,6 +73,7 @@ class Settings:
     thinking: str | None = None
     recover_qwen_tool_calls: bool = False
     dataset_plugins: tuple[str, ...] = ()
+    non_interactive: bool = True
 
     def __post_init__(self) -> None:
         from deerflow.sp.agent_tools import DEFAULT_SP_ACTION_LIMIT
@@ -196,6 +197,7 @@ async def _run_task(
         "run_id": run_id,
         "episode_id": f"episode-{identity}",
         "user_id": f"bench-{identity}",
+        "non_interactive": settings.non_interactive,
     }
     result = dict(
         task_id=task.id,
