@@ -105,7 +105,8 @@ def worker(directory, upstream):
     def factory(task):
         role_name = "sp-researcher" if task.subagent_type == "researcher" else "sp-outline"
         cfg, scoped, role = configure_report_subagent(task, state=state, available_tools=tools, subagent_config=get_subagent_config(role_name, app_config=app))
-        cfg = replace(cfg, max_turns=350, tool_call_limit=50, **({"finalize_after_tool_calls": 40} if role == "researcher" else {}))
+        if not task.metadata.get("report_supplement_repair"):
+            cfg = replace(cfg, max_turns=350, tool_call_limit=50, **({"finalize_after_tool_calls": 40} if role == "researcher" else {}))
         limit = REPORT_OUTLINE_OUTPUT_MAX_TOKENS
         task.metadata["max_tokens_per_step"] = limit
         dump(directory / f"task-{len(created) + 1}.json", dict(metadata=task.metadata, context_refs=task.context_refs, max_turns=cfg.max_turns, tool_call_limit=cfg.tool_call_limit, output_format=cfg.output_format))

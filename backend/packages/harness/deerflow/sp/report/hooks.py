@@ -587,7 +587,7 @@ def configure_report_subagent(
         raise ReportValidationError("reporter must be bound as a writer delegation with report_write_key")
     paths = report_store.ReportPaths(report.outputs_path, report.report_id)  # type: ignore[arg-type]
     tools_by_name = {str(getattr(tool, "name", "")): tool for tool in available_tools}
-    if role in {"outline", "researcher"} and not task.metadata.get("report_summary_repair"):
+    if role in {"outline", "researcher"} and not task.metadata.get("report_summary_repair") and not task.metadata.get("report_supplement_repair"):
         from deerflow.sp.report.read_material import build_read_material_tool
 
         read_material_tool = build_read_material_tool(paths=paths)
@@ -659,7 +659,11 @@ def configure_report_subagent(
 
     from deerflow.sp.report.prompts import REPORT_PRE_RESEARCH_PROMPT
     from deerflow.sp.report.research_delivery import REPAIR_OUTPUT_INSTRUCTION, is_markdown_research
+    from deerflow.sp.report.supplement_delivery import OUTPUT_INSTRUCTION, REPAIR_INSTRUCTION, is_supplement
 
+    supplement = is_supplement(task)
+    if supplement and task.metadata.get("report_supplement_repair"):
+        return replace(subagent_config, system_prompt=REPAIR_INSTRUCTION, tools=[], skills=[], output_format="markdown", max_turns=20), [], role
     markdown = is_markdown_research(task)
     if markdown and task.metadata.get("report_summary_repair"):
         return replace(subagent_config, system_prompt=REPAIR_OUTPUT_INSTRUCTION, tools=[], skills=[], output_format="markdown", max_turns=20), [], role
@@ -684,12 +688,15 @@ def configure_report_subagent(
             effective_tools.append(search_tool)
         selected.append(search_tool)
     selected.append(material_tool)
+    research_prompt = REPORT_RESEARCH_PROMPT
+    if supplement:
+        research_prompt = REPORT_RESEARCH_PROMPT.split("- Return one detailed, theme-organized research synthesis", 1)[0] + "\n" + OUTPUT_INSTRUCTION + "\n</report-research-mode>"
     config = replace(
         subagent_config,
-        system_prompt=REPORT_PRE_RESEARCH_PROMPT if markdown else _join_prompt(subagent_config.system_prompt, REPORT_RESEARCH_PROMPT),
+        system_prompt=REPORT_PRE_RESEARCH_PROMPT if markdown else _join_prompt(subagent_config.system_prompt, research_prompt),
         tools=[str(getattr(tool, "name", "")) for tool in selected],
         skills=["report-research"],
-        output_format="markdown" if markdown else subagent_config.output_format,
+        output_format="markdown" if markdown or supplement else subagent_config.output_format,
         max_turns=max(REPORT_SUBAGENT_MAX_TURNS, subagent_config.max_turns),
     )
     return config, [*effective_tools, material_tool], role
@@ -722,6 +729,14 @@ def handle_success(
             previous = ledger.action(action.action_id)
             if previous is None or previous.get("status") != "completed":
                 result = prepare_delivery(result, task, ledger, executor)
+        from deerflow.sp.report.supplement_delivery import is_supplement
+        from deerflow.sp.report.supplement_delivery import prepare as prepare_supplement
+
+        if is_supplement(task):
+            ledger = ledger_for_state(context.state)
+            previous = ledger.action(action.action_id)
+            if previous is None or previous.get("status") != "completed":
+                result = prepare_supplement(result, task, ledger, executor)
         return _accept_research(action, context, result, task, artifact_adapter=artifact_adapter, delegate_entry=delegate_entry)
     if role == "writer":
         return _accept_writer(action, context, result, task, artifact_adapter=artifact_adapter, delegate_entry=delegate_entry)
@@ -1969,6 +1984,25 @@ def _accept_research_locked(
                 reason="invalid_pre_research_summary",
                 technical=True,
             )
+    from deerflow.sp.report.supplement_delivery import content_issues, is_supplement
+
+    if is_supplement(task):
+        problems = list(result.artifact_metadata.get("supplement_delivery_issues") or [])
+        problems.extend(content_issues(summary or "", {str(item.get("source_id")) for item in ledger.materials()}))
+        if problems:
+            report_store.write_text_atomic(ledger.paths.summary_file(action.action_id).parent / "diagnostics/rejected.md", summary or "")
+            ledger.fail_research_action(action.action_id, "; ".join(dict.fromkeys(problems)))
+            ledger.save()
+            return _rejection(
+                action,
+                context,
+                "Supplementary summary delivery failed after at most one tool-free correction: "
+                + "; ".join(dict.fromkeys(problems))
+                + "; this assigned attempt is closed. Do not repeat research automatically; retained materials remain available to Outline.",
+                reason="invalid_supplement_summary",
+                technical=True,
+            )
+
     if not summary or not summary.strip():
         summary = result.result if isinstance(result.result, str) and result.result.strip() else None
     if not summary:
@@ -1992,7 +2026,7 @@ def _accept_research_locked(
             stop_reason=result.stop_reason,
         )
         summary_path = report_store.write_research_summary(ledger.paths, action.action_id, summary)
-        if is_markdown_research(task) and summary_path.read_text(encoding="utf-8") != summary.rstrip() + "\n":
+        if (is_markdown_research(task) or is_supplement(task)) and summary_path.read_text(encoding="utf-8") != summary.rstrip() + "\n":
             raise report_store.ReportStoreError("Saved pre-research summary differs from the complete delivered body")
         artifact = artifact_adapter.write_text_artifact(
             summary,

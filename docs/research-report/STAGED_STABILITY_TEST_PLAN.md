@@ -77,3 +77,5 @@ PYTHONPATH=.:packages/harness .venv/bin/python scripts/evaluate_report_supplemen
 补研采用原协议，未将预检索专属 Markdown 交付补丁扩散到其他阶段。只增加独立测试入口和指标，不修改生产提示词、验收或预算。没有 open gap 的样本明确跳过补研，不人为制造任务。首轮结果保留在 `logs/supplement-smoke3-v1`。
 
 Smoke 首轮已完成：1/3 全通过；25 的引用标记不规范，97 的旧 JSON 交付解析失败并保存成截断原文，两条均停止下游。三条都无预算中断或工具错误。[结果与修复讨论范围](SUPPLEMENT_SMOKE_20261101.md)。暂不扩大到 20 条。
+
+补研独立 Markdown 修改后，三条 smoke 均正常保存带规范引用的综述，并完成 Outline 收尾；采用既有重试分别为 2、2、3 次 Outline 委派。没有运行 Writer／终稿，未扩大至 20 条。[本次修改与结果](SUPPLEMENT_MARKDOWN_DELIVERY_20261101.md)。

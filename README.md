@@ -1001,3 +1001,5 @@ See [the initial Outline stage results](docs/research-report/OUTLINE_STAGE_STABI
 Report Outline planning can correct one malformed `report_submit_outline` call inside the same execution. Original arguments remain in the audit history; only provider-bound copies are converted to non-executable text. Correction exposes only the submission tool, continues normal schema validation feedback, and retains the existing run budgets. A second syntax failure falls back to normal delegation recovery; other agents and read-only review do not enable this policy.
 
 Report-stage diagnostics can also evaluate batched supplementary research and Outline consolidation from accepted initial trees using `backend/scripts/evaluate_report_supplement.py`. Results retain cited summaries, revised outlines, gap outcomes and write-task coverage without running Writer or final delivery.
+
+Report supplementary research now delivers a full Markdown synthesis with canonical source citations and a compact gap execution table. Its delivery checks and one optional formatting correction are separate from pre-research; correction does not start another search round.

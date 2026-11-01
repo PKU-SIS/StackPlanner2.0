@@ -134,8 +134,10 @@ def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
     """Render a structured SP task for a DR2 subagent prompt."""
     task.validate_protocol()
     from deerflow.sp.report.research_delivery import MARKDOWN_OUTPUT_INSTRUCTION, is_markdown_research
+    from deerflow.sp.report.supplement_delivery import OUTPUT_INSTRUCTION, is_supplement
 
-    markdown = is_markdown_research(task)
+    supplement = is_supplement(task)
+    markdown = is_markdown_research(task) or supplement
     payload = {
         "protocol": task.protocol_payload(),
         "action_id": task.action_id,
@@ -162,7 +164,7 @@ def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
                 "recovery when the contract is not satisfied."
             ),
             *(
-                [MARKDOWN_OUTPUT_INSTRUCTION]
+                [OUTPUT_INSTRUCTION if supplement else MARKDOWN_OUTPUT_INSTRUCTION]
                 if markdown
                 else [
                     "Return the task_result envelope fields implied by protocol.message_type. Do not expose private chain-of-thought; report only observable actions, evidence, tests, files, and blockers.",
@@ -666,7 +668,11 @@ def _last_model_finish_reason(ai_messages: Any) -> str | None:
 def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = None) -> SPSubagentResult:
     """Normalize DR2 SubagentResult-like objects into SPSubagentResult."""
     from deerflow.sp.report.research_delivery import is_markdown_research, normalize_markdown_research
+    from deerflow.sp.report.supplement_delivery import is_supplement
+    from deerflow.sp.report.supplement_delivery import normalize as normalize_supplement
 
+    if is_supplement(task):
+        return normalize_supplement(result, task)
     if is_markdown_research(task):
         return normalize_markdown_research(result, task)
     raw_status = getattr(result, "status", None)

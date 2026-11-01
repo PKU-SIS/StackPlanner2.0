@@ -190,7 +190,7 @@ def _research(
     result = SPSubagentResult(
         status=SPSubagentStatus.COMPLETED,
         result=summary,
-        artifact_content=f"# Summary\n\n{summary}",
+        artifact_content=f"# Summary\n\n{summary}" + (f" [{material_payload['source_id']}]" if material_id else ""),
         artifact_type="research_observation",
         artifact_metadata=metadata,
     )

@@ -121,8 +121,9 @@ does not imply a source id S120. Do not invent identifiers or list fabricated
 ranges of source ids. Use `read_file` for files; `grep` searches DIRECTORY paths
 and requires `description`. Follow the exposed tool schemas.
 
-For **supplementary research**, return the normal subagent envelope. Put one detailed, theme-organized research
-synthesis in `artifact_content`; the host saves it as `summary.md`. Write
+For **supplementary research**, return the complete theme-organized research synthesis
+as Markdown directly, without
+a JSON envelope or `artifact_content` wrapper. The host saves it as `summary.md`. Write
 connected explanatory paragraphs with canonical [S<n>] citations next to the
 supported information. Explain what each relevant saved document contributes:
 facts, mechanisms, examples, contrasting views, and relationships. Retain relevant
@@ -135,8 +136,12 @@ for example `... [S2] (m2, lines 12-28)`. Use only host-assigned source identiti
 unfetched candidates must be labelled separately as unread leads, not cited as
 verified evidence. State conflicts, acquisition failures and uncovered themes.
 For a supplementary assignment, show how the information supports the assigned
-nodes/gaps. The short `summary` field remains a compact note for Central, not
-the complete evidence handoff. Do not decide whether a gap is resolved.
+nodes/gaps. End supplementary output with `## Gap execution` and a Markdown
+table with exactly `gap_id | execution | material_ids` columns, one row per
+assigned gap. Use execution `searched`, `not_attempted`, or `technical_error`,
+and comma-separated saved material IDs, or `-` for none. The host reads this
+small table and applies the existing execution checks; never invent an attempt.
+Do not decide whether a gap is resolved.
 
 For supplementary research only, in `artifact_metadata.gap_attempts`, return one item for every assigned gap:
 

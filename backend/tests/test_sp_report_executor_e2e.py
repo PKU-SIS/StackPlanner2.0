@@ -629,11 +629,7 @@ def test_real_executor_review_revise_new_write_and_reassemble(tmp_path, monkeypa
         ),
         real_executor,
     )
-    review_handler = DelegateHandler(
-        executor=DR2SubagentExecutorAdapter(
-            _executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool, write_file_tool], "sp-outline", real_executor)
-        )
-    )
+    review_handler = DelegateHandler(executor=DR2SubagentExecutorAdapter(_executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool, write_file_tool], "sp-outline", real_executor)))
     review_result = review_handler.handle(review_action, ctx)
     assert review_result.next_step == "continue", review_result.error
     ctx.state.update(review_result.state_update)
@@ -663,11 +659,7 @@ def test_real_executor_review_revise_new_write_and_reassemble(tmp_path, monkeypa
     )
     _install_fake_model(monkeypatch, revise_model, real_executor)
     revise_action = _host_fixed_action(state)
-    revise_handler = DelegateHandler(
-        executor=DR2SubagentExecutorAdapter(
-            _executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool, write_file_tool], "sp-outline", real_executor)
-        )
-    )
+    revise_handler = DelegateHandler(executor=DR2SubagentExecutorAdapter(_executor_factory(state, app_config, [read_file_tool, ls_tool, grep_tool, glob_tool, write_file_tool], "sp-outline", real_executor)))
     revise_result = revise_handler.handle(revise_action, ctx)
     assert revise_result.next_step == "continue", revise_result.error
     ctx.state.update(revise_result.state_update)
@@ -771,7 +763,8 @@ def test_real_executor_review_revise_new_write_and_reassemble(tmp_path, monkeypa
     assert (outputs / "report" / "r1" / "drafts" / "n2" / "d2.md").is_file()
 
 
-def test_real_executor_researcher_saves_tool_return_and_charges_one_round(tmp_path, monkeypatch, real_executor):
+@pytest.mark.parametrize("delivery_format", ["legacy", "markdown"])
+def test_real_executor_researcher_saves_tool_return_and_charges_one_round(tmp_path, monkeypatch, real_executor, delivery_format):
     app_config = _app_config()
     state = _state(tmp_path)
     _install_fake_model(monkeypatch, _outline_model(), real_executor)
@@ -818,6 +811,8 @@ def test_real_executor_researcher_saves_tool_return_and_charges_one_round(tmp_pa
                         },
                         ensure_ascii=False,
                     )
+                    if delivery_format == "legacy"
+                    else "# Research\n\nFY2024 parent solvency ratio 123.4% [S1].\n\n## Gap execution\n| gap_id | execution | material_ids |\n|---|---|---|\n| g1 | searched | m1 |"
                 ),
             ]
         ),
@@ -843,6 +838,8 @@ def test_real_executor_researcher_saves_tool_return_and_charges_one_round(tmp_pa
     saved = Path(material["path"]).read_text(encoding="utf-8")
     assert saved == "Official annual report note: FY2024 parent solvency ratio 123.4%."
     assert ledger.payload["summaries"][0]["action_id"] == "a-research-e2e"
+    summary = Path(ledger.payload["summaries"][0]["path"]).read_text()
+    assert summary.startswith("# Research") and "[S1]" in summary
 
 
 def test_real_executor_outline_reads_saved_material_with_read_file(tmp_path, monkeypatch, real_executor):
@@ -984,10 +981,12 @@ def test_outline_can_deliver_after_collection_tools_are_closed(tmp_path, monkeyp
         if repair_case == "invalid":
             responses.append(broken.model_copy(update={"id": "second-invalid"}))
         else:
-            responses.extend([
-                AIMessage(content="", tool_calls=[{"name": "report_submit_outline", "args": {"tree": tree}, "id": "submit-tree", "type": "tool_call"}]),
-                AIMessage(content=json.dumps({"summary": "Tree delivered", "artifact_content": None, "artifact_type": "outline", "artifact_metadata": {"completion_status": "complete", "delivery_mode": "file", "tree_path": path}})),
-            ])
+            responses.extend(
+                [
+                    AIMessage(content="", tool_calls=[{"name": "report_submit_outline", "args": {"tree": tree}, "id": "submit-tree", "type": "tool_call"}]),
+                    AIMessage(content=json.dumps({"summary": "Tree delivered", "artifact_content": None, "artifact_type": "outline", "artifact_metadata": {"completion_status": "complete", "delivery_mode": "file", "tree_path": path}})),
+                ]
+            )
         model = FakeToolCallingModel(responses=responses)
         _install_fake_model(monkeypatch, model, real_executor)
         executor = real_executor.SubagentExecutor(config=replace(cfg, finalize_after_tool_calls=1), tools=tools, app_config=app_config, parent_model="fake-model", thread_data=state["thread_data"], thread_id="t-e2e", run_id="run-e2e")
@@ -1383,4 +1382,3 @@ def test_real_executor_writer_writes_host_path_and_disables_thinking(tmp_path, m
     assert Path(draft["path"]).read_text(encoding="utf-8") == "Node two body from the Writer.\n"
     assert ledger.payload["write_requests"][0]["status"] == "completed"
     assert ledger.payload["write_requests"][0]["attempts"][0]["action_id"] == "a-writer-e2e"
-
