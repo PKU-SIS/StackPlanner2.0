@@ -297,6 +297,30 @@ def _restore_reasoning_field(payload_msg: dict[str, Any], orig_msg: AIMessage) -
         payload_msg["reasoning"] = reasoning
 
 
+def _merge_vllm_system_messages(payload: dict[str, Any]) -> None:
+    """Keep native system instructions in the single leading slot Qwen accepts.
+
+    Runtime reminders may introduce extra system messages. Merge only system
+    content, preserving its order and all non-system messages/tool pairings.
+    This operates on the serialized payload, never on the stored conversation.
+    """
+    messages = payload.get("messages", [])
+    systems = [message for message in messages if message.get("role") == "system"]
+    if not systems or (len(systems) == 1 and messages[0] is systems[0]):
+        return
+    contents = [message.get("content") or "" for message in systems]
+    if all(isinstance(content, str) for content in contents):
+        content = "\n\n".join(contents)
+    else:
+        content = []
+        for part in contents:
+            content.extend(part if isinstance(part, list) else [{"type": "text", "text": part}])
+    payload["messages"] = [
+        {**systems[0], "content": content},
+        *[message for message in messages if message.get("role") != "system"],
+    ]
+
+
 class VllmChatModel(ChatOpenAI):
     """ChatOpenAI variant that preserves vLLM reasoning fields across turns."""
 
@@ -329,6 +353,7 @@ class VllmChatModel(ChatOpenAI):
             for payload_msg, ai_msg in zip(assistant_payloads, ai_messages):
                 _restore_reasoning_field(payload_msg, ai_msg)
 
+        _merge_vllm_system_messages(payload)
         return payload
 
     def _create_chat_result(self, response: dict | openai.BaseModel, generation_info: dict | None = None) -> ChatResult:

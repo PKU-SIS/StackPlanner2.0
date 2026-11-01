@@ -940,3 +940,9 @@ See `docs/` directory for detailed documentation:
 - [plan_mode_usage.md](docs/plan_mode_usage.md) - Plan mode with TodoList
 
 SP Researcher uses 256 graph turns and a 40-call total tool budget (warning at 24). Other subagents retain the existing 20-call cap; repeated-tool and token guards remain active.
+
+Reporter defaults to Markdown for prose but honors explicit machine-readable file formats such as JSON. Keep control envelopes separate from delivered file bytes and preserve current-action filename ownership. This is also required by the optional CLAUSE RAG transport.
+
+Qwen compatibility merges serialized system instructions into one leading system message without changing stored history or tool pairings. Report literal-token checks do not treat encoding names as mandatory answer content unless explicitly requested as literals. Both fixes preserve the existing native acceptance guards; tests cover Qwen messages and report encoding requirements.
+
+`read_file` accepts either inclusive line bound independently (missing start means 1, missing end means EOF), rejects invalid ranges, and explicitly reports total lines when a range starts past EOF. Character truncation still requires narrower ranges; never interpret a truncated requested range as fully read. Regression coverage: tests/test_read_file_ranges.py.

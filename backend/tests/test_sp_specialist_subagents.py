@@ -103,3 +103,11 @@ def test_sp_coder_requires_file_tools_for_source_and_separate_execution():
     assert "Printing an example output is not verification" in coder
     assert "Do not use factorial full permutations" in coder
     assert "Do not search the web for a self-contained" in coder
+
+
+def test_reporter_keeps_machine_readable_files_separate_from_control_envelope():
+    prompt = SP_SPECIALIST_CONFIGS["reporter"].system_prompt
+    assert "machine-readable file such as JSON" in prompt
+    assert "Use the task's requested extension" in prompt
+    assert "Keep the control" in prompt
+    assert "current action_id" in prompt

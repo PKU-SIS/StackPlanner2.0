@@ -2267,8 +2267,8 @@ def read_file_tool(
     Args:
         description: Explain why you are reading this file in short words. ALWAYS PROVIDE THIS PARAMETER FIRST.
         path: The **absolute** path to the file to read.
-        start_line: Optional starting line number (1-indexed, inclusive). Use with end_line to read a specific range.
-        end_line: Optional ending line number (1-indexed, inclusive). Use with start_line to read a specific range.
+        start_line: Optional starting line number (1-indexed, inclusive). Defaults to the first line; without end_line, reads through EOF.
+        end_line: Optional ending line number (1-indexed, inclusive). Defaults to EOF; without start_line, reads from the first line.
     """
     try:
         # Block access to disabled skill files
@@ -2279,8 +2279,14 @@ def read_file_tool(
         content = read_current_file_content(runtime, path)
         if not content:
             return "(empty)"
-        if start_line is not None and end_line is not None:
-            content = "\n".join(content.splitlines()[start_line - 1 : end_line])
+        if start_line is not None or end_line is not None:
+            start = 1 if start_line is None else start_line
+            if start < 1 or (end_line is not None and (end_line < 1 or end_line < start)):
+                return "Error: invalid line range; use positive 1-indexed bounds with end_line >= start_line."
+            lines = content.splitlines()
+            if start > len(lines):
+                return f"(empty: requested range starts after end of file; total_lines={len(lines)})"
+            content = "\n".join(lines[start - 1 : end_line])
         try:
             from deerflow.config.app_config import get_app_config
 

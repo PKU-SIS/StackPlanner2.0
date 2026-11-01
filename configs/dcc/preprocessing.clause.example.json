@@ -1,0 +1,21 @@
+{
+  "loader": "dcc_harness.preprocessing.clause:load",
+  "loader_options": {
+    "source": "../../.benchmark-data/clause/private/test.jsonl"
+  },
+  "document_mode": "ragflow",
+  "ragflow": {
+    "base_url": "https://YOUR-RAGFLOW-HOST",
+    "dataset_prefix": "clause",
+    "knowledge_base_scope": "sample",
+    "check_embedding_models": true,
+    "dataset_options": {
+      "chunk_method": "naive",
+      "parser_config": {
+        "chunk_token_num": 512
+      }
+    },
+    "poll_interval": 3,
+    "parse_timeout": 1800
+  }
+}

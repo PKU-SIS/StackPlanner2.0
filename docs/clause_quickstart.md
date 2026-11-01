@@ -157,3 +157,11 @@ BERTScore F1。结果写入评分目录的 `scores.jsonl`（逐文档）和 `rep
 
 进一步阅读：[详细协议](clause_benchmark.md)、[通用插件接口](dcc_harness.md)、
 [数据来源说明](../configs/clause/NOTICE.md)。
+
+
+## 可选：直接安装共享数据包与 RAG 映射
+
+若维护者已发布 CLAUSE EVAL3 Release，可按 [共享数据和 RAG 模式说明](clause_ragflow.md#完整共享-release) 使用 `scripts/dcc_clause_release.py download` 安装经 SHA-256 校验的完整数据包，代替从上游重新构建。数据包同时提供文件读取和 RAG 两模式的 L1/L2 public/private 清单；文件模式与离线评分不需要 RAGFlow 凭据，RAG 模式需要管理员授权的服务凭据。Git 仓库只保存脚本、协议和 Release 描述文件，不保存正文、标注或实验成绩。
+
+
+Qwen/vLLM 用户可选用 `--config configs/clause/stackplanner-qwen.example.yaml`。该示例采用 Qwen 的 `chat_template_kwargs.enable_thinking=false`，并将文件读取上限设为 262144 字符；模型地址、名称和 Key 仍通过原 CLI 参数/环境变量提供。运行前核对自己的模型上下文容量。调用 `--thinking disabled` 会启用另一个服务协议的参数形状，不应代替这个 Qwen 配置。建议将 `--max-tokens 16384 --max-actions 20 --recover-qwen-tool-calls` 与实际使用的温度、top-p、seed 一起明确记录。

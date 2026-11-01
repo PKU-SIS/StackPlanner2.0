@@ -321,6 +321,25 @@ def _uploaded_file_body_bundle(
     }
 
 
+def _filter_report_literal_tokens(tokens: list[str], request_text: str) -> list[str]:
+    """Encoding names constrain file serialization, not the artifact's prose.
+
+    Preserve an encoding name as content only when it is explicitly named as a
+    literal/token/string/label. Ordinary audit IDs retain the existing policy.
+    """
+    kept = []
+    for token in dict.fromkeys(tokens):
+        is_encoding = re.fullmatch(r"(?:UTF[-_](?:8|16|32)(?:[-_]?(?:LE|BE))?|US[-_]ASCII|ISO[-_]8859[-_]\d+)", token, re.IGNORECASE)
+        explicitly_literal = re.search(
+            r"(?:literal\s+(?:token|string|text)|token|string|label|identifier|字面量|字符串|标记|标签)\s*[:：]?\s*[`\"']?" + re.escape(token) + r"\b",
+            request_text,
+            re.IGNORECASE,
+        )
+        if not is_encoding or explicitly_literal:
+            kept.append(token)
+    return kept[:REPORTER_REQUIRED_LITERAL_MAX_ITEMS]
+
+
 def _required_report_literal_tokens(
     action: SPAction,
     context: HandlerContext,
@@ -351,7 +370,7 @@ def _required_report_literal_tokens(
         )
     )
     if not _REPORT_LITERAL_REQUIREMENT_PATTERN.search(request_text) and not bare_preservation_request:
-        return tokens[:REPORTER_REQUIRED_LITERAL_MAX_ITEMS]
+        return _filter_report_literal_tokens(tokens, request_text)
     # Users naturally write preservation lists without Markdown backticks.
     # Identifier-shaped values remain narrow enough to extract safely: at
     # least one hyphen/underscore is required, so ordinary uppercase prose
@@ -372,7 +391,7 @@ def _required_report_literal_tokens(
         content = _read_uploaded_text(context.state, ref)
         if content:
             tokens.extend(_REPORT_LITERAL_TOKEN_PATTERN.findall(content))
-    return list(dict.fromkeys(tokens))[:REPORTER_REQUIRED_LITERAL_MAX_ITEMS]
+    return _filter_report_literal_tokens(tokens, request_text)
 
 
 def _clean_user_instruction(value: Any) -> str:

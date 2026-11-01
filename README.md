@@ -1048,8 +1048,17 @@ explains input isolation, alignment, aggregation, and diagnostic modes.
 python -B scripts/dcc_prepare_clause.py --download
 ```
 
-Only reconstruction code and frozen manifests/prompts/checksums are versioned;
-contracts, annotations, generated task lists, NLTK and model weights stay local.
+Only reconstruction code and frozen manifests/prompts/checksums are stored in Git.
+The optional shared Release distributes verified contracts, annotations and task
+lists separately; NLTK resources, model weights, credentials and experiment results
+stay local.
 The protocol is `intext-yes-whole-document-v1 / sp2-files`, not the paper's official
 split or a claim of reproduced model scores. Development checks cover source reconstruction, input isolation and offline scoring;
 use the `--no-sp-runtime` test option when SP execution must be excluded.
+
+CLAUSE EVAL3 also supports an opt-in `clause_ragflow` plugin using the DCC
+per-sample RAGFlow pipeline. Both file and RAG modes support L1/L2 inference and
+independent seven-metric scoring. Collaborators can install the same-repository
+CLAUSE Release to reuse the complete dataset and existing knowledge-base mapping
+without rebuilding the vector index. RAG access requires separately authorized
+service credentials. See [CLAUSE shared data, RAGFlow setup and evaluation](docs/clause_ragflow.md).

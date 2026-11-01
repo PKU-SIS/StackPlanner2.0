@@ -316,3 +316,18 @@ Historical upstream source containing credentials must remain excluded from Git;
 reconstruction restores it only into ignored local provenance, never executes it.
 See `tests/test_clause_source_rebuild.py` for tamper checks and optional fresh-source
 parity tests. No reconstruction or adapter test may invoke an SP/model/Judge run.
+
+CLAUSE's optional RAG transport is `preprocessing.clause:make_plugin`
+(`clause_ragflow`). Its loader consumes validated existing CLAUSE manifests;
+its dedicated renderer preserves original IDs, prompts, gold and metrics while
+binding the new public retrieval scope into input hashes. Original document
+references stay in host manifests for validation; stage ONLY dcc-context.json in
+RAG runs. Never expose private labels or original sample IDs through prompts or
+retrieval uploads. Keep `clause` file mode unchanged. Scoring must work offline
+without RAG credentials/index state and report sp2-ragflow provenance. Use
+`tests/test_clause_ragflow.py` with fake transports; no real SP/service tests by
+default. See docs/clause_ragflow.md.
+
+Full CLAUSE sharing uses preprocessing.clause_release and scripts/dcc_clause_release.py. Preserve pinned split IDs/counts; L1/L2 share the same per-sample index. Release manifests bind files, labels and scopes; validate rendered labels against canonical private annotations. Package only whitelisted assets, set index read_only_view, exclude credentials/logs/models, and verify before atomic installation. Service audits query every sample but are not SP quality evaluations. Tests use fake services.
+
+`evaluation.shards.merge_runs` and `scripts/collect_sp_benchmarks.py` collect disjoint native inference runs only when execution fingerprints agree. Verify every input/delivery hash and full inventory; never use this path to combine different code/model/settings or silently select successful retries. Preserve original shard traces and explicit partial coverage. Tests are in `tests/test_inference_shards.py`.

@@ -256,20 +256,25 @@ REPORTER_CONFIG = SubagentConfig(
 - Never expose a host filesystem path as a Markdown link (`/data/...`,
   `/mnt/...`, `file://...`, and similar). Cite uploaded evidence by plain
   filename unless a real reader-accessible URL was supplied.
-- Match the user's language, audience, tone, and requested style. Output clean
-  Markdown: no preamble, no outer Markdown fence, no JSON contract inside the
-  report, and no commentary about being unable to write files.
+- Match the user's language, audience, tone, and requested format. For prose
+  reports, output clean Markdown without a preamble or outer Markdown fence.
+  When the task requires a machine-readable file such as JSON, honor that
+  format instead: the file must contain only the requested data, without
+  Markdown, commentary, or the internal SP control envelope. Keep the control
+  envelope and completion summary separate from every delivered file.
 - A Chinese user request requires a Chinese report unless the user explicitly
   asks for another language; do not silently switch the report to English.
 - Apply that language requirement to your explanations and headings. Preserve
   original-language source fields, identifiers, code, and URLs; do not translate
   literal data merely to make the report appear more Chinese.
-- For a long report, prefer `write_file` and create a unique
-  `/mnt/user-data/outputs/report-<action_id>.md`; never overwrite a prior report.
-  Then set artifact_content to null and list that path in created_paths. For a
-  short report, put the complete report in artifact_content. Copy the current
-  action_id exactly when practical; a filename containing its unique opaque
-  suffix is also accepted.
+- For a required file or a long report, use `write_file` and create a unique
+  path under `/mnt/user-data/outputs/` whose filename contains the current
+  action_id. Use the task's requested extension, for example `.json` for JSON;
+  ordinary Markdown reports use `report-<action_id>.md`. Never overwrite a
+  prior report. Then set artifact_content to null and list the actual path in
+  created_paths. For a short report without a file requirement, put the complete
+  report in artifact_content. Copy the current action_id exactly when practical;
+  a filename containing its unique opaque suffix is also accepted.
 - Never list a created_path unless you successfully called `write_file` for
   that exact path in this delegation. If `write_file` is unavailable or fails,
   return the complete report in artifact_content and leave created_paths empty.
