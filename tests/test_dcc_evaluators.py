@@ -318,6 +318,23 @@ def test_model_transport_error_is_not_a_dataset_prediction_error(monkeypatch, tm
     assert "PRIVATE_API_KEY_SENTINEL" not in str(error.value) + json.dumps(context.provenance)
 
 
+@pytest.mark.parametrize("thinking", ["enabled", "disabled"])
+def test_evaluator_thinking_is_explicit_in_request_and_provenance(fake_models, thinking):
+    requests, responses, config = fake_models
+    responses.append("A")
+    context = EvaluationContext()
+    model = Model({**config, "thinking": thinking}, context, "judge", default_model="official")
+    assert model("chat", messages=[])[0] == "A"
+    assert requests[0]["payload"]["extra_body"] == {"thinking": {"type": thinking}}
+    assert context.provenance["models"]["judge"]["thinking"] == thinking
+
+
+@pytest.mark.parametrize("config", [{"thinking": "unknown"}, {"thinking": "disabled", "api": "responses"}])
+def test_evaluator_rejects_unsupported_thinking_configuration(config):
+    with pytest.raises(ValueError, match="thinking"):
+        Model(config, EvaluationContext(), "judge", default_model="official")
+
+
 def test_resource_fingerprint_ignores_generated_pycache():
     from dcc_harness.preprocessing.native import make_plugin
 

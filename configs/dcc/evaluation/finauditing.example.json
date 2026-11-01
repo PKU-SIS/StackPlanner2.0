@@ -7,6 +7,7 @@
           "model": "deepseek-v4.1-flash",
           "base_url": "http://123.57.228.132:8286/api",
           "api": "chat",
+          "thinking": "disabled",
           "api_key_env": "DCC_JUDGE_API_KEY",
           "api_key_file_env": "DCC_JUDGE_API_KEY_FILE",
           "timeout": 120,

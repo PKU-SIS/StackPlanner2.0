@@ -61,6 +61,10 @@ python scripts/evaluate_sp_benchmarks.py \
 
 `--options` 中的 `bundle` 指向对应数据包；使用其他安装位置时修改该路径。
 `datasets.<名称>.judge`／`rule_extractor` 控制各自的模型、接口和凭据来源。
+兼容的 Chat 服务可设置 `thinking: "enabled"|"disabled"`；示例对团队 DeepSeek 显式设为
+`disabled`，避免内部推理耗尽输出预算而没有返回判分标签／规则 JSON。该选项会记录到 provenance，
+不发送给 Responses API。SP 推理阶段通过已有的 `--thinking disabled` 单独配置；两个阶段
+都保留原生 SP 流程、官方提示词和计分公式。
 NBA 仅算 Accuracy 时，删除 `rule_extractor` 配置；无需模型调用，规则指标标为 `not_requested`。
 FinMR 必须配置裁判，不会自动替换成自定义数值比较器。
 NBA 的 `extraction_attempts` 可设为 1–5，默认 5，与官方驱动的尝试上限一致；离线接入只重试

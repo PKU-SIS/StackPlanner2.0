@@ -17,9 +17,11 @@ class ModelCallError(RuntimeError):
 
 class Model:
     def __init__(self, config: dict, context, role: str, *, default_model: str):
-        allowed = {"use", "model", "base_url", "api", "api_key_env", "api_key_file_env", "api_key_file", "timeout", "max_tokens", "revision"}
+        allowed = {"use", "model", "base_url", "api", "api_key_env", "api_key_file_env", "api_key_file", "timeout", "max_tokens", "revision", "thinking"}
         if not isinstance(config, dict) or set(config) - allowed:
             raise ValueError("unsupported evaluator model configuration; configure keys by environment/private file")
+        if "thinking" in config and (config["thinking"] not in {"enabled", "disabled"} or config.get("api", "chat") != "chat"):
+            raise ValueError("thinking must be enabled/disabled on a compatible chat endpoint")
         self.config = deepcopy(config)
         self.model = config.get("model", default_model)
         self.base_url = config.get("base_url", "https://api.openai.com/v1")
@@ -39,6 +41,7 @@ class Model:
             "use": config.get("use", "openai_sdk"),
             "calls": 0,
             "response_models": [],
+            "thinking": config.get("thinking", "provider_default"),
         }
         if self.callback is not None:
             module = importlib.import_module(factory.__module__)
@@ -50,6 +53,10 @@ class Model:
         payload = {**payload, "model": self.model}
         if self.config.get("max_tokens") is not None and api == "chat":
             payload["max_tokens"] = self.config["max_tokens"]
+        if "thinking" in self.config:
+            if api != "chat":
+                raise ValueError("thinking requires a compatible chat endpoint")
+            payload["extra_body"] = {"thinking": {"type": self.config["thinking"]}}
         request = {"api": api, "payload": payload}
         request_hash = digest(encoded(request))
         self.provenance["api"] = api

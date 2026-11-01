@@ -213,7 +213,11 @@ record failed attempts, never regenerate SP answers, and preserve exhausted retr
 as evaluation errors. Model callbacks are evaluator-only, injected separately, and all
 custom models/endpoints must be recorded alongside the official metric provenance.
 The team model is deepseek-v4.1-flash, configured by example JSON and a private key
-file/environment. No key values belong in Git or evaluation options. See
+file/environment. No key values belong in Git or evaluation options.
+`thinking: enabled|disabled` is optional for compatible chat endpoints and is
+recorded in provenance. Team DeepSeek examples set it to disabled explicitly;
+do not silently rely on the service default or send this option to Responses.
+See
 `docs/DCC_EVALUATION.md` and `tests/test_dcc_evaluators.py`; automated tests use fake
 transports only. Real-service smoke checks are separate, explicitly diagnostic runs.
 
