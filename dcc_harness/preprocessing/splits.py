@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import tempfile
@@ -22,6 +23,7 @@ from .pipeline import (
     inline_text,
     read_jsonl,
 )
+from .ragflow import index_identity
 from .releases import validate_ready_bundle
 
 GROUP_KEY = "dcc_harness.preprocessing.splits:nba_context_group"
@@ -151,14 +153,27 @@ def export_splits(bundle: Path, definition: dict, output: Path) -> dict:
     if output.exists():
         raise FileExistsError(f"split output already exists: {output}")
     strategy = definition["strategy"]
-    expected = make_definition(bundle, **{key: strategy[key] for key in ("train_fraction", "seed", "group_key", "stratum_key")})
+    builder = extension(definition["builder"], {}) if "builder" in definition else make_definition
+    expected = builder(bundle, **{key: strategy[key] for key in ("train_fraction", "seed", "group_key", "stratum_key") if key in strategy})
     if definition != expected:
         raise ValueError("split definition differs from the verified source or deterministic assignment")
     manifest, samples = validate_ready_bundle(bundle)
     labels = read_jsonl(bundle / "private/gold.jsonl")
     tasks = read_jsonl(bundle / "public/tasks.jsonl")
-    records = _records(bundle, samples, labels, strategy["group_key"], strategy["stratum_key"])
-    groups = {row["id"]: row["group"] for row in records}
+    if "group_builder" in strategy:
+        groups = extension(strategy["group_builder"], {})(samples, bundle)
+    else:
+        records = _records(bundle, samples, labels, strategy["group_key"], strategy["stratum_key"])
+        groups = {row["id"]: row["group"] for row in records}
+    document_owners = {}
+    for split, ids in definition["partitions"].items():
+        selected = set(ids)
+        for sample in samples:
+            if sample["id"] in selected:
+                for asset in sample["documents"]:
+                    if document_owners.setdefault(asset["sha256"], split) != split:
+                        raise ValueError("evidence document leaks across splits")
+    source_index = json.loads((bundle / "index.json").read_text()) if document_mode(manifest) == "ragflow" else None
     original_tasks = {task.id: task for task in load_tasks(bundle / "public/tasks.jsonl")}
     output.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".dcc-splits-", dir=output.parent))
@@ -197,6 +212,21 @@ def export_splits(bundle: Path, definition: dict, output: Path) -> dict:
                 "source_bundle": definition["source_bundle"],
             }
             atomic_json(target / "manifest.json", derived)
+            if source_index is not None:
+                identity = index_identity(derived, source_index)
+                view = {
+                    **deepcopy(source_index),
+                    **identity,
+                    "configuration_sha256": digest(encoded(identity)),
+                    "datasets": {key: deepcopy(value) for key, value in source_index["datasets"].items() if key in selected},
+                    "scopes": {key: deepcopy(value) for key, value in source_index["scopes"].items() if key in selected},
+                    "read_only_view": {
+                        "source_index_sha256": digest((bundle / "index.json").read_bytes()),
+                        "source_configuration_sha256": source_index["configuration_sha256"],
+                        "split": split,
+                    },
+                }
+                atomic_json(target / "index.json", view)
             validate_ready_bundle(target)
             loaded = load_tasks(target / "public/tasks.jsonl")
             if any(task.input_sha256() != original_tasks[task.id].input_sha256() for task in loaded):

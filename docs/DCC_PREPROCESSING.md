@@ -70,6 +70,10 @@ finauditing-v1/
 `--dataset-plugin dcc_harness.preprocessing.native:make_plugin`；其余模型与 SP 配置沿用
 [通用 benchmark 推理说明](dcc_harness.md)。原生适配器只给 agent 问题、规则文件和当前样本检索工具。
 
+FinAuditing 可选用[内部训练/测试划分](DCC_FINAUDITING_SPLIT.md)：882/220 题，
+跨子任务共享待审文档的样本整组分配，文档交集为零。分区在新目录导出，复用原知识库；
+原 Release 和既有实验输入不变。
+
 ### 从原始数据重新准备
 
 在仓库根目录运行。离线预处理只需要轻量环境，无需安装整个 SP：

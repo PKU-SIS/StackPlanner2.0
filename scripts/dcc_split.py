@@ -10,12 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from dcc_harness.preprocessing.splits import (  # noqa: E402
-    GROUP_KEY,
-    STRATUM_KEY,
-    export_splits,
-    make_definition,
-)
+from dcc_harness.preprocessing.pipeline import extension  # noqa: E402
+from dcc_harness.preprocessing.splits import export_splits  # noqa: E402
 
 
 def main(argv=None):
@@ -24,8 +20,9 @@ def main(argv=None):
     create = commands.add_parser("create")
     create.add_argument("--train-fraction", default="0.8")
     create.add_argument("--seed", type=int, default=42)
-    create.add_argument("--group-key", default=GROUP_KEY, help="trusted module:function")
-    create.add_argument("--stratum-key", default=STRATUM_KEY, help="trusted module:function")
+    create.add_argument("--builder", default="dcc_harness.preprocessing.splits:make_definition", help="trusted module:function")
+    create.add_argument("--group-key", help="trusted module:function (NBA builder)")
+    create.add_argument("--stratum-key", help="trusted module:function (NBA builder)")
     export = commands.add_parser("export")
     export.add_argument("--definition", type=Path, required=True)
     for command in (create, export):
@@ -35,7 +32,8 @@ def main(argv=None):
     if args.command == "create":
         if args.output.exists():
             raise FileExistsError(f"definition already exists: {args.output}")
-        definition = make_definition(args.bundle, train_fraction=args.train_fraction, seed=args.seed, group_key=args.group_key, stratum_key=args.stratum_key)
+        options = {key: getattr(args, key) for key in ("train_fraction", "seed", "group_key", "stratum_key") if getattr(args, key) is not None}
+        definition = extension(args.builder, {})(args.bundle, **options)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         with args.output.open("x", encoding="utf-8") as handle:
             json.dump(definition, handle, ensure_ascii=False, indent=2)

@@ -55,6 +55,9 @@ NBA rule extraction uses bounded retries on the saved delivery and records failu
 An optional NBA [train/test partition](docs/DCC_RULEARENA_NBA.md#内部训练测试划分可选)
 provides 173 training and 43 test samples in independent bundles; the original
 216-task baseline remains unchanged.
+FinAuditing also has an optional [document-disjoint partition](docs/DCC_FINAUDITING_SPLIT.md)
+with 882 training and 220 test samples. Shared evidence documents, including
+cross-subtask reuse, stay together; existing sample-scoped RAGFlow indexes are reused.
 The team DeepSeek examples explicitly disable provider thinking for evaluation;
 this setting is recorded independently from SP inference configuration.
 

@@ -197,11 +197,21 @@ See `docs/DCC_RULEARENA_NBA.md` and `tests/test_dcc_rulearena.py`.
 Optional future train/test definitions live in `configs/dcc/splits/`. The NBA
 80/20 definition groups identical team/player backgrounds (including changed
 operations), stratifies by difficulty and Boolean label, and pins source hashes
-plus seed 42. `scripts/dcc_split.py export` creates separate inline train/test
+plus seed 42. `scripts/dcc_split.py export` creates separate inline or RAGFlow train/test
 bundles; it must never rewrite the baseline bundle, Release or running manifest.
 Only host split/group fields change; verify identical public-input hashes and
 disjoint scenario families. Group/stratum keys are trusted module:function
 extensions. Definitions are custom internal splits, not the official benchmark.
+`document_splits:make_definition` groups all evidence-document hashes into
+transitive components across subtasks, excludes reference rules, and allocates
+whole components against per-dataset quotas. FinAuditing uses 882/220 samples.
+Split builders/group builders are trusted module:function extensions; preserve
+the frozen NBA assignment. RAGFlow exports retain original per-sample scopes and
+contexts in subset index views, with updated public/configuration hashes and a
+read_only_view provenance marker. `index_bundle` must reject these views before
+any service access; never reindex or mutate the original knowledge bases when
+partitioning. Verify zero evidence-hash overlap and unchanged input hashes.
+See `docs/DCC_FINAUDITING_SPLIT.md` and `tests/test_dcc_document_splits.py`.
 
 Both factories attach `evaluation.dcc.plugin` hooks to the existing offline runner.
 These load verified private bundle labels only during evaluation and dispatch by

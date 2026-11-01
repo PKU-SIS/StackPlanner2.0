@@ -214,6 +214,8 @@ def index_bundle(bundle: Path, config: dict, *, client=None, retry_failed: bool 
         if path.exists()
         else {"schema_version": 2, **identity, "configuration_sha256": configuration_sha256, "datasets": {}, "scopes": {}, "ready": False}
     )
+    if state.get("read_only_view"):
+        raise ValueError("read-only split index reuses existing knowledge bases; index the original bundle instead")
     if state.get("schema_version") != 2:
         raise ValueError("legacy shared knowledge-base ledger cannot resume; create a new bundle for sample isolation")
     if state["configuration_sha256"] != configuration_sha256:
