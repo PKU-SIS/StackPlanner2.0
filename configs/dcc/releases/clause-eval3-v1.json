@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "dataset": "CLAUSE EVAL3 In-Text",
+  "repository": "PKU-SIS/StackPlanner2.0",
+  "tag": "dcc-clause-eval3-v1",
+  "asset": "clause-eval3-v1.tar.gz",
+  "sha256": "e6865dc69e53cbd9f0f25b019676da3112016323652b7894f67e600e31cc50bd",
+  "bytes": 107441273,
+  "documents": 5026,
+  "splits": {
+    "train": 4025,
+    "validation": 501,
+    "test": 500
+  },
+  "knowledge_bases": 5026,
+  "service_validation": {
+    "checked_samples": 5026,
+    "checked_documents": 5026,
+    "index_sha256": {
+      "train": "937b60dcb14a4ae5ea293cdd03616a0c6c85e9b11cca4e6af38ebd0b2a9c82b6",
+      "validation": "3757bcb94925f9879a1622aa22861699513d563c9bae6cc7020fd10420b20649",
+      "test": "1cdbb99d866205aab10d6de64f3ad6b09807b40a11d41c084220406f15377828"
+    },
+    "checked_at_utc": "2026-11-01T21:48:01Z"
+  }
+}
