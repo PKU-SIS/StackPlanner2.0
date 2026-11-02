@@ -108,7 +108,8 @@ def test_format_repair_cannot_change_historical_gap_execution(tmp_path):
     changed = body().replace("| g1 | searched | m1 |", "| g1 | not_attempted | - |")
     executor = SimpleNamespace(execute=lambda repair: delivery.normalize(SimpleNamespace(status="completed", result=changed, stop_reason=None, error=None, ai_messages=[]), repair))
     result = delivery.prepare(original, task(), ledger, executor)
-    assert "changed_gap_execution_during_repair" in result.artifact_metadata["supplement_delivery_issues"]
+    assert result.artifact_metadata["supplement_delivery_issues"] == []
+    assert delivery.parse_attempts(result.artifact_content, task())[0][0]["execution"] == "searched"
     assert result.artifact_metadata["gap_attempts"][0]["execution"] == "searched"
 
 
@@ -117,3 +118,29 @@ def test_provider_output_cap_is_not_a_complete_supplement():
     result = delivery.normalize(raw, task())
     assert result.stop_reason == "output_capped"
     assert result.completion_status == "partial"
+
+
+def test_missing_execution_table_is_not_invented_by_format_repair(tmp_path):
+    ledger = Ledger()
+    ledger.paths = SimpleNamespace(summary_file=lambda _: tmp_path / "summary.md")
+    host_records = [{"tool": "web_search", "ok": True}]
+    original = SPSubagentResult(status=SPSubagentStatus.COMPLETED, artifact_content="<｜｜DSML｜｜ calls>bad tool transcript", artifact_metadata={"host_tool_execution_records": host_records})
+    executor = SimpleNamespace(execute=lambda repair: delivery.normalize(SimpleNamespace(status="completed", result=body(), stop_reason=None, error=None, ai_messages=[]), repair))
+    result = delivery.prepare(original, task(), ledger, executor)
+    assert result.artifact_metadata["supplement_delivery_issues"] == []
+    assert result.artifact_metadata["gap_attempts"] == []
+    assert result.artifact_metadata["host_tool_execution_records"] == host_records
+    assert delivery.parse_attempts(result.artifact_content, task())[0] == []
+    assert "Useful" in result.artifact_content and "[S1]" in result.artifact_content
+
+
+def test_tool_protocol_text_is_never_a_formal_summary_even_with_citations():
+    assert "tool_protocol_output" in delivery.content_issues("<｜｜DSML｜｜ calls> [S1]", {"S1"})
+
+
+def test_repair_prompt_never_asks_model_to_redeclare_execution():
+    repair = replace(task(), metadata={**task().metadata, "report_supplement_repair": True})
+    rendered = render_sp_subagent_prompt(repair)
+    assert "canonical [S<n>]" in rendered
+    assert "Do not generate a gap execution table" in rendered
+    assert "Include one row per assigned gap" not in rendered

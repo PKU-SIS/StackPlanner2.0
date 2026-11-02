@@ -1013,3 +1013,5 @@ Final report Markdown uses continuous numeric citations such as `[35]`, matching
 Report Researcher and Writer now use the same 350-step / 50-tool scoped budgets validated by stage tests; pre-research reserves a final synthesis before the hard cap. Central-driven report smoke tests can be scheduled with `backend/scripts/evaluate_report_full.py --not-before <ISO timestamp> --start`.
 
 Report writing now runs as a ledger-driven concurrent pipeline: the host fills available Writer slots in request order and refills a slot as soon as a node returns. Accepted drafts remain durable across interruption, while failed writes stay incomplete. DeepSeek thinking is retained through the dedicated adapter and request-history replay.
+
+Report supplementary research uses the cited research summaries and gap-related source identities as its default handoff; original evidence stays available through material-read tools. Format repair preserves host execution records and original declarations, without asking the model to recreate execution history. The supplementary stage evaluator follows the configured model's thinking support.

@@ -1,5 +1,6 @@
 """Keep report research breadth, handoff, and bounded scheduling aligned."""
 
+import json
 from pathlib import Path
 
 from deerflow.sp.report.hooks import CONTEXT_INSTRUCTIONS
@@ -93,3 +94,32 @@ def test_one_research_packet_preserves_multiple_nodes_questions_and_original_use
     assert pre_research["gaps"] == []
     assert request in pre_research["request"]["text"]
     assert pre_research["instructions"] == REPORT_PRE_RESEARCH_PROMPT
+
+
+def test_supplement_uses_cited_summary_and_only_gap_related_material_metadata(tmp_path):
+    ledger = ReportLedger.create(ReportPaths(tmp_path, "r1"), request_text="Research", inputs=[{"text": "Research"}])
+    summary = tmp_path / "summary.md"
+    text = "# Existing findings\nUseful evidence [S1] (m1).\n"
+    summary.write_text(text)
+    ledger.payload["summaries"] = [{"action_id": "pre", "path": str(summary), "artifact_id": "a-pre"}]
+    ledger.payload["materials"] = [{"material_id": f"m{i}", "source_id": f"S{i}", "lines": 1, "preview": "irrelevant repeated body " * 1000} for i in range(1, 259)]
+    gap = ledger.register_gap(
+        mode="new",
+        question="Need specific evidence",
+        constraints={},
+        why_insufficient="Missing detail",
+        stop_condition="One attempt",
+        requirement_refs=[{"input_id": "u1", "quote": "Research"}],
+        node_ids=[],
+        materials_checked=[{"material_id": "m1", "lines": [1, 1]}],
+    )
+    accepted_tree = tmp_path / "tree.json"
+    accepted_tree.write_text(json.dumps({"nodes": [{"node_id": "n1", "evidence": [{"material_id": "m2"}]}]}))
+    ledger.payload["tree"] = {"path": str(accepted_tree)}
+    ledger.payload["gaps"][0]["node_ids"] = ["n1"]
+    packet = build_researcher_packet(ledger, [gap["gap_id"]], action_id="supplement")
+    assert packet["summaries"][0]["content"] == text
+    assert [m["material_id"] for m in packet["materials"]] == ["m1", "m2"]
+    assert "preview" not in packet["materials"][0]
+    assert packet["material_catalog_path"]
+    assert "preview" in build_pre_research_packet(ledger, action_id="pre")["materials"][0]

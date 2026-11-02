@@ -143,7 +143,10 @@ def worker(directory, upstream, consolidation_only=False):
             cfg = replace(cfg, max_turns=350, tool_call_limit=50, **({"finalize_after_tool_calls": 40} if role == "researcher" else {}))
         limit = REPORT_OUTLINE_OUTPUT_MAX_TOKENS
         task.metadata["max_tokens_per_step"] = limit
-        dump(directory / f"task-{len(created) + 1}.json", dict(metadata=task.metadata, context_refs=task.context_refs, max_turns=cfg.max_turns, tool_call_limit=cfg.tool_call_limit, output_format=cfg.output_format))
+        dump(
+            directory / f"task-{len(created) + 1}.json",
+            dict(metadata=task.metadata, context_refs=task.context_refs, thinking_enabled=bool(app.models[0].supports_thinking), max_turns=cfg.max_turns, tool_call_limit=cfg.tool_call_limit, output_format=cfg.output_format),
+        )
         executor = SubagentExecutor(
             config=cfg,
             tools=scoped,
@@ -155,7 +158,7 @@ def worker(directory, upstream, consolidation_only=False):
             run_id=f"supplement-{query['id']}",
             user_id="stage-eval",
             user_scoped_skills=True,
-            thinking_enabled=False,
+            thinking_enabled=bool(app.models[0].supports_thinking),
             step_observer=observe,
         )
         created.append(executor)

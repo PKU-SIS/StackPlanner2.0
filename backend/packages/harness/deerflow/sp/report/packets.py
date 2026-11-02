@@ -471,11 +471,38 @@ def build_researcher_packet(ledger: ReportLedger, gap_ids: Iterable[str], *, act
         entry = _gap_entry(gap, ledger)
         entry["requirement_refs"] = refs
         gaps.append(entry)
+    # The cited synthesis is the handoff; source bodies stay behind the read tool.
+    summaries = []
+    remaining = OUTLINE_INITIAL_SUMMARY_MAX_CHARS
+    for item in reversed(ledger.payload.get("summaries") or []):
+        text, error = _read_text(item.get("path"))
+        content = text[:remaining]
+        remaining -= len(content)
+        summaries.append(
+            {
+                "artifact_id": item.get("artifact_id"),
+                "action_id": item.get("action_id"),
+                "path": item.get("virtual_path"),
+                "content": content,
+                "content_truncated": len(content) < len(text),
+                "error": error,
+            }
+        )
+    related = set()
+    tree_nodes = {node["node_id"]: node for node in (load_current_tree(ledger) or {}).get("nodes", [])}
+    for gap in gaps:
+        for item in gap.get("materials_checked") or []:
+            related.add(str(item.get("material_id") if isinstance(item, Mapping) else item))
+        for node_id in gap.get("node_ids") or []:
+            node = tree_nodes.get(node_id) or {}
+            related.update(str(e.get("material_id")) for e in node.get("evidence") or [] if isinstance(e, Mapping))
     return {
         "report_id": ledger.payload.get("report_id"),
         "action_id": action_id,
         "gaps": gaps,
-        "materials": [_material_entry(item) for item in ledger.materials()],
+        "summaries": list(reversed(summaries)),
+        "materials": [_outline_material_entry(item) for item in ledger.materials() if str(item.get("material_id")) in related],
+        "materials_note": "Only gap-related source identities are inlined. Read original evidence by report_read_material; the complete catalog remains at material_catalog_path.",
         "material_catalog_path": ledger.paths.virtual(ledger.paths.catalog),
         "instructions": REPORT_RESEARCH_PROMPT,
     }

@@ -27,17 +27,42 @@ not whether evidence is sufficient; only Outline judges sufficiency. Never claim
 searched for untouched work. The host validates declarations against its records.
 This table is part of Markdown, not a JSON envelope. Keep the useful full synthesis.
 """.strip()
-REPAIR_INSTRUCTION = (
-    """
-Repair only the delivery format and citation identifiers of this existing
-supplementary synthesis using its original body and saved source/material mappings.
-No tools, new research, new facts or guessed identifiers. Preserve useful content,
-language, and original gap execution declarations. Never upgrade an execution
-status or invent material mappings. Omit unsupported identifiers or statements.
+REPAIR_INSTRUCTION = """
+Repair the cited Markdown supplementary synthesis using only the supplied body
+and saved source/material evidence. No tools, new research or guessed identifiers.
+Use canonical [S<n>] citations next to factual claims, with saved source URLs.
+Use source_id from saved_evidence; material IDs such as m12 alone are not citations.
+Preserve useful content and its language. If the original is only tool-protocol
+text, summarize the supplied evidence for the assigned gaps instead of repeating
+that text. Omit unsupported claims. Return the complete Markdown body directly.
+Do not generate a gap execution table: the host preserves original declarations
+and actual tool records separately. You cannot change historical execution.
 """.strip()
-    + "\n\n"
-    + OUTPUT_INSTRUCTION
-)
+
+
+def _without_execution_table(body: str) -> str:
+    """Remove only the reserved execution table, preserving other Markdown."""
+    lines = []
+    in_table = False
+    for line in body.splitlines():
+        cells = [part.strip().strip("`") for part in line.strip().strip("|").split("|")]
+        if cells == ["gap_id", "execution", "material_ids"]:
+            in_table = True
+            continue
+        if in_table and line.strip().startswith("|") and len(cells) == 3:
+            continue
+        in_table = False
+        lines.append(line)
+    return "\n".join(lines).strip()
+
+
+def _restore_execution_table(body: str, attempts: list[dict]) -> str:
+    body = _without_execution_table(body)
+    if not attempts:
+        return body
+    rows = ["| gap_id | execution | material_ids |", "|---|---|---|"]
+    rows.extend(f"| {r['gap_id']} | {r['execution']} | {', '.join(r.get('material_ids') or []) or '-'} |" for r in attempts)
+    return body + "\n\n" + "\n".join(rows)
 
 
 def is_supplement(task: SPSubagentTask | None) -> bool:
@@ -88,6 +113,8 @@ def parse_attempts(body: str, task: SPSubagentTask) -> tuple[list[dict], list[st
 
 def content_issues(body: str, sources: set[str]) -> list[str]:
     problems = delivery_issues(body, sources)
+    if "DSML" in body or "<tool_call>" in body:
+        problems.append("tool_protocol_output")
     # A zero-result observation must not invent citations. Existing host
     # execution checks still decide whether an attempt actually ran.
     return [p for p in problems if p != "missing_citations" or sources]
@@ -157,15 +184,8 @@ def prepare(result: SPSubagentResult, task: SPSubagentTask, ledger: Any, executo
     def check(text, *, repaired=False):
         found = content_issues(text, sources)
         if repaired or not result.artifact_metadata.get("supplement_legacy_envelope"):
-            parsed, table_issues = parse_attempts(text, task)
+            _, table_issues = parse_attempts(text, task)
             found.extend(table_issues)
-            if repaired:
-
-                def signature(rows):
-                    return sorted((r.get("gap_id"), r.get("execution"), tuple(sorted(r.get("material_ids") or []))) for r in rows)
-
-                if signature(parsed) != signature(original_attempts):
-                    found.append("changed_gap_execution_during_repair")
         if result.stop_reason or result.error or result.status != SPSubagentStatus.COMPLETED:
             found.append(result.stop_reason or str(result.error or result.status.value))
         return found
@@ -186,12 +206,24 @@ def prepare(result: SPSubagentResult, task: SPSubagentTask, ledger: Any, executo
             pass
     if claimed:
         evidence = []
-        for material in materials:
+        remaining_evidence_chars = 24_000
+        current_materials = [m for m in materials if m.get("action_id") == task.action_id]
+        cited_ids = set(re.findall(r"\[(S\d+)\]", body))
+        candidates = [m for m in materials if m.get("source_id") in cited_ids] + current_materials
+        if not candidates:
+            candidates = materials
+        seen_materials = set()
+        for material in candidates:
+            if material.get("material_id") in seen_materials or remaining_evidence_chars <= 0:
+                continue
+            seen_materials.add(material.get("material_id"))
             excerpt = str(material.get("preview") or "")[:600]
             path = material.get("path")
             if path and Path(path).is_file():
                 with Path(path).open(encoding="utf-8") as stream:
                     excerpt = stream.read(600)
+            excerpt = excerpt[:remaining_evidence_chars]
+            remaining_evidence_chars -= len(excerpt)
             evidence.append({k: material.get(k) for k in ("source_id", "material_id", "title", "url")} | {"excerpt": excerpt, "excerpt_is_partial": True})
         repair_task = replace(
             task,
@@ -199,7 +231,15 @@ def prepare(result: SPSubagentResult, task: SPSubagentTask, ledger: Any, executo
             description="Repair supplementary research delivery",
             expected_output="Complete cited Markdown",
             allowed_tools=[],
-            context_refs={"supplement_delivery_repair": {"issues": problems, "original_body": body, "saved_evidence": evidence, "original_gap_attempts": legacy_attempts or []}},
+            context_refs={
+                "supplement_delivery_repair": {
+                    "issues": problems,
+                    "original_body": body,
+                    "saved_evidence": evidence,
+                    "original_gap_attempts": original_attempts,
+                    "assigned_gaps": (task.context_refs.get("report_packet") or {}).get("gaps", []),
+                }
+            },
             metadata={**task.metadata, "report_supplement_repair": True},
         )
         try:
@@ -207,7 +247,7 @@ def prepare(result: SPSubagentResult, task: SPSubagentTask, ledger: Any, executo
         except Exception as exc:
             result = replace(result, error=f"Supplement delivery repair failed: {type(exc).__name__}: {exc}")
         else:
-            body = markdown_body(str(repaired.artifact_content or ""))
+            body = _restore_execution_table(markdown_body(str(repaired.artifact_content or "")), original_attempts)
             store.write_text_atomic(directory / "repair.md", body)
             # Correction changes presentation, never historical execution data.
             metadata = {**result.artifact_metadata, "supplement_repair_attempted": True}

@@ -640,7 +640,7 @@ class DelegateHandler:
             generic_refs = build_handler_context_refs(context)
             generic_refs.update(context_refs)
             context_refs = generic_refs
-            if action.target_agent in _MATERIALIZED_ARTIFACT_ROLES:
+            if action.target_agent in _MATERIALIZED_ARTIFACT_ROLES and not (report_role == "researcher" and task_metadata.get("report_gap_ids")):
                 artifact_bundle = self._materialize_stage_artifacts(action, context)
                 if action.target_agent == "outline":
                     artifact_bundle = _dedupe_outline_artifact_bodies(
