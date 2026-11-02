@@ -336,6 +336,17 @@ class TestAgentConstruction:
         assert stage.tool_total_hard_limit == 50
         assert ordinary.tool_total_hard_limit == 20
 
+    def test_writer_warning_instruction_is_wired_without_extra_budget(self, classes):
+        scoped = SimpleNamespace(tool_freq_warn=30, tool_freq_hard_limit=50)
+        ordinary = SimpleNamespace(tool_freq_warn=30, tool_freq_hard_limit=50)
+        reserve = classes["reserve_subagent_loop_guard_budget"]
+        reserve([scoped], max_turns=350, tool_call_limit=50, loop_warning_instruction="Save with write_file first")
+        reserve([ordinary], max_turns=150)
+        assert scoped.soft_warning_instruction == "Save with write_file first"
+        assert scoped.tool_total_hard_limit == 50
+        assert not hasattr(ordinary, "soft_warning_instruction")
+        assert ordinary.tool_total_hard_limit == 20
+
     def test_qwen_vllm_subagent_enables_thinking_when_tools_are_bound(self, classes, base_config):
         SubagentExecutor = classes["SubagentExecutor"]
         app_config = SimpleNamespace(

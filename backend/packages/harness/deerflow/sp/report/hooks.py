@@ -669,6 +669,13 @@ def configure_report_subagent(
         config = replace(
             subagent_config,
             system_prompt=REPORT_WRITER_PROMPT,
+            loop_warning_instruction=(
+                "[REPORT WRITER DELIVERY] Stop exploring: do not search, grep, list directories or read more evidence. "
+                "Use the evidence already collected to finish only your assigned node body. "
+                f"Call write_file to save it at {task.metadata.get('report_draft_path')} before returning the completion envelope. "
+                "A tool warning is not proof that the draft was saved. Do not claim completion or created_paths without a successful write. "
+                "Keep the existing call, token and time budgets; this instruction grants no retries or extra budget."
+            ),
             tools=[str(getattr(tool, "name", "")) for tool in selected],
             skills=["report-node-writing"],
             max_turns=max(350, subagent_config.max_turns),

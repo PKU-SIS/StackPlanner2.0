@@ -1212,3 +1212,30 @@ class TestFromConfig:
         queued = mw._pending_warnings.get(_pending_key(), [])
         assert queued
         assert "LOOP DETECTED" in queued[0]
+
+
+@pytest.mark.parametrize("custom", [False, True])
+def test_report_writer_soft_warning_preserves_delivery_and_hard_stop(custom):
+    instruction = "Stop reading evidence. Save the assigned node using write_file before returning."
+    guard = LoopDetectionMiddleware(soft_warning_instruction=instruction if custom else None)
+    runtime = _make_runtime()
+    state = None
+    for start, end in [(26, 40), (40, 62), (69, 100)]:
+        state = _make_state(tool_calls=[{"name": "read_file", "args": {"path": "/evidence.txt", "start_line": start, "end_line": end}, "id": f"read-{start}"}])
+        assert guard.after_model(state, runtime) is None
+    request = _make_request(state["messages"] + [ToolMessage(content="evidence", tool_call_id="read-69")], runtime)
+    prepared = guard._augment_request(request)
+    warning = prepared.messages[-1].content
+    if custom:
+        assert warning == instruction
+        assert "Stop calling tools" not in warning
+    else:
+        assert "Stop calling tools" in warning
+    assert len(request.messages) == 2
+    assert guard.consume_stop_reason("test-run") is None
+    # Same budgets: the fifth repeated call remains a hard stop.
+    assert guard.after_model(state, runtime) is None
+    stopped = guard.after_model(state, runtime)
+    assert stopped["messages"][0].tool_calls == []
+    assert "[FORCED STOP]" in stopped["messages"][0].content
+    assert guard.consume_stop_reason("test-run") == "loop_capped"

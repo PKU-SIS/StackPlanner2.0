@@ -235,6 +235,7 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         tool_freq_overrides: dict[str, tuple[int, int]] | None = None,
         tool_total_warn: int | None = None,
         tool_total_hard_limit: int | None = None,
+        soft_warning_instruction: str | None = None,
     ):
         super().__init__()
         self.warn_threshold = warn_threshold
@@ -246,6 +247,7 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         self._tool_freq_overrides: dict[str, tuple[int, int]] = tool_freq_overrides or {}
         self.tool_total_warn = tool_total_warn
         self.tool_total_hard_limit = tool_total_hard_limit
+        self.soft_warning_instruction = soft_warning_instruction
         self._lock = threading.Lock()
         self._history: OrderedDict[str, list[str]] = OrderedDict()
         self._warned: dict[str, set[str]] = defaultdict(set)
@@ -677,7 +679,7 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
             return request
         new_messages = [
             *request.messages,
-            HumanMessage(content=self._format_warning_message(warnings), name="loop_warning"),
+            HumanMessage(content=self.soft_warning_instruction or self._format_warning_message(warnings), name="loop_warning"),
         ]
         return request.override(messages=new_messages)
 

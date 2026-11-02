@@ -67,7 +67,7 @@ def _subagent_tool_loop_limits(max_turns: int, hard_cap: int = _SUBAGENT_TOOL_LO
     return safe_warn_limit, safe_hard_limit
 
 
-def _reserve_subagent_loop_guard_budget(middlewares: list[Any], *, max_turns: int, tool_call_limit: int | None = None) -> None:
+def _reserve_subagent_loop_guard_budget(middlewares: list[Any], *, max_turns: int, tool_call_limit: int | None = None, loop_warning_instruction: str | None = None) -> None:
     """Ensure loop detection can stop a tool loop before graph recursion wins.
 
     The current subagent middleware graph consumes up to six graph steps for a
@@ -89,6 +89,8 @@ def _reserve_subagent_loop_guard_budget(middlewares: list[Any], *, max_turns: in
         middleware.tool_freq_warn = min(original_warn_limit, safe_warn_limit)
         middleware.tool_total_hard_limit = safe_hard_limit
         middleware.tool_total_warn = safe_warn_limit
+        if loop_warning_instruction is not None:
+            middleware.soft_warning_instruction = loop_warning_instruction
         if (middleware.tool_freq_warn, middleware.tool_freq_hard_limit) != (original_warn_limit, original_hard_limit):
             logger.debug(
                 "Subagent loop guard thresholds clamped for shutdown budget: warn=%s->%s hard=%s->%s max_turns=%s",
@@ -642,6 +644,7 @@ class SubagentExecutor:
             middlewares,
             max_turns=self.config.max_turns,
             tool_call_limit=self.config.tool_call_limit,
+            loop_warning_instruction=self.config.loop_warning_instruction,
         )
         if self.config.finalize_after_tool_calls is not None:
             from deerflow.agents.middlewares.subagent_finalization_middleware import SubagentFinalizationMiddleware

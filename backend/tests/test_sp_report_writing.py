@@ -1161,3 +1161,40 @@ def test_outline_declared_file_failure_does_not_fallback_to_inline(tmp_path):
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
     assert ledger.payload.get("tree") is None
     assert ledger.payload.get("rejected_outline")
+
+
+@pytest.mark.parametrize("created_paths", [None, []])
+def test_real_assigned_file_is_accepted_after_writer_soft_warning(tmp_path, created_paths):
+    from deerflow.subagents.config import SubagentConfig
+
+    ctx = _context(tmp_path)
+    assert _outline(ctx, _tree(write_requests=[{"key": "w-n2", "node_ids": ["n2"], "feedback_wanted": False}])).next_step == "continue"
+    action, task, host = _writer_action(ctx, "w-n2")
+    config, _, _ = hooks.configure_report_subagent(task, state=ctx.state, available_tools=[type("Tool", (), {"name": "write_file"})()], subagent_config=SubagentConfig(name="reporter", description="test"))
+    assert "write_file" in config.loop_warning_instruction
+    host.parent.mkdir(parents=True, exist_ok=True)
+    host.write_text("已有证据支持的章节正文。\n", encoding="utf-8")
+    result = _writer_result(None, task)
+    if created_paths is not None:
+        result.artifact_metadata["created_paths"] = created_paths
+    accepted = _accept_writer(ctx, action, task, result)
+    assert accepted.next_step == "continue", accepted.error
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.payload["write_requests"][0]["status"] == "completed"
+    assert ledger.payload["drafts"][-1]["sha256"] == report_store.sha256_text(host.read_text())
+
+
+def test_writer_warning_override_is_scoped_to_report_writer(tmp_path):
+    from dataclasses import replace
+
+    from deerflow.subagents.config import SubagentConfig
+
+    ctx = _context(tmp_path)
+    assert _outline(ctx, _tree(write_requests=[{"key": "w-n2", "node_ids": ["n2"], "feedback_wanted": False}])).next_step == "continue"
+    _, task, _ = _writer_action(ctx, "w-n2")
+    base = SubagentConfig(name="reporter", description="test")
+    tools = [type("Tool", (), {"name": "write_file"})()]
+    scoped, _, _ = hooks.configure_report_subagent(task, state=ctx.state, available_tools=tools, subagent_config=base)
+    ordinary, _, role = hooks.configure_report_subagent(replace(task, metadata={}), state=ctx.state, available_tools=tools, subagent_config=base)
+    assert scoped.loop_warning_instruction and base.loop_warning_instruction is None
+    assert ordinary is base and role is None

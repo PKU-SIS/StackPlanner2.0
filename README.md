@@ -1015,3 +1015,5 @@ Report Researcher and Writer now use the same 350-step / 50-tool scoped budgets 
 Report writing now runs as a ledger-driven concurrent pipeline: the host fills available Writer slots in request order and refills a slot as soon as a node returns. Accepted drafts remain durable across interruption, while failed writes stay incomplete. DeepSeek thinking is retained through the dedicated adapter and request-history replay.
 
 Report supplementary research uses the cited research summaries and gap-related source identities as its default handoff; original evidence stays available through material-read tools. Format repair preserves host execution records and original declarations, without asking the model to recreate execution history. The supplementary stage evaluator follows the configured model's thinking support.
+
+Report Writer soft loop warnings close evidence exploration while still requiring the assigned node body to be saved with `write_file` before completion. Hard budgets and existing draft-file acceptance checks are unchanged.
