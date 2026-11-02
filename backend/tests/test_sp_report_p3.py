@@ -468,8 +468,9 @@ def test_sources_keep_identity_and_material_versions(tmp_path):
     assert _send_review(ctx, status="ready", outcome="deliver", action_id="a-review-source").next_step == "continue"
     ledger = _ledger(ctx)
     final = Path(ledger.payload["final_report"]["path"]).read_text(encoding="utf-8")
-    assert "[S1]" in final
-    assert "material: m1, m2" in final
+    assert "[1]" in final
+    assert "[S1]" not in final and "material:" not in final
+    assert ledger.payload["final_report"]["citation_numbering"] == {"S1": 1}
     assert ledger.payload["candidate"]["source_table"][0]["source_id"] == "S1"
     assert [item["material_id"] for item in ledger.payload["candidate"]["source_table"][0]["material_versions"]] == ["m1", "m2"]
 
@@ -702,3 +703,28 @@ def test_review_packet_bounds_material_previews_without_changing_saved_sources(t
     assert item["sha256"] == material["sha256"]
     assert Path(material["path"]).read_text() == text
     assert packet["candidate"]["content"]
+
+
+def test_numeric_final_citations_keep_review_drafts_and_delivery_bindings(tmp_path):
+    from deerflow.sp.report.assembly import final_binding_error
+
+    ctx, _ = _seed(tmp_path, body="Claim [S1], repeated [S1].\n", with_sources=True, write_status="completed")
+    result = _send_review(ctx, status="ready", outcome="deliver")
+    assert result.error is None
+    ledger = _ledger(ctx)
+    candidate = ledger.payload["candidate"]
+    final = ledger.payload["final_report"]
+    canonical = Path(candidate["path"]).read_text()
+    public = Path(final["path"]).read_text()
+    assert "Claim [S1], repeated [S1]." in canonical
+    assert "Claim [1], repeated [1]." in public
+    assert "[1] 示例来源 — https://example.com/source" in public
+    assert "[S1]" not in public and "material:" not in public
+    assert final["citation_numbering"] == {"S1": 1}
+    assert final["reviewed_candidate_sha256"] == candidate["sha256"]
+    assert ledger.payload["review"]["candidate_sha256"] == candidate["sha256"]
+    assert final["sha256"] == report_store.sha256_text(public)
+    assert final["chars"] == len(public)
+    assert "[S1]" in Path(ledger.payload["drafts"][0]["path"]).read_text()
+    assert final_binding_error(ledger) is None
+    assert _finish(ctx).next_step == "finish"

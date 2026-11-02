@@ -1007,3 +1007,7 @@ Report supplementary research now delivers a full Markdown synthesis with canoni
 Report Outline consolidation now submits the complete tree through the structured tool. Known material/source numbering mismatches are corrected from the saved ledger; remaining identifier corrections are bounded to one model attempt, preserving the complete candidate and normal validation.
 
 Report writing and delivery can be tested independently with `backend/scripts/evaluate_report_writer.py`, reusing accepted upstream artifacts and an explicit API cutoff via `--deadline`. Integration review retains the complete report while using bounded material previews and original-file references to reduce repeated context.
+
+Final report Markdown uses continuous numeric citations such as `[35]`, matching its source list. Numbering is applied after integration review; internal source identities and provenance remain unchanged.
+
+Report Researcher and Writer now use the same 350-step / 50-tool scoped budgets validated by stage tests; pre-research reserves a final synthesis before the hard cap. Central-driven report smoke tests can be scheduled with `backend/scripts/evaluate_report_full.py --not-before <ISO timestamp> --start`.

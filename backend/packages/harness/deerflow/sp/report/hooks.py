@@ -671,7 +671,8 @@ def configure_report_subagent(
             system_prompt=REPORT_WRITER_PROMPT,
             tools=[str(getattr(tool, "name", "")) for tool in selected],
             skills=["report-node-writing"],
-            max_turns=max(REPORT_SUBAGENT_MAX_TURNS, subagent_config.max_turns),
+            max_turns=max(350, subagent_config.max_turns),
+            tool_call_limit=50,
         )
         return config, list(available_tools), role
 
@@ -715,7 +716,9 @@ def configure_report_subagent(
         tools=[str(getattr(tool, "name", "")) for tool in selected],
         skills=["report-research"],
         output_format="markdown" if markdown or supplement else subagent_config.output_format,
-        max_turns=max(REPORT_SUBAGENT_MAX_TURNS, subagent_config.max_turns),
+        max_turns=max(350, subagent_config.max_turns),
+        tool_call_limit=50,
+        finalize_after_tool_calls=40,
     )
     return config, [*effective_tools, material_tool], role
 
@@ -985,8 +988,12 @@ def _finalize_integration_review(
     versions = [int(item.get("version") or 0) for item in final_reports if isinstance(item, Mapping)]
     version = max(versions, default=0) + 1
     final_path = ledger.paths.final_file(version)
+    from deerflow.sp.report.citation_display import render_final_citations
+
+    content, citation_numbering = render_final_citations(content, candidate.get("source_table") or [])
+    final_sha256 = report_store.sha256_text(content)
     report_store.write_text_atomic(final_path, content)
-    if report_store.sha256_text(final_path.read_text(encoding="utf-8")) != str(candidate.get("sha256") or ""):
+    if report_store.sha256_text(final_path.read_text(encoding="utf-8")) != final_sha256:
         raise ReportValidationError("final report file verification failed")
     virtual_path = ledger.paths.virtual(final_path)
     artifact = artifact_adapter.register_existing_artifact(
@@ -1005,6 +1012,8 @@ def _finalize_integration_review(
             "review_id": review.get("review_id"),
             "inputs_digest": review.get("inputs_digest"),
             "tree_version": candidate.get("tree_version"),
+            "citation_numbering": citation_numbering,
+            "reviewed_candidate_sha256": candidate.get("sha256"),
         },
     )
     final_record = {
@@ -1013,8 +1022,10 @@ def _finalize_integration_review(
         "is_current": True,
         "path": str(final_path),
         "virtual_path": virtual_path,
-        "sha256": str(candidate.get("sha256")),
-        "chars": int(candidate.get("chars") or len(content)),
+        "sha256": final_sha256,
+        "chars": len(content),
+        "citation_numbering": citation_numbering,
+        "reviewed_candidate_sha256": candidate.get("sha256"),
         "candidate_id": candidate.get("candidate_id"),
         "review_id": review.get("review_id"),
         "inputs_digest": review.get("inputs_digest"),

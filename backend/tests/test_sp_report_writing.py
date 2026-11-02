@@ -699,7 +699,9 @@ def test_report_writer_budget_is_scoped_without_changing_ordinary_reporter(tmp_p
     tools = [SimpleNamespace(name=name) for name in ("read_file", "write_file")]
     report_config, _, role = hooks.configure_report_subagent(task, state=ctx.state, available_tools=tools, subagent_config=config)
     assert role == "writer"
-    assert report_config.max_turns == 150
+    assert report_config.max_turns == 350
+    assert report_config.tool_call_limit == 50
+    assert config.tool_call_limit is None
     assert config.max_turns == 60
     ordinary = SPSubagentTask(action_id="ordinary", subagent_type="reporter", task="write", description="write")
     ordinary_config, ordinary_tools, role = hooks.configure_report_subagent(ordinary, state=ctx.state, available_tools=tools, subagent_config=config)

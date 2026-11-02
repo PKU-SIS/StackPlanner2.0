@@ -438,7 +438,9 @@ def test_deepseek_search_capture_is_bound_only_to_report_researcher(tmp_path, mo
     task = SPSubagentTask(action_id="a-material", subagent_type="researcher", task="research", description="research", metadata={"report_role": "researcher", "report_id": report.report_id})
     report_config, report_tools, role = hooks.configure_report_subagent(task, state=ctx.state, available_tools=tools, subagent_config=config)
     assert role == "researcher"
-    assert report_config.max_turns == 150 and config.max_turns == 80
+    assert report_config.max_turns == 350 and config.max_turns == 80
+    assert report_config.tool_call_limit == 50
+    assert report_config.finalize_after_tool_calls == 40
     searches = [item for item in report_tools if item.name == "web_search"]
     assert len(searches) == 1 and searches[0] is not deepseek_tools.web_search_tool
     assert json.loads(searches[0].invoke({"query": "query"}))["saved_count"] == 1
@@ -635,3 +637,14 @@ def test_pdf_empty_conversion_is_not_registered_and_temp_is_cleaned(tmp_path, mo
     assert before == after
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
     assert ledger.materials() == []
+
+
+def test_report_writer_uses_verified_budget_without_changing_ordinary_config(tmp_path):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    report = hooks.report_context(ctx.state)
+    base = SubagentConfig(name="sp-reporter", description="write", max_turns=80)
+    task = SPSubagentTask(action_id="write-budget",subagent_type="reporter",task="write",description="write",metadata={"report_role":"writer","report_id":report.report_id})
+    config, _, role = hooks.configure_report_subagent(task,state=ctx.state,available_tools=[SimpleNamespace(name="read_file"),SimpleNamespace(name="write_file")],subagent_config=base)
+    assert role == "writer" and config.max_turns == 350 and config.tool_call_limit == 50
+    assert base.max_turns == 80 and base.tool_call_limit is None
