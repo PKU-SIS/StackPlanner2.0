@@ -79,3 +79,7 @@ PYTHONPATH=.:packages/harness .venv/bin/python scripts/evaluate_report_supplemen
 Smoke 首轮已完成：1/3 全通过；25 的引用标记不规范，97 的旧 JSON 交付解析失败并保存成截断原文，两条均停止下游。三条都无预算中断或工具错误。[结果与修复讨论范围](SUPPLEMENT_SMOKE_20261101.md)。暂不扩大到 20 条。
 
 补研独立 Markdown 修改后，三条 smoke 均正常保存带规范引用的综述，并完成 Outline 收尾；采用既有重试分别为 2、2、3 次 Outline 委派。没有运行 Writer／终稿，未扩大至 20 条。[本次修改与结果](SUPPLEMENT_MARKDOWN_DELIVERY_20261101.md)。
+
+Outline 收尾独立复测：复用真实补研，三条均一次委派完成，无工具错误、预算中断或新检索。66 个正文节点证据和写作任务齐全；只测试收尾，未运行 Writer。[修改与验证](CONSOLIDATION_STABILITY_20261102.md)。
+
+补研与收尾修改后的真实预检索回归已完成：31、11、97 三条均一次执行正常落盘，正文引用来源分别为 106、54、49；无工具错误、预算中断或格式修复，全部引用对应已保存材料，文件哈希及全文核对通过。仅测试预检索，未运行下游。[回归记录](PRERESEARCH_REGRESSION_20261102.md)。

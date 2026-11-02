@@ -25,7 +25,7 @@ def consolidation_metrics(tree, ledger, *, accepted_revision):
     return dict(accepted_revision=accepted_revision, missing_write_nodes=missing, unclosed_gaps=active, awaiting_user_gaps=user, consolidation_ok=accepted_revision and not missing and not active and not user)
 
 
-def worker(directory, upstream):
+def worker(directory, upstream, consolidation_only=False):
     import yaml
     from dotenv import load_dotenv
 
@@ -65,32 +65,66 @@ def worker(directory, upstream):
 
     query = json.loads((directory / "query.json").read_text())
     source = upstream / str(query["id"])
-    original = json.loads((source / "ledger.json").read_text())
-    if not json.loads((source / "metrics.json").read_text()).get("accepted") or not original.get("tree"):
+    original = json.loads((source / ("research-ledger.json" if consolidation_only else "ledger.json")).read_text())
+    accepted_key = "research_ok" if consolidation_only else "accepted"
+    if not json.loads((source / "metrics.json").read_text()).get(accepted_key) or not original.get("tree"):
         raise ValueError("blocked_upstream: accepted initial Outline required")
     set_current_user(SimpleNamespace(id="stage-eval", role="admin"))
     thread_id = f"pre-{query['id']}"
     paths = get_paths()
     outputs = paths.sandbox_outputs_dir(thread_id, user_id="stage-eval")
     old_root = Path(original["request"]["path"]).parents[3]
+    tree_bytes = Path(original["tree"]["path"]).read_bytes()
+    if hashlib.sha256(tree_bytes).hexdigest() != original["tree"]["sha256"] and consolidation_only:
+        initial_batch = Path(json.loads((upstream / "manifest.json").read_text())["upstream"])
+        initial_source = initial_batch / str(query["id"])
+        original_tree = json.loads((initial_source / "ledger.json").read_text())["tree"]
+        baseline_bytes = Path(original_tree["path"]).read_bytes()
+        if hashlib.sha256(baseline_bytes).hexdigest() != original["tree"]["sha256"] or json.loads(baseline_bytes) != json.loads(tree_bytes):
+            raise ValueError("blocked_upstream: original accepted tree cannot be restored exactly")
+        tree_bytes = baseline_bytes
+        dump(directory / "input-tree-restoration.json", {"origin": original_tree["path"], "sha256": original["tree"]["sha256"], "reason": "Clone serialization changed bytes only; exact original verified and restored in this clone."})
     for item in [*original.get("materials", []), *original.get("summaries", []), original["tree"]]:
         file = Path(item["path"])
-        if not file.resolve().is_relative_to(old_root.resolve()) or hashlib.sha256(file.read_bytes()).hexdigest() != item["sha256"]:
+        if not file.resolve().is_relative_to(old_root.resolve()) or hashlib.sha256(tree_bytes if item is original["tree"] else file.read_bytes()).hexdigest() != item["sha256"]:
             raise ValueError("blocked_upstream: artifact changed")
     shutil.copytree(old_root, outputs.parent)
+    report_directory = outputs / "report" / original["report_id"]
     for file in outputs.parent.rglob("*.json"):
+        # Candidate/rejected JSON may intentionally be incomplete. Accepted
+        # trees and diagnostic proposals are immutable content, not path indexes.
+        if file.is_relative_to(report_directory / "outline") or file.is_relative_to(report_directory / "tree"):
+            continue
         dump(file, rebase_paths(json.loads(file.read_text()), old_root, outputs.parent))
-    checkpoint = rebase_paths(json.loads((source / "restored-checkpoint.json").read_text()), old_root, outputs.parent)
+    Path(rebase_paths(original["tree"]["path"], old_root, outputs.parent)).write_bytes(tree_bytes)
+    if consolidation_only:
+        initial_batch = Path(json.loads((upstream / "manifest.json").read_text())["upstream"])
+        initial_source = initial_batch / str(query["id"])
+        initial_ledger = json.loads((initial_source / "ledger.json").read_text())
+        checkpoint_root = Path(initial_ledger["request"]["path"]).parents[3]
+    else:
+        initial_source, checkpoint_root = source, old_root
+    checkpoint = rebase_paths(json.loads((initial_source / "restored-checkpoint.json").read_text()), checkpoint_root, outputs.parent)
     state = dict(
         messages=[HumanMessage(content=query["prompt"], id="original-query")],
         thread_data=dict(outputs_path=str(outputs), workspace_path=str(paths.sandbox_work_dir(thread_id, user_id="stage-eval")), uploads_path=str(paths.sandbox_uploads_dir(thread_id, user_id="stage-eval"))),
     )
     state.update(checkpoint["state_update"])
     memory = checkpoint["memory"]
-    for attempt in sorted(source.glob("attempt-*.json")):
-        saved = rebase_paths(json.loads(attempt.read_text()), old_root, outputs.parent)
+    for attempt in sorted(initial_source.glob("attempt-*.json")):
+        saved = rebase_paths(json.loads(attempt.read_text()), checkpoint_root, outputs.parent)
         state.update(saved["state_update"])
         memory["entries"].extend(saved.get("memory_entries", []))
+    if consolidation_only:
+        research_handoff = rebase_paths(json.loads((source / "handler-1.json").read_text()), old_root, outputs.parent)
+        if research_handoff.get("error"):
+            raise ValueError("blocked_upstream: supplementary research handoff failed")
+        state.update(research_handoff["state_update"])
+        memory["entries"].extend(research_handoff.get("memory_entries", []))
+        # The cloned runtime also contains later Outline revisions. Restore the
+        # exact accepted research ledger, not the final consolidated ledger.
+        target_ledger = outputs / "report" / original["report_id"] / "ledger.json"
+        dump(target_ledger, rebase_paths(original, old_root, outputs.parent))
     stack = TaskMemoryStack.from_dict(memory, thread_id=thread_id)
     app = get_app_config()
     tools = get_available_tools(model_name=app.models[0].name, app_config=app)
@@ -131,7 +165,7 @@ def worker(directory, upstream):
     handler = DelegateHandler(executor=DR2SubagentExecutorAdapter(factory, result_observer=raw_results.append))
     ledger_file = next(outputs.glob("report/*/ledger.json"))
     initial = json.loads(ledger_file.read_text())
-    gap_ids = [g["gap_id"] for g in initial["gaps"] if g["status"] == "open"]
+    gap_ids = [g["gap_id"] for g in initial["gaps"] if g["status"] == ("awaiting_outline" if consolidation_only else "open")]
     records = []
 
     def delegate(target, text, metadata):
@@ -153,7 +187,12 @@ def worker(directory, upstream):
         return action, result
 
     research_ok, summary_scores = True, []
-    if gap_ids:
+    if consolidation_only:
+        text = (source / "summary.md").read_text()
+        (directory / "summary.md").write_text(text)
+        summary_scores = [assess(text, initial, error=None, stop_reason=None)]
+        research_ok = all(s["summary_ok"] and s["body_unique_sources"] > 0 and not s["invalid_source_ids"] for s in summary_scores)
+    if gap_ids and not consolidation_only:
         action, result = delegate(
             "researcher",
             "Process all assigned report gaps together in one research pass. Share searches and material collection across nodes. "
@@ -173,7 +212,7 @@ def worker(directory, upstream):
     if research_ok and gap_ids:
         phase = "consolidation"
         for attempt in range(3):
-            previous = records[-1].get("error")
+            previous = records[-1].get("error") if records else None
             before_version = json.loads(ledger_file.read_text())["tree"]["version"]
             _, result = delegate(
                 "outline",
@@ -202,6 +241,9 @@ def worker(directory, upstream):
         records=records,
         blocked_upstream=not research_ok,
         skipped_no_gaps=not gap_ids,
+        consolidation_only=consolidation_only,
+        retrieval_calls=sum(c.get("name") in {"web_search", "web_fetch", "report_fetch_material"} for step in steps for c in step.get("tool_calls", [])),
+        submission_events=[event for executor in created for event in getattr(getattr(executor, "_tool_argument_repair_middleware", None), "events", [])],
         **scores,
         outline=outline_metrics(tree, ledger, 0),
         new_materials=len(ledger["materials"]) - len(initial["materials"]),
@@ -220,11 +262,12 @@ def main():
     parser.add_argument("--ids", default="11,25,97")
     parser.add_argument("--concurrency", type=int, default=3)
     parser.add_argument("--worker", action="store_true")
+    parser.add_argument("--consolidation-only", action="store_true", help="Resume accepted research-ledger and handoff; never re-run Researcher")
     args = parser.parse_args()
     output = args.output.resolve()
     upstream = args.upstream.resolve()
     if args.worker:
-        worker(output, upstream)
+        worker(output, upstream, args.consolidation_only)
         return
     ids = [int(s) for s in args.ids.split(",")]
     if len(ids) != len(set(ids)) or args.concurrency < 1:
@@ -236,7 +279,8 @@ def main():
             ids=ids,
             upstream=str(upstream),
             concurrency=args.concurrency,
-            research_attempts=1,
+            research_attempts=0 if args.consolidation_only else 1,
+            consolidation_only=args.consolidation_only,
             outline_attempts=3,
             max_tools=50,
             max_turns=350,
@@ -257,7 +301,10 @@ def main():
             shutil.copyfile(upstream / str(i) / name, d / name)
         with (d / "worker.log").open("w") as log:
             try:
-                p = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--worker", "--output", str(d), "--upstream", str(upstream)], stdout=log, stderr=subprocess.STDOUT, timeout=1200)
+                command = [sys.executable, str(Path(__file__).resolve()), "--worker", "--output", str(d), "--upstream", str(upstream)]
+                if args.consolidation_only:
+                    command.append("--consolidation-only")
+                p = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=1200)
                 if not (d / "metrics.json").exists():
                     dump(d / "metrics.json", dict(id=i, overall_pass=False, error=f"worker_exit_{p.returncode}"))
             except subprocess.TimeoutExpired:

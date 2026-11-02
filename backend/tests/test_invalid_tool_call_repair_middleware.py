@@ -108,3 +108,20 @@ def test_successful_syntax_repair_keeps_normal_schema_feedback_in_the_same_run()
     middleware.wrap_tool_call(tool_request, lambda _: success)
     assert middleware.prepare_request(request).tools == []
     assert middleware.consume_stop_reason() is None
+
+
+def test_consolidation_source_feedback_allows_one_correction_then_closes_tools():
+    middleware = InvalidToolCallRepairMiddleware(bound_source_correction=True)
+    request = SimpleNamespace(tool_call={"name": "report_submit_outline"})
+    failure = ToolMessage(content='{"error":"invalid_outline_tree","detail":"tree.nodes[n1] references unknown material: m999"}', tool_call_id="submit")
+    middleware.wrap_tool_call(request, lambda _: failure)
+    tools = [SimpleNamespace(name="report_submit_outline"), SimpleNamespace(name="report_read_material")]
+    prepared = middleware.prepare_request(Request(messages=[failure], tools=tools))
+    assert [t.name for t in prepared.tools] == ["report_submit_outline"]
+    assert "once" in prepared.messages[0].content
+    middleware.wrap_tool_call(request, lambda _: failure)
+    assert middleware.prepare_request(Request(messages=[failure], tools=tools)).tools == []
+    assert middleware.consume_stop_reason() == "tool_argument_repair_failed"
+    ordinary = InvalidToolCallRepairMiddleware()
+    ordinary.wrap_tool_call(request, lambda _: failure)
+    assert not ordinary.used

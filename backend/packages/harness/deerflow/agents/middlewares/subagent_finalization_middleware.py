@@ -56,6 +56,12 @@ class SubagentFinalizationMiddleware(AgentMiddleware):
                 "Return the short normal JSON envelope with delivery_mode=file and the tree_path after the file is complete. "
                 "Do not paste a full tree into the final envelope or promise to finish later."
             )
+        if self.keep_tools is not None and "report_submit_outline" in self.keep_tools and "write_file" not in self.keep_tools:
+            instruction = (
+                "Evidence collection is closed. Submit the complete existing tree using report_submit_outline. "
+                "write_file is unavailable; do not generate partial JSON chunks. Preserve all nodes, requirements and gap outcomes. "
+                "Use the tool's validation feedback and returned path, then return the compact normal file-delivery envelope."
+            )
         if self.output_format == "markdown":
             from deerflow.sp.report.research_delivery import MARKDOWN_OUTPUT_INSTRUCTION
 

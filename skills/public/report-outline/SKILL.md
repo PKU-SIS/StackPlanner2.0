@@ -300,6 +300,16 @@ entire content is the tree JSON object.
 
 ### File delivery
 
+For fixed-round consolidation (`metadata.report_outline_structured=true`), use
+**only `report_submit_outline(tree=complete_object)`** to create the candidate;
+`write_file` is unavailable. This rule overrides the fallback/chunk instructions
+below. Preserve all nodes and returned gap outcomes. Submit once, use any
+validation feedback to correct in place, and return the actual saved tree path.
+Known material/source mismatches are canonicalized from the ledger by the host.
+If an identifier error remains, attempt its correction at most once using the
+existing catalog; do not open repeated reads, restart research or rebuild the
+whole plan. Do not invent IDs or discard required sections to pass validation.
+
 File delivery is preferred for every report Outline, including the first plan.
 If `report_packet.delivery.mode` is `optional_file` or `required_file`, write
 the **complete tree object** to `report_packet.delivery.path` with `write_file`.

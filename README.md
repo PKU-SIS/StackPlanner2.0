@@ -1003,3 +1003,5 @@ Report Outline planning can correct one malformed `report_submit_outline` call i
 Report-stage diagnostics can also evaluate batched supplementary research and Outline consolidation from accepted initial trees using `backend/scripts/evaluate_report_supplement.py`. Results retain cited summaries, revised outlines, gap outcomes and write-task coverage without running Writer or final delivery.
 
 Report supplementary research now delivers a full Markdown synthesis with canonical source citations and a compact gap execution table. Its delivery checks and one optional formatting correction are separate from pre-research; correction does not start another search round.
+
+Report Outline consolidation now submits the complete tree through the structured tool. Known material/source numbering mismatches are corrected from the saved ledger; remaining identifier corrections are bounded to one model attempt, preserving the complete candidate and normal validation.

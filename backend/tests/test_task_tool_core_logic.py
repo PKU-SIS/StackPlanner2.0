@@ -286,23 +286,21 @@ def test_task_tool_forwards_channel_user_id_to_executor(monkeypatch):
     assert captured["executor_kwargs"]["channel_user_id"] == "ou_group_sender_1"
 
 
-def test_task_tool_rejects_bash_subagent_when_host_bash_disabled(monkeypatch):
+@pytest.mark.parametrize("advertised", [True, False])
+def test_task_tool_rejects_bash_subagent_when_host_bash_disabled(monkeypatch, advertised):
     monkeypatch.setattr(task_tool_module, "get_subagent_config", lambda _: _make_subagent_config())
+    monkeypatch.setattr(task_tool_module, "get_available_subagent_names", lambda: ["bash"] if advertised else ["general-purpose"])
     monkeypatch.setattr(task_tool_module, "is_host_bash_allowed", lambda: False)
-
-    result = _run_task_tool(
-        runtime=_make_runtime(),
-        description="执行任务",
-        prompt="run commands",
-        subagent_type="bash",
-        tool_call_id="tc-bash",
-    )
-
+    executor = MagicMock(side_effect=AssertionError("Disabled Bash must never start an executor"))
+    monkeypatch.setattr(task_tool_module, "SubagentExecutor", executor)
+    result = _run_task_tool(runtime=_make_runtime(), description="执行任务", prompt="run commands", subagent_type="bash", tool_call_id="tc-bash")
     message = _task_tool_message(result)
     assert isinstance(message.content, str)
-    assert message.content.startswith("Task failed. Error: Bash subagent is disabled")
+    assert message.content.startswith("Task failed.")
     assert message.additional_kwargs[SUBAGENT_STATUS_KEY] == "failed"
-    assert message.additional_kwargs[SUBAGENT_ERROR_KEY] == LOCAL_BASH_SUBAGENT_DISABLED_MESSAGE
+    error = message.additional_kwargs[SUBAGENT_ERROR_KEY]
+    assert error == LOCAL_BASH_SUBAGENT_DISABLED_MESSAGE if advertised else "Unknown subagent type 'bash'" in error
+    executor.assert_not_called()
 
 
 def test_task_tool_threads_runtime_app_config_to_subagent_dependencies(monkeypatch):

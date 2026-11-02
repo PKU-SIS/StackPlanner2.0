@@ -52,3 +52,12 @@ def test_outline_closes_collection_but_keeps_delivery_tools_before_token_cap():
     assert [item.name for item in prepared.tools] == ["read_file", "write_file", "report_register_research_request"]
     assert "complete tree" in prepared.messages[0].content
     assert middleware.trigger_reason == "token_reserve"
+
+
+def test_structured_consolidation_finalization_does_not_suggest_partial_files():
+    middleware = SubagentFinalizationMiddleware(after_tool_calls=1, keep_tools=["report_submit_outline", "read_file"])
+    request = Request(messages=[ToolMessage(content="Evidence", tool_call_id="r")], tools=[SimpleNamespace(name=n) for n in ["report_read_material", "report_submit_outline", "read_file", "write_file"]])
+    prepared = middleware._prepare(request)
+    assert [t.name for t in prepared.tools] == ["report_submit_outline", "read_file"]
+    assert "write_file is unavailable" in prepared.messages[0].content
+    assert "Alternatively" not in prepared.messages[0].content

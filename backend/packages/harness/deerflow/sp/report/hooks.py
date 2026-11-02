@@ -504,6 +504,19 @@ def prepare_delegation(
                 "before appending. Do not try to fit a large tree into one response. Return "
                 "artifact_content=null and this path in artifact_metadata."
             )
+            structured = report_task == "revise" and any(
+                gap.get("status") == "awaiting_outline" and ledger.has_returned_research(str(gap.get("gap_id") or ""))
+                for gap in ledger.gaps()
+            )
+            task_metadata["report_outline_structured"] = structured
+            if structured:
+                instruction = (
+                    "Structured consolidation delivery is required: submit the complete tree with report_submit_outline. "
+                    "write_file is not available; do not build a partial JSON file or return an inline tree. "
+                    "Use the returned tree_path in the compact file-delivery envelope only after validation succeeds. "
+                    "Material IDs own their canonical source IDs; the host corrects a known material/source mismatch in one deterministic pass. "
+                    "For any remaining identifier error, correct once using the existing catalog; do not spend the remaining ReAct budget retrying."
+                )
             if ledger.has_any_returned_gap_research():
                 instruction += (
                     " This is the fixed-round consolidation: all selected research attempts have returned. "
@@ -512,7 +525,7 @@ def prepare_delegation(
                     "targets as not_needed optional, and leave only a genuinely unsupported hard requirement "
                     "awaiting_user."
                 )
-            if requires_file:
+            if requires_file and not structured:
                 instruction = (
                     "This Outline retry requires file delivery. Prefer report_submit_outline(tree=the_complete_object) "
                     "to stage it at the host-assigned path. As a fallback use write_file with complete tree JSON; "
@@ -595,6 +608,7 @@ def configure_report_subagent(
         available_tools = [*available_tools, read_material_tool]
     if role == "outline":
         report_task = str(task.metadata.get("report_task") or "plan").strip().lower()
+        structured = bool(task.metadata.get("report_outline_structured"))
         if report_task == "integrate_review":
             selected = [tools_by_name[name] for name in [*REPORT_READ_TOOLS, "report_read_material"] if name in tools_by_name]
         else:
@@ -614,12 +628,15 @@ def configure_report_subagent(
             selected.append(user_material_tool)
             from deerflow.sp.report.submit_outline import build_submit_outline_tool
 
-            submit_tool = build_submit_outline_tool(paths=paths, delivery_path=Path(str(task.metadata.get("outline_delivery_path") or _outline_delivery_path(paths, task.action_id))))
+            submit_tool = build_submit_outline_tool(paths=paths, delivery_path=Path(str(task.metadata.get("outline_delivery_path") or _outline_delivery_path(paths, task.action_id))), normalize_sources=structured)
             selected.append(submit_tool)
             available_tools = [*available_tools, submit_tool]
         prompt = REPORT_INTEGRATE_REVIEW_PROMPT if report_task == "integrate_review" else REPORT_OUTLINE_PROMPT
         disallowed_tools = list(subagent_config.disallowed_tools or [])
         if report_task == "integrate_review":
+            disallowed_tools = list(dict.fromkeys([*disallowed_tools, "write_file"]))
+        elif structured:
+            selected = [tool for tool in selected if getattr(tool, "name", None) != "write_file"]
             disallowed_tools = list(dict.fromkeys([*disallowed_tools, "write_file"]))
         elif "write_file" in disallowed_tools:
             disallowed_tools = [name for name in disallowed_tools if name != "write_file"]
@@ -637,9 +654,10 @@ def configure_report_subagent(
                 max_turns=max(350, config.max_turns),
                 tool_call_limit=50,
                 finalize_after_tool_calls=30,
-                finalize_keep_tools=["report_submit_outline", "read_file", "write_file", "report_register_research_request", "report_save_user_material"],
+                finalize_keep_tools=["report_submit_outline", "read_file", "report_register_research_request", "report_save_user_material"] + ([] if structured else ["write_file"]),
                 finalize_token_fraction=0.5,
                 repair_invalid_tool_calls=True,
+                bound_outline_source_correction=structured,
             )
         extra_tools = [tool for tool in (register_tool, user_material_tool) if tool is not None]
         return config, [*available_tools, *extra_tools], role

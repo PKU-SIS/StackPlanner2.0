@@ -1205,3 +1205,23 @@ def test_rejected_outline_does_not_commit_partial_business_mutations(tmp_path):
     packet = build_outline_packet(after)
     assert packet["rejected_outline"]["virtual_path"] == after.payload["rejected_outline"]["virtual_path"]
 
+
+
+def test_returned_research_scopes_structured_submission_and_one_source_correction(tmp_path):
+    from deerflow.subagents.config import SubagentConfig
+    ctx = _context(_state(tmp_path))
+    _start(ctx)
+    gap_id = _register_gap(ctx, "a-gap")["registered"][0]["gap_id"]
+    action, task = _delegate(ctx, "a-plan", "outline", {"report_task": "plan"})
+    assert _accept_outline(ctx, action, task, _tree(gap_ids=[gap_id])).error is None
+    assert _research(ctx, "a-research", [gap_id]).error is None
+    _, task = _delegate(ctx, "a-consolidate", "outline", {"report_task": "revise"})
+    base = SubagentConfig(name="sp-outline",description="test",system_prompt="test")
+    config, _, _ = hooks.configure_report_subagent(task, state=ctx.state, available_tools=[SimpleNamespace(name=n) for n in ["read_file", "write_file", "grep", "ls", "glob"]], subagent_config=base)
+    assert task.metadata["report_outline_structured"] is True
+    assert "report_submit_outline" in config.tools
+    assert "write_file" not in config.tools
+    assert "write_file" in config.disallowed_tools
+    assert config.bound_outline_source_correction is True
+    assert "write_file" not in config.finalize_keep_tools
+    assert not base.bound_outline_source_correction

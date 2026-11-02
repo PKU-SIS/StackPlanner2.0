@@ -17,6 +17,11 @@ _REPAIR = (
     "read materials, search, or register new research. Return exactly one report_submit_outline tool call with valid JSON arguments. "
     "The host will validate it normally; do not claim a file was written before the tool succeeds."
 )
+_SOURCE_FIX = (
+    "[HOST SOURCE CORRECTION] Correct the reported material/source identifiers once, using the existing catalog and candidate. "
+    "No reads, searches or re-planning. Preserve nodes and useful content; never invent material IDs or line ranges. "
+    "Submit one complete report_submit_outline call. A second identifier failure ends this correction; do not repeat it."
+)
 _FINISH = "[HOST SUBMISSION ACK] No further tools are available. Return the compact normal file-delivery JSON envelope using the actual submission result. Do not re-plan or collect evidence."
 _SCHEMA_FIX = (
     "[HOST SUBMISSION VALIDATION] The JSON syntax was corrected, but the normal submission tool returned tree validation errors. "
@@ -33,12 +38,15 @@ class InvalidToolCallRepairMiddleware(AgentMiddleware):
     and guard middleware stay in the same run. No parser guesses or tool replay.
     """
 
-    def __init__(self, *, budget: TokenBudgetConfig | None = None, output_limit: int = 32768, tool_limit: int = 50, aborted: Callable[[], bool] | None = None):
+    def __init__(self, *, budget: TokenBudgetConfig | None = None, output_limit: int = 32768, tool_limit: int = 50, aborted: Callable[[], bool] | None = None, bound_source_correction: bool = False):
         super().__init__()
         self.budget = budget
         self.output_limit = output_limit
         self.tool_limit = tool_limit
         self.aborted = aborted or (lambda: False)
+        self.bound_source_correction = bound_source_correction
+        self.source_corrections = 0
+        self.source_fix = False
         self.used = False
         self.pending = False
         self.correcting = False
@@ -144,7 +152,7 @@ class InvalidToolCallRepairMiddleware(AgentMiddleware):
                 extra = {key: value for key, value in message.additional_kwargs.items() if key not in {"tool_calls", "function_call"}}
                 message = message.model_copy(update={"content": "[Unexecuted invalid tool arguments]\n" + raw, "invalid_tool_calls": [], "additional_kwargs": extra})
             messages.append(message)
-        instruction = _REPAIR if self.pending else _SCHEMA_FIX if self.schema_fix else _FINISH
+        instruction = _REPAIR if self.pending else _SOURCE_FIX if self.source_fix else _SCHEMA_FIX if self.schema_fix else _FINISH
         if messages and isinstance(messages[0], SystemMessage):
             messages[0] = messages[0].model_copy(update={"content": str(messages[0].content) + "\n\n" + instruction})
         else:
@@ -162,12 +170,33 @@ class InvalidToolCallRepairMiddleware(AgentMiddleware):
         return await handler(self.prepare_request(request))
 
     def _submission_result(self, request, response):
-        if not self.used or request.tool_call.get("name") != "report_submit_outline":
+        if request.tool_call.get("name") != "report_submit_outline":
             return response
         try:
             payload = json.loads(response.content)
         except (ValueError, TypeError, AttributeError):
             return response
+        if self.bound_source_correction and isinstance(payload, dict) and payload.get("validation_ok") is True:
+            self.used = self.finish_only = True
+            self.source_fix = self.schema_fix = self.pending = False
+            self.events.append({"status": "submission_validated", "validation_ok": True})
+            return response
+        source_error = isinstance(payload, dict) and payload.get("error") == "invalid_outline_tree" and any(marker in str(payload.get("detail", "")) for marker in ("evidence source_ids", "unknown material", ".source_ids"))
+        if self.bound_source_correction and source_error:
+            self.used = True
+            if self.source_corrections >= 1:
+                self.failed = self.finish_only = True
+                self.source_fix = self.schema_fix = self.pending = False
+                self.events.append({"status": "source_correction_exhausted"})
+            else:
+                self.source_corrections += 1
+                self.source_fix = self.schema_fix = True
+                self.finish_only = False
+                self.events.append({"status": "source_correction_requested"})
+            return response
+        if not self.used:
+            return response
+        self.source_fix = False
         self.schema_fix = isinstance(payload, dict) and payload.get("error") == "invalid_outline_tree"
         self.finish_only = not self.schema_fix
         if self.schema_fix:

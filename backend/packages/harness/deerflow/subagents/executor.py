@@ -661,6 +661,7 @@ class SubagentExecutor:
             self._tool_argument_repair_middleware = InvalidToolCallRepairMiddleware(
                 budget=app_config.subagents.get_token_budget_for(self.config.name), output_limit=self.max_tokens_per_step or 32768,
                 tool_limit=_subagent_tool_loop_limits(self.config.max_turns, self.config.tool_call_limit or _SUBAGENT_TOOL_LOOP_HARD_CAP)[1], aborted=self._parent_aborted,
+                bound_source_correction=self.config.bound_outline_source_correction,
             )
             middlewares.insert(0, self._tool_argument_repair_middleware)
         # Collect every guard middleware that exposes ``consume_stop_reason``
