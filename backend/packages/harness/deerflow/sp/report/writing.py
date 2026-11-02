@@ -84,7 +84,7 @@ def begin_writer_attempt(ledger: ReportLedger, key: str, *, action_id: str, node
     request["last_run_id"] = str(run_id) if run_id else None
     request["last_draft_id"] = draft_id
     request["updated_at"] = now
-    request.setdefault("attempts", []).append({"action_id": action_id, "run_id": str(run_id) if run_id else None, "status": "in_flight", "draft_id": draft_id, "at": now})
+    request.setdefault("attempts", []).append({"action_id": action_id, "run_id": str(run_id) if run_id else None, "round": int(request.get("round") or 1), "status": "in_flight", "draft_id": draft_id, "at": now})
     _refresh(ledger)
     prior = current_draft(ledger, node_id)
     if prior is None and request.get("last_draft_id"):
@@ -563,7 +563,9 @@ def control_entries(ledger: ReportLedger) -> dict[str, Any]:
                 "round": item.get("round"),
                 "draft_id": item.get("draft_id"),
                 "last_error": item.get("last_error"),
-                "next_action": next_action(item),
+                "next_action": ("handle_technical_failure" if item.get("status") == "technical_failed" else "host_writer_pipeline")
+                if (ledger.payload.get("writer_pipeline") or {}).get("managed") and next_action(item) == "delegate_writer"
+                else next_action(item),
             }
             for item in requests
             if item.get("status") != "superseded"

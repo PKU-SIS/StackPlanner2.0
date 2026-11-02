@@ -8,8 +8,10 @@ the current gap/dispatch state without a tool round-trip.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Awaitable, Callable, Mapping
+from threading import Event
 from typing import Any, override
 
 from langchain.agents.middleware import AgentMiddleware
@@ -25,6 +27,24 @@ class SPReportContextMiddleware(AgentMiddleware[ThreadState]):
 
     state_schema = ThreadState
 
+    def __init__(self, *, executor_provider=None, max_writers=3):
+        super().__init__()
+        self.executor_provider = executor_provider
+        self.max_writers = max(1, int(max_writers))
+
+    def _after_writing(self, state, update, runtime=None):
+        from deerflow.sp.report.acceptance import next_acceptance_action
+        from deerflow.sp.report.hooks import report_context
+
+        context = getattr(runtime, "context", None)
+        abort = context.get("__run_abort_event") if isinstance(context, Mapping) else None
+        if report_context(state).is_active and abort is not None and abort.is_set():
+            return {**(update or {}), "jump_to": "end"}
+        action = next_acceptance_action({**state, **(update or {})})
+        if action is None:
+            return update
+        return {**(update or {}), "jump_to": "tools", "messages": [action]}
+
     @override
     def before_agent(self, state: ThreadState, runtime: Any) -> dict[str, Any] | None:
         del runtime
@@ -35,25 +55,34 @@ class SPReportContextMiddleware(AgentMiddleware[ThreadState]):
     async def abefore_agent(self, state: ThreadState, runtime: Any) -> dict[str, Any] | None:
         return self.before_agent(state, runtime)
 
-    @hook_config(can_jump_to=["tools"])
+    @hook_config(can_jump_to=["tools", "end"])
     def before_model(self, state: ThreadState, runtime: Any) -> dict[str, Any] | None:
-        """Let the report gate take over before a Central model call.
+        """Drain ready writing, then hand off through native fixed acceptance."""
+        from deerflow.sp.report.writer_pipeline import run_writer_pipeline
 
-        The synthetic message still goes through the existing control-tool
-        middleware; this hook only decides that the next model turn is not
-        needed and a fixed report action is due.
-        """
-        del runtime
-        from deerflow.sp.report.acceptance import next_acceptance_action
+        update = run_writer_pipeline(state, executor_provider=self.executor_provider, runtime=runtime, max_workers=self.max_writers) if self.executor_provider is not None else None
+        return self._after_writing(state, update, runtime)
 
-        action = next_acceptance_action(state)
-        if action is None:
-            return None
-        return {"jump_to": "tools", "messages": [action]}
-
-    @hook_config(can_jump_to=["tools"])
+    @hook_config(can_jump_to=["tools", "end"])
     async def abefore_model(self, state: ThreadState, runtime: Any) -> dict[str, Any] | None:
-        return self.before_model(state, runtime)
+        if self.executor_provider is None:
+            return self._after_writing(state, None, runtime)
+        from deerflow.sp.report.writer_pipeline import run_writer_pipeline
+
+        stop = Event()
+        task = asyncio.create_task(asyncio.to_thread(run_writer_pipeline, state, executor_provider=self.executor_provider, runtime=runtime, max_workers=self.max_writers, stop_event=stop))
+        try:
+            update = await asyncio.shield(task)
+        except asyncio.CancelledError:
+            stop.set()
+            # The existing executor cancellation guard sees the shared event;
+            # queued nodes never start after this run has been cancelled.
+            try:
+                await asyncio.wait_for(asyncio.shield(task), timeout=5)
+            except (TimeoutError, asyncio.CancelledError):
+                pass
+            raise
+        return self._after_writing(state, update, runtime)
 
     @override
     def wrap_model_call(

@@ -1011,3 +1011,5 @@ Report writing and delivery can be tested independently with `backend/scripts/ev
 Final report Markdown uses continuous numeric citations such as `[35]`, matching its source list. Numbering is applied after integration review; internal source identities and provenance remain unchanged.
 
 Report Researcher and Writer now use the same 350-step / 50-tool scoped budgets validated by stage tests; pre-research reserves a final synthesis before the hard cap. Central-driven report smoke tests can be scheduled with `backend/scripts/evaluate_report_full.py --not-before <ISO timestamp> --start`.
+
+Report writing now runs as a ledger-driven concurrent pipeline: the host fills available Writer slots in request order and refills a slot as soon as a node returns. Accepted drafts remain durable across interruption, while failed writes stay incomplete. DeepSeek thinking is retained through the dedicated adapter and request-history replay.

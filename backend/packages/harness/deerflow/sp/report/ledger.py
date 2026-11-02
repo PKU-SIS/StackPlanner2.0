@@ -873,6 +873,10 @@ class ReportLedger:
             "gaps": open_gaps,
             "closed_gap_count": len(closed),
             "writes_pending": writing["writes_pending"],
+            "writer_pipeline": {
+                key: (self.payload.get("writer_pipeline") or {}).get(key)
+                for key in ("managed", "max_concurrent", "status", "last_run_id")
+            },
             "write_requests": writing["write_requests"],
             "current_drafts": writing["current_drafts"],
             "draft_review_due": writing["draft_review_due"],

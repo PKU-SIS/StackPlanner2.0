@@ -2719,6 +2719,10 @@ def report_delegate_dispatch_error(
     if role not in {"outline", "researcher", "reporter"}:
         return None
     current_order = int(current["order"])
+    if role == "reporter":
+        ledger = _load_report_ledger_for_gate(state)
+        if ledger is not None and (ledger.payload.get("writer_pipeline") or {}).get("managed"):
+            return "Report writing is owned by the ledger-driven pipeline. Do not dispatch Writer calls from Central; handle Outline feedback or missing write requests instead."
 
     if role == "researcher":
         if any(

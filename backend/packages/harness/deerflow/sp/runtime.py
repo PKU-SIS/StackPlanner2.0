@@ -903,7 +903,7 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
             SPActionBudgetMiddleware(max_actions=max_central_actions, report_max_actions=report_max_actions),
             SPControlActionMiddleware(executor_provider=executor_provider),
             SPThinkLabelMiddleware(),
-            SPReportContextMiddleware(),
+            SPReportContextMiddleware(executor_provider=executor_provider, max_writers=max_parallel_delegates),
             SubagentLimitMiddleware(
                 max_concurrent=max_parallel_delegates,
                 tool_names={"sp_delegate"},

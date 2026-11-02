@@ -184,3 +184,71 @@ def test_positional_fallback_when_count_differs():
 
     assistant_msg = next(m for m in payload["messages"] if m["role"] == "assistant")
     assert assistant_msg["reasoning_content"] == "My reasoning"
+
+
+def test_thinking_history_preserves_real_reasoning_and_projects_legacy_tool_pairs():
+    from langchain_core.messages import SystemMessage, ToolMessage
+
+    from deerflow.models.patched_deepseek import project_legacy_history
+
+    legacy = AIMessage(content="", tool_calls=[{"name": "lookup", "args": {}, "id": "old-call"}])
+    genuine = AIMessage(content="", tool_calls=[{"name": "lookup", "args": {}, "id": "new-call"}], additional_kwargs={"reasoning_content": "provider-field"})
+    messages = [SystemMessage(content="System"), HumanMessage(content="Original request"), legacy, ToolMessage(content="Old result", tool_call_id="old-call"), genuine, ToolMessage(content="New result", tool_call_id="new-call")]
+    projected = project_legacy_history(messages)
+    assert projected[0] is messages[0] and projected[1] is messages[1]
+    assert projected[2].type == "human" and "old-call" in projected[2].content
+    assert projected[3].type == "human" and "Old result" in projected[3].content
+    assert projected[4] is genuine and projected[5] is messages[5]
+    assert legacy.type == "ai" and legacy.tool_calls[0]["id"] == "old-call"
+    model = _make_model().model_copy(update={"extra_body": {"thinking": {"type": "enabled"}}})
+    payload = model._get_request_payload(messages, tools=[{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object", "properties": {}}}}])
+    assistant = [m for m in payload["messages"] if m["role"] == "assistant"]
+    assert len(assistant) == 1 and assistant[0]["reasoning_content"] == "provider-field"
+    assert [m["tool_call_id"] for m in payload["messages"] if m["role"] == "tool"] == ["new-call"]
+
+
+def test_thinking_projection_does_not_fabricate_private_reasoning_for_host_actions():
+    from langchain_core.messages import ToolMessage
+
+    from deerflow.models.patched_deepseek import project_legacy_history
+
+    host = AIMessage(content="", tool_calls=[{"name": "sp_delegate", "args": {}, "id": "host-call"}], additional_kwargs={"stackplanner_generated": True})
+    projected = project_legacy_history([HumanMessage(content="Request"), host, ToolMessage(content="Accepted", tool_call_id="host-call")])
+    assert all(m.type != "ai" for m in projected)
+    assert all("reasoning_content" not in m.additional_kwargs for m in projected)
+
+
+def test_real_sdk_response_parsing_and_request_replay_keep_opaque_reasoning():
+    from langchain_core.messages import ToolMessage
+    from openai.types.chat import ChatCompletion
+
+    model = _make_model().model_copy(update={"extra_body": {"thinking": {"type": "enabled"}}})
+    response = ChatCompletion.model_validate(
+        {
+            "id": "test-response",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4-flash",
+            "choices": [
+                {
+                    "index": 0,
+                    "finish_reason": "tool_calls",
+                    "message": {"role": "assistant", "content": "", "reasoning_content": "opaque-provider-field", "tool_calls": [{"id": "provider-call", "type": "function", "function": {"name": "lookup", "arguments": "{}"}}]},
+                }
+            ],
+        }
+    )
+    result = model._create_chat_result(response)
+    message = result.generations[0].message
+    assert message.additional_kwargs["reasoning_content"] == "opaque-provider-field"
+    payload = model._get_request_payload([HumanMessage(content="Lookup"), message, ToolMessage(content="Result", tool_call_id="provider-call")])
+    assert payload["messages"][1]["reasoning_content"] == "opaque-provider-field"
+    assert payload["extra_body"]["thinking"]["type"] == "enabled"
+
+
+def test_plain_thinking_chat_keeps_legacy_roles_when_no_tools_are_sent():
+    model = _make_model().model_copy(update={"extra_body": {"thinking": {"type": "enabled"}}})
+    message = AIMessage(content="Earlier ordinary answer")
+    payload = model._get_request_payload([HumanMessage(content="Question"), message])
+    assert payload["messages"][-1]["role"] == "assistant"
+    assert payload["messages"][-1]["content"] == "Earlier ordinary answer"

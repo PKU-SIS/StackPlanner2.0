@@ -28,7 +28,6 @@ from langchain_core.messages import AIMessage
 
 from deerflow.sp.report.ledger import ReportLedger, ReportValidationError
 
-
 ACCEPTANCE_ORIGIN = "harness"
 _ACCEPTANCE_DEFAULTS: dict[str, Any] = {
     "status": "idle",
@@ -160,6 +159,7 @@ def _new_explicit_decision(ledger: ReportLedger, acceptance: Mapping[str, Any]) 
 def _tool_call(tool_name: str, args: dict[str, Any], action_id: str) -> AIMessage:
     return AIMessage(
         content="",
+        additional_kwargs={"stackplanner_generated": True},
         tool_calls=[{"name": tool_name, "args": args, "id": action_id, "type": "tool_call"}],
     )
 

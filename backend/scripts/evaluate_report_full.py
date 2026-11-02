@@ -13,6 +13,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 from evaluate_report_outline import ROOT, dump
 
@@ -67,11 +68,11 @@ def worker(directory, not_before, timeout):
     app = get_app_config()
     runtime = dict(
         thread_id=thread,
-        run_id=thread,
+        run_id=f"{thread}-{uuid4().hex[:12]}",
         user_id="full-eval",
         model_name=app.models[0].name,
-        thinking_enabled=False,
-        sp_subagent_thinking_enabled=False,
+        thinking_enabled=bool(app.models[0].supports_thinking),
+        sp_subagent_thinking_enabled=bool(app.models[0].supports_thinking),
         debug_trace_enabled=True,
         max_concurrent_subagents=6,
         sp_subagent_timeout_seconds=timeout - 30,

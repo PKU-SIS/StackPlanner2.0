@@ -145,10 +145,14 @@ Required sequence (only after a report has been started):
    gap is legitimately `awaiting_user`, use the existing `sp_ask_human` path
    **without** `report_gap_ids`: state the real failure, preserved work, and the
    options the user must choose; do not invent a gap state or user permission.
-6. In P3, invoke each write through `reporter` with
-   `metadata.report_write_key`; this is the report Writer call, not ordinary
-   Reporter synthesis. The Writer writes only the node body; the host emits
-   the Outline-owned node title. A Writer `node_feedback` goes back to Outline
+6. In P3, the Harness owns the writing pipeline after Outline creates the
+   write requests. It claims each task, records in_flight before starting
+   Writer, and refills a bounded concurrent window as each result returns.
+   Do not emit reporter/Writer delegations from Central, including batches.
+   The ledger owns pending/in_flight/completed and retained technical failures;
+   do not retry a failed write key automatically in the same run. Handle
+   real feedback or missing writing coverage through Outline instead.
+   Writer writes only the node body; the host emits the Outline-owned title. A Writer `node_feedback` goes back to Outline
    for `revise`; it is not a final integration review. Do not call
    `integrate_review` or `sp_finish`; after the body is complete the Harness
    fixed-acceptance gate runs the minimum review and, only when ready, the
