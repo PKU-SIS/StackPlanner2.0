@@ -141,6 +141,16 @@ machine-wide HTTP proxy.
 
 ## DCC input preprocessing
 
+The opt-in `document_mode: files` stages byte-identical UTF-8/XML evidence as
+neutral per-thread files through `native:make_file_plugin` (`dcc_files`). It
+uses existing native file tools and the same official evaluator hooks, with no
+RAGFlow tool, index, credentials or requests. `dcc_preprocess.py export-files`
+creates a separate transport variant of a ready bundle, preserving sample/gold
+bytes and host group IDs; source RAGFlow bundles/configs stay immutable. Keep
+evidence hashes and sample-local file inventories checked before staging. XML
+fragments stay untouched; filenames are .txt wrappers. Tests are in
+`tests/test_dcc_file_search.py`; see `docs/DCC_FINAUDITING_FILES.md`.
+
 `dcc_harness/preprocessing/` is the independent data ingestion layer, with
 `Sample`/`Asset` contracts, trusted `module:function` loader/processor extensions,
 content-addressed public assets, separate private labels, a resumable RAGFlow

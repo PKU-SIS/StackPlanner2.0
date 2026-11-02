@@ -13,14 +13,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from dcc_harness.preprocessing.pipeline import (
+from dcc_harness.preprocessing.pipeline import (  # noqa: E402
     document_mode,
     extension,
     prepare,
     read_jsonl,
     render,
 )
-from dcc_harness.preprocessing.ragflow import RagflowClient, index_bundle, retrieve
+from dcc_harness.preprocessing.ragflow import RagflowClient, index_bundle, retrieve  # noqa: E402
 
 
 def load_config(path: Path) -> dict:
@@ -68,6 +68,10 @@ def main(argv=None) -> int:
     download.add_argument("--release", required=True, help="release name in configs/dcc/releases/ or a JSON descriptor path")
     download.add_argument("--output", type=Path, required=True)
     download.add_argument("--archive", type=Path, help="install a manually downloaded archive instead of using gh")
+    file_export = commands.add_parser("export-files", help="copy a ready bundle into a separate native-file transport variant")
+    file_export.add_argument("--config", type=Path, required=True)
+    file_export.add_argument("--bundle", type=Path, required=True)
+    file_export.add_argument("--output", type=Path, required=True)
     for name in ("prepare", "index", "render", "retrieve", "status", "doctor"):
         command = commands.add_parser(name)
         if name != "status":
@@ -95,16 +99,22 @@ def main(argv=None) -> int:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     config = load_config(args.config.resolve()) if args.command != "status" else {}
-    if args.command in {"index", "retrieve"} and document_mode(config) == "inline":
-        raise ValueError("inline evidence does not use RAGFlow; run prepare and render directly")
+    if args.command in {"index", "retrieve"} and document_mode(config) != "ragflow":
+        raise ValueError(f"{document_mode(config)} evidence does not use RAGFlow; run prepare and render directly")
     if args.command == "pack":
         from dcc_harness.preprocessing.releases import build_finauditing_release
 
+        if document_mode(config) == "files":
+            raise ValueError("retain the original dataset Release and use export-files for a file transport variant")
         builder = extension(config["release_builder"], {}) if config.get("release_builder") else build_finauditing_release
         with bundle_lock(args.bundle):
             result = builder(args.bundle, args.source, config, args.output, version=args.version)
-    elif args.command == "doctor" and document_mode(config) == "inline":
-        result = {"document_mode": "inline", "ragflow_required": False}
+    elif args.command == "export-files":
+        from dcc_harness.preprocessing.file_search import export_file_bundle
+
+        result = export_file_bundle(args.bundle, args.output, config)
+    elif args.command == "doctor" and document_mode(config) != "ragflow":
+        result = {"document_mode": document_mode(config), "ragflow_required": False}
     elif args.command == "doctor":
         client = RagflowClient(config["ragflow"])
         try:

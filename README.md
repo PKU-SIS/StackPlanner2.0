@@ -384,6 +384,9 @@ StackPlanner 2.0 建立在以下项目的工作基础之上：
 
 ### Benchmark plugins: separate inference and evaluation
 
+FinAuditing 可选择[原生文件检索模式](docs/DCC_FINAUDITING_FILES.md)：完整 XML 按题隔离上传，
+由 SP 文件工具检索，复用官方评测器。原 RAGFlow 配置和知识库保留，两种访问方式独立使用。
+
 DCC v3 supports native SP2 benchmark inference and independent offline evaluation.
 Run `scripts/infer_sp_benchmarks.py` to collect final deliveries, then
 `scripts/evaluate_sp_benchmarks.py` to score an existing run. Input adapters receive

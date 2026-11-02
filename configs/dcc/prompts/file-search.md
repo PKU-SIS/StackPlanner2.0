@@ -1,0 +1,7 @@
+Use native file search and reading tools to inspect the evidence listed above. Search with grep using the directory /mnt/user-data/uploads as its path, then read the relevant evidence with read_file. A grep preview may omit long XML lines; inspect the original text or use local Python to extract the necessary elements and links. XML documents can be fragments in the original dataset: do not repair, invent, or silently omit source content.
+
+Trace namespace-qualified concept identifiers, locator references, parent/child arcs, contexts, units and periods as required by the question. Follow relationships across the supplied evidence files. Keep output concise when searching large files, and retain enough evidence to verify the result. Only files belonging to this sample are available.
+
+This is document/data analysis. When delegating local computation to Coder, use metadata.coder_task_kind="data_processing" and metadata.requires_implementation=false. Run actual calculations when needed, using one command per bash call or dependent steps joined with &&; avoid masking process status with pipelines or appended echo commands. A detected document violation is a finding, not a software regression.
+
+Finish the whole audit and return exactly the task-specific answer format. Working notes, extraction scripts and intermediate evidence do not replace the requested answer. Keep evidence citations in working notes when the task requires only a label or JSON. Use the original source evidence; report unresolved coverage honestly instead of guessing.
