@@ -14,3 +14,5 @@
 离线回归：修改前 7641 passed；修改后 **7647 passed、22 skipped**。相关 214 项通过，覆盖默认/报告提示、硬上限、配置接线、写作验收和并发流水线；Ruff 与 diff 检查通过。两个实验进程均已退出。
 
 产物：`logs/writer-soft-warning-nodes-20261102/{11,25}/node-draft.md`、`metrics.json`、`handler.json`；原真实失败记录保留。提示修正降低了本次触发点的风险，不代表 Writer 在所有输入下都不会漏写；文件门禁和原失败恢复继续保留。
+
+后续两条原始 query 的完整回归通过，Writer 窗口提至每报告 4，47 个写作任务全部首次完成；观察限制和残留工具错误见 [完整回归记录](WRITER_C4_FULL_REGRESSION_20261102.md)。
