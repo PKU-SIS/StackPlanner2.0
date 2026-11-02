@@ -1005,3 +1005,5 @@ Report-stage diagnostics can also evaluate batched supplementary research and Ou
 Report supplementary research now delivers a full Markdown synthesis with canonical source citations and a compact gap execution table. Its delivery checks and one optional formatting correction are separate from pre-research; correction does not start another search round.
 
 Report Outline consolidation now submits the complete tree through the structured tool. Known material/source numbering mismatches are corrected from the saved ledger; remaining identifier corrections are bounded to one model attempt, preserving the complete candidate and normal validation.
+
+Report writing and delivery can be tested independently with `backend/scripts/evaluate_report_writer.py`, reusing accepted upstream artifacts and an explicit API cutoff via `--deadline`. Integration review retains the complete report while using bounded material previews and original-file references to reduce repeated context.

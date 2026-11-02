@@ -681,3 +681,24 @@ def test_review_packet_reads_material_by_id_but_keeps_virtual_path(tmp_path):
     assert materials["m1"]["error"] is None
     assert materials["m2"]["text"] == "material two\n"
     assert materials["m2"]["error"] is None
+
+
+def test_review_packet_bounds_material_previews_without_changing_saved_sources(tmp_path):
+    _ctx, ledger = _seed(tmp_path, with_sources=True)
+    material = ledger.materials()[0]
+    text = "original source evidence [S1]\n" * 3000
+    Path(material["path"]).write_text(text)
+    material["sha256"] = report_store.sha256_text(text)
+    material["chars"] = len(text)
+    ledger.save()
+    from deerflow.sp.report import assembly, packets
+
+    assembly.ensure_candidate(ledger)
+    packet = packets.build_integrate_review_packet(ledger)
+    item = next(m for m in packet["materials"] if m["material_id"] == material["material_id"])
+    assert len(item["text"]) <= 800
+    assert item["content_truncated"] is True
+    assert item["path"] == material["virtual_path"]
+    assert item["sha256"] == material["sha256"]
+    assert Path(material["path"]).read_text() == text
+    assert packet["candidate"]["content"]

@@ -14,6 +14,7 @@ from deerflow.sp.report import writing as report_writing
 from deerflow.sp.report.ledger import ReportLedger, ReportValidationError, gap_next_action
 from deerflow.sp.report.prompts import REPORT_RESEARCH_PROMPT
 
+INTEGRATE_MATERIAL_PREVIEW_MAX_CHARS = 800
 OUTLINE_SUMMARY_MAX_CHARS = 24_000
 OUTLINE_INITIAL_SUMMARY_MAX_CHARS = 64_000
 OUTLINE_TREE_MAX_CHARS = 80_000
@@ -268,8 +269,8 @@ def build_integrate_review_packet(ledger: ReportLedger) -> dict[str, Any]:
         materials.append(
             {
                 **item,
-                "text": text[:OUTLINE_SUMMARY_MAX_CHARS],
-                "content_truncated": len(text) > OUTLINE_SUMMARY_MAX_CHARS,
+                "text": text[:INTEGRATE_MATERIAL_PREVIEW_MAX_CHARS],
+                "content_truncated": len(text) > INTEGRATE_MATERIAL_PREVIEW_MAX_CHARS,
                 "error": error,
             }
         )
@@ -307,6 +308,10 @@ def build_integrate_review_packet(ledger: ReportLedger) -> dict[str, Any]:
         "inputs": inputs,
         "drafts": inputs_view["drafts"],
         "materials": materials,
+        "materials_note": (
+            "Material text is a bounded preview; complete sources remain at their paths. The full candidate and drafts are inlined. "
+            "Read an original only for a specific finding; this is minimum-content acceptance, not another research round."
+        ),
         "sources": inputs_view["sources"],
         "citation_map": inputs_view["citation_map"],
         "current_review": ledger.payload.get("review"),
