@@ -49,6 +49,6 @@ Return compact JSON only:
     disallowed_tools=["task", "ask_clarification", "present_files", "bash", "write_file", "str_replace"],
     skills=[],
     model="inherit",
-    max_turns=20,
+    max_turns=480,
     internal=True,
 )

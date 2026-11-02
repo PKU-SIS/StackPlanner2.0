@@ -538,4 +538,6 @@ See the [LICENSE](../LICENSE) file in the project root.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
-SP Researcher uses 256 graph turns and a 40-call total tool budget (warning at 24). Other subagents retain the existing 20-call cap; repeated-tool and token guards remain active.
+The main integration replaces the earlier Researcher 256/40 and other-role 20-call policy: graph steps and tool budgets are independent, with built-in 480 graph steps (subject to explicit overrides), at most 50 tool calls and 8 searches per child, and a shared atomic 200-call default per run. DCC Reporter overrides remain effective. Record this budget change when comparing experiments.
+
+DCC compatibility: `task_kind` is the canonical coder contract; legacy `coder_task_kind` remains accepted. Audit findings such as a violated cap are valid data results when execution succeeds. Runtime errors, masked failures and unmet verification still block completion.

@@ -232,7 +232,7 @@ class DeerFlowClient:
         }
         return RunnableConfig(
             configurable=configurable,
-            recursion_limit=overrides.get("recursion_limit", 100),
+            recursion_limit=overrides.get("recursion_limit", 512),
         )
 
     def _ensure_agent(self, config: RunnableConfig):
@@ -751,7 +751,9 @@ class DeerFlowClient:
         self._ensure_agent(config)
 
         state: dict[str, Any] = {"messages": [HumanMessage(content=message)]}
-        context = {"thread_id": thread_id}
+        from deerflow.runtime.tool_budget import RunToolBudget
+
+        context = {"thread_id": thread_id, "__run_tool_budget": RunToolBudget(getattr(self._app_config, "max_tool_calls_per_run", 200))}
         if deerflow_trace_id:
             context[DEERFLOW_TRACE_METADATA_KEY] = deerflow_trace_id
         if self._agent_name:

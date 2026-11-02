@@ -248,13 +248,93 @@ tool graph or subagent executor during state/schema imports.
 - StackPlanner chooses direct, bounded-execution, or deliberate control profiles. Deliberate tasks can produce a normalized perception brief, one batch of decision-critical clarification questions, a minimum-node dependency-aware outline, staged execution/research, verification, and versioned human review without imposing that pipeline on simple requests. `PromptContextBuilder.workflow_status` exposes deduplicated artifact-stage counts, pinned feedback, and partial/blocked state to prevent redundant stages.
 - Coder delegations use `metadata.coder_task_kind="data_processing"` for data extraction, filtering, calculations, and validation; software changes use `software_change` and retain the existing default acceptance rules. Data work requires execution evidence, but not a repository patch or software test command. Runtime stage policy must preserve the data task's validated tool allowlist: `requires_implementation=false` does not imply read-only data processing. Software inspection stages retain their read-only policy. Preserve the task kind in artifact/observation metadata and bounded recovery; do not inherit an unrelated software-change requirement. Execution-evidence pipe detection excludes quoted/escaped literals, comments, and data heredoc bodies; nested shell execution, command substitution, or ambiguous syntax retains conservative detection. Do not relax the existing masked-exit checks. Reporter language checks evaluate narrative text rather than source tables, fenced/inline code, or URLs.
 - SP-to-subagent delegation uses an additive internal A2A envelope at the Central/DR2 boundary. `SPSubagentTask` sends a `delegate` message with protocol version, stage, receiver, bounded input references, child-tool allowlist, acceptance criteria, and positive integer budgets; `SPSubagentResult` returns a `task_result` with completion status, retry recommendation, observable changed files/tests, and bounded artifact metadata. Progress and terminal events carry the same A2A task ID so the UI/debug trace can correlate dispatch, Skill/tool steps, and result. This is a message/context/artifact protocol adapter inspired by the original Stack-Planner A2A design; it does not expose ordinary tools to Central, and it deliberately excludes provider-private chain-of-thought.
-- `SPCentralResilienceMiddleware` is installed only on the Central control-plane model. For the initial perception/planning decision it applies a bounded request timeout, one lower-token retry, and at most one synthetic `sp_think` recovery per run; it emits observable timeout/fallback events and never grants ordinary tools or changes subagent policy. This addresses provider stalls without turning the outer graph watchdog into the primary recovery mechanism.
+- `SPCentralResilienceMiddleware` is installed only on the Central control-plane model. For the initial perception/planning decision it applies a bounded request timeout, one lower-token retry (both request deadlines default to 240 seconds), and at most one synthetic `sp_think` recovery per run; it emits observable timeout/fallback events and never grants ordinary tools or changes subagent policy. This addresses provider stalls without turning the outer graph watchdog into the primary recovery mechanism.
 - StackPlanner keeps large evidence out of `ThreadState`: `DelegateHandler` passes a separately bounded `mandatory_requirements.human_feedback` channel to every specialist, materializes perception/research bodies for Outline, outline/perception/evidence bodies for Researcher, and the full bounded evidence/parent-report bundle for Reporter. A revision also promotes the current run's cleaned user request (without the injected `<uploaded_files>` inventory) into Reporter's mandatory feedback. Source artifact IDs are retained across all materialized stage artifacts; report versions additionally retain parent and feedback lineage. `sp_finish` accepts `final_artifact_ref` plus `required_artifact_type` and rejects a mismatched artifact family. Repeated Reporter delegation without a revision reason is recoverable rather than silently terminating the run.
 - Opt-in execution debugging travels as `context.debug_trace_enabled`. `services.start_run` marks the run metadata, `TaskMemoryMiddleware` records the exact bounded task-context block sent to CentralAgent, SP action events retain their original `ts`, and subagent `task_*` events carry `occurred_at`, role, prompt, stop reason, and aggregate usage before batch persistence. `app.gateway.debug_trace` pages and aggregates those events for `GET /api/threads/{thread_id}/runs/{run_id}/debug-trace`, pairs action/subagent start and terminal events, computes latency/offsets, and redacts credential-shaped values. It deliberately drops provider-private reasoning fields; the debug contract is observable output plus explicit action reasons and context, not hidden chain-of-thought.
 - The no-Docker SWE-bench pilot uses `scripts/run_swebench_sp2.py`. It records the last observable stage/action and applies a per-instance `--no-progress-timeout` watchdog (default 180 seconds) in addition to the overall `--timeout`, so a graph that emits no further events is cancelled and reported as `no_progress_timeout` instead of consuming the full wall-clock budget. It subscribes to both graph values and custom subagent lifecycle events, so diagnostics distinguish a parent stall from a child that only reached `task_started`. The Qwen vLLM adapter must normalize both `reasoning` and `reasoning_content`; the current endpoint emits text-protocol `<tool_call>` blocks in the latter, which are recovered into LangChain tool calls without exposing the private reasoning stream. The benchmark explicitly disables CentralAgent and subagent extended thinking because the current Qwen endpoint can hang on the long tool-bound reasoning request; this is isolated to the benchmark runner, not the normal web configuration.
 - `sp-reporter` loads the `stackplanner-reporting` Skill and may create a unique Markdown file with `write_file`; it remains unable to search or run shell commands. Transport-wrapper cleanup prevents nested JSON or outer Markdown fences from becoming the persisted report body. Report acceptance recognizes both backticked and bare identifier-shaped preservation lists, accepts a current action's full ID or unique opaque suffix in a created filename, and enforces explicit user-supplied percentage-point boundary adjustments instead of accepting implied table arithmetic.
 - A user correction forces at most one targeted REFLECT/BACKTRACK per run before corrected work resumes; the reservation prevents a deep prior stack from being peeled in repeated batches. For REFLECT/REVISE/BACKTRACK, a unique one-character typo in a long opaque `spmem_...` target is normalized and traced as `sp.action.target_normalized`; ambiguous or larger mismatches still fail closed.
 - Non-report specialist recovery is bounded to three attempts per unresolved role chain within the run. After the cap, `SPFinishAvailabilityMiddleware` removes SP control actions and requires an honest direct gap report instead of allowing a recursion-limit/token loop. Its post-model guard also converts a plain-text success claim for a still-partial requested artifact into a recovery `sp_delegate`; at the cap, it replaces the claim with a deterministic incomplete response. A complete current-run non-report deliverable is forced directly through `sp_finish`. A blocked consecutive same-role delegation is recorded as an effective `THINK` policy checkpoint, so it delays one retry without permanently deadlocking that role. `ActionRouter` normalizes a mistaken Researcher delegation for self-contained exact arithmetic or exhaustive assignment/combinatorial work to Coder and emits `sp.delegate.target_normalized`; requests that explicitly need web/source/current evidence remain Researcher work. Coder delegations default to `read_file`, `write_file`, `str_replace`, and `bash`; Central must explicitly request network tools. A narrowed allowlist retains those local tools, and reporter narrowing always retains both `read_file` and `write_file` so a safe revision retry can inspect an existing candidate before changing it. Common interpreter aliases (`python`, `python3`, `node`, shells) normalize to `bash` before validation. The coder contract forbids redirecting program stdout into a source path, requires source creation and execution as separate operations, uses canonical backtracking instead of factorial full permutations for combinatorial enumeration, and requires assertion/exact-comparison tests for supplied expected outputs instead of accepting printed examples. `DR2SubagentExecutorAdapter` downgrades a coder's `complete` claim to `partial` when an execution/test/verification task has no successful `bash` result after the latest source edit. Registered structured result files retain a bounded `finalization_preview`; `FinishHandler` uses it for the finish memory entry and visible terminal response and emits `sp.finish.summary_grounded`, so stale model prose cannot contradict an authoritative generated result.
+
+StackPlanner execution-contract invariants:
+- `metadata.task_kind` separates software changes, data processing, and inspection
+  from the orchestration `stage`. Preserve explicit `requires_implementation=false`;
+  verification alone must not demand a source edit. Data work retains bash/output
+  tools outside the read-only perception/planning/research stages.
+- Source recovery in both `ActionRouter` and `SPFinishAvailabilityMiddleware`
+  requires an established software contract. Carry `task_kind`,
+  `requires_implementation`, and `verification_only` into observation metadata;
+  never inherit a source-write requirement from an unrelated prior delegation.
+- `ToolCallBudgetMiddleware` is always installed for subagents, independently of
+  loop detection. It runs last after the model and admits only the remaining
+  prefix of a parallel batch, capped at 50 calls. Search middleware counts blank queries separately and reserves
+  sibling provider slots before execution, capped at 8. A total-tool hard stop
+  uses the existing `loop_capped` stop-reason channel. Recursion and repeated-tool
+  guards may terminate earlier; they are separate constraints, not tool budgets.
+- `RunToolBudgetMiddleware` admits at most `max_tool_calls_per_run` (default
+  200) dispatches across the complete run. `runtime/tool_budget.py` owns the
+  locked counter; Gateway, embedded client, generic task tool and SP provider
+  propagate the same opaque `__run_tool_budget` object to every child. Never
+  copy counts or allocate a new budget on retry. Failed tools consume a slot;
+  provider HTTP retry attempts are not additional tool dispatches. A new run
+  gets a distinct counter. Both graph-admission and dispatch-denial caps must
+  surface an incomplete result. Use scalar serializable counters for events;
+  the live budget object belongs only in runtime context, never checkpoints.
+- Built-in graph budgets are 480 steps, default entrypoint recursion is 512,
+  and repeated identical-call detection retains its configured thresholds.
+  The independent fifty-call ceiling replaces graph-derived per-tool caps.
+  Reserve frequency slot 51 only for the default threshold 50; never raise a
+  custom lower frequency threshold or overwrite per-tool overrides.
+  Repetition history and frequency counters are keyed by (thread_id, run_id),
+  bounded by LRU, and cleared for that run after completion. Parallel runs
+  sharing a thread must never share frequency counters.
+- `sp_action_count` derives the canonical Central count from the unioned
+  idempotency ledger, correcting parallel absolute-counter merges without
+  sacrificing reducer idempotence. The action middleware normalizes the scalar
+  projection and trims oversized sibling batches before dispatch.
+- Summarization resolves its capacity from the main model, not its compressor.
+  `models[].context_window` is harness-only metadata (excluded by the model
+  factory). Fractional thresholds require known main-model capacity; absolute
+  thresholds also clamp to it. Reserve output/formatting headroom and clamp
+  token retention below the effective trigger. The compressor must independently
+  reserve its own output and formatting space. Template defaults: trigger
+  64000, retain 16000, trim-for-summary 32768. An empty/blank model response or
+  unbuildable summary prompt must return None and preserve checkpoint history.
+  Forward explicit null trimming limits to LangChain; omitting the argument
+  restores LangChain's 4000-token default and violates the configuration.
+- Background task registry IDs must be unique even when providers reuse tool-call
+  IDs across runs. Scheduler closures retain their own result holder, not a
+  registry lookup that can be replaced or removed. Public task progress events
+  continue to use the original tool-call ID; internal IDs are only for polling.
+  Usage caches use (thread_id, run_id, tool_call_id), and ordinary task delegation
+  forwards the parent abort event just like SP delegation. Queued cancellation
+  finalizes immediately; active waits check cancellation every 250ms. Mirror
+  completed-model usage into the result holder before cancellation can finalize
+  it, retain first-terminal-wins semantics, and propagate asyncio cancellation.
+- Context reservations include output caps from both thinking-mode configurations
+  and runtime Central output overrides. Use `utils/token_estimation.py` for
+  CJK-aware, network-free history sizing and fallback budget accounting. Keep
+  retention-slice estimates unscaled by usage metadata so trimming can converge;
+  preserve image overhead without counting base64 payloads as prose.
+- Supported A2A `budgets`: `max_tool_calls`, `max_searches`, `max_turns`,
+  `timeout_seconds`, `max_tokens`, `max_input_tokens`, `max_output_tokens`.
+  Tool/search/global resource ceilings can only be narrowed. Token ceilings are
+  checked at model boundaries, so the final model response may exceed a ceiling.
+- Verification records tool-call emission positions as well as result positions.
+  A check must be emitted after the latest source-write result, so parallel
+  siblings cannot establish a post-edit verification dependency. Shell parsing
+  preserves newline separators, quoted expressions and here-document bodies;
+  unconditional suffixes and failure-recovery OR clauses cannot certify success.
+  Collection-only/version/help/listing preflights cannot satisfy test execution.
+- Evidence validation consumes structured tool status and exit codes, recognizes
+  executed test commands, Python syntax checks and assertions, and rejects data
+  files/no-op replacements as source changes. Latest failed tests invalidate
+  older successes, and common `.spec.ts`/`.test.ts` layouts are tests. A rerun supersedes the same check's
+  old failure, not unrelated failures. Language acceptance excludes Markdown data
+  tables, fenced/inline code and links and respects negated English requests.
+- Regression coverage: `test_sp_review_regressions.py`,
+  `test_tool_call_budget_middleware.py`, `test_run_tool_budget.py`,
+  `test_harness_parameter_regressions.py`, and `test_web_search_budget_middleware.py`.
 
 **Runtime Configuration** (via `config.configurable`):
 - `thinking_enabled` - Enable model's extended thinking
@@ -939,7 +1019,9 @@ See `docs/` directory for detailed documentation:
 - [summarization.md](docs/summarization.md) - Context summarization
 - [plan_mode_usage.md](docs/plan_mode_usage.md) - Plan mode with TodoList
 
-SP Researcher uses 256 graph turns and a 40-call total tool budget (warning at 24). Other subagents retain the existing 20-call cap; repeated-tool and token guards remain active.
+SP delegates use independent graph and tool budgets: built-in graph defaults are 480 (Reporter retains its DCC-specific override), each child has at most 50 tool calls and 8 web searches, and the whole run shares an atomic 200-call default. Explicit lower limits remain binding; repeated-tool and token guards remain active. These defaults supersede the earlier Researcher 256/40 and other-role 20-call policy.
+
+Coder metadata uses `task_kind` canonically; legacy `coder_task_kind` is accepted at the boundary and host-authored metadata retains the alias for saved consumers. Task classification and verification flags come from the delegated contract, never child-declared artifact metadata. A successful data audit may report a negative business finding, but transport errors, tracebacks, nonzero exit codes and masked execution still fail. Software verification keeps the post-edit execution requirement.
 
 Reporter defaults to Markdown for prose but honors explicit machine-readable file formats such as JSON. Keep control envelopes separate from delivered file bytes and preserve current-action filename ownership. This is also required by the optional CLAUSE RAG transport.
 

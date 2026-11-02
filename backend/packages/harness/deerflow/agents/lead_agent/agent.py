@@ -84,9 +84,9 @@ def _resolve_model_name(requested_model_name: str | None = None, *, app_config: 
     return default_model_name
 
 
-def _create_summarization_middleware(*, app_config: AppConfig | None = None) -> DeerFlowSummarizationMiddleware | None:
+def _create_summarization_middleware(*, app_config: AppConfig | None = None, main_model_name: str | None = None, output_token_limit: int | None = None) -> DeerFlowSummarizationMiddleware | None:
     """Create and configure the summarization middleware from config."""
-    return create_summarization_middleware(app_config=app_config)
+    return create_summarization_middleware(app_config=app_config, main_model_name=main_model_name, output_token_limit=output_token_limit)
 
 
 def _create_todo_list_middleware(is_plan_mode: bool) -> TodoMiddleware | None:
@@ -292,7 +292,11 @@ def build_middlewares(
     )
 
     # Add summarization middleware if enabled
-    summarization_middleware = _create_summarization_middleware(app_config=resolved_app_config)
+    try:
+        output_token_limit = int(_get_runtime_config(config).get("sp_central_max_tokens") or 0) if control_plane_only else 0
+    except (TypeError, ValueError):
+        output_token_limit = 0
+    summarization_middleware = _create_summarization_middleware(app_config=resolved_app_config, main_model_name=model_name, output_token_limit=max(0, output_token_limit))
     if summarization_middleware is not None:
         middlewares.append(summarization_middleware)
 

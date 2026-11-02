@@ -2813,6 +2813,7 @@ class TestResolveRunParamsUserId:
     """
 
     def _manager(self):
+        import app.gateway.github.run_policy  # noqa: F401 -- register the policy explicitly
         from app.channels.manager import ChannelManager
 
         bus = MessageBus()
@@ -2894,7 +2895,7 @@ class TestResolveRunParamsUserId:
     def test_github_channel_gets_raised_recursion_limit(self):
         """Autonomous GitHub coding runs (clone → edit → test → push → PR) need
         more super-steps than an interactive chat turn. The default
-        ``recursion_limit`` of 100 is raised for the github channel only."""
+        ``recursion_limit`` is 512 by default; GitHub policy may raise it further."""
         manager = self._manager()
 
         gh_msg = InboundMessage(channel_name="github", chat_id="zhfeng/llm-gateway", user_id="zhfeng", text="hi")
@@ -2904,7 +2905,7 @@ class TestResolveRunParamsUserId:
         # Interactive channels keep the default ceiling.
         slack_msg = InboundMessage(channel_name="slack", chat_id="C1", user_id="u", text="hi")
         _, slack_config, _ = manager._resolve_run_params(slack_msg, "thread-1")
-        assert slack_config["recursion_limit"] == 100
+        assert slack_config["recursion_limit"] == 512
 
     def test_github_channel_recursion_limit_respects_higher_override(self):
         """An explicit higher recursion_limit in channel/user config must not be
@@ -3000,7 +3001,7 @@ class TestResolveRunParamsUserId:
                 metadata={"github": {"recursion_limit": bad}},
             )
             _, gh_config, _ = manager._resolve_run_params(gh_msg, "thread-1")
-            assert gh_config["recursion_limit"] == 250, f"bad value {bad!r} should fall back to 250"
+            assert gh_config["recursion_limit"] == 512, f"bad value {bad!r} should fall back to 512"
 
     def test_auth_disabled_user_id_is_used_for_unbound_channel_messages(self, monkeypatch):
         from app.gateway.auth_disabled import AUTH_DISABLED_USER_ID

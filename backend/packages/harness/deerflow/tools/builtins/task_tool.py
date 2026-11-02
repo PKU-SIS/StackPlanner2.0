@@ -43,9 +43,9 @@ def _task_event_time() -> str:
     return datetime.now(UTC).isoformat()
 
 
-# Cache subagent token usage by tool_call_id so TokenUsageMiddleware can
+# Cache subagent usage by thread/run/call ID so TokenUsageMiddleware can
 # write it back to the triggering AIMessage's usage_metadata.
-_subagent_usage_cache: dict[str, dict[str, int]] = {}
+_subagent_usage_cache: dict[str | tuple[str, str, str], dict[str, int]] = {}
 
 
 def _token_usage_cache_enabled(app_config: "AppConfig | None") -> bool:
@@ -57,13 +57,19 @@ def _token_usage_cache_enabled(app_config: "AppConfig | None") -> bool:
     return bool(getattr(getattr(app_config, "token_usage", None), "enabled", False))
 
 
-def _cache_subagent_usage(tool_call_id: str, usage: dict | None, *, enabled: bool = True) -> None:
+def _usage_cache_key(tool_call_id: str, context: Any = None) -> str | tuple[str, str, str]:
+    if isinstance(context, dict) and (context.get("thread_id") or context.get("run_id")):
+        return (str(context.get("thread_id") or ""), str(context.get("run_id") or ""), tool_call_id)
+    return tool_call_id
+
+
+def _cache_subagent_usage(tool_call_id: str, usage: dict | None, *, enabled: bool = True, context: Any = None) -> None:
     if enabled and usage:
-        _subagent_usage_cache[tool_call_id] = usage
+        _subagent_usage_cache[_usage_cache_key(tool_call_id, context)] = usage
 
 
-def pop_cached_subagent_usage(tool_call_id: str) -> dict | None:
-    return _subagent_usage_cache.pop(tool_call_id, None)
+def pop_cached_subagent_usage(tool_call_id: str, *, context: Any = None) -> dict | None:
+    return _subagent_usage_cache.pop(_usage_cache_key(tool_call_id, context), None)
 
 
 def _is_subagent_terminal(result: Any) -> bool:
@@ -384,9 +390,13 @@ async def task_tool(
         "run_id": run_id,
         "channel_user_id": channel_user_id,
         "deerflow_trace_id": deerflow_trace_id,
+        "parent_abort_event": parent_context.get("__run_abort_event"),
     }
     if resolved_app_config is not None:
         executor_kwargs["app_config"] = resolved_app_config
+    from deerflow.runtime.tool_budget import resolve_run_tool_budget
+
+    executor_kwargs["run_tool_budget"] = resolve_run_tool_budget(parent_context)
     executor = SubagentExecutor(**executor_kwargs)
 
     # Start background execution (always async to prevent blocking)
@@ -407,7 +417,7 @@ async def task_tool(
     writer(
         {
             "type": "task_started",
-            "task_id": task_id,
+            "task_id": tool_call_id,
             "description": description,
             "prompt": description,
             "subagent_type": subagent_type,
@@ -424,7 +434,7 @@ async def task_tool(
                 writer(
                     {
                         "type": "task_failed",
-                        "task_id": task_id,
+                        "task_id": tool_call_id,
                         "error": "Task disappeared from background tasks",
                         "subagent_type": subagent_type,
                         "occurred_at": _task_event_time(),
@@ -453,7 +463,7 @@ async def task_tool(
                     writer(
                         {
                             "type": "task_running",
-                            "task_id": task_id,
+                            "task_id": tool_call_id,
                             "message": message,
                             "message_index": i + 1,  # 1-based index for display
                             "total_messages": current_message_count,
@@ -467,12 +477,12 @@ async def task_tool(
             # Check if task completed, failed, or timed out
             usage = _summarize_usage(getattr(result, "token_usage_records", None))
             if result.status == SubagentStatus.COMPLETED:
-                _cache_subagent_usage(tool_call_id, usage, enabled=cache_token_usage)
+                _cache_subagent_usage(tool_call_id, usage, enabled=cache_token_usage, context=parent_context)
                 _report_subagent_usage(runtime, result)
                 writer(
                     {
                         "type": "task_completed",
-                        "task_id": task_id,
+                        "task_id": tool_call_id,
                         "result": result.result,
                         "stop_reason": result.stop_reason,
                         "usage": usage,
@@ -492,12 +502,12 @@ async def task_tool(
                     stop_reason=result.stop_reason,
                 )
             elif result.status == SubagentStatus.FAILED:
-                _cache_subagent_usage(tool_call_id, usage, enabled=cache_token_usage)
+                _cache_subagent_usage(tool_call_id, usage, enabled=cache_token_usage, context=parent_context)
                 _report_subagent_usage(runtime, result)
                 writer(
                     {
                         "type": "task_failed",
-                        "task_id": task_id,
+                        "task_id": tool_call_id,
                         "error": result.error,
                         "stop_reason": result.stop_reason,
                         "usage": usage,
@@ -517,12 +527,12 @@ async def task_tool(
                     stop_reason=result.stop_reason,
                 )
             elif result.status == SubagentStatus.CANCELLED:
-                _cache_subagent_usage(tool_call_id, usage, enabled=cache_token_usage)
+                _cache_subagent_usage(tool_call_id, usage, enabled=cache_token_usage, context=parent_context)
                 _report_subagent_usage(runtime, result)
                 writer(
                     {
                         "type": "task_cancelled",
-                        "task_id": task_id,
+                        "task_id": tool_call_id,
                         "error": result.error,
                         "usage": usage,
                         "subagent_type": subagent_type,
@@ -537,12 +547,12 @@ async def task_tool(
                     error=result.error,
                 )
             elif result.status == SubagentStatus.TIMED_OUT:
-                _cache_subagent_usage(tool_call_id, usage, enabled=cache_token_usage)
+                _cache_subagent_usage(tool_call_id, usage, enabled=cache_token_usage, context=parent_context)
                 _report_subagent_usage(runtime, result)
                 writer(
                     {
                         "type": "task_timed_out",
-                        "task_id": task_id,
+                        "task_id": tool_call_id,
                         "error": result.error,
                         "usage": usage,
                         "subagent_type": subagent_type,
@@ -569,11 +579,11 @@ async def task_tool(
                 logger.error(f"[trace={trace_id}] Task {task_id} polling timed out after {poll_count} polls (should have been caught by thread pool timeout)")
                 _report_subagent_usage(runtime, result)
                 usage = _summarize_usage(getattr(result, "token_usage_records", None))
-                _cache_subagent_usage(tool_call_id, usage, enabled=cache_token_usage)
+                _cache_subagent_usage(tool_call_id, usage, enabled=cache_token_usage, context=parent_context)
                 writer(
                     {
                         "type": "task_timed_out",
-                        "task_id": task_id,
+                        "task_id": tool_call_id,
                         "usage": usage,
                         "subagent_type": subagent_type,
                         "occurred_at": _task_event_time(),
@@ -611,8 +621,8 @@ async def task_tool(
             cleanup_background_task(task_id)
         else:
             _schedule_deferred_subagent_cleanup(task_id, trace_id, max_poll_count)
-        _subagent_usage_cache.pop(tool_call_id, None)
+        _subagent_usage_cache.pop(_usage_cache_key(tool_call_id, parent_context), None)
         raise
     except Exception:
-        _subagent_usage_cache.pop(tool_call_id, None)
+        _subagent_usage_cache.pop(_usage_cache_key(tool_call_id, parent_context), None)
         raise

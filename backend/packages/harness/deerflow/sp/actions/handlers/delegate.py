@@ -14,7 +14,7 @@ from deerflow.sp.actions.schema import HandlerResult, SPAction
 from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.memory import StackMemoryEntry
 from deerflow.sp.subagents import SPSubagentExecutorProtocol, SPSubagentResult, SPSubagentTask
-from deerflow.sp.subagents.dr2_adapter import coder_task_requires_implementation, is_data_processing_coder
+from deerflow.sp.subagents.dr2_adapter import coder_task_kind, coder_task_requires_implementation, is_data_processing_coder
 
 OBSERVE_SUMMARY_MAX_CHARS = 700
 LARGE_RESULT_ARTIFACT_THRESHOLD = 1200
@@ -538,12 +538,22 @@ class DelegateHandler:
                 )
             )
         if action.target_agent == "coder":
-            task_metadata.setdefault("coder_task_kind", "software_change")
-        data_processing = action.target_agent == "coder" and is_data_processing_coder(task_metadata)
-        if data_processing:
+            task_metadata["task_kind"] = coder_task_kind(
+                SPSubagentTask(
+                    action_id=action.action_id,
+                    subagent_type="coder",
+                    task=str(action.task),
+                    description=action.reason,
+                    expected_output=action.expected_output,
+                    metadata=task_metadata,
+                )
+            )
+        if action.target_agent == "coder":
+            task_metadata["coder_task_kind"] = task_metadata["task_kind"]
+        if action.target_agent == "coder" and is_data_processing_coder(task_metadata):
             task_metadata["requires_implementation"] = False
             task_metadata.pop("verification_only", None)
-            task_metadata.setdefault("tool_names", ["read_file", "bash"])
+            task_metadata.setdefault("tool_names", ["read_file", "write_file", "bash"])
         if action.target_agent == "coder" and action.stage in {
             "perception",
             "planning",
@@ -552,7 +562,7 @@ class DelegateHandler:
             task_metadata["requires_implementation"] = False
         if (
             action.target_agent == "coder"
-            and not data_processing
+            and not is_data_processing_coder(task_metadata)
             and action.stage
             not in {
                 "perception",
@@ -560,26 +570,23 @@ class DelegateHandler:
                 "research",
             }
         ):
-            # Preserve the implementation contract across recovery turns. A
-            # later Central action may only say "locate the implementation";
-            # without this inherited flag that read-only step could be marked
-            # complete and FINISH would become available despite no source edit.
-            verification_only = action.stage == "verification" and action.metadata.get("verification_only") is True and action.metadata.get("requires_implementation") is False
-            prior_requires_implementation = any(entry.action == "delegate" and entry.metadata.get("target_agent") == "coder" and entry.metadata.get("requires_implementation") is True for entry in context.stack.entries)
+            # Preserve this delegation's explicit contract. Source recovery
+            # carries its own flag; unrelated earlier coder work must not
+            # impose source edits or software tests on a data task.
+            verification_only = action.stage == "verification" and action.metadata.get("requires_implementation") is not True and (action.metadata.get("verification_only") is True or task_metadata["task_kind"] == "software_change")
+            if verification_only:
+                task_metadata["verification_only"] = True
             task_metadata["requires_implementation"] = (
                 False
                 if verification_only
-                else bool(
-                    prior_requires_implementation
-                    or coder_task_requires_implementation(
-                        SPSubagentTask(
-                            action_id=action.action_id,
-                            subagent_type="coder",
-                            task=str(action.task),
-                            description=action.reason,
-                            expected_output=action.expected_output,
-                            metadata={"stage": action.stage},
-                        )
+                else coder_task_requires_implementation(
+                    SPSubagentTask(
+                        action_id=action.action_id,
+                        subagent_type="coder",
+                        task=str(action.task),
+                        description=action.reason,
+                        expected_output=action.expected_output,
+                        metadata=task_metadata,
                     )
                 )
             )
@@ -649,7 +656,9 @@ class DelegateHandler:
         if isinstance(requested_acceptance, list):
             acceptance_criteria.extend(str(value).strip() for value in requested_acceptance if isinstance(value, str) and value.strip())
         raw_budgets = task_metadata.get("budgets")
-        budgets = {str(name): value for name, value in raw_budgets.items() if isinstance(name, str) and name.strip() and isinstance(value, int) and not isinstance(value, bool) and value > 0} if isinstance(raw_budgets, Mapping) else {}
+        if raw_budgets is not None and not isinstance(raw_budgets, Mapping):
+            raise ValueError("SP action metadata.budgets must be an object")
+        budgets = dict(raw_budgets) if isinstance(raw_budgets, Mapping) else {}
         allowed_tools = task_metadata.get("tool_names")
         allowed_tools = list(dict.fromkeys(str(value).strip() for value in allowed_tools if isinstance(value, str) and value.strip())) if isinstance(allowed_tools, list) else []
 
@@ -936,11 +945,11 @@ class DelegateHandler:
                 "execution_verification",
                 "verification_only",
                 "requires_implementation",
+                "task_kind",
             )
             if key in result.artifact_metadata
         }
-        if task.metadata.get("coder_task_kind"):
-            acceptance_metadata["coder_task_kind"] = task.metadata["coder_task_kind"]
+        acceptance_metadata.update({key: task.metadata[key] for key in ("requires_implementation", "verification_only", "task_kind", "coder_task_kind") if key in task.metadata})
         observe_entry = context.stack.append_observe(
             observe_content,
             actor=str(action.target_agent),
@@ -1261,7 +1270,9 @@ def _report_language_alignment_gaps(
 ) -> list[str]:
     """Reject predominantly English reports when the user requested in Chinese."""
     latest_query = str(task.context_refs.get("latest_user_input") or task.context_refs.get("original_query") or "")
-    if len(_CJK_CHARACTER_PATTERN.findall(latest_query)) < 4 or _EXPLICIT_ENGLISH_REPORT_PATTERN.search(latest_query) or len(output.strip()) < 200:
+    # Negated English requests ("不要用英文") are not permission to switch language.
+    language_request = re.sub(r"(?:不要|不能|禁止|勿|不必|无需).{0,8}(?:英文|英语)|\b(?:do not|don't|never)\b[^。.!?\n]{0,32}\benglish\b", "", latest_query, flags=re.I)
+    if len(_CJK_CHARACTER_PATTERN.findall(latest_query)) < 4 or _EXPLICIT_ENGLISH_REPORT_PATTERN.search(language_request):
         return []
     # Source tables, code, literal identifiers, and citation destinations do not
     # express the report's narrative language and must retain their source values.
@@ -1798,9 +1809,11 @@ def _delegated_artifact_metadata(
     metadata["delegate_stage"] = action.stage
     metadata["target_agent"] = action.target_agent
     metadata["requires_implementation"] = task.metadata.get("requires_implementation")
-    metadata.pop("coder_task_kind", None)
-    if task.metadata.get("coder_task_kind"):
-        metadata["coder_task_kind"] = task.metadata["coder_task_kind"]
+    for key in ("task_kind", "coder_task_kind", "verification_only"):
+        metadata.pop(key, None)
+    if task.subagent_type == "coder":
+        metadata["task_kind"] = coder_task_kind(task)
+        metadata["coder_task_kind"] = metadata["task_kind"]
     if task.metadata.get("verification_only") is True:
         metadata["verification_only"] = True
     return metadata

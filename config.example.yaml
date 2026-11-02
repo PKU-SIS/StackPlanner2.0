@@ -15,7 +15,7 @@
 # ============================================================================
 # Bump this number when the config schema changes.
 # Run `make config-upgrade` to merge new fields into your local config.yaml.
-config_version: 20
+config_version: 21
 
 # ============================================================================
 # Logging
@@ -61,15 +61,18 @@ token_budget:
 # least one LLM call). The Gateway never trusts a client-supplied value
 # verbatim: any value above this ceiling is clamped down to it, preventing
 # runaway API cost / DoS. Invalid or non-positive client values fall back to
-# the server default of 100. Raise this only if you legitimately run very
+# the server default of 512. Raise this only if you legitimately run very
 # deeply nested subagent graphs.
 max_recursion_limit: 1000
+max_tool_calls_per_run: 200
 
 
 # ============================================================================
 # Models Configuration
 # ============================================================================
 # Configure available LLM models for the agent to use
+# Optional models[].context_window: declare actual server capacity in tokens
+# (e.g. 128000). This guides compaction; it does not enlarge the model server.
 #
 # Optional per-model pricing (powers the real-cost display on the workspace
 # console). Add a `pricing` block to any model entry; use ONE currency across
@@ -1227,8 +1230,8 @@ sandbox:
 #   # Custom agents use their own timeout_seconds (default 900) unless overridden.
 #   timeout_seconds: 1800
 #   # Optional global max-turn override for all subagents.
-#   # Built-in defaults: general-purpose=150, bash=60. Leave unset to keep them.
-#   # max_turns: 120
+#   # Built-in graph-step defaults: 480; independent tool ceiling: 50.
+#   # max_turns: 480
 #
 #   # Per-run token ceiling for subagents (#3875 Phase 2). A backstop against a
 #   # subagent that burns tokens on trivial work. At the hard-stop threshold the
@@ -1247,7 +1250,7 @@ sandbox:
 #   agents:
 #     general-purpose:
 #       timeout_seconds: 2700  # 45 minutes for very long deep-research tasks
-#       max_turns: 250         # raise above the 150 default for very deep tasks
+#       max_turns: 480         # graph steps; tool calls remain capped at 50
 #       # token_budget:        # per-agent override of the global token_budget above
 #       #   max_tokens: 3000000  # raise the ceiling for deep-research tasks
 #       # model: qwen3:32b     # Use a specific model (default: inherit from lead agent)
@@ -1381,9 +1384,9 @@ summarization:
   # Summarization runs when ANY threshold is met (OR logic)
   # You can specify a single trigger or a list of triggers
   trigger:
-    # Trigger when token count reaches 32000
+    # Trigger when token count reaches 64000 (clamped to the main model window)
     - type: tokens
-      value: 32000
+      value: 64000  # CJK-aware estimate; clamped to actual capacity/output headroom
     # Uncomment to also trigger when message count reaches 50
     # - type: messages
     #   value: 50
@@ -1394,9 +1397,9 @@ summarization:
   # Context retention policy after summarization
   # Specifies how much recent history to preserve
   keep:
-    # Keep the most recent 10 messages (recommended)
-    type: messages
-    value: 10
+    # Keep up to 16000 recent tokens, clamped below the trigger threshold.
+    type: tokens
+    value: 16000
     # Alternative: Keep specific token count
     # type: tokens
     # value: 3000
@@ -1406,7 +1409,9 @@ summarization:
 
   # Maximum tokens to keep when preparing messages for summarization
   # Set to null to skip trimming (not recommended for very long conversations)
-  trim_tokens_to_summarize: 15564
+  trim_tokens_to_summarize: 32768
+  output_token_reserve: 8192
+  context_safety_margin: 2048
 
   # Custom summary prompt template (null = use default LangChain prompt)
   # The prompt should guide the model to extract important context

@@ -538,10 +538,10 @@ class TestLoopDetection:
         runtime_new = _make_runtime("thread-new")
         mw._apply(_make_state(tool_calls=call), runtime_new)
 
-        assert "thread-0" not in mw._history
+        assert ("thread-0", "test-run") not in mw._history
         assert "thread-0" not in mw._tool_freq
         assert "thread-0" not in mw._tool_freq_warned
-        assert "thread-new" in mw._history
+        assert ("thread-new", "test-run") in mw._history
         assert len(mw._history) == 3
 
     def test_warned_hashes_are_pruned_to_sliding_window(self):
@@ -554,9 +554,9 @@ class TestLoopDetection:
             mw._apply(_make_state(tool_calls=call), runtime)
             mw._apply(_make_state(tool_calls=call), runtime)
 
-        assert len(mw._history["test-thread"]) <= 4
-        assert set(mw._warned["test-thread"]).issubset(set(mw._history["test-thread"]))
-        assert len(mw._warned["test-thread"]) <= 4
+        assert len(mw._history[("test-thread", "test-run")]) <= 4
+        assert set(mw._warned[("test-thread", "test-run")]).issubset(set(mw._history[("test-thread", "test-run")]))
+        assert len(mw._warned[("test-thread", "test-run")]) <= 4
 
     def test_pending_warning_keys_are_capped(self):
         """Abnormal same-thread runs cannot grow pending-warning keys forever."""
@@ -608,7 +608,7 @@ class TestLoopDetection:
         call = [_bash_call("ls")]
 
         mw._apply(_make_state(tool_calls=call), runtime)
-        assert "default" in mw._history
+        assert ("default", "default") in mw._history
 
 
 class TestLoopDetectionAgentGraphIntegration:
@@ -1122,14 +1122,14 @@ class TestTotalToolCallDetection:
         )
         runtime = _make_runtime()
 
-        for i in range(4):
+        for i in range(5):
             mw._apply(_make_state(tool_calls=[self._alternating_call(i)]), runtime)
 
-        result = mw._apply(_make_state(tool_calls=[self._alternating_call(4)]), runtime)
+        result = mw._apply(_make_state(tool_calls=[self._alternating_call(5)]), runtime)
         assert result is not None
         msg = result["messages"][0]
         assert msg.tool_calls == []
-        assert "Total tool calls reached 5" in msg.content
+        assert "Total tool calls reached 6" in msg.content
         assert mw.consume_stop_reason("test-run") == "loop_capped"
 
     def test_counts_parallel_tool_calls(self):
@@ -1144,10 +1144,11 @@ class TestTotalToolCallDetection:
         first = [self._alternating_call(0), self._alternating_call(1)]
         second = [self._alternating_call(2), self._alternating_call(3)]
         assert mw._apply(_make_state(tool_calls=first), runtime) is None
-        result = mw._apply(_make_state(tool_calls=second), runtime)
+        assert mw._apply(_make_state(tool_calls=second), runtime) is None
+        result = mw._apply(_make_state(tool_calls=[self._alternating_call(4)]), runtime)
 
         assert result is not None
-        assert "Total tool calls reached 4" in result["messages"][0].content
+        assert "Total tool calls reached 5" in result["messages"][0].content
 
     def test_after_agent_clears_only_current_run_total(self):
         mw = LoopDetectionMiddleware(

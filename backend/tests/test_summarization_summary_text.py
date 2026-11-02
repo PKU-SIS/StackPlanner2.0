@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage, SystemMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -68,6 +69,16 @@ def _big_history(n: int = 12) -> list:
 
 
 class TestSummaryFailureSafety:
+    @pytest.mark.parametrize("text", ["", " \n\t"])
+    def test_blank_summary_does_not_destroy_history(self, text):
+        middleware = DeerFlowSummarizationMiddleware(model=_StaticChatModel(text=text), trigger=("messages", 4), keep=("messages", 2), token_counter=len)
+        assert middleware._maybe_summarize({"messages": _big_history(), "summary_text": "existing summary"}, None) is None
+
+    @pytest.mark.asyncio
+    async def test_async_blank_summary_does_not_destroy_history(self):
+        middleware = DeerFlowSummarizationMiddleware(model=_StaticChatModel(text=""), trigger=("messages", 4), keep=("messages", 2), token_counter=len)
+        assert await middleware._amaybe_summarize({"messages": _big_history(), "summary_text": "existing summary"}, None) is None
+
     def test_summary_model_failure_does_not_destroy_history(self):
         middleware = DeerFlowSummarizationMiddleware(
             model=_RaisingChatModel(),

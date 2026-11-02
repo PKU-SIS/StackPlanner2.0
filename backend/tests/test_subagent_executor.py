@@ -253,6 +253,11 @@ def msg(classes):
 class TestAgentConstruction:
     """Test _create_agent() wiring before execution starts."""
 
+    def test_subagent_loop_guard_preserves_custom_frequency_limit(self, classes):
+        guard = SimpleNamespace(tool_freq_warn=5, tool_freq_hard_limit=10)
+        classes["reserve_subagent_loop_guard_budget"]([guard], max_turns=480)
+        assert guard.tool_freq_hard_limit == 10
+
     def test_subagent_loop_guard_stops_before_graph_recursion_boundary(self, classes):
         guard = SimpleNamespace(
             tool_freq_warn=30,
@@ -262,10 +267,10 @@ class TestAgentConstruction:
 
         classes["reserve_subagent_loop_guard_budget"]([guard], max_turns=100)
 
-        assert guard.tool_freq_warn == 9
-        assert guard.tool_freq_hard_limit == 15
-        assert guard.tool_total_warn == 9
-        assert guard.tool_total_hard_limit == 15
+        assert guard.tool_freq_warn == 30
+        assert guard.tool_freq_hard_limit == 51
+        assert not hasattr(guard, "tool_total_warn")
+        assert not hasattr(guard, "tool_total_hard_limit")
 
     def test_subagent_loop_guard_scales_for_small_turn_budgets(self, classes):
         guard = SimpleNamespace(
@@ -276,10 +281,10 @@ class TestAgentConstruction:
 
         classes["reserve_subagent_loop_guard_budget"]([guard], max_turns=10)
 
-        assert guard.tool_freq_warn == 1
-        assert guard.tool_freq_hard_limit == 2
-        assert guard.tool_total_warn == 1
-        assert guard.tool_total_hard_limit == 2
+        assert guard.tool_freq_warn == 30
+        assert guard.tool_freq_hard_limit == 51
+        assert not hasattr(guard, "tool_total_warn")
+        assert not hasattr(guard, "tool_total_hard_limit")
 
     def test_subagent_loop_guard_accounts_for_middleware_graph_steps(self, classes):
         guard = SimpleNamespace(
@@ -290,10 +295,10 @@ class TestAgentConstruction:
 
         classes["reserve_subagent_loop_guard_budget"]([guard], max_turns=40)
 
-        assert guard.tool_freq_warn == 3
-        assert guard.tool_freq_hard_limit == 5
-        assert guard.tool_total_warn == 3
-        assert guard.tool_total_hard_limit == 5
+        assert guard.tool_freq_warn == 30
+        assert guard.tool_freq_hard_limit == 51
+        assert not hasattr(guard, "tool_total_warn")
+        assert not hasattr(guard, "tool_total_hard_limit")
 
     def test_subagent_loop_guard_allows_bounded_long_coder_run(self, classes):
         guard = SimpleNamespace(
@@ -304,32 +309,22 @@ class TestAgentConstruction:
 
         classes["reserve_subagent_loop_guard_budget"]([guard], max_turns=140)
 
-        assert guard.tool_freq_warn == 12
-        assert guard.tool_freq_hard_limit == 20
-        assert guard.tool_total_warn == 12
-        assert guard.tool_total_hard_limit == 20
+        assert guard.tool_freq_warn == 30
+        assert guard.tool_freq_hard_limit == 51
+        assert not hasattr(guard, "tool_total_warn")
+        assert not hasattr(guard, "tool_total_hard_limit")
 
-    def test_sp_researcher_loop_guard_has_expanded_research_budget(self, classes):
-        from deerflow.subagents.builtins.sp_specialists import RESEARCHER_CONFIG
+    @pytest.mark.parametrize("agent_name", ["sp-researcher", "sp-coder"])
+    def test_sp_role_loop_guards_keep_graph_and_tool_budgets_independent(self, classes, agent_name):
+        from deerflow.subagents.builtins.sp_specialists import CODER_CONFIG, RESEARCHER_CONFIG
 
+        config = {"sp-researcher": RESEARCHER_CONFIG, "sp-coder": CODER_CONFIG}[agent_name]
         guard = SimpleNamespace(tool_freq_warn=30, tool_freq_hard_limit=50, warn_threshold=3, hard_limit=5)
-
-        classes["reserve_subagent_loop_guard_budget"]([guard], max_turns=RESEARCHER_CONFIG.max_turns, agent_name=RESEARCHER_CONFIG.name)
-
-        assert RESEARCHER_CONFIG.max_turns == 256
-        assert guard.tool_total_warn == 24
-        assert guard.tool_total_hard_limit == 40
-        assert guard.tool_freq_warn == 24
-        assert guard.tool_freq_hard_limit == 40
+        classes["reserve_subagent_loop_guard_budget"]([guard], max_turns=config.max_turns)
+        assert config.max_turns == 480
+        assert not hasattr(guard, "tool_total_hard_limit")
+        assert guard.tool_freq_hard_limit == 51
         assert (guard.warn_threshold, guard.hard_limit) == (3, 5)
-
-    def test_other_subagents_keep_existing_tool_budget_cap(self, classes):
-        guard = SimpleNamespace(tool_freq_warn=30, tool_freq_hard_limit=50)
-
-        classes["reserve_subagent_loop_guard_budget"]([guard], max_turns=256, agent_name="sp-coder")
-
-        assert guard.tool_total_warn == 12
-        assert guard.tool_total_hard_limit == 20
 
     def test_qwen_vllm_subagent_enables_thinking_when_tools_are_bound(self, classes, base_config):
         SubagentExecutor = classes["SubagentExecutor"]
@@ -367,7 +362,7 @@ class TestAgentConstruction:
 
         assert executor._should_enable_tool_thinking(app_config, [NamedTool("bash")]) is False
 
-    @pytest.mark.parametrize(("agent_name", "max_turns", "warning", "hard_limit"), [("test-agent", 10, 1, 2), ("sp-researcher", 256, 24, 40)])
+    @pytest.mark.parametrize(("agent_name", "max_turns"), [("test-agent", 10), ("sp-researcher", 480)])
     def test_create_agent_threads_explicit_app_config_to_model_and_middlewares(
         self,
         classes,
@@ -375,8 +370,6 @@ class TestAgentConstruction:
         monkeypatch: pytest.MonkeyPatch,
         agent_name,
         max_turns,
-        warning,
-        hard_limit,
     ):
         """Explicit app_config must flow into both model and middleware factories."""
         import deerflow.config as config_module
@@ -453,8 +446,8 @@ class TestAgentConstruction:
         }
         assert captured["agent"]["model"] is model
         assert captured["agent"]["middleware"] is middlewares
-        assert guard.tool_total_warn == warning
-        assert guard.tool_total_hard_limit == hard_limit
+        assert not hasattr(guard, "tool_total_hard_limit")
+        assert guard.tool_freq_hard_limit == 51
         assert captured["agent"]["tools"] == []
         assert captured["agent"]["system_prompt"] is None  # system_prompt is merged into initial state messages
 
@@ -638,7 +631,7 @@ class TestAgentConstruction:
         assert isinstance(messages[1], HumanMessage)
 
     @pytest.mark.anyio
-    @pytest.mark.parametrize(("agent_name", "max_turns", "warning", "hard_limit"), [("test-agent", 10, 1, 2), ("sp-researcher", 256, 24, 40), ("sp-coder", 256, 12, 20)])
+    @pytest.mark.parametrize(("agent_name", "max_turns"), [("test-agent", 10), ("sp-researcher", 480), ("sp-coder", 480)])
     async def test_build_initial_state_tells_tool_subagent_its_execution_budget(
         self,
         classes,
@@ -646,8 +639,6 @@ class TestAgentConstruction:
         monkeypatch: pytest.MonkeyPatch,
         agent_name,
         max_turns,
-        warning,
-        hard_limit,
     ):
         SubagentExecutor = classes["SubagentExecutor"]
         base_config.name = agent_name
@@ -667,7 +658,7 @@ class TestAgentConstruction:
 
         system_content = state["messages"][0].content
         assert "<execution_budget>" in system_content
-        assert f"hard budget of {hard_limit} total tool calls and will warn after {warning}" in system_content
+        assert "hard budget of 50 total tool calls" in system_content
         assert "reserve calls for the source edit" in system_content
 
     @pytest.mark.anyio
@@ -3070,3 +3061,145 @@ class TestSubagentGuardrailAttribution:
         from langchain_core.messages import HumanMessage
 
         return ({"messages": [HumanMessage(content=task)]}, [], None)
+
+
+@pytest.mark.asyncio
+async def test_ordinary_sync_execute_respects_timeout(classes, monkeypatch):
+    import asyncio
+    import time
+
+    executor = classes["SubagentExecutor"](classes["SubagentConfig"](name="timeout", description="timeout", timeout_seconds=1), tools=[], parent_model="test")
+
+    async def slow(task, result_holder):
+        await asyncio.sleep(2)
+        return classes["SubagentResult"](task_id="timeout", trace_id="timeout", status=classes["SubagentStatus"].COMPLETED)
+
+    monkeypatch.setattr(executor, "_aexecute", slow)
+    started = time.monotonic()
+    result = await asyncio.to_thread(executor.execute, "work")
+    assert result.status == classes["SubagentStatus"].TIMED_OUT
+    assert time.monotonic() - started < 1.8
+
+
+def test_background_tasks_with_same_provider_call_id_do_not_overwrite(classes, base_config, monkeypatch):
+    executor_module = sys.modules["deerflow.subagents.executor"]
+    queued = []
+    monkeypatch.setattr(executor_module._scheduler_pool, "submit", lambda fn: queued.append(fn))
+    executor = classes["SubagentExecutor"](base_config, tools=[], parent_model="test")
+    first = executor.execute_async("first", task_id="same-provider-call")
+    first_result = executor_module.get_background_task_result(first)
+    second = executor.execute_async("second", task_id="same-provider-call")
+    assert first != second
+    assert executor_module.get_background_task_result(first) is first_result
+    assert executor_module.get_background_task_result(second) is not first_result
+
+
+@pytest.mark.parametrize("cancel_source", ["child", "parent"])
+def test_background_cancellation_interrupts_a_stalled_model(classes, base_config, monkeypatch, cancel_source):
+    import time
+
+    executor_module = sys.modules["deerflow.subagents.executor"]
+
+    started, release, stopped = threading.Event(), threading.Event(), threading.Event()
+    abort_event = threading.Event()
+    executor = classes["SubagentExecutor"](base_config, tools=[], parent_model="test", parent_abort_event=abort_event)
+
+    async def stalled(task, result_holder):
+        started.set()
+        try:
+            while not release.is_set():
+                await asyncio.sleep(0.01)
+            result_holder.try_set_terminal(classes["SubagentStatus"].COMPLETED, result="late completion")
+            return result_holder
+        finally:
+            stopped.set()
+
+    monkeypatch.setattr(executor, "_aexecute", stalled)
+    task_id = executor.execute_async("work")
+    try:
+        assert started.wait(1)
+        if cancel_source == "child":
+            executor_module.request_cancel_background_task(task_id)
+        else:
+            abort_event.set()
+        assert stopped.wait(1), "cancel must interrupt a model that never yields a graph chunk"
+        deadline = time.monotonic() + 1
+        result = executor_module.get_background_task_result(task_id)
+        while not result.status.is_terminal and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert result.status == classes["SubagentStatus"].CANCELLED
+    finally:
+        release.set()
+        stopped.wait(1)
+
+
+@pytest.mark.asyncio
+async def test_already_cancelled_child_skips_setup(classes, base_config, monkeypatch):
+    executor = classes["SubagentExecutor"](base_config, tools=[], parent_model="test")
+    result = classes["SubagentResult"](task_id="cancelled", trace_id="trace", status=classes["SubagentStatus"].PENDING)
+    result.cancel_event.set()
+
+    async def forbidden_setup(task):
+        pytest.fail("a cancelled child must not load skills or construct its model")
+
+    monkeypatch.setattr(executor, "_build_initial_state", forbidden_setup)
+    result = await executor._aexecute("work", result)
+    assert result.status == classes["SubagentStatus"].CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_cancelled_child_retains_metered_usage(classes, base_config, monkeypatch):
+    executor = classes["SubagentExecutor"](base_config, tools=[], parent_model="test")
+    result = classes["SubagentResult"](task_id="metered", trace_id="trace", status=classes["SubagentStatus"].RUNNING)
+    started = asyncio.Event()
+
+    async def initial(task):
+        return {"messages": []}, [], None
+
+    async def stream(state, *, config, **kwargs):
+        response = SimpleNamespace(generations=[[SimpleNamespace(message=classes["AIMessage"](content="done", usage_metadata={"input_tokens": 10, "output_tokens": 2, "total_tokens": 12}))]])
+        config["callbacks"][0].on_llm_end(response, run_id="metered-call")
+        started.set()
+        await asyncio.Event().wait()
+        yield state
+
+    monkeypatch.setattr(executor, "_build_initial_state", initial)
+    monkeypatch.setattr(executor, "_create_agent", lambda *args, **kwargs: SimpleNamespace(astream=stream))
+    operation = asyncio.create_task(executor._aexecute("work", result))
+    try:
+        await asyncio.wait_for(started.wait(), timeout=1)
+        assert sum(record["total_tokens"] for record in result.token_usage_records) == 12
+    finally:
+        operation.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await operation
+    assert result.status == classes["SubagentStatus"].CANCELLED
+    assert sum(record["total_tokens"] for record in result.token_usage_records) == 12
+
+
+def test_cancelled_queued_child_can_be_cleaned_before_scheduler_starts(classes, base_config, monkeypatch):
+    executor_module = sys.modules["deerflow.subagents.executor"]
+    queued = []
+    monkeypatch.setattr(executor_module._scheduler_pool, "submit", lambda fn: queued.append(fn))
+    executor = classes["SubagentExecutor"](base_config, tools=[], parent_model="test")
+    monkeypatch.setattr(executor, "_aexecute", lambda *args: pytest.fail("cancelled queued work must not start"))
+    task_id = executor.execute_async("queued")
+    executor_module.request_cancel_background_task(task_id)
+    assert executor_module.get_background_task_result(task_id).status == classes["SubagentStatus"].CANCELLED
+    executor_module.cleanup_background_task(task_id)
+    assert executor_module.get_background_task_result(task_id) is None
+    queued[0]()
+
+
+def test_scheduler_rejection_does_not_leave_pending_task(classes, base_config, monkeypatch):
+    executor_module = sys.modules["deerflow.subagents.executor"]
+    executor = classes["SubagentExecutor"](base_config, tools=[], parent_model="test")
+    original_ids = set(executor_module._background_tasks)
+
+    def rejected(fn):
+        raise RuntimeError("scheduler shut down")
+
+    monkeypatch.setattr(executor_module._scheduler_pool, "submit", rejected)
+    with pytest.raises(RuntimeError, match="scheduler shut down"):
+        executor.execute_async("work")
+    assert set(executor_module._background_tasks) == original_ids

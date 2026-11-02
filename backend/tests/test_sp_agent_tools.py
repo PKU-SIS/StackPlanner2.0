@@ -624,11 +624,11 @@ def test_partial_data_processing_recovery_preserves_its_acceptance_contract():
     filtered = middleware._filter_request(request)
 
     instruction = filtered.messages[-1].content
-    assert '"coder_task_kind": "data_processing"' in instruction
+    assert '"task_kind": "data_processing"' in instruction
     assert "source implementation recovery" not in instruction
     update = middleware.after_model({**state, "messages": [*state["messages"], AIMessage(content="The data table is complete.")]}, SimpleNamespace(context={"run_id": "run-1"}))
     recovery = update["messages"][0].tool_calls[0]["args"]
-    assert recovery["metadata"]["coder_task_kind"] == "data_processing"
+    assert recovery["metadata"]["task_kind"] == "data_processing"
     assert recovery["metadata"]["requires_implementation"] is False
     assert recovery["metadata"].get("verification_only") is not True
     assert "existing diff" not in recovery["task"]
@@ -651,6 +651,7 @@ def test_verification_behavior_regression_recovers_to_writable_implementation():
         metadata={
             "target_agent": "coder",
             "completion_status": "partial",
+            "requires_implementation": True,
             "evidence_gaps": ["Existing regression test behavior is incompatible with the patch."],
         },
     )
@@ -1112,6 +1113,7 @@ def test_plain_success_claim_for_partial_coder_artifact_becomes_recovery_delegat
         result_ref="partial-code-1",
         metadata={
             "completion_status": "partial",
+            "requires_implementation": True,
             "evidence_gaps": ["The '-3--1,2' test still fails."],
             "target_agent": "coder",
         },
@@ -1519,7 +1521,7 @@ def test_report_recovery_dispatches_by_missing_capability(gap, target):
     assert f'target_agent="{target}"' in instruction
     assert 'input_refs=["report-1"]' in instruction
     if target == "coder":
-        assert '"coder_task_kind": "data_processing"' in instruction
+        assert '"task_kind": "data_processing"' in instruction
 
 
 @pytest.mark.parametrize(
@@ -1597,7 +1599,7 @@ def test_report_missing_software_test_preserves_patch_and_software_contract():
     request.state["sp_task_memory"] = stack.to_dict()
     instruction = SPFinishAvailabilityMiddleware()._filter_request(request).messages[-1].content
     assert 'target_agent="coder"' in instruction
-    assert '"coder_task_kind": "software_change"' in instruction
+    assert '"task_kind": "software_change"' in instruction
     assert 'stage="verification"' in instruction
     assert "patch-1" in instruction
 

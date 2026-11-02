@@ -121,6 +121,8 @@ def _install_runtime_context(config: dict, runtime_context: dict[str, Any]) -> N
             existing_context.setdefault(DEERFLOW_TRACE_METADATA_KEY, runtime_context[DEERFLOW_TRACE_METADATA_KEY])
         if "app_config" in runtime_context:
             existing_context["app_config"] = runtime_context["app_config"]
+        if "__run_tool_budget" in runtime_context:
+            existing_context["__run_tool_budget"] = runtime_context["__run_tool_budget"]
         return
 
     config["context"] = dict(runtime_context)
@@ -360,6 +362,9 @@ async def run_agent(
         # children stop promptly when the run is cancelled or disconnected,
         # instead of continuing to search and consume tokens in the background.
         runtime_ctx["__run_abort_event"] = record.abort_event
+        from deerflow.runtime.tool_budget import RunToolBudget
+
+        runtime_ctx["__run_tool_budget"] = RunToolBudget(getattr(ctx.app_config, "max_tool_calls_per_run", 200))
         _install_runtime_context(config, runtime_ctx)
         runtime = Runtime(context=cast(Any, runtime_ctx), store=store)
         config.setdefault("configurable", {})["__pregel_runtime"] = runtime

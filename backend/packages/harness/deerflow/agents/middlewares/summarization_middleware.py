@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Protocol, override, runtime_checkable
 
 from langchain.agents import AgentState
@@ -17,6 +18,7 @@ from langgraph.runtime import Runtime
 from deerflow.agents.middlewares.dynamic_context_middleware import is_dynamic_context_reminder
 from deerflow.config.app_config import get_app_config
 from deerflow.models import create_chat_model
+from deerflow.utils.token_estimation import estimate_message_tokens
 
 logger = logging.getLogger(__name__)
 _SUMMARY_TRIGGER_MESSAGE_NAME = "summary"
@@ -84,6 +86,10 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
+        if isinstance(self.token_counter, partial) and self.token_counter.func is estimate_message_tokens:
+            # Retention slices must shrink with their content, independently
+            # of historical provider usage attached to retained messages.
+            self._partial_token_counter = estimate_message_tokens
         self._before_summarization_hooks = before_summarization or []
         # The summary LLM call runs inside a LangGraph middleware hook, so its token
         # stream would otherwise be captured by the messages-tuple stream callback and
@@ -118,13 +124,13 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
             return "No previous conversation history."
         prompt = self._build_summary_prompt(messages_to_summarize, previous_summary=previous_summary)
         if prompt is None:
-            return "Previous conversation was too long to summarize."
+            return None
         try:
             response = self._summary_model.invoke(
                 prompt,
                 config={"metadata": {"lc_source": "summarization"}},
             )
-            return response.text.strip()
+            return response.text.strip() or None
         except Exception:
             logger.exception("Summary generation failed; skipping compaction this turn")
             return None
@@ -135,13 +141,13 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
             return "No previous conversation history."
         prompt = self._build_summary_prompt(messages_to_summarize, previous_summary=previous_summary)
         if prompt is None:
-            return "Previous conversation was too long to summarize."
+            return None
         try:
             response = await self._summary_model.ainvoke(
                 prompt,
                 config={"metadata": {"lc_source": "summarization"}},
             )
-            return response.text.strip()
+            return response.text.strip() or None
         except Exception:
             logger.exception("Summary generation failed; skipping compaction this turn")
             return None
@@ -437,6 +443,8 @@ def create_summarization_middleware(
     *,
     app_config: Any | None = None,
     keep: tuple[str, int | float] | None = None,
+    main_model_name: str | None = None,
+    output_token_limit: int | None = None,
 ) -> DeerFlowSummarizationMiddleware | None:
     """Create the configured summarization middleware.
 
@@ -452,13 +460,6 @@ def create_summarization_middleware(
     if not config.enabled:
         return None
 
-    trigger = None
-    if config.trigger is not None:
-        if isinstance(config.trigger, list):
-            trigger = [item.to_tuple() for item in config.trigger]
-        else:
-            trigger = config.trigger.to_tuple()
-
     if config.model_name:
         model = create_chat_model(
             name=config.model_name,
@@ -472,15 +473,74 @@ def create_summarization_middleware(
             app_config=resolved_app_config,
             attach_tracing=False,
         )
+    # The compressor's profile must never determine the caller's input limit.
+    default_name = resolved_app_config.models[0].name if resolved_app_config.models else None
+    main_name = main_model_name or default_name
+    main_config = resolved_app_config.get_model_config(main_name) if main_name else None
+    extras = getattr(main_config, "model_extra", None) or {}
+    profile = extras.get("profile") or {}
+    window = getattr(main_config, "context_window", None) or profile.get("max_input_tokens")
+    if window is None:
+        if main_name == (config.model_name or default_name):
+            profile = getattr(model, "profile", None) or {}
+        elif main_name:
+            context_model = create_chat_model(name=main_name, thinking_enabled=False, app_config=resolved_app_config, attach_tracing=False)
+            profile = getattr(context_model, "profile", None) or {}
+        window = profile.get("max_input_tokens")
+
+    def configured_output_limit(model_config, *, compressor=False):
+        settings = getattr(model_config, "model_extra", None) or {}
+        variants = [settings, getattr(model_config, "when_thinking_disabled", None)]
+        if not compressor:
+            variants.append(getattr(model_config, "when_thinking_enabled", None))
+        caps = [config.output_token_reserve]
+        for variant in variants:
+            if isinstance(variant, dict):
+                for key in ("max_tokens", "max_completion_tokens", "max_output_tokens"):
+                    cap = variant.get(key)
+                    if isinstance(cap, int) and not isinstance(cap, bool) and cap > 0:
+                        caps.append(cap)
+        return max(caps)
+
+    output_reserve = max(configured_output_limit(main_config), int(output_token_limit or 0))
+    available = max(1, int(window) - output_reserve - config.context_safety_margin) if window is not None else None
+    context_trigger = max(1, int(available * 0.85)) if available is not None else None
+
+    def resolve_size(size):
+        kind, value = size
+        if kind == "fraction":
+            if available is None:
+                raise ValueError("Fractional summarization requires the main model's context_window or max_input_tokens profile")
+            return ("tokens", max(1, int(available * value)))
+        return (kind, value)
+
+    requested = config.trigger if isinstance(config.trigger, list) else [config.trigger] if config.trigger is not None else []
+    triggers = [resolve_size(item.to_tuple()) for item in requested] or [("tokens", 64000)]
+    if context_trigger is not None:
+        triggers = [(kind, min(value, context_trigger) if kind == "tokens" else value) for kind, value in triggers]
+        if not any(kind == "tokens" for kind, value in triggers):
+            triggers.append(("tokens", context_trigger))
+    trigger = triggers[0] if len(triggers) == 1 else triggers
+    retained = resolve_size(keep or config.keep.to_tuple())
+    token_triggers = [int(value) for kind, value in triggers if kind == "tokens"]
+    if retained[0] == "tokens" and token_triggers:
+        retained = ("tokens", min(int(retained[1]), max(1, min(token_triggers) // 2)))
+    summary_config = resolved_app_config.get_model_config(config.model_name or default_name) if (config.model_name or default_name) else None
+    summary_window = getattr(summary_config, "context_window", None) or (getattr(model, "profile", None) or {}).get("max_input_tokens")
+    trim_tokens = config.trim_tokens_to_summarize
+    if summary_window is not None and trim_tokens is not None:
+        summary_output = configured_output_limit(summary_config, compressor=True)
+        summary_available = max(1, int(summary_window) - summary_output - config.context_safety_margin)
+        trim_tokens = min(trim_tokens, max(1, int(summary_available * 0.85)))
     model = model.with_config(tags=["middleware:summarize"])
 
     kwargs: dict[str, Any] = {
         "model": model,
         "trigger": trigger,
-        "keep": keep or config.keep.to_tuple(),
+        "keep": retained,
+        "trim_tokens_to_summarize": trim_tokens,
+        "token_counter": partial(estimate_message_tokens, use_usage_metadata_scaling=True),
     }
-    if config.trim_tokens_to_summarize is not None:
-        kwargs["trim_tokens_to_summarize"] = config.trim_tokens_to_summarize
     if config.summary_prompt is not None:
         kwargs["summary_prompt"] = config.summary_prompt
 

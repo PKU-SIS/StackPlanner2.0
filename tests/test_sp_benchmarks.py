@@ -1135,7 +1135,7 @@ def test_search_failures_match_native_protocol_and_stop_native_retry_guard(
         "args": {"query": "another query"},
     }
     messages.append(AIMessage(content="", tool_calls=[next_call]))
-    stopped = WebSearchBudgetMiddleware._short_circuit(
+    stopped = WebSearchBudgetMiddleware()._short_circuit(
         SimpleNamespace(tool_call=next_call, state={"messages": messages})
     )
     assert json.loads(stopped.content)["error"] == "WEB_SEARCH_ATTEMPTS_EXHAUSTED"
@@ -1234,8 +1234,10 @@ def test_native_compaction_model_uses_actual_endpoint_model_and_credential(monke
 
 
 @pytest.mark.parametrize("recover_qwen_tool_calls", [False, True])
+@pytest.mark.parametrize("explicit_stream_timeout", [None, 37.0])
 def test_native_transport_preserves_provider_request_and_stream_defaults(
     recover_qwen_tool_calls,
+    explicit_stream_timeout,
 ):
     from deerflow.config.app_config import AppConfig
     from deerflow.models.factory import create_chat_model
@@ -1253,6 +1255,10 @@ def test_native_transport_preserves_provider_request_and_stream_defaults(
             recover_qwen_tool_calls=recover_qwen_tool_calls,
         )
     )
+    if explicit_stream_timeout is not None:
+        payload = app.model_dump(mode="python")
+        payload["models"][0]["stream_chunk_timeout"] = explicit_stream_timeout
+        app = AppConfig.model_validate(payload)
     original = app.model_dump(mode="python")
     original["models"][0]["use"] = (
         "deerflow.models.vllm_provider:VllmChatModel"
@@ -1269,6 +1275,8 @@ def test_native_transport_preserves_provider_request_and_stream_defaults(
             assert adapted._default_params == baseline._default_params
             assert adapted.stream_usage == baseline.stream_usage
             assert adapted.stream_chunk_timeout == baseline.stream_chunk_timeout
+            if explicit_stream_timeout is not None:
+                assert adapted.stream_chunk_timeout == explicit_stream_timeout
         finally:
             await baseline.root_async_client._client.aclose()
             await adapted.root_async_client._client.aclose()

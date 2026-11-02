@@ -12,7 +12,7 @@ def test_memory_recaller_is_registered_as_builtin_subagent():
 
     assert config is not None
     assert config.name == "sp-memory-recaller"
-    assert config.max_turns == 20
+    assert config.max_turns == 480
     assert config.internal is True
     assert config.skills == []
 

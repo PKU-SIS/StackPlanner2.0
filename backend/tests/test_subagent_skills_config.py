@@ -107,7 +107,7 @@ class TestCustomSubagentConfig:
         assert config.disallowed_tools == ["task", "ask_clarification", "present_files"]
         assert config.skills is None
         assert config.model == "inherit"
-        assert config.max_turns == 50
+        assert config.max_turns == 480
         assert config.timeout_seconds == 900
 
     def test_full_configuration(self):

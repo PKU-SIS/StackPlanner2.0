@@ -27,7 +27,7 @@ from deerflow.sp.agent_tools import (
 )
 from deerflow.sp.central import CENTRAL_AGENT_ACTION_PROMPT
 from deerflow.sp.central.runtime_context import SPCentralRuntimeContext, build_sp_central_runtime_context
-from deerflow.sp.central_resilience import SPCentralResilienceMiddleware
+from deerflow.sp.central_resilience import DEFAULT_CENTRAL_RETRY_TIMEOUT_SECONDS, DEFAULT_CENTRAL_TIMEOUT_SECONDS, SPCentralResilienceMiddleware
 from deerflow.sp.memory.entry import utc_now_iso
 from deerflow.sp.subagents import (
     A2A_PROGRESS_MESSAGE,
@@ -326,7 +326,7 @@ def _apply_sp_stage_tool_policy(subagent_config: Any, task: SPSubagentTask):
         return subagent_config
     stage = str(task.metadata.get("stage") or "").strip().lower()
     read_only_stage = stage in {"perception", "planning", "research"}
-    if task.metadata.get("requires_implementation") is not False and not read_only_stage:
+    if not read_only_stage:
         return subagent_config
     configured = subagent_config.tools
     if configured is None:
@@ -368,6 +368,9 @@ class DR2SPExecutorProvider:
 
     def __call__(self, state: Mapping[str, Any], runtime: Runtime) -> SPSubagentExecutorProtocol:
         context = _mapping(getattr(runtime, "context", None))
+        from deerflow.runtime.tool_budget import resolve_run_tool_budget
+
+        run_tool_budget = resolve_run_tool_budget(context)
         metadata = _mapping(self.runnable_config.get("metadata"))
         writer = getattr(runtime, "stream_writer", None)
         journal = context.get("__run_journal")
@@ -389,6 +392,10 @@ class DR2SPExecutorProvider:
                 timeout_override = 0
             if timeout_override > 0:
                 subagent_config = replace(subagent_config, timeout_seconds=timeout_override)
+            task.validate_protocol()
+            config_caps = {name: min(getattr(subagent_config, name), task.budgets[name]) for name in ("max_turns", "timeout_seconds") if name in task.budgets}
+            if config_caps:
+                subagent_config = replace(subagent_config, **config_caps)
             raw_thinking = context.get("sp_subagent_thinking_enabled", configurable.get("sp_subagent_thinking_enabled"))
             subagent_thinking_enabled: bool | None = None
             if raw_thinking is not None:
@@ -417,9 +424,7 @@ class DR2SPExecutorProvider:
                 "sp_protect_test_files",
                 configurable.get("sp_protect_test_files"),
             )
-            protect_test_files = (
-                raw_protect_tests.strip().lower() in {"1", "true", "yes", "on"} if isinstance(raw_protect_tests, str) else bool(raw_protect_tests)
-            )
+            protect_test_files = raw_protect_tests.strip().lower() in {"1", "true", "yes", "on"} if isinstance(raw_protect_tests, str) else bool(raw_protect_tests)
             _infer_task_skill_selection(
                 task,
                 available_skill_names=self.available_skill_names,
@@ -489,6 +494,8 @@ class DR2SPExecutorProvider:
                 thinking_enabled=subagent_thinking_enabled,
                 max_tokens_per_step=subagent_max_tokens if subagent_max_tokens > 0 else None,
                 protect_test_files=protect_test_files,
+                budgets=dict(task.budgets),
+                run_tool_budget=run_tool_budget,
             )
 
         def observe_raw_result(raw_result: Any) -> None:
@@ -740,8 +747,8 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
                 memory_config=getattr(resolved_app_config, "memory", None),
             ),
             SPCentralResilienceMiddleware(
-                initial_timeout_seconds=float(runtime.get("sp_central_timeout_seconds") or 90),
-                retry_timeout_seconds=float(runtime.get("sp_central_retry_timeout_seconds") or 60),
+                initial_timeout_seconds=float(runtime.get("sp_central_timeout_seconds") or DEFAULT_CENTRAL_TIMEOUT_SECONDS),
+                retry_timeout_seconds=float(runtime.get("sp_central_retry_timeout_seconds") or DEFAULT_CENTRAL_RETRY_TIMEOUT_SECONDS),
                 retry_max_tokens=int(runtime.get("sp_central_retry_max_tokens") or 2048),
             ),
             SPTerminalActionMiddleware(),

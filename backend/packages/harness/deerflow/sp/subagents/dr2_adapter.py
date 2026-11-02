@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import re
+import shlex
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from typing import Any, Protocol
@@ -49,7 +51,9 @@ _CODER_IMPLEMENTATION_ACTION_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _TEST_PATH_PATTERN = re.compile(
-    r"(?:^|/)(?:tests?|testdata)(?:/|$)"
+    r"(?:^|/)(?:tests?|testdata|__tests__|spec)(?:/|$)"
+    r"|\.(?:spec|test)\.[cm]?[jt]sx?$"
+    r"|(?:^|/)[^/]*Test\.(?:java|kt|cs)$"
     r"|(?:^|/)(?:test_[^/]*|[^/]*_test\.[^/]*)$",
     re.IGNORECASE,
 )
@@ -282,15 +286,29 @@ def _message_text(value: Any) -> str:
 
 
 def _tool_result_succeeded(value: Any, *, allow_negative_findings: bool = False) -> bool:
-    # A data audit may successfully find a noncompliant row. Runtime errors
-    # and nonzero process status still fail; domain CHECK/FAIL text alone is
-    # not evidence that the checking program malfunctioned.
+    if isinstance(value, Mapping):
+        if value.get("status") == "error":
+            return False
+        value = value.get("content")
     text = _message_text(value).strip()
     lowered = text.lower()
-    if lowered.startswith("error:") or "traceback (most recent call last)" in lowered or "assertionerror" in lowered or "permission denied" in lowered or (not allow_negative_findings and _OBSERVABLE_FALSE_CHECK_PATTERN.search(text)):
+    try:
+        payload = json.loads(text)
+    except (ValueError, TypeError):
+        payload = None
+    if isinstance(payload, Mapping) and (payload.get("error") or payload.get("status") == "error"):
+        return False
+    if (
+        lowered.startswith("error:")
+        or "traceback (most recent call last)" in lowered
+        or "assertionerror" in lowered
+        or "permission denied" in lowered
+        or "timed out" in lowered
+        or (not allow_negative_findings and _OBSERVABLE_FALSE_CHECK_PATTERN.search(text))
+    ):
         return False
     exit_codes = [int(match.group(1)) for pattern in _EXIT_STATUS_PATTERNS for match in pattern.finditer(text)]
-    return not exit_codes or exit_codes[-1] == 0
+    return not exit_codes or all(code == 0 for code in exit_codes)
 
 
 def _coder_reported_behavior_failure(raw_result: Any, ai_messages: Any, *, allow_negative_findings: bool = False) -> bool:
@@ -306,12 +324,20 @@ def _coder_reported_behavior_failure(raw_result: Any, ai_messages: Any, *, allow
     if _BEHAVIOR_FAILURE_REPORT_PATTERN.search(raw_text) and not _ENVIRONMENT_BLOCKER_REPORT_PATTERN.search(raw_text):
         return True
 
-    tool_texts: list[str] = []
-    if isinstance(ai_messages, list):
-        for message in ai_messages:
-            if isinstance(message, Mapping) and message.get("type") == "tool":
-                tool_texts.append(_message_text(message.get("content")))
-    for text in tool_texts:
+    # A later result supersedes only the same check, never an unrelated failure.
+    calls: dict[str, str] = {}
+    latest: dict[str, Mapping[str, Any]] = {}
+    for index, message in enumerate(ai_messages if isinstance(ai_messages, list) else []):
+        if not isinstance(message, Mapping):
+            continue
+        if message.get("type") == "ai":
+            for call in message.get("tool_calls") or []:
+                calls[str(call.get("id"))] = json.dumps([call.get("name"), call.get("args")], sort_keys=True, default=str)
+        elif message.get("type") == "tool":
+            key = calls.get(str(message.get("tool_call_id")), f"unknown-{index}")
+            latest[key] = message
+    for message in latest.values():
+        text = _message_text(message.get("content"))
         if _ENVIRONMENT_BLOCKER_REPORT_PATTERN.search(text) and not _OBSERVABLE_FALSE_CHECK_PATTERN.search(text):
             continue
         if (not allow_negative_findings and _OBSERVABLE_FALSE_CHECK_PATTERN.search(text)) or _BEHAVIOR_FAILURE_REPORT_PATTERN.search(text):
@@ -396,21 +422,28 @@ def _shell_pipeline_surface(command: str) -> str:
 
 def _command_preserves_exit_status(command: str) -> bool:
     """Reject shell wrappers that can turn a failed test into exit code zero."""
-
-    lowered = command.lower()
-    if re.search(r"\|\|\s*(?:true|:)(?:\s|$)", lowered):
+    try:
+        segments, separators = _shell_command_segments(command)
+    except ValueError:
+        return False
+    if any("||" in separator or "&" == separator for separator in separators):
         return False
     # Without pipefail, ``pytest ... | head`` reports the consumer's status,
     # not pytest's. This exact pattern produced false-complete SWE patches.
     if re.search(r"(?<!\|)\|(?!\|)", _shell_pipeline_surface(command)) and not re.search(
         r"\bset\s+(?:-[^;\n]*o\s+pipefail|-o\s+pipefail)\b",
-        lowered,
+        command.lower(),
     ):
         return False
-    # A semicolon always runs the next command and therefore discards the test
-    # status. ``&&`` is safe because the suffix runs only after success.
-    if re.search(r";\s*(?:echo|printf|head|tail|cat)\b", lowered):
+    # Any unconditional suffix can mask the runner status, including a second
+    # test command. Setup before the runner and success-only && suffixes are safe.
+    if re.search(r";\s*(?:echo|printf|head|tail|cat)\b", _shell_pipeline_surface(command), re.I):
         return False
+    checked = False
+    for index, args in enumerate(segments):
+        checked = checked or _is_verification_args(args, command)
+        if checked and index < len(separators) and any(char in separators[index] for char in ";\n") and any(segments[index + 1 :]):
+            return False
     return True
 
 
@@ -485,7 +518,7 @@ def _recover_research_tool_evidence(ai_messages: Any) -> str | None:
 
 def is_data_processing_coder(metadata: Mapping[str, Any]) -> bool:
     """Distinguish data execution from the default software-change contract."""
-    return metadata.get("coder_task_kind") == "data_processing"
+    return metadata.get("task_kind", metadata.get("coder_task_kind")) == "data_processing"
 
 
 def _coder_requires_execution_evidence(task: SPSubagentTask | None) -> bool:
@@ -494,19 +527,37 @@ def _coder_requires_execution_evidence(task: SPSubagentTask | None) -> bool:
     if is_data_processing_coder(task.metadata):
         return True
     text = "\n".join(str(value) for value in (task.task, task.description, task.expected_output) if value)
-    return bool(_CODER_EXECUTION_REQUIRED_PATTERN.search(text))
+    stage = str(task.stage or task.metadata.get("stage") or "").lower()
+    data_execution = stage not in {"perception", "planning", "research"} and (
+        task.metadata.get("task_kind") == "data_processing" or re.search(r"筛选|过滤|去重|汇总|计算|排序|统计|\b(?:filter|aggregate|calculate|compute|sort)\b", text, re.I)
+    )
+    return bool(data_execution or _CODER_EXECUTION_REQUIRED_PATTERN.search(text))
+
+
+def coder_task_kind(task: SPSubagentTask) -> str:
+    """Task purpose and orchestration stage are separate execution contracts."""
+    kind = task.metadata.get("task_kind", task.metadata.get("coder_task_kind"))
+    if kind in {"software_change", "data_processing", "inspection"}:
+        return kind
+    text = "\n".join(str(v) for v in (task.task, task.description, task.expected_output) if v)
+    text = re.sub(
+        r"(?:不要|无需|不需要|不必|不得|禁止|不能|勿|不)[^，。；;\n]{0,24}(?:源码|源代码|代码|软件|仓库|程序|脚本)"
+        r"|\b(?:do not|don't|without|no need to)\b[^,.;\n]{0,32}\b(?:source code|code|software|repository|script)\b",
+        "",
+        text,
+        flags=re.I,
+    )
+    software = re.search(r"源码|源代码|代码|软件|程序|脚本|仓库|补丁|\b(?:code|source\s+(?:code|file|change)|software|repository|patch|implementation|bug)\b", text, re.I)
+    data = re.search(r"筛选|过滤|去重|汇总|计算|排序|统计|数据|\b(?:data|csv|xlsx|filter|aggregate|calculate|compute|sort)\b", text, re.I)
+    if data and not software:
+        return "data_processing"
+    if software or _CODER_IMPLEMENTATION_ACTION_PATTERN.search(text):
+        return "software_change"
+    return "inspection"
 
 
 def coder_task_requires_implementation(task: SPSubagentTask) -> bool:
-    """Return whether a coder delegation must produce a source-file change.
-
-    Explicit data-processing tasks do not require repository changes.
-    ``perception`` coder tasks are intentionally read-only. Other software coder
-    stage is an implementation/verification task in SP's contract, including a
-    follow-up that only says "locate the implementation" after an earlier
-    failed edit.  The latter is why this is metadata-driven rather than inferred
-    from the latest natural-language task alone.
-    """
+    """A software mutation needs source evidence; verification alone never does."""
     if task.subagent_type != "coder":
         return False
     if is_data_processing_coder(task.metadata):
@@ -514,18 +565,20 @@ def coder_task_requires_implementation(task: SPSubagentTask) -> bool:
     explicit = task.metadata.get("requires_implementation")
     if isinstance(explicit, bool):
         return explicit
-    stage = str(task.metadata.get("stage") or "").strip().lower()
-    if stage == "perception":
+    stage = str(task.stage or task.metadata.get("stage") or "").lower()
+    if stage in {"perception", "planning", "research", "verification"}:
         return False
-    # Coder work outside the read-only perception stage is an implementation
-    # contract by default. Relying only on action verbs made recovery turns
-    # such as "investigate" or "verify" look read-only, allowing a test-only
-    # patch to satisfy the model while the requested source fix remained
-    # absent.
-    if stage in {"implementation", "verification", "revision"}:
+    return coder_task_kind(task) == "software_change"
+
+
+def observation_requires_code_recovery(metadata: Mapping[str, Any]) -> bool:
+    """Only an established software contract may force source/test recovery."""
+    if metadata.get("task_kind", metadata.get("coder_task_kind")) in {"data_processing", "inspection"} or metadata.get("requires_implementation") is False and metadata.get("verification_only") is not True:
+        return False
+    if metadata.get("task_kind", metadata.get("coder_task_kind")) == "software_change":
         return True
-    text = "\n".join(str(value) for value in (task.task, task.description, task.expected_output) if value)
-    return bool(_CODER_IMPLEMENTATION_ACTION_PATTERN.search(text))
+    implementation = metadata.get("implementation_verification")
+    return metadata.get("requires_implementation") is True or metadata.get("verification_only") is True or (isinstance(implementation, Mapping) and (implementation.get("required") is True or implementation.get("passed") is True))
 
 
 def _is_test_path(path: str) -> bool:
@@ -533,11 +586,21 @@ def _is_test_path(path: str) -> bool:
     return bool(_TEST_PATH_PATTERN.search(normalized))
 
 
+def _is_source_path(path: str) -> bool:
+    normalized = path.replace("\\", "/").lower()
+    name = normalized.rsplit("/", 1)[-1]
+    configuration = name in {"makefile", "dockerfile", "package.json", "tsconfig.json", "cargo.toml", "pyproject.toml", "pom.xml", "config.yaml", "config.example.yaml", "extensions_config.json", "extensions_config.example.json"} or any(
+        part in {"config", "configs", ".github"} for part in normalized.split("/")[:-1]
+    )
+    return configuration or bool(re.search(r"\.(?:py|pyi|js|jsx|ts|tsx|mjs|cjs|go|rs|java|kt|kts|c|h|cc|cpp|hpp|cs|rb|php|swift|scala|sh|bash|zsh|sql|vue|svelte|html|css|scss)$", normalized))
+
+
 def _implementation_verification(ai_messages: Any) -> dict[str, Any]:
     """Check whether successful file edits include a non-test source path."""
     calls: dict[str, tuple[str, Mapping[str, Any] | None]] = {}
     source_paths: list[str] = []
     test_paths: list[str] = []
+    read_contents: dict[str, str] = {}
     if not isinstance(ai_messages, list):
         ai_messages = []
 
@@ -554,19 +617,34 @@ def _implementation_verification(ai_messages: Any) -> dict[str, Any]:
                 call_id = str(call.get("id") or f"anonymous-{index}-{call_index}")
                 calls[call_id] = (str(call.get("name") or ""), _tool_call_args(call.get("args")))
             continue
-        if message.get("type") != "tool" or not _tool_result_succeeded(message.get("content")):
+        if message.get("type") != "tool" or not _tool_result_succeeded(message):
             continue
         call_id = str(message.get("tool_call_id") or "")
         tool_name, args = calls.get(call_id, (str(message.get("name") or ""), None))
-        if tool_name not in _FILE_WRITE_TOOLS or args is None:
+        if args is None:
             continue
         path = args.get("path")
         if not isinstance(path, str) or not path.strip():
             continue
         path = path.strip()
+        if tool_name == "read_file":
+            if args.get("start_line") is None and args.get("end_line") is None:
+                read_contents[path] = _message_text(message.get("content"))
+            continue
+        if tool_name not in _FILE_WRITE_TOOLS:
+            continue
+        if tool_name == "str_replace":
+            old = args.get("old_str", args.get("old_string"))
+            new = args.get("new_str", args.get("new_string"))
+            if isinstance(old, str) and old == new:
+                continue
+        if tool_name == "write_file":
+            if args.get("append") and not args.get("content") or not args.get("append") and path in read_contents and args.get("content") == read_contents[path]:
+                continue
+        read_contents.pop(path, None)
         if _is_test_path(path):
             test_paths.append(path)
-        else:
+        elif _is_source_path(path):
             source_paths.append(path)
 
     return {
@@ -579,12 +657,102 @@ def _implementation_verification(ai_messages: Any) -> dict[str, Any]:
     }
 
 
+def _shell_command_segments(command: str) -> tuple[list[list[str]], list[str]]:
+    # Here-document bodies are data for the interpreter, not shell commands.
+    # Retain the header and any shell suffix after the closing delimiter.
+    shell_text = re.sub(r"(?m)(<<-?\s*(['\"]?)([A-Za-z_]\w*)\2[^\n]*)\n.*?^\s*\3\s*$", r"\1", command, flags=re.S)
+    # shlex normally consumes the newline with a shell comment, merging the
+    # next command into this one's argv. Strip comments but retain separators.
+    characters: list[str] = []
+    quote = None
+    escaped = False
+    comment = False
+    for char in shell_text:
+        if comment:
+            if char != "\n":
+                continue
+            comment = False
+        if escaped:
+            escaped = False
+        elif char == "\\" and quote != "'":
+            escaped = True
+        elif quote:
+            if char == quote:
+                quote = None
+        elif char in "\"'":
+            quote = char
+        elif char == "#" and (not characters or characters[-1].isspace() or characters[-1] in ";&|"):
+            comment = True
+            continue
+        characters.append(char)
+    lexer = shlex.shlex("".join(characters), posix=True, punctuation_chars=";&|<>\n")
+    lexer.commenters = ""
+    lexer.whitespace = " \t\r"
+    lexer.whitespace_split = True
+    segments: list[list[str]] = [[]]
+    separators: list[str] = []
+    for token in lexer:
+        if token and all(char in ";&|\n" for char in token):
+            separators.append(token.replace("\n", "") or "\n")
+            segments.append([])
+        else:
+            segments[-1].append(token)
+    return segments, separators
+
+
+def _is_verification_args(args: list[str], command: str) -> bool:
+    while args and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", args[0]):
+        args = args[1:]
+    if not args:
+        return False
+    executable = args[0].rsplit("/", 1)[-1]
+    if executable in {"uv", "poetry"} and len(args) > 2 and args[1] == "run":
+        args = args[2:]
+        executable = args[0].rsplit("/", 1)[-1]
+    # Collection, version and help commands do not execute behavioral checks.
+    # Keep this scoped to runners, so a Python assertion mentioning '--help'
+    # as data still counts as execution.
+    runner = executable in {"pytest", "py.test", "tox", "nox", "jest", "vitest", "npm", "pnpm", "yarn", "cargo", "go", "mvn", "gradle", "make"}
+    python_runner = bool(re.fullmatch(r"python(?:\d+(?:\.\d+)?)?", executable) and args[1:2] == ["-m"] and args[2:3] in (["pytest"], ["unittest"]))
+    preflight_flags = {"--collect-only", "--co", "--help", "-h", "--version", "-V", "--listTests", "--list-tests", "--list", "-list", "--dry-run", "--no-run"}
+    if (runner or python_runner) and any(arg.split("=", 1)[0] in preflight_flags for arg in args[1:]):
+        return False
+    if executable in {"pytest", "py.test", "tox", "nox", "jest", "vitest"}:
+        return True
+    if executable in {"npm", "pnpm", "yarn", "cargo", "go", "mvn", "gradle", "make"} and (args[1:2] == ["test"] or args[1:3] == ["run", "test"]):
+        return True
+    if re.fullmatch(r"python(?:\d+(?:\.\d+)?)?", executable):
+        if len(args) > 2 and args[1] == "-m" and args[2] in {"pytest", "unittest", "py_compile", "compileall"}:
+            return True
+        code = args[2] if len(args) > 2 and args[1] == "-c" else None
+        if "<<" in args:
+            lines = command.splitlines()
+            code = "\n".join(lines[1:-1])
+        if code:
+            try:
+                return any(isinstance(node, ast.Assert) for node in ast.walk(ast.parse(code)))
+            except SyntaxError:
+                pass
+    return False
+
+
+def _is_verification_command(command: str) -> bool:
+    """Recognize executable checks, not runner names inside echo/string arguments."""
+    try:
+        segments, _ = _shell_command_segments(command)
+        return any(_is_verification_args(args, command) for args in segments)
+    except ValueError:
+        return False
+
+
 def _test_execution_verification(ai_messages: Any) -> dict[str, Any]:
     """Check for a successful, recognizable test command after source edits."""
     calls: dict[str, tuple[str, Mapping[str, Any] | None]] = {}
+    issued_at: dict[str, int] = {}
     latest_source_write_index: int | None = None
     successful_test_indices: list[int] = []
     masked_test_command_count = 0
+    check_results: dict[str, tuple[int, bool, int]] = {}
     if not isinstance(ai_messages, list):
         ai_messages = []
     for index, message in enumerate(ai_messages):
@@ -599,28 +767,35 @@ def _test_execution_verification(ai_messages: Any) -> dict[str, Any]:
                     continue
                 call_id = str(call.get("id") or f"anonymous-{index}-{call_index}")
                 calls[call_id] = (str(call.get("name") or ""), _tool_call_args(call.get("args")))
+                issued_at[call_id] = index
             continue
         if message.get("type") != "tool":
             continue
         call_id = str(message.get("tool_call_id") or "")
         tool_name, args = calls.get(call_id, (str(message.get("name") or ""), None))
-        if not _tool_result_succeeded(message.get("content")):
+        if tool_name == "bash" and args is not None:
+            command = args.get("command")
+            if isinstance(command, str) and _is_verification_command(command):
+                check_results[command] = (index, _tool_result_succeeded(message) and _command_preserves_exit_status(command), issued_at.get(call_id, -1))
+        if not _tool_result_succeeded(message):
             continue
         if tool_name in _FILE_WRITE_TOOLS:
             path = args.get("path") if args is not None else None
-            if isinstance(path, str) and not _is_test_path(path):
+            if isinstance(path, str) and _is_source_path(path) and not _is_test_path(path):
                 latest_source_write_index = index
         if tool_name == "bash" and args is not None:
             command = args.get("command")
-            if isinstance(command, str) and _TEST_COMMAND_PATTERN.search(command):
+            if isinstance(command, str) and _is_verification_command(command):
                 if not _command_preserves_exit_status(command):
                     masked_test_command_count += 1
                     continue
                 successful_test_indices.append(index)
-    latest_test_index = successful_test_indices[-1] if successful_test_indices else None
+    successful_test_indices = [index for index, passed, _ in check_results.values() if passed]
+    unresolved_failures = [index for index, passed, _ in check_results.values() if not passed]
+    latest_test_index = max(successful_test_indices) if successful_test_indices else None
     return {
         "required": True,
-        "passed": bool(latest_test_index is not None and (latest_source_write_index is None or latest_test_index > latest_source_write_index)),
+        "passed": bool(not unresolved_failures and latest_test_index is not None and (latest_source_write_index is None or any(passed and issued > latest_source_write_index for _, passed, issued in check_results.values()))),
         "successful_test_count": len(successful_test_indices),
         "masked_test_command_count": masked_test_command_count,
         "latest_source_write_index": latest_source_write_index,
@@ -634,9 +809,11 @@ def _execution_verification(
     reject_masked_commands: bool = False,
     allow_negative_findings: bool = False,
 ) -> dict[str, int | bool | None]:
-    calls: dict[str, tuple[str, int, Mapping[str, Any] | None]] = {}
+    calls: dict[str, tuple[str, Mapping[str, Any] | None]] = {}
+    issued_at: dict[str, int] = {}
     latest_source_write_index: int | None = None
     successful_execution_indices: list[int] = []
+    successful_execution_issued_at: list[int] = []
     if not isinstance(ai_messages, list):
         ai_messages = []
 
@@ -651,7 +828,8 @@ def _execution_verification(
                 if not isinstance(call, Mapping):
                     continue
                 call_id = str(call.get("id") or f"anonymous-{index}-{call_index}")
-                calls[call_id] = (str(call.get("name") or ""), index, _tool_call_args(call.get("args")))
+                calls[call_id] = (str(call.get("name") or ""), _tool_call_args(call.get("args")))
+                issued_at[call_id] = index
             continue
         if message.get("type") != "tool":
             continue
@@ -660,20 +838,23 @@ def _execution_verification(
         call = calls.get(call_id)
         if call is not None:
             tool_name = tool_name or call[0]
-        if not _tool_result_succeeded(message.get("content"), allow_negative_findings=allow_negative_findings):
+        if not _tool_result_succeeded(message, allow_negative_findings=allow_negative_findings):
             continue
         if tool_name in _FILE_WRITE_TOOLS:
-            latest_source_write_index = index
+            args = call[1] if call is not None else None
+            if args is not None and isinstance(args.get("path"), str) and _is_source_path(args["path"]):
+                latest_source_write_index = index
         if tool_name in _EXECUTION_TOOLS:
             if reject_masked_commands:
-                args = call[2] if call is not None else None
+                args = call[1] if call is not None else None
                 command = args.get("command") if args is not None else None
                 if not isinstance(command, str) or not _command_preserves_exit_status(command):
                     continue
             successful_execution_indices.append(index)
+            successful_execution_issued_at.append(issued_at.get(call_id, -1))
 
     latest_successful_execution_index = successful_execution_indices[-1] if successful_execution_indices else None
-    passed = bool(latest_successful_execution_index is not None and (latest_source_write_index is None or latest_successful_execution_index > latest_source_write_index))
+    passed = bool(latest_successful_execution_index is not None and (latest_source_write_index is None or any(issued > latest_source_write_index for issued in successful_execution_issued_at)))
     return {
         "required": True,
         "passed": passed,
@@ -847,7 +1028,7 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
             task is not None
             and task.subagent_type == "coder"
             and not is_data_processing_coder(task.metadata)
-            and task.metadata.get("verification_only") is True
+            and (task.metadata.get("verification_only") is True or coder_task_kind(task) == "software_change")
             and str(task.stage or task.metadata.get("stage") or "").strip().lower() == "verification"
         )
         if coder_task_requires_implementation(task) or code_verification_only:

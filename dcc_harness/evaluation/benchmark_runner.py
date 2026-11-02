@@ -33,6 +33,9 @@ class _LoopLocalTransport:
     """Keep native model behavior while isolating its asynchronous pool."""
 
     def __init__(self, **kwargs):
+        from deerflow.models.factory import _apply_stream_chunk_timeout_default
+
+        _apply_stream_chunk_timeout_default("langchain_openai:ChatOpenAI", kwargs)
         kwargs["http_async_client"] = _loop_local_async_client(
             timeout=kwargs.get("timeout")
         )
@@ -44,14 +47,6 @@ class _LoopLocalTransport:
 
 class BenchmarkChatOpenAI(_LoopLocalTransport, ChatOpenAI):
     """OpenAI-compatible evaluation transport for native Central and helpers."""
-
-    def __init__(self, **kwargs):
-        from deerflow.models.factory import _apply_stream_chunk_timeout_default
-
-        # Native factory defaults are keyed by the configured provider path.
-        # Preserve its OpenAI stream budget when using this external subclass.
-        _apply_stream_chunk_timeout_default("langchain_openai:ChatOpenAI", kwargs)
-        super().__init__(**kwargs)
 
 
 class BenchmarkVllmChatModel(_LoopLocalTransport, VllmChatModel):

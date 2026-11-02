@@ -315,6 +315,21 @@ def merge_sp_counter(existing: int | None, new: int | None) -> int | None:
     return max(int(existing), int(new))
 
 
+def sp_action_count(state: Mapping[str, Any], run_id: str | None = None) -> int:
+    state_run = state.get("sp_loop_run_id")
+    if run_id and state_run and str(state_run) != str(run_id):
+        return 0
+    count = int(state.get("sp_loop_iteration") or 0)
+    ledger = state.get("sp_idempotency_ledger")
+    if not isinstance(ledger, Mapping):
+        return count
+    current_run = run_id or state_run
+    iterations = [int(item.get("loop_iteration") or 0) for item in ledger.values() if isinstance(item, Mapping) and item.get("run_id") == current_run and item.get("action_id")]
+    if iterations:
+        count = max(count, min(iterations) + len(iterations) - 1)
+    return count
+
+
 def merge_sp_report_version(existing: str | None, new: str | None) -> str | None:
     """Keep the highest report version across sibling artifact writers."""
     if new is None:

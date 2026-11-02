@@ -50,8 +50,8 @@ CUSTOM_AGENT_NAME_PATTERN = re.compile(r"^[A-Za-z0-9-]+$")
 # This is independent of subagent depth: a `task()` dispatch runs the whole
 # subagent inside ONE lead tools-node step, and subagents enforce their own
 # limit via `subagents.max_turns` (see SubagentExecutor). Do not conflate this
-# 100 with the general-purpose subagent's max_turns.
-DEFAULT_RUN_CONFIG: dict[str, Any] = {"recursion_limit": 100}
+# 512 with the general-purpose subagent's max_turns.
+DEFAULT_RUN_CONFIG: dict[str, Any] = {"recursion_limit": 512}
 DEFAULT_RUN_CONTEXT: dict[str, Any] = {
     "thinking_enabled": True,
     "is_plan_mode": False,
@@ -933,7 +933,7 @@ class ChannelManager:
             if isinstance(override, int) and override > 0:
                 run_config["recursion_limit"] = override
             else:
-                run_config["recursion_limit"] = max(run_config.get("recursion_limit", 100), policy.default_recursion_limit)
+                run_config["recursion_limit"] = max(run_config.get("recursion_limit", 512), policy.default_recursion_limit)
 
         return assistant_id, run_config, run_context
 

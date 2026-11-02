@@ -46,59 +46,21 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_SUBAGENT_TOOL_LOOP_HARD_CAP = 20
-_SP_RESEARCHER_TOOL_LOOP_HARD_CAP = 40
-_SUBAGENT_LOOP_SHUTDOWN_RESERVED_STEPS = 6
-_SUBAGENT_GRAPH_STEPS_PER_TOOL_LOOP = 6
 _SUBAGENT_RECOVERED_EVIDENCE_MAX_CHARS = 12_000
 _SUBAGENT_RECOVERED_EVIDENCE_MAX_ITEMS = 6
 
 
-def _subagent_tool_loop_limits(max_turns: int, *, agent_name: str | None = None) -> tuple[int, int]:
-    """Return warning/hard tool-call limits that fit the graph-step budget."""
+def _reserve_subagent_loop_guard_budget(middlewares: list[Any], *, max_turns: int) -> None:
+    """Graph depth, repeated-call detection and tool budgets are independent.
 
-    safe_hard_limit = max(
-        2,
-        min(
-            _SP_RESEARCHER_TOOL_LOOP_HARD_CAP if agent_name == "sp-researcher" else _SUBAGENT_TOOL_LOOP_HARD_CAP,
-            (max(1, int(max_turns)) - _SUBAGENT_LOOP_SHUTDOWN_RESERVED_STEPS) // _SUBAGENT_GRAPH_STEPS_PER_TOOL_LOOP,
-        ),
-    )
-    safe_warn_limit = max(1, min(safe_hard_limit - 1, (safe_hard_limit * 3) // 5))
-    return safe_warn_limit, safe_hard_limit
-
-
-def _reserve_subagent_loop_guard_budget(middlewares: list[Any], *, max_turns: int, agent_name: str | None = None) -> None:
-    """Ensure loop detection can stop a tool loop before graph recursion wins.
-
-    The current subagent middleware graph consumes up to six graph steps for a
-    model/tool cycle. If a tool-frequency limit is derived as if each cycle used
-    only two steps, LangGraph can raise ``GraphRecursionError`` before the guard
-    gets a chance to strip the next tool call. A per-tool limit alone is also
-    insufficient because an agent can rotate among tool types. Clamp per-tool
-    limits and enable a run-total limit only on subagent middleware instances,
-    preserving lead-agent policy and explicit per-tool overrides.
+    Repeated identical calls retain the configured detector. Varying arguments
+    must not accidentally reduce the advertised per-child tool budget.
     """
-
-    safe_warn_limit, safe_hard_limit = _subagent_tool_loop_limits(max_turns, agent_name=agent_name)
+    del max_turns
     for middleware in middlewares:
-        if not hasattr(middleware, "tool_freq_hard_limit") or not hasattr(middleware, "tool_freq_warn"):
-            continue
-        original_hard_limit = int(middleware.tool_freq_hard_limit)
-        original_warn_limit = int(middleware.tool_freq_warn)
-        middleware.tool_freq_hard_limit = min(original_hard_limit, safe_hard_limit)
-        middleware.tool_freq_warn = min(original_warn_limit, safe_warn_limit)
-        middleware.tool_total_hard_limit = safe_hard_limit
-        middleware.tool_total_warn = safe_warn_limit
-        if (middleware.tool_freq_warn, middleware.tool_freq_hard_limit) != (original_warn_limit, original_hard_limit):
-            logger.debug(
-                "Subagent loop guard thresholds clamped for shutdown budget: warn=%s->%s hard=%s->%s max_turns=%s",
-                original_warn_limit,
-                middleware.tool_freq_warn,
-                original_hard_limit,
-                middleware.tool_freq_hard_limit,
-                max_turns,
-            )
+        if getattr(middleware, "tool_freq_hard_limit", None) == 50:
+            # Reserve the final default slot without weakening a custom cap.
+            middleware.tool_freq_hard_limit = 51
 
 
 _previous_shutdown_isolated_subagent_loop = globals().get("_shutdown_isolated_subagent_loop")
@@ -476,6 +438,8 @@ class SubagentExecutor:
         thinking_enabled: bool | None = None,
         max_tokens_per_step: int | None = None,
         protect_test_files: bool = False,
+        budgets: dict[str, int] | None = None,
+        run_tool_budget: Any | None = None,
     ):
         """Initialize the executor.
 
@@ -527,6 +491,7 @@ class SubagentExecutor:
             max_tokens_per_step: Optional per-run completion cap for each
                 subagent model call. This bounds one action without reducing
                 the subagent's multi-step turn budget.
+            budgets: Per-delegation tool, search, and cumulative token ceilings.
             protect_test_files: Prevent benchmark subagents from mutating test
                 files that are owned by an external grader.
         """
@@ -566,6 +531,10 @@ class SubagentExecutor:
         self.thinking_enabled = thinking_enabled
         self.max_tokens_per_step = max_tokens_per_step
         self.protect_test_files = bool(protect_test_files)
+        self.budgets = dict(budgets or {})
+        from deerflow.runtime.tool_budget import RunToolBudget
+
+        self.run_tool_budget = run_tool_budget if run_tool_budget is not None else RunToolBudget(getattr(app_config, "max_tool_calls_per_run", 200))
         self._active_platform_skill_secrets: dict[str, str] = {}
 
         self._base_tools = _filter_tools(
@@ -617,6 +586,8 @@ class SubagentExecutor:
             "deferred_setup": deferred_setup,
             "agent_name": self.config.name,
         }
+        if self.budgets:
+            middleware_kwargs["budgets"] = self.budgets
         if self.memory_agent_name is not None:
             middleware_kwargs["memory_agent_name"] = self.memory_agent_name
         middlewares = build_subagent_runtime_middlewares(
@@ -625,7 +596,6 @@ class SubagentExecutor:
         _reserve_subagent_loop_guard_budget(
             middlewares,
             max_turns=self.config.max_turns,
-            agent_name=self.config.name,
         )
         # Collect every guard middleware that exposes ``consume_stop_reason``
         # (TokenBudgetMiddleware, LoopDetectionMiddleware) so _aexecute can read
@@ -827,10 +797,10 @@ class SubagentExecutor:
         for skill_msg in skill_messages:
             system_parts.append(skill_msg.content)
         if final_tools:
-            warn_limit, hard_limit = _subagent_tool_loop_limits(self.config.max_turns, agent_name=self.config.name)
+            hard_limit = min(50, self.budgets.get("max_tool_calls", 50))
             system_parts.append(
                 "<execution_budget>\n"
-                f"This run has a hard budget of {hard_limit} total tool calls and will warn after {warn_limit}. "
+                f"This run has a hard budget of {hard_limit} total tool calls and at most {min(8, self.budgets.get('max_searches', 8))} web searches. "
                 "Batch related read-only inspection into a small number of calls. For implementation work, reserve calls for the source edit, focused tests after the latest edit, and git diff --check. "
                 "As soon as the delegated acceptance evidence is available, stop calling tools and return the required JSON result.\n"
                 "</execution_budget>"
@@ -882,6 +852,9 @@ class SubagentExecutor:
                 status=SubagentStatus.RUNNING,
                 started_at=datetime.now(),
             )
+        if result.cancel_event.is_set() or self._parent_aborted():
+            result.try_set_terminal(SubagentStatus.CANCELLED, error=self._cancellation_error())
+            return result
         ai_messages = result.ai_messages
         if ai_messages is None:
             ai_messages = []
@@ -903,9 +876,18 @@ class SubagentExecutor:
 
             # Token collector for subagent LLM calls
             collector_caller = f"subagent:{self.config.name}"
+
+            def observe_usage(record):
+                # Timeout/cancellation can finalize the holder before coroutine
+                # cleanup runs. Keep completed model usage available throughout.
+                with result._state_lock:
+                    result.token_usage_records.append(dict(record))
+                if self.token_usage_observer is not None:
+                    self.token_usage_observer(record)
+
             collector = SubagentTokenCollector(
                 caller=collector_caller,
-                record_observer=self.token_usage_observer,
+                record_observer=observe_usage,
             )
 
             # Build config with thread_id for sandbox access and recursion limit
@@ -965,6 +947,7 @@ class SubagentExecutor:
             if self.deerflow_trace_id:
                 context[DEERFLOW_TRACE_METADATA_KEY] = self.deerflow_trace_id
             context["is_subagent"] = True
+            context["__run_tool_budget"] = self.run_tool_budget
             if self.protect_test_files:
                 context["protect_test_files"] = True
             if self._active_platform_skill_secrets:
@@ -1040,6 +1023,14 @@ class SubagentExecutor:
                 token_usage_records=token_usage_records,
             )
 
+        except asyncio.CancelledError:
+            result.cancel_event.set()
+            result.try_set_terminal(
+                SubagentStatus.CANCELLED,
+                error=self._cancellation_error(),
+                token_usage_records=collector.snapshot_records() if collector is not None else None,
+            )
+            raise
         except GraphRecursionError:
             # ``recursion_limit`` on run_config == ``self.config.max_turns``
             # (set above). Hitting it means the subagent exhausted its turn
@@ -1182,8 +1173,8 @@ class SubagentExecutor:
                 logger.debug(f"[trace={self.trace_id}] Subagent {self.config.name} detected running event loop, using isolated loop")
                 return self._execute_in_isolated_loop(task, result_holder)
 
-            # Standard path: no running event loop, use asyncio.run
-            return asyncio.run(self._aexecute(task, result_holder))
+            # The ordinary synchronous path uses the same bounded wait.
+            return self._execute_in_isolated_loop(task, result_holder)
         except Exception as e:
             logger.exception(f"[trace={self.trace_id}] Subagent {self.config.name} execution failed")
             # Create a result with error if we don't have one
@@ -1220,21 +1211,32 @@ class SubagentExecutor:
             status=SubagentStatus.PENDING,
         )
 
-        logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} starting async execution, task_id={task_id}, timeout={self.config.timeout_seconds}s")
-
         with _background_tasks_lock:
+            # Provider call IDs are only unique within one model response.
+            # Parallel runs must never replace each other's result holders.
+            requested_id = task_id
+            while task_id in _background_tasks:
+                task_id = f"{requested_id}-{uuid.uuid4().hex}"
+            result.task_id = task_id
             _background_tasks[task_id] = result
+
+        logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} starting async execution, task_id={task_id}, timeout={self.config.timeout_seconds}s")
 
         parent_context = copy_context()
 
         # Submit to scheduler pool
         def run_task():
-            with _background_tasks_lock:
-                _background_tasks[task_id].status = SubagentStatus.RUNNING
-                _background_tasks[task_id].started_at = datetime.now()
-                result_holder = _background_tasks[task_id]
+            result_holder = result
+            with result_holder._state_lock:
+                if result_holder.status.is_terminal:
+                    return
+                result_holder.status = SubagentStatus.RUNNING
+                result_holder.started_at = datetime.now()
 
             try:
+                if result_holder.cancel_event.is_set() or self._parent_aborted():
+                    result_holder.try_set_terminal(SubagentStatus.CANCELLED, error=self._cancellation_error())
+                    return
                 # Submit execution directly to the persistent isolated loop so the
                 # background path does not create a temporary loop via execute().
                 execution_future = _submit_to_isolated_loop_in_context(
@@ -1242,8 +1244,21 @@ class SubagentExecutor:
                     lambda: self._aexecute(task, result_holder),
                 )
                 try:
-                    # Wait for execution with timeout
-                    execution_future.result(timeout=self.config.timeout_seconds)
+                    deadline = time.monotonic() + self.config.timeout_seconds
+                    while True:
+                        if result_holder.cancel_event.is_set() or self._parent_aborted():
+                            result_holder.cancel_event.set()
+                            result_holder.try_set_terminal(SubagentStatus.CANCELLED, error=self._cancellation_error())
+                            execution_future.cancel()
+                            return
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise FuturesTimeoutError
+                        try:
+                            execution_future.result(timeout=min(0.25, remaining))
+                            break
+                        except FuturesTimeoutError:
+                            continue
                 except FuturesTimeoutError:
                     logger.error(f"[trace={self.trace_id}] Subagent {self.config.name} execution timed out after {self.config.timeout_seconds}s")
                     # Signal cooperative cancellation and cancel the future
@@ -1255,11 +1270,15 @@ class SubagentExecutor:
                     execution_future.cancel()
             except Exception as e:
                 logger.exception(f"[trace={self.trace_id}] Subagent {self.config.name} async execution failed")
-                with _background_tasks_lock:
-                    task_result = _background_tasks[task_id]
-                task_result.try_set_terminal(SubagentStatus.FAILED, error=str(e))
+                result_holder.try_set_terminal(SubagentStatus.FAILED, error=str(e))
 
-        _scheduler_pool.submit(run_task)
+        try:
+            _scheduler_pool.submit(run_task)
+        except Exception:
+            with _background_tasks_lock:
+                if _background_tasks.get(task_id) is result:
+                    _background_tasks.pop(task_id)
+            raise
         return task_id
 
 
@@ -1269,10 +1288,10 @@ MAX_CONCURRENT_SUBAGENTS = 3
 def request_cancel_background_task(task_id: str) -> None:
     """Signal a running background task to stop.
 
-    Sets the cancel_event on the task, which is checked cooperatively
-    by ``_aexecute`` during ``agent.astream()`` iteration.  This allows
-    subagent threads — which cannot be force-killed via ``Future.cancel()``
-    — to stop at the next iteration boundary.
+    Sets the cancel_event checked by the scheduler's bounded wait and by
+    ``_aexecute`` at stream boundaries. The scheduler cancels the async future
+    even while the model is stalled. Already-running synchronous tool workers
+    still rely on their own cooperative cancellation or command timeout.
 
     Args:
         task_id: The task ID to cancel.
@@ -1281,6 +1300,8 @@ def request_cancel_background_task(task_id: str) -> None:
         result = _background_tasks.get(task_id)
         if result is not None:
             result.cancel_event.set()
+            if result.status == SubagentStatus.PENDING:
+                result.try_set_terminal(SubagentStatus.CANCELLED, error="Cancelled by user before execution started")
             logger.info("Requested cancellation for background task %s", task_id)
 
 

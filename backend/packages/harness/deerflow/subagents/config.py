@@ -36,7 +36,7 @@ class SubagentConfig:
     disallowed_tools: list[str] | None = field(default_factory=lambda: ["task"])
     skills: list[str] | None = None
     model: str = "inherit"
-    max_turns: int = 50
+    max_turns: int = 480
     timeout_seconds: int = 900
     # Internal specialists are addressable by orchestration code through the
     # registry but are not advertised to, or callable from, the default lead

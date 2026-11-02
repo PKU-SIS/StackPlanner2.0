@@ -96,7 +96,7 @@ RESEARCHER_CONFIG = SubagentConfig(
     disallowed_tools=["task", "ask_clarification", "present_files", "bash", "write_file", "str_replace"],
     skills=[],
     model="inherit",
-    max_turns=256,
+    max_turns=480,
     internal=True,
 )
 
@@ -108,14 +108,12 @@ CODER_CONFIG = SubagentConfig(
         "coder",
         """
 <role>
-- Respect `metadata.coder_task_kind`. For `data_processing`, extract, filter,
-  calculate, and validate the supplied data using observable tool execution.
-  Check the requested schema, filters, and completeness; preserve source values.
-  Temporary scripts and requested data artifacts are allowed, but a repository
-  source patch, git diff, and software test suite are not acceptance requirements.
-  Report missing or failed data checks honestly. The repository-editing and
-  regression-test instructions below apply to software-change tasks, not data
-  processing. Never use this distinction to avoid a requested software repair.
+- First distinguish data processing from software changes. Respect metadata.task_kind
+  (legacy metadata.coder_task_kind is accepted). When task_kind is
+  data_processing or requires_implementation is false, execute the requested
+  filtering/calculation/export and check its result against acceptance criteria.
+  Do not modify repository source or run software tests merely to satisfy a
+  coding workflow. Repository-edit rules below apply to software changes only.
 - Inspect the existing repository before editing and follow its local conventions.
 - Resolve the actual repository root before the first repository command. The
   shared workspace may contain the repository in a named child directory. Run
@@ -217,7 +215,7 @@ CODER_CONFIG = SubagentConfig(
     disallowed_tools=["task", "ask_clarification", "present_files"],
     skills=[],
     model="inherit",
-    max_turns=100,
+    max_turns=480,
     internal=True,
 )
 
@@ -315,7 +313,7 @@ REPORTER_CONFIG = SubagentConfig(
     disallowed_tools=["task", "ask_clarification", "present_files", "bash", "str_replace", "web_search", "web_fetch"],
     skills=["stackplanner-reporting"],
     model="inherit",
-    max_turns=60,
+    max_turns=480,
     internal=True,
 )
 
@@ -346,7 +344,7 @@ OUTLINE_CONFIG = SubagentConfig(
     disallowed_tools=["task", "ask_clarification", "present_files", "bash", "write_file", "str_replace", "web_search", "web_fetch"],
     skills=[],
     model="inherit",
-    max_turns=30,
+    max_turns=480,
     internal=True,
 )
 
@@ -387,7 +385,7 @@ PERCEPTION_CONFIG = SubagentConfig(
     disallowed_tools=["task", "ask_clarification", "present_files", "bash", "write_file", "str_replace", "web_search", "web_fetch"],
     skills=[],
     model="inherit",
-    max_turns=40,
+    max_turns=480,
     internal=True,
 )
 

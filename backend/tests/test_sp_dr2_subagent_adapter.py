@@ -65,7 +65,7 @@ def _sp_task() -> SPSubagentTask:
     )
 
 
-def test_coder_verification_task_requires_implementation_by_default():
+def test_coder_verification_task_does_not_require_source_mutation():
     task = SPSubagentTask(
         action_id="act-1",
         subagent_type="coder",
@@ -75,15 +75,16 @@ def test_coder_verification_task_requires_implementation_by_default():
         metadata={"stage": "verification"},
     )
 
-    assert coder_task_requires_implementation(task) is True
+    assert coder_task_requires_implementation(task) is False
 
 
 @pytest.mark.parametrize("output,expected_status", [("CHECK cap: FAIL\nexit code: 0", "complete"), ("CHECK cap: FAIL\nexit code: 1", "partial"), ("Traceback (most recent call last):\nAssertionError", "partial")])
-def test_data_audit_negative_finding_is_not_a_software_test_failure(output, expected_status):
+@pytest.mark.parametrize("kind_key", ["task_kind", "coder_task_kind"])
+def test_data_audit_negative_finding_is_not_a_software_test_failure(output, expected_status, kind_key):
     task = _sp_task()
     task.subagent_type = "coder"
     task.stage = "verification"
-    task.metadata = {"stage": "verification", "coder_task_kind": "data_processing", "requires_implementation": False}
+    task.metadata = {"stage": "verification", kind_key: "data_processing", "requires_implementation": False}
     executor = FakeDR2Executor(
         FakeDR2Result(
             status="completed",
@@ -1228,7 +1229,7 @@ def test_coder_implementation_claim_accepts_non_test_source_change():
                         {
                             "id": "write-source",
                             "name": "str_replace",
-                            "args": {"path": "/mnt/user-data/workspace/src/flask/config.py", "old_string": "def from_file", "new_string": "def from_file"},
+                            "args": {"path": "/mnt/user-data/workspace/src/flask/config.py", "old_string": "def from_file(self, filename):", "new_string": 'def from_file(self, filename, mode="r"):'},
                         }
                     ],
                 },
@@ -1272,3 +1273,28 @@ def test_memory_recaller_keeps_full_recall_json_for_normalization():
 
     assert result.result == '{"summary":"Use phased tests.","items":[{"content":"Test each unit.","memory_id":"mem-1"}]}'
     assert result.artifact_content is None
+
+
+@pytest.mark.parametrize("kind_key", ["task_kind", "coder_task_kind"])
+def test_task_kind_aliases_preserve_data_and_software_contracts(kind_key):
+    from deerflow.sp.subagents.dr2_adapter import coder_task_kind, observation_requires_code_recovery
+
+    task = _sp_task()
+    task.subagent_type = "coder"
+    task.stage = "implementation"
+    task.task = "Execute the supplied audit script and export findings."
+    task.metadata = {kind_key: "data_processing"}
+    assert coder_task_kind(task) == "data_processing"
+    assert not coder_task_requires_implementation(task)
+    assert not observation_requires_code_recovery(task.metadata)
+    task.metadata = {kind_key: "software_change", "requires_implementation": True}
+    assert coder_task_kind(task) == "software_change"
+    assert coder_task_requires_implementation(task)
+    assert observation_requires_code_recovery(task.metadata)
+
+
+@pytest.mark.parametrize("value", [{"status": "error", "content": "CHECK cap: FAIL\nExit Code: 0"}, '{"status":"error","error":"network unavailable"}', "Traceback (most recent call last):\nRuntimeError", "CHECK cap: FAIL\nExit Code: 1"])
+def test_audit_negative_findings_never_hide_runtime_or_transport_errors(value):
+    from deerflow.sp.subagents.dr2_adapter import _tool_result_succeeded
+
+    assert not _tool_result_succeeded(value, allow_negative_findings=True)
