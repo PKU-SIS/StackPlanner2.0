@@ -43,12 +43,14 @@ export function SubtaskCard({
   threadId,
   runId,
   isLoading,
+  descriptionOverride,
 }: {
   className?: string;
   taskId: string;
   threadId?: string;
   runId?: string;
   isLoading: boolean;
+  descriptionOverride?: string;
 }) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(true);
@@ -140,10 +142,10 @@ export function SubtaskCard({
                         duration={3}
                         spread={3}
                       >
-                        {task.description}
+                        {descriptionOverride ?? task.description}
                       </Shimmer>
                     ) : (
-                      task.description
+                      (descriptionOverride ?? task.description)
                     )}
                   </div>
                 }

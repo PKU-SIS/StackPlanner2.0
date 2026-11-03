@@ -69,6 +69,13 @@ def derive_report_view(
             "reason": f"report ledger cannot be read: {exc}"[:1000],
         }
 
+    def _pipeline_view(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        result = _view(*args, **kwargs)
+        pipeline = _writer_pipeline_view(ledger, result["status"], run_id)
+        if pipeline is not None:
+            result["writer_pipeline"] = pipeline
+        return result
+
     status = str(ledger.payload.get("status") or context.status).strip().lower()
     delivered = ledger.payload.get("delivered") if isinstance(ledger.payload.get("delivered"), Mapping) else None
     final = ledger.payload.get("final_report") if isinstance(ledger.payload.get("final_report"), Mapping) else None
@@ -82,14 +89,14 @@ def derive_report_view(
         if run_id and delivery_run_id and run_id != delivery_run_id:
             return _not_report_view(context)
         if delivered is None or final is None:
-            return _view(
+            return _pipeline_view(
                 context,
                 "technical_error",
                 run_id=run_id,
                 can_continue=False,
                 reason="report is marked delivered but has no current final/delivery record",
             )
-        return _view(
+        return _pipeline_view(
             context,
             "delivered",
             run_id=run_id,
@@ -111,13 +118,13 @@ def derive_report_view(
         return _not_report_view(context)
 
     if isinstance(pending, Mapping):
-        return _view(context, "awaiting_user", run_id=run_id, can_continue=True, reason=_pending_reason(pending))
+        return _pipeline_view(context, "awaiting_user", run_id=run_id, can_continue=True, reason=_pending_reason(pending))
 
     if run_normalized in {"pending", "running", "queued", "streaming"}:
-        return _view(context, "running", run_id=run_id, can_continue=True)
+        return _pipeline_view(context, "running", run_id=run_id, can_continue=True)
 
     if run_normalized in {"interrupted", "cancelled", "canceled"}:
-        return _view(
+        return _pipeline_view(
             context,
             "stopped",
             run_id=run_id,
@@ -126,13 +133,13 @@ def derive_report_view(
         )
 
     if run_normalized in {"error", "failed"}:
-        return _view(context, "technical_error", run_id=run_id, can_continue=True, reason="the current run ended with an error")
+        return _pipeline_view(context, "technical_error", run_id=run_id, can_continue=True, reason="the current run ended with an error")
 
     # Active report with a finished (or unknown) current run: it is not running
     # now and it has not been delivered.  This is the important distinction
     # between a resumable incomplete report and a live execution.
     blockers = _safe_blockers(ledger)
-    return _view(
+    return _pipeline_view(
         context,
         "incomplete",
         run_id=run_id,
@@ -231,3 +238,43 @@ def _report_run_ids(ledger: ReportLedger) -> set[str]:
                         if isinstance(attempt_run, str) and attempt_run:
                             runs.add(attempt_run)
     return runs
+
+
+def _writer_pipeline_view(ledger: ReportLedger, status: str, run_id: str | None) -> dict[str, Any] | None:
+    """Small authoritative queue projection; never writes report state."""
+    marker = ledger.payload.get("writer_pipeline") or {}
+    if not isinstance(marker, Mapping) or not marker.get("managed"):
+        return None
+    nodes = ledger.payload.get("nodes") or {}
+    order = (ledger.payload.get("tree") or {}).get("node_ids") or list(nodes)
+    requests = {}
+    for request in ledger.payload.get("write_requests") or []:
+        ids = request.get("node_ids") or []
+        if len(ids) == 1 and request.get("status") != "superseded":
+            requests[str(ids[0])] = request
+    current = {str(d.get("node_id")): d for d in ledger.payload.get("drafts") or [] if d.get("is_current")}
+    rows = []
+    for node_id in order:
+        node = nodes.get(str(node_id)) or {}
+        if node.get("kind") != "writable":
+            continue
+        request = requests.get(str(node_id)) or {}
+        raw_status = request.get("status")
+        phase = "completed" if raw_status == "completed" and str(node_id) in current else "in_flight" if raw_status == "in_flight" else "failed" if raw_status in {"technical_failed", "completed"} else "pending"
+        if phase == "in_flight" and status not in {"running"}:
+            phase = "stopped"
+        draft_path = (current.get(str(node_id)) or {}).get("virtual_path")
+        row = {
+            "node_id": str(node_id),
+            "title": str(node.get("title") or node_id)[:300],
+            "status": phase,
+            "task_id": request.get("last_action_id") if phase != "pending" else None,
+            "run_id": request.get("last_run_id") or marker.get("run_id") or run_id,
+        }
+        if phase == "completed" and isinstance(draft_path, str) and draft_path.startswith("/mnt/user-data/outputs/"):
+            row["draft_path"] = draft_path
+        rows.append(row)
+    if not rows:
+        return None
+    limit = marker.get("max_concurrent")
+    return {"max_concurrent": limit if isinstance(limit, int) and limit > 0 else 3, "nodes": rows}

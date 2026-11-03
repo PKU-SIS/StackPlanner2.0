@@ -358,6 +358,15 @@ export interface Translations {
     startConversation: string;
     branchCreated: string;
     branchFailed: string;
+    writerPipeline: {
+      title: string;
+      pending: string;
+      in_flight: string;
+      completed: string;
+      failed: string;
+      stopped: string;
+      concurrency: string;
+    };
     reportStatus: {
       title: string;
       running: string;

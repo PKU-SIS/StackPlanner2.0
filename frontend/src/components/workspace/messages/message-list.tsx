@@ -70,6 +70,7 @@ import { cn } from "@/lib/utils";
 
 import { ArtifactFileList } from "../artifacts/artifact-file-list";
 import { CopyButton } from "../copy-button";
+import { ReportWriterPipeline } from "../report-writer-pipeline";
 import { useMaybeSidecar } from "../sidecar/context";
 import { Tooltip } from "../tooltip";
 
@@ -307,6 +308,21 @@ export function MessageList({
     }
   }, [threadId, thread.isLoading]);
   const messages = thread.messages;
+  const anchoredTaskIds = useMemo(
+    () =>
+      new Set(
+        messages.flatMap((message) =>
+          message.type === "ai"
+            ? (message.tool_calls ?? [])
+                .filter(
+                  (call) => call.name === "task" || call.name === "sp_delegate",
+                )
+                .flatMap((call) => (call.id ? [call.id] : []))
+            : [],
+        ),
+      ),
+    [messages],
+  );
   const groupedMessages = getMessageGroups(messages);
   const [regeneratingMessageId, setRegeneratingMessageId] = useState<
     string | null
@@ -1049,6 +1065,13 @@ export function MessageList({
               </div>
             );
           })}
+          {!sidecarSurface && (
+            <ReportWriterPipeline
+              threadId={threadId}
+              isLoading={thread.isLoading}
+              anchoredTaskIds={anchoredTaskIds}
+            />
+          )}
           {thread.isLoading && !hasActiveAssistantText && (
             <div className="w-full">
               <Reasoning isStreaming={true} startTimeProp={turnStartTime}>

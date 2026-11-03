@@ -433,6 +433,15 @@ export const zhCN: Translations = {
     startConversation: "开始新的对话以查看消息",
     branchCreated: "已创建分叉对话",
     branchFailed: "创建分叉对话失败。",
+    writerPipeline: {
+      title: "章节写作流水线",
+      pending: "待写",
+      in_flight: "在写",
+      completed: "已完成",
+      failed: "失败",
+      stopped: "已停止",
+      concurrency: "并发上限",
+    },
     reportStatus: {
       title: "报告",
       running: "报告正在生成",

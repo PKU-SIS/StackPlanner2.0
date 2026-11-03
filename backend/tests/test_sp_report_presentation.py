@@ -85,3 +85,28 @@ def test_known_report_run_gets_active_view(tmp_path):
     ledger.save()
     view = derive_report_view(state, run_status="running", run_id="report-run")
     assert view["status"] == "running"
+
+
+def test_writer_pipeline_view_is_read_only_and_scoped(tmp_path):
+    state, ledger = _ledger(tmp_path)
+    ledger.payload["nodes"] = {n: {"node_id": n, "kind": "writable", "title": title} for n, title in [("n1", "First"), ("n2", "Second"), ("n3", "Third")]}
+    ledger.payload["tree"] = {"node_ids": ["n1", "n2", "n3"]}
+    ledger.payload["writer_pipeline"] = {"managed": True, "max_concurrent": 4, "run_id": "run1"}
+    ledger.payload["write_requests"] = [
+        {"key": "old", "node_ids": ["n1"], "status": "superseded"},
+        {"key": "w1", "node_ids": ["n1"], "status": "pending"},
+        {"key": "w2", "node_ids": ["n2"], "status": "in_flight", "last_action_id": "writer-2", "last_run_id": "run1"},
+        {"key": "w3", "node_ids": ["n3"], "status": "completed", "last_action_id": "writer-3", "last_run_id": "run1"},
+    ]
+    ledger.payload["drafts"] = [{"node_id": "n3", "is_current": True, "virtual_path": "/mnt/user-data/outputs/report/r1/drafts/n3/d1.md"}]
+    ledger.save()
+    before = ledger.paths.ledger.read_bytes()
+    view = derive_report_view(state, run_status="running", run_id="run1")
+    pipeline = view["writer_pipeline"]
+    assert pipeline["max_concurrent"] == 4
+    assert [n["status"] for n in pipeline["nodes"]] == ["pending", "in_flight", "completed"]
+    assert pipeline["nodes"][1]["task_id"] == "writer-2"
+    assert pipeline["nodes"][2]["draft_path"].startswith("/mnt/")
+    assert "writer_pipeline" not in derive_report_view(state, run_status="running", run_id="other-run")
+    assert derive_report_view(state, run_status="interrupted", run_id="run1")["writer_pipeline"]["nodes"][1]["status"] == "stopped"
+    assert ledger.paths.ledger.read_bytes() == before

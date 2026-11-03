@@ -450,6 +450,15 @@ export const enUS: Translations = {
     startConversation: "Start a conversation to see messages here",
     branchCreated: "Conversation branch created",
     branchFailed: "Failed to branch conversation.",
+    writerPipeline: {
+      title: "Chapter writing",
+      pending: "Pending",
+      in_flight: "Writing",
+      completed: "Completed",
+      failed: "Failed",
+      stopped: "Stopped",
+      concurrency: "Parallel limit",
+    },
     reportStatus: {
       title: "Report",
       running: "Report generation in progress",

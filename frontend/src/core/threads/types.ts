@@ -38,7 +38,17 @@ export type ReportViewStatus =
   | "delivered"
   | "not_report";
 
+export interface ReportWriterNode {
+  node_id: string;
+  title: string;
+  status: "pending" | "in_flight" | "completed" | "failed" | "stopped";
+  task_id?: string | null;
+  run_id?: string | null;
+  draft_path?: string | null;
+}
+
 export interface ReportView {
+  writer_pipeline?: { max_concurrent: number; nodes: ReportWriterNode[] };
   status: ReportViewStatus;
   report_id?: string | null;
   run_id?: string | null;
