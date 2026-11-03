@@ -911,7 +911,7 @@ export function MessageList({
                 </div>
               );
             } else if (group.type === "assistant:subagent") {
-              const tasks = new Set<Subtask>();
+              const tasks = new Map<string, Subtask>();
               for (const message of group.messages) {
                 if (message.type === "ai") {
                   for (const toolCall of message.tool_calls ?? []) {
@@ -942,7 +942,7 @@ export function MessageList({
                           : {}),
                       };
                       updateSubtask(task);
-                      tasks.add(task);
+                      tasks.set(taskId, task);
                     }
                   }
                 } else if (message.type === "tool") {
@@ -959,6 +959,7 @@ export function MessageList({
 
               const results: React.ReactNode[] = [];
               const subagentDebugMessageIds: string[] = [];
+              const renderedTaskIds = new Set<string>();
               if (tasks.size > 0) {
                 results.push(
                   <div
@@ -997,6 +998,10 @@ export function MessageList({
                     : [],
                 );
                 for (const taskId of taskIds ?? []) {
+                  if (renderedTaskIds.has(taskId)) {
+                    continue;
+                  }
+                  renderedTaskIds.add(taskId);
                   results.push(
                     <SubtaskCard
                       key={"task-group-" + taskId}

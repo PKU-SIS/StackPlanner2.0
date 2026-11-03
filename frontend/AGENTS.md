@@ -132,3 +132,5 @@ When adding features:
 3. Write unit tests under `tests/unit/` (`pnpm test`) and E2E tests under `tests/e2e/` (`pnpm test:e2e`)
 4. Run `pnpm check` before committing
 5. Update this `AGENTS.md` when architecture, commands, or conventions change
+
+When one logical subtask ID has a failed attempt followed by a successful retry, MessageList history can replay both terminal results during one render. `useUpdateSubtask` batches deferred terminal notifications by the first observed status and compares the final status before notifying; replay with no net change must not schedule another render. Successful completion clears stale failure text. MessageList deduplicates task counts/cards by task ID within each subagent group. Preserve existing live-step/backfill merging and keep the browser regression in `tests/e2e/subtask-retry-render.spec.ts`.

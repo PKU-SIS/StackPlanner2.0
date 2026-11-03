@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 
-import { computeNextSubtask } from "./subtask-update";
+import { computeNextSubtask, hasTerminalStatusChanges } from "./subtask-update";
 import type { Subtask } from "./types";
 
 export interface SubtaskContextValue {
@@ -57,14 +57,17 @@ export function useSubtask(id: string) {
 
 export function useUpdateSubtask() {
   const { tasksRef, setTasks } = useSubtaskContext();
-  const shouldNotifyAfterRenderRef = useRef(false);
+  const pendingTerminalStatusesRef = useRef(
+    new Map<string, Subtask["status"] | undefined>(),
+  );
   // No deps: must run after every render to check the ref set during render.
   useEffect(() => {
-    if (!shouldNotifyAfterRenderRef.current) {
-      return;
+    const pending = pendingTerminalStatusesRef.current;
+    const changed = hasTerminalStatusChanges(pending, tasksRef.current);
+    pending.clear();
+    if (changed) {
+      setTasks({ ...tasksRef.current });
     }
-    shouldNotifyAfterRenderRef.current = false;
-    setTasks({ ...tasksRef.current });
   });
 
   const updateSubtask = useCallback(
@@ -74,10 +77,8 @@ export function useUpdateSubtask() {
       // fetchSubtaskSteps().then(updateSubtask) resolving late would write a stale
       // map, clobbering SSE steps/status and sibling subtasks added meanwhile (#3779).
       const current = tasksRef.current;
-      const { next, becameTerminal } = computeNextSubtask(
-        current[task.id],
-        task,
-      );
+      const previous = current[task.id];
+      const { next, becameTerminal } = computeNextSubtask(previous, task);
 
       current[task.id] = next;
 
@@ -86,7 +87,9 @@ export function useUpdateSubtask() {
       } else if (becameTerminal) {
         // Defer the render to the after-render effect so a terminal-only update
         // does not loop with MessageList's same-render pending write.
-        shouldNotifyAfterRenderRef.current = true;
+        if (!pendingTerminalStatusesRef.current.has(task.id)) {
+          pendingTerminalStatusesRef.current.set(task.id, previous?.status);
+        }
       }
     },
     [tasksRef, setTasks],

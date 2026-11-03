@@ -125,3 +125,41 @@ describe("isTerminalSubtaskStatus", () => {
     expect(isTerminalSubtaskStatus(undefined)).toBe(false);
   });
 });
+
+it("clears a previous failure after an explicit successful retry", () => {
+  const { next } = computeNextSubtask(
+    baseTask({ status: "failed", error: "old failure" }),
+    { id: "t1", status: "completed", result: "recovered" },
+  );
+  expect(next.status).toBe("completed");
+  expect(next.error).toBeUndefined();
+});
+
+it("does not notify again when replay returns to the committed terminal status", async () => {
+  const { hasTerminalStatusChanges } =
+    await import("@/core/tasks/subtask-update");
+  const committed = baseTask({ status: "completed", result: "done" });
+  const failed = computeNextSubtask(committed, {
+    id: "t1",
+    status: "failed",
+    error: "old",
+  }).next;
+  const completed = computeNextSubtask(failed, {
+    id: "t1",
+    status: "completed",
+    result: "done",
+  }).next;
+  expect(
+    hasTerminalStatusChanges(new Map([["t1", committed.status]]), {
+      t1: completed,
+    }),
+  ).toBe(false);
+  expect(
+    hasTerminalStatusChanges(new Map([["t1", "in_progress"]]), {
+      t1: completed,
+    }),
+  ).toBe(true);
+  expect(
+    hasTerminalStatusChanges(new Map([["t1", "failed"]]), { t1: completed }),
+  ).toBe(true);
+});

@@ -1023,3 +1023,5 @@ Report Researcher explicitly allows up to 65,536 output tokens for pre-research,
 Report content identity preserves original UTF-8 line endings during reads, so intact CRLF sources pass hash checks and modified files remain rejected. Gateway runs now report current-run StackPlanner `error_fatal` results as errors with their original detail.
 
 Report source extraction and final numbering share recognition of `[S11]` and Markdown-escaped `\[S11\]` markers. Writer dispatch reserves draft IDs across pending executions and past attempts before work starts; old repeated IDs can be addressed with both node_id and draft_id without renaming historical files.
+
+Chat history supports recovered subtask attempts without triggering a React render loop, and successful retries clear stale failure messages.

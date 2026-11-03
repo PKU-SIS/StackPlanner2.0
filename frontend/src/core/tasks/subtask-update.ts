@@ -31,6 +31,9 @@ export function computeNextSubtask(
   const next = {
     ...previous,
     ...task,
+    ...(task.status === "completed" && task.error === undefined
+      ? { error: undefined }
+      : {}),
     ...(task.status === "in_progress" && isTerminalSubtaskStatus(previousStatus)
       ? { status: previousStatus }
       : {}),
@@ -49,4 +52,16 @@ export function computeNextSubtask(
     isTerminalSubtaskStatus(next.status) && previousStatus !== next.status;
 
   return { next, becameTerminal };
+}
+
+/** Notify deferred render-time updates only when the final status changed.
+ * A reused task ID may appear as failed then completed in one history render.
+ */
+export function hasTerminalStatusChanges(
+  before: ReadonlyMap<string, Subtask["status"] | undefined>,
+  tasks: Record<string, Subtask>,
+): boolean {
+  return Array.from(before).some(
+    ([id, status]) => tasks[id]?.status !== status,
+  );
 }
