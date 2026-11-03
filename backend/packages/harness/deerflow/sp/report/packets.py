@@ -25,7 +25,7 @@ def _read_text(path: str | Path | None) -> tuple[str, str | None]:
     if not path:
         return "", "missing path"
     try:
-        return Path(path).read_text(encoding="utf-8"), None
+        return report_store.read_text(Path(path)), None
     except (OSError, UnicodeDecodeError) as exc:
         return "", f"unreadable: {exc}"
 
@@ -42,7 +42,7 @@ def _outline_candidate_view(record: Any) -> dict[str, Any] | None:
         if not path:
             return None
         try:
-            parsed = json.loads(Path(str(path)).read_text(encoding="utf-8"))
+            parsed = json.loads(report_store.read_text(Path(str(path))))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             return None
         if not isinstance(parsed, Mapping) or not any(key in parsed for key in ("nodes", "requirements", "report_title")):
@@ -124,7 +124,7 @@ def load_current_tree(ledger: ReportLedger) -> dict[str, Any] | None:
     if not isinstance(tree_ref, Mapping) or not tree_ref.get("path"):
         return None
     try:
-        payload = json.loads(Path(str(tree_ref["path"])).read_text(encoding="utf-8"))
+        payload = json.loads(report_store.read_text(Path(str(tree_ref["path"]))))
     except (OSError, json.JSONDecodeError) as exc:
         raise ReportValidationError(f"current report tree is unreadable: {exc}") from exc
     return payload if isinstance(payload, dict) else None
@@ -575,7 +575,7 @@ def read_material_lines(ledger: ReportLedger, material_id: str, start: int, end:
     material = ledger.material(material_id)
     if material is None or not material.get("path"):
         raise ReportValidationError(f"unknown material: {material_id}")
-    text = Path(str(material["path"])).read_text(encoding="utf-8")
+    text = report_store.read_text(Path(str(material["path"])))
     lines = text.splitlines()
     selected = lines[max(start - 1, 0) : end]
     return "\n".join(selected), end < len(lines)

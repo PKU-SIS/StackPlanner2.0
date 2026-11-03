@@ -248,6 +248,8 @@ async def run_agent(
     workspace_changes_user_id: str | None = None
     snapshot_capture_failed = False
     llm_error_fallback_message: str | None = None
+    sp_state: dict[str, Any] = {}
+    sp_fatal_error: str | None = None
     run_metadata = record.metadata if isinstance(record.metadata, Mapping) else {}
     debug_trace_enabled = bool(run_metadata.get("debug_trace_enabled"))
     # Message ids checkpointed *before* this run started. The stream loop uses
@@ -476,6 +478,32 @@ async def run_agent(
                 )
             return goal_evaluator_model
 
+        def _capture_sp_state(mode: str, chunk: Any) -> None:
+            if not isinstance(chunk, Mapping):
+                return
+            if mode == "values" and "sp_last_handler_result" in chunk:
+                sp_state.clear()
+                sp_state.update({key: chunk[key] for key in ("sp_last_handler_result", "sp_loop_run_id") if key in chunk})
+            elif mode == "updates":
+                for delta in chunk.values():
+                    if isinstance(delta, Mapping) and "sp_last_handler_result" in delta:
+                        sp_state.update({key: delta[key] for key in ("sp_last_handler_result", "sp_loop_run_id") if key in delta})
+
+        async def _terminal_sp_error() -> str | None:
+            state = sp_state
+            before = (pre_run_snapshot or {}).get("checkpoint", {}).get("channel_values", {})
+            if checkpointer is not None and (record.assistant_id == "stackplanner" or sp_state or "sp_last_handler_result" in before):
+                try:
+                    saved = await _call_checkpointer_method(checkpointer, "aget_tuple", "get_tuple", {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}})
+                    values = getattr(saved, "checkpoint", {}).get("channel_values", {}) if saved else {}
+                    if isinstance(values, Mapping) and "sp_last_handler_result" in values:
+                        owner = values.get("sp_loop_run_id") or (values.get("sp_last_handler_result") or {}).get("run_id")
+                        if owner == run_id or not owner and values.get("sp_last_handler_result") != before.get("sp_last_handler_result"):
+                            state = values
+                except Exception:
+                    logger.debug("Could not read final SP state for %s", run_id, exc_info=True)
+            return _sp_fatal_error_from_state(state, run_id, before.get("sp_last_handler_result"))
+
         async def _stream_once(input_payload: Any, stream_config: RunnableConfig) -> None:
             nonlocal llm_error_fallback_message
             if len(lg_modes) == 1 and not stream_subgraphs:
@@ -485,6 +513,7 @@ async def run_agent(
                     if record.abort_event.is_set():
                         logger.info("Run %s abort requested — stopping", run_id)
                         break
+                    _capture_sp_state(single_mode, chunk)
                     llm_error_fallback_message = llm_error_fallback_message or _extract_llm_error_fallback_message(chunk, pre_existing_message_ids)
                     sse_event = _lg_mode_to_sse_event(single_mode)
                     await bridge.publish(run_id, sse_event, serialize(chunk, mode=single_mode))
@@ -506,6 +535,8 @@ async def run_agent(
                 if mode is None:
                     continue
 
+                if not (stream_subgraphs and isinstance(item, tuple) and len(item) == 3 and item[0]):
+                    _capture_sp_state(mode, chunk)
                 llm_error_fallback_message = llm_error_fallback_message or _extract_llm_error_fallback_message(chunk, pre_existing_message_ids)
                 sse_event = _lg_mode_to_sse_event(mode)
                 await bridge.publish(run_id, sse_event, serialize(chunk, mode=mode))
@@ -514,7 +545,8 @@ async def run_agent(
 
         # 7. Stream the requested turn, then optionally continue hidden goal turns.
         await _stream_once(graph_input, initial_runnable_config)
-        while not record.abort_event.is_set() and not llm_error_fallback_message and (journal is None or not journal.had_llm_error_fallback):
+        sp_fatal_error = await _terminal_sp_error()
+        while not record.abort_event.is_set() and not sp_fatal_error and not llm_error_fallback_message and (journal is None or not journal.had_llm_error_fallback):
             continuation_input = await _prepare_goal_continuation_input(
                 bridge=bridge,
                 checkpointer=checkpointer,
@@ -528,6 +560,7 @@ async def run_agent(
             if continuation_input is None or record.abort_event.is_set():
                 break
             await _stream_once(continuation_input, _continuation_runnable_config())
+            sp_fatal_error = await _terminal_sp_error()
 
         # 8. Final status
         if record.abort_event.is_set():
@@ -549,6 +582,9 @@ async def run_agent(
                     logger.warning("Failed to rollback checkpoint for run %s", run_id, exc_info=True)
             else:
                 await run_manager.set_status(run_id, RunStatus.interrupted)
+        elif sp_fatal_error:
+            await run_manager.set_status(run_id, RunStatus.error, error=sp_fatal_error)
+            await bridge.publish(run_id, "error", {"message": sp_fatal_error, "name": "SPFatalError"})
         elif llm_error_fallback_message or (journal is not None and journal.had_llm_error_fallback):
             error_msg = llm_error_fallback_message
             if error_msg is None and journal is not None:
@@ -1302,6 +1338,18 @@ def _try_extract_from_message(obj: Any, pre_existing_ids: set[str] | None = None
         if isinstance(nested_kwargs, dict) and nested_kwargs.get("deerflow_error_fallback"):
             return _error_fallback_message_from_metadata(nested_kwargs, obj.get("content"))
     return None
+
+
+def _sp_fatal_error_from_state(state: Mapping[str, Any], run_id: str, prior_result: Any = None) -> str | None:
+    result = state.get("sp_last_handler_result")
+    if not isinstance(result, Mapping) or result.get("next_step") != "error_fatal":
+        return None
+    owner = result.get("run_id") or state.get("sp_loop_run_id")
+    if owner and owner != run_id:
+        return None
+    if not owner and result == prior_result:
+        return None
+    return str(result.get("error") or "StackPlanner terminated with error_fatal")
 
 
 def _extract_llm_error_fallback_message(value: Any, pre_existing_ids: set[str] | None = None) -> str | None:

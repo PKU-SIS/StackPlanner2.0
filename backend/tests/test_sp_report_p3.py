@@ -728,3 +728,21 @@ def test_numeric_final_citations_keep_review_drafts_and_delivery_bindings(tmp_pa
     assert "[S1]" in Path(ledger.payload["drafts"][0]["path"]).read_text()
     assert final_binding_error(ledger) is None
     assert _finish(ctx).next_step == "finish"
+
+
+def test_assembly_preserves_crlf_material_and_draft_identity(tmp_path):
+    from deerflow.sp.report import assembly
+
+    _, ledger = _seed(tmp_path, body="Supported finding [S1].\r\nFurther detail.\r\n", with_sources=True, write_status="completed", node_status="ready")
+    material = ledger.payload["materials"][0]
+    text = "source first\r\nsource second\n"
+    Path(material["path"]).write_bytes(text.encode("utf-8"))
+    material.update(sha256=report_store.sha256_text(text), chars=len(text), lines=2)
+    ledger.save()
+    candidate = assembly.ensure_candidate(ledger)
+    content = assembly.candidate_file_content(candidate)
+    assert "[S1].\r\nFurther" in content
+    assert report_store.sha256_text(content) == candidate["sha256"]
+    Path(material["path"]).write_bytes((text + "changed").encode("utf-8"))
+    with pytest.raises(ReportValidationError, match="hash does not match"):
+        assembly.base_inputs_digest(ledger)

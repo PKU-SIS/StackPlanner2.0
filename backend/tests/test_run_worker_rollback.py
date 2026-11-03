@@ -1857,3 +1857,71 @@ async def test_worker_finally_block_swallows_helper_exceptions(monkeypatch):
     # reflects the run outcome.
     assert captured_status.get("status") == ("thread-1", "interrupted")
     bridge.publish_end.assert_awaited_once_with(record.run_id)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("next_step,expected", [("error_fatal", RunStatus.error), ("error_recoverable", RunStatus.success), ("continue", RunStatus.success), ("await_human", RunStatus.success)])
+async def test_sp_terminal_result_controls_run_status(next_step, expected):
+    manager = RunManager()
+    record = await manager.create("sp-status-thread", assistant_id="stackplanner")
+    bridge = SimpleNamespace(publish=AsyncMock(), publish_end=AsyncMock(), cleanup=AsyncMock())
+
+    class Agent:
+        async def astream(self, graph_input, config=None, stream_mode=None, subgraphs=False):
+            yield {"messages": [], "sp_loop_run_id": record.run_id, "sp_last_handler_result": {"next_step": next_step, "error": "SP action budget exhausted: 60/60"}}
+
+    await run_agent(bridge, manager, record, ctx=RunContext(checkpointer=None), agent_factory=lambda **_: Agent(), graph_input={}, config={})
+    result = await manager.get(record.run_id)
+    assert result.status == expected
+    if expected == RunStatus.error:
+        assert result.error == "SP action budget exhausted: 60/60"
+        assert any(c.args[1] == "error" for c in bridge.publish.await_args_list)
+
+
+@pytest.mark.anyio
+async def test_historical_sp_fatal_does_not_poison_new_run():
+    manager = RunManager()
+    record = await manager.create("sp-status-thread", assistant_id="stackplanner")
+    bridge = SimpleNamespace(publish=AsyncMock(), publish_end=AsyncMock(), cleanup=AsyncMock())
+
+    class Agent:
+        async def astream(self, graph_input, config=None, stream_mode=None, subgraphs=False):
+            yield {"messages": [], "sp_loop_run_id": "old-run", "sp_last_handler_result": {"next_step": "error_fatal", "error": "old failure"}}
+
+    await run_agent(bridge, manager, record, ctx=RunContext(checkpointer=None), agent_factory=lambda **_: Agent(), graph_input={}, config={})
+    assert (await manager.get(record.run_id)).status == RunStatus.success
+
+
+@pytest.mark.anyio
+async def test_sp_fatal_checkpoint_is_detected_without_values_stream():
+    manager = RunManager()
+    record = await manager.create("sp-status-thread", assistant_id="stackplanner")
+    bridge = SimpleNamespace(publish=AsyncMock(), publish_end=AsyncMock(), cleanup=AsyncMock())
+    holder = {"state": None}
+
+    async def get_tuple(_):
+        return SimpleNamespace(checkpoint={"channel_values": holder["state"]}) if holder["state"] else None
+
+    class Agent:
+        async def astream(self, graph_input, config=None, stream_mode=None, subgraphs=False):
+            holder["state"] = {"title": "Test", "sp_loop_run_id": record.run_id, "sp_last_handler_result": {"next_step": "error_fatal", "error": "fatal in checkpoint"}}
+            yield {"type": "heartbeat"}
+
+    await run_agent(bridge, manager, record, ctx=RunContext(checkpointer=SimpleNamespace(aget_tuple=get_tuple)), agent_factory=lambda **_: Agent(), graph_input={}, config={}, stream_modes=["custom"])
+    result = await manager.get(record.run_id)
+    assert result.status == RunStatus.error and result.error == "fatal in checkpoint"
+
+
+@pytest.mark.anyio
+async def test_child_sp_fatal_does_not_mark_successful_parent_failed():
+    manager = RunManager()
+    record = await manager.create("parent-thread")
+    bridge = SimpleNamespace(publish=AsyncMock(), publish_end=AsyncMock(), cleanup=AsyncMock())
+
+    class Agent:
+        async def astream(self, graph_input, config=None, stream_mode=None, subgraphs=False):
+            yield (("child:1",), "values", {"sp_loop_run_id": record.run_id, "sp_last_handler_result": {"next_step": "error_fatal", "error": "child failure"}})
+            yield ((), "values", {"messages": []})
+
+    await run_agent(bridge, manager, record, ctx=RunContext(checkpointer=None), agent_factory=lambda **_: Agent(), graph_input={}, config={}, stream_modes=["values"], stream_subgraphs=True)
+    assert (await manager.get(record.run_id)).status == RunStatus.success

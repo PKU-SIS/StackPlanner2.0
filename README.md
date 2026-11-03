@@ -1019,3 +1019,5 @@ Report supplementary research uses the cited research summaries and gap-related 
 Report Writer soft loop warnings close evidence exploration while still requiring the assigned node body to be saved with `write_file` before completion. Hard budgets and existing draft-file acceptance checks are unchanged.
 
 Report Researcher explicitly allows up to 65,536 output tokens for pre-research, supplementary research and tool-free delivery correction, independent of UI thinking mode defaults. A length-truncated synthesis may receive one tool-free continuation within its remaining token budget; original text is retained and truncated continuations are rejected.
+
+Report content identity preserves original UTF-8 line endings during reads, so intact CRLF sources pass hash checks and modified files remain rejected. Gateway runs now report current-run StackPlanner `error_fatal` results as errors with their original detail.

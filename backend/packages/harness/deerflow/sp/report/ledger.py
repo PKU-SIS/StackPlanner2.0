@@ -613,7 +613,7 @@ class ReportLedger:
                     "gap_ids": action_gap_ids,
                     "path": str(summary_path),
                     "virtual_path": self.paths.virtual(summary_path),
-                    "sha256": report_store.sha256_text(summary_path.read_text(encoding="utf-8")),
+                    "sha256": report_store.sha256_text(report_store.read_text(summary_path)),
                     "artifact_id": artifact_id,
                     "created_at": utc_now_iso(),
                 }

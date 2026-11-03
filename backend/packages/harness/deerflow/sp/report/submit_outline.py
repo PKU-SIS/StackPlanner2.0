@@ -59,7 +59,7 @@ def build_submit_outline_tool(*, paths: store.ReportPaths, delivery_path: Path, 
                     store.write_text_atomic(original_path, json.dumps(original, ensure_ascii=False, indent=2) + "\n")
         content = json.dumps(tree, ensure_ascii=False, indent=2) + "\n"
         store.write_text_atomic(delivery_path, content)
-        if delivery_path.read_text(encoding="utf-8") != content:
+        if store.read_text(delivery_path) != content:
             raise store.ReportStoreError("Outline delivery read-back differs from the submitted tree")
         try:
             validate_tree_with_diagnostics(tree, ledger)

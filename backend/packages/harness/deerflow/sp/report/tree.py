@@ -620,12 +620,12 @@ def commit_tree(
     ledger: ReportLedger,
 ) -> None:
     """Switch the authoritative tree after the Artifact view has been registered."""
-    content = path.read_text(encoding="utf-8")
+    content = report_store.read_text(path)
     previous_tree: Mapping[str, Any] | None = None
     previous_ref = ledger.payload.get("tree")
     if isinstance(previous_ref, Mapping) and previous_ref.get("path"):
         try:
-            previous_tree = json.loads(Path(str(previous_ref["path"])).read_text(encoding="utf-8"))
+            previous_tree = json.loads(report_store.read_text(Path(str(previous_ref["path"]))))
         except (OSError, json.JSONDecodeError):
             previous_tree = None
     ledger.payload["tree"] = {

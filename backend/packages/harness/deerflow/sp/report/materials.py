@@ -108,7 +108,7 @@ def _convert_pdf_bytes_to_markdown(data: bytes) -> str:
         md_path = _run_coroutine_sync(lambda: convert_file_to_markdown(pdf_path))
         if md_path is None or not md_path.is_file():
             raise ValueError("pdf conversion returned no markdown file")
-        text = md_path.read_text(encoding="utf-8")
+        text = report_store.read_text(md_path)
         if not text.strip():
             raise ValueError("pdf conversion produced empty markdown")
         if text.lstrip().startswith("%PDF"):
@@ -325,7 +325,7 @@ def _save_material_text(
     # Read the exact UTF-8 payload. Path.read_text() applies universal-newline
     # translation, which would turn a saved CRLF body into LF and fail a
     # content-identity check that is actually correct on disk.
-    read_back = path.read_bytes().decode("utf-8")
+    read_back = report_store.read_text(path)
     if read_back != text:
         raise OSError("material verification failed: file content differs from tool return")
 
@@ -417,7 +417,7 @@ def build_register_user_material_tool(*, paths: report_store.ReportPaths):
                         {"saved": False, "error": f"unknown input_id: {input_id}"},
                         ensure_ascii=False,
                     )
-                text = Path(str(input_item.get("path") or "")).read_text(encoding="utf-8")
+                text = report_store.read_text(Path(str(input_item.get("path") or "")))
                 if not text.strip():
                     return json.dumps(
                         {"saved": False, "error": f"user input is empty: {input_id}"},

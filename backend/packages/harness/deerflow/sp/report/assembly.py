@@ -24,7 +24,7 @@ def _tree_document(ledger: ReportLedger) -> dict[str, Any]:
     if not isinstance(tree_ref, Mapping) or not tree_ref.get("path"):
         raise ReportValidationError("report assembly requires an accepted tree")
     try:
-        payload = json.loads(Path(str(tree_ref["path"])).read_text(encoding="utf-8"))
+        payload = json.loads(report_store.read_text(Path(str(tree_ref["path"]))))
     except (OSError, json.JSONDecodeError) as exc:
         raise ReportValidationError(f"accepted tree is unreadable: {exc}") from exc
     if not isinstance(payload, dict):
@@ -34,7 +34,7 @@ def _tree_document(ledger: ReportLedger) -> dict[str, Any]:
 
 def _read_text(path: Any, label: str) -> str:
     try:
-        return Path(str(path)).read_text(encoding="utf-8")
+        return report_store.read_text(Path(str(path)))
     except (OSError, TypeError) as exc:
         raise ReportValidationError(f"{label} is unreadable: {exc}") from exc
 
@@ -306,7 +306,7 @@ def _candidate_manifest(record: Mapping[str, Any], tree: Mapping[str, Any]) -> d
 def _write_candidate_files(ledger: ReportLedger, record: dict[str, Any], tree: Mapping[str, Any]) -> None:
     candidate_path = Path(str(record["path"]))
     report_store.write_text_atomic(candidate_path, str(record["content"]))
-    read_back = candidate_path.read_text(encoding="utf-8")
+    read_back = report_store.read_text(candidate_path)
     if report_store.sha256_text(read_back) != str(record["sha256"]):
         raise ReportValidationError("candidate file verification failed")
     manifest = _candidate_manifest(record, tree)
@@ -483,7 +483,7 @@ def final_binding_error(ledger: ReportLedger) -> str | None:
         return "final report is bound to a different candidate"
     path = Path(str(final.get("path") or ""))
     try:
-        content = path.read_text(encoding="utf-8")
+        content = report_store.read_text(path)
     except OSError:
         return "final report file is unreadable"
     if report_store.sha256_text(content) != str(final.get("sha256") or ""):

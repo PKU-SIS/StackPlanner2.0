@@ -102,6 +102,11 @@ def ledger_path(outputs_path: Path, report_id: str) -> Path:
     return report_dir(outputs_path, report_id) / "ledger.json"
 
 
+def read_text(path: str | Path) -> str:
+    """Read exact UTF-8 content without universal-newline translation."""
+    return Path(path).read_bytes().decode("utf-8")
+
+
 def read_json(path: Path) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8"))

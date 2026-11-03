@@ -197,7 +197,7 @@ def _copy_rejected_outline_to_delivery(
     if not candidate_path.is_file():
         raise ReportValidationError("retained outline candidate is not a regular file")
     try:
-        text = candidate_path.read_text(encoding="utf-8")
+        text = report_store.read_text(candidate_path)
     except (OSError, UnicodeDecodeError) as exc:
         raise ReportValidationError(f"retained outline candidate is unreadable: {exc}") from exc
     if report_store.sha256_text(text) != record_sha256:
@@ -989,7 +989,7 @@ def _finalize_integration_review(
 ) -> tuple[dict[str, Any], Any]:
     candidate_path = Path(str(candidate.get("path") or ""))
     try:
-        content = candidate_path.read_text(encoding="utf-8")
+        content = report_store.read_text(candidate_path)
     except OSError as exc:
         raise ReportValidationError(f"candidate file is unreadable: {exc}") from exc
     if report_store.sha256_text(content) != str(candidate.get("sha256") or ""):
@@ -1009,7 +1009,7 @@ def _finalize_integration_review(
     content, citation_numbering = render_final_citations(content, candidate.get("source_table") or [])
     final_sha256 = report_store.sha256_text(content)
     report_store.write_text_atomic(final_path, content)
-    if report_store.sha256_text(final_path.read_text(encoding="utf-8")) != final_sha256:
+    if report_store.sha256_text(report_store.read_text(final_path)) != final_sha256:
         raise ReportValidationError("final report file verification failed")
     virtual_path = ledger.paths.virtual(final_path)
     artifact = artifact_adapter.register_existing_artifact(
@@ -1437,7 +1437,7 @@ def _accept_writer_locked(
         declared_path = str(result.artifact_metadata.get("draft_path") or "").strip()
         if declared_path and declared_path != virtual_path:
             raise ReportValidationError("Writer returned a draft_path that does not match the host-assigned path")
-        content = host_path.read_text(encoding="utf-8") if draft_exists else ""
+        content = report_store.read_text(host_path) if draft_exists else ""
         # A usable assigned body completes the writing request. Evidence notes
         # or a model-declared partial status must not open a new feedback loop.
         # Keep the existing feedback-only path when no usable body was written.
@@ -1643,7 +1643,7 @@ def _outline_delivery_text(task: SPSubagentTask) -> str | None:
     if not str(path) or not path.is_file():
         return None
     try:
-        return path.read_text(encoding="utf-8")
+        return report_store.read_text(path)
     except OSError:
         return None
 
@@ -1852,7 +1852,7 @@ def _accept_outline_locked(
             delivery_path = Path(str(task.metadata.get("outline_delivery_path") or ""))
             if str(delivery_path) and delivery_path.is_file():
                 try:
-                    candidate_source = delivery_path.read_text(encoding="utf-8")
+                    candidate_source = report_store.read_text(delivery_path)
                     candidate_kind = "delivery_file"
                 except OSError:
                     candidate_source = None
@@ -2091,7 +2091,7 @@ def _accept_research_locked(
             stop_reason=result.stop_reason,
         )
         summary_path = report_store.write_research_summary(ledger.paths, action.action_id, summary)
-        if (is_markdown_research(task) or is_supplement(task)) and summary_path.read_text(encoding="utf-8") != summary.rstrip() + "\n":
+        if (is_markdown_research(task) or is_supplement(task)) and report_store.read_text(summary_path) != summary.rstrip() + "\n":
             raise report_store.ReportStoreError("Saved pre-research summary differs from the complete delivered body")
         artifact = artifact_adapter.write_text_artifact(
             summary,
