@@ -40,6 +40,7 @@ class SubagentConfig:
     timeout_seconds: int = 900
     # Optional task-scoped policies; defaults preserve ordinary behavior.
     tool_call_limit: int | None = None
+    max_output_tokens: int | None = None
     loop_warning_instruction: str | None = None
     finalize_after_tool_calls: int | None = None
     output_format: str = "json"

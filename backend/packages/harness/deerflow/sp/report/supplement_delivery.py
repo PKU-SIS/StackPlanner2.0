@@ -174,7 +174,12 @@ def normalize(raw: Any, task: SPSubagentTask) -> SPSubagentResult:
 
 
 def prepare(result: SPSubagentResult, task: SPSubagentTask, ledger: Any, executor: Any) -> SPSubagentResult:
+    from deerflow.sp.report.research_continuation import continue_output
+
+    result = continue_output(result, task, ledger, executor, marker="supplement-repair-started.json")
     body = markdown_body(str(result.artifact_content or ""))
+    if result.artifact_metadata.get("output_continuation_attempted"):
+        result = replace(result, artifact_metadata={**result.artifact_metadata, "gap_attempts": parse_attempts(body, task)[0]})
     materials = ledger.materials()
     sources = {str(m.get("source_id")) for m in materials} & {str(s.get("source_id")) for s in ledger.payload.get("sources", [])}
     # Valid legacy declarations still use the existing native validator.
@@ -183,6 +188,8 @@ def prepare(result: SPSubagentResult, task: SPSubagentTask, ledger: Any, executo
 
     def check(text, *, repaired=False):
         found = content_issues(text, sources)
+        if result.artifact_metadata.get("continuation_skipped_reason"):
+            found.append("continuation_skipped:" + result.artifact_metadata["continuation_skipped_reason"])
         if repaired or not result.artifact_metadata.get("supplement_legacy_envelope"):
             _, table_issues = parse_attempts(text, task)
             found.extend(table_issues)
@@ -242,6 +249,7 @@ def prepare(result: SPSubagentResult, task: SPSubagentTask, ledger: Any, executo
             },
             metadata={**task.metadata, "report_supplement_repair": True},
         )
+        result = replace(result, artifact_metadata={**result.artifact_metadata, "supplement_repair_attempted": True})
         try:
             repaired = executor.execute(repair_task)
         except Exception as exc:

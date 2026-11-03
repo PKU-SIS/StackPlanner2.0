@@ -118,3 +118,17 @@ def test_non_report_task_returns_shared_config_and_hard_stop_semantics_remain():
     budget = next(item for item in middlewares if isinstance(item, TokenBudgetMiddleware))
     assert budget._config.enabled is True
     assert budget._config.hard_stop_threshold == 1.0
+
+
+def test_continuation_remaining_budget_does_not_mutate_global_config():
+    from deerflow.sp.runtime import app_config_for_report_continuation
+
+    app = _app_config()
+    task = _task("researcher")
+    task.metadata.update(report_output_continuation=True, report_delivery_remaining_tokens=20000, report_delivery_input_remaining=15000, report_delivery_output_remaining=5000)
+    scoped = app_config_for_report_continuation(app, task)
+    budget = scoped.subagents.get_token_budget_for("sp-researcher")
+    assert budget.max_tokens == 20000 and budget.max_input_tokens == 15000 and budget.max_output_tokens == 5000
+    assert app.subagents.get_token_budget_for("sp-researcher").max_tokens == 120000
+    assert scoped.subagents.get_token_budget_for("sp-outline").max_tokens == 120000
+    assert app_config_for_report_continuation(app, _task()) is app

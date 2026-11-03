@@ -141,7 +141,9 @@ def worker(directory, upstream, consolidation_only=False):
         cfg, scoped, role = configure_report_subagent(task, state=state, available_tools=tools, subagent_config=get_subagent_config(role_name, app_config=app))
         if not task.metadata.get("report_supplement_repair"):
             cfg = replace(cfg, max_turns=350, tool_call_limit=50, **({"finalize_after_tool_calls": 40} if role == "researcher" else {}))
-        limit = REPORT_OUTLINE_OUTPUT_MAX_TOKENS
+        if role == "researcher":
+            task.metadata.setdefault("report_research_token_budget", app.subagents.get_token_budget_for(cfg.name).model_dump())
+        limit = (cfg.max_output_tokens or 65536) if role == "researcher" else REPORT_OUTLINE_OUTPUT_MAX_TOKENS
         task.metadata["max_tokens_per_step"] = limit
         dump(
             directory / f"task-{len(created) + 1}.json",

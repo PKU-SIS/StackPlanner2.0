@@ -1017,3 +1017,5 @@ Report writing now runs as a ledger-driven concurrent pipeline: the host fills a
 Report supplementary research uses the cited research summaries and gap-related source identities as its default handoff; original evidence stays available through material-read tools. Format repair preserves host execution records and original declarations, without asking the model to recreate execution history. The supplementary stage evaluator follows the configured model's thinking support.
 
 Report Writer soft loop warnings close evidence exploration while still requiring the assigned node body to be saved with `write_file` before completion. Hard budgets and existing draft-file acceptance checks are unchanged.
+
+Report Researcher explicitly allows up to 65,536 output tokens for pre-research, supplementary research and tool-free delivery correction, independent of UI thinking mode defaults. A length-truncated synthesis may receive one tool-free continuation within its remaining token budget; original text is retained and truncated continuations are rejected.

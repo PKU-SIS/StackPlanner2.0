@@ -688,6 +688,15 @@ def configure_report_subagent(
     from deerflow.sp.report.supplement_delivery import OUTPUT_INSTRUCTION, REPAIR_INSTRUCTION, is_supplement
 
     supplement = is_supplement(task)
+    from deerflow.sp.report.research_continuation import CONTINUE_INSTRUCTION, RESEARCH_OUTPUT_LIMIT
+
+    subagent_config = replace(subagent_config, max_output_tokens=RESEARCH_OUTPUT_LIMIT)
+    if task.metadata.get("report_output_continuation"):
+        return (
+            replace(subagent_config, system_prompt=CONTINUE_INSTRUCTION, tools=[], skills=[], output_format="markdown", max_turns=20, max_output_tokens=min(RESEARCH_OUTPUT_LIMIT, int(task.metadata["report_delivery_output_limit"]))),
+            [],
+            role,
+        )
     if supplement and task.metadata.get("report_supplement_repair"):
         return replace(subagent_config, system_prompt=REPAIR_INSTRUCTION, tools=[], skills=[], output_format="markdown", max_turns=20), [], role
     markdown = is_markdown_research(task)
@@ -2014,7 +2023,17 @@ def _accept_research_locked(
             return _rejection(
                 action,
                 context,
-                "Pre-research summary delivery failed after at most one tool-free correction: "
+                (
+                    "Pre-research summary delivery failed ("
+                    + (
+                        "one tool-free continuation attempted"
+                        if result.artifact_metadata.get("output_continuation_attempted")
+                        else "one tool-free correction attempted"
+                        if result.artifact_metadata.get("summary_repair_attempted")
+                        else "no tool-free correction performed"
+                    )
+                    + "): "
+                )
                 + "; ".join(dict.fromkeys(issues))
                 + ". This attempt is closed. Do not automatically re-dispatch research; retained materials remain available to Outline.",
                 reason="invalid_pre_research_summary",
@@ -2032,7 +2051,17 @@ def _accept_research_locked(
             return _rejection(
                 action,
                 context,
-                "Supplementary summary delivery failed after at most one tool-free correction: "
+                (
+                    "Supplementary summary delivery failed ("
+                    + (
+                        "one tool-free continuation attempted"
+                        if result.artifact_metadata.get("output_continuation_attempted")
+                        else "one tool-free correction attempted"
+                        if result.artifact_metadata.get("supplement_repair_attempted")
+                        else "no tool-free correction performed"
+                    )
+                    + "): "
+                )
                 + "; ".join(dict.fromkeys(problems))
                 + "; this assigned attempt is closed. Do not repeat research automatically; retained materials remain available to Outline.",
                 reason="invalid_supplement_summary",

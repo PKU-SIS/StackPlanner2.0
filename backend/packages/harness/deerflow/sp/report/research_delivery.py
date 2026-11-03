@@ -108,12 +108,17 @@ def normalize_markdown_research(raw: Any, task: SPSubagentTask) -> SPSubagentRes
 
 def prepare_delivery(result: SPSubagentResult, task: SPSubagentTask, ledger: Any, executor: Any) -> SPSubagentResult:
     """At most one tool-free repair. Diagnostics never become formal summaries."""
+    from deerflow.sp.report.research_continuation import continue_output
+
+    result = continue_output(result, task, ledger, executor, marker="repair-started.json")
     body = markdown_body(str(result.artifact_content or ""))
     materials = ledger.materials()
     sources = {str(item.get("source_id")) for item in materials} & {str(item.get("source_id")) for item in ledger.payload.get("sources", [])}
     issues = delivery_issues(body, sources)
     if result.stop_reason or result.error:
         issues.append(result.stop_reason or str(result.error))
+    if result.artifact_metadata.get("continuation_skipped_reason"):
+        issues.append("continuation_skipped:" + result.artifact_metadata["continuation_skipped_reason"])
     if result.artifact_metadata.get("result_source") == "recovered_tool_evidence":
         issues.append("recovered_tool_evidence")
     if not issues:
@@ -147,6 +152,7 @@ def prepare_delivery(result: SPSubagentResult, task: SPSubagentTask, ledger: Any
             context_refs={"research_summary_repair": {"issues": issues, "original_body": body, "saved_evidence": evidence}},
             metadata={**task.metadata, "report_summary_repair": True},
         )
+        result = replace(result, artifact_metadata={**result.artifact_metadata, "summary_repair_attempted": True})
         try:
             repaired = executor.execute(repair_task)
         except Exception as exc:  # noqa: BLE001 - preserve this attempt and close it

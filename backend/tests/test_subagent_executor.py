@@ -336,6 +336,16 @@ class TestAgentConstruction:
         assert stage.tool_total_hard_limit == 50
         assert ordinary.tool_total_hard_limit == 20
 
+    def test_scoped_output_default_and_explicit_override(self, classes, base_config):
+        from dataclasses import replace
+        config = replace(base_config, max_output_tokens=65536)
+        default = classes["SubagentExecutor"](config=config, tools=[])
+        explicit = classes["SubagentExecutor"](config=config, tools=[], max_tokens_per_step=1234)
+        ordinary = classes["SubagentExecutor"](config=base_config, tools=[])
+        assert default.max_tokens_per_step == 65536
+        assert explicit.max_tokens_per_step == 1234
+        assert ordinary.max_tokens_per_step is None
+
     def test_writer_warning_instruction_is_wired_without_extra_budget(self, classes):
         scoped = SimpleNamespace(tool_freq_warn=30, tool_freq_hard_limit=50)
         ordinary = SimpleNamespace(tool_freq_warn=30, tool_freq_hard_limit=50)

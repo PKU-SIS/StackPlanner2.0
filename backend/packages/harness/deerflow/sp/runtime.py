@@ -436,6 +436,31 @@ def app_config_for_report_outline(app_config: AppConfig, task: SPSubagentTask) -
     return app_config.model_copy(update={"subagents": subagents})
 
 
+def app_config_for_report_continuation(app_config: AppConfig, task: SPSubagentTask) -> AppConfig:
+    """A continuation uses only the original assignment's remaining total budget."""
+    remaining = task.metadata.get("report_delivery_remaining_tokens")
+    if task.metadata.get("report_role") != "researcher" or not task.metadata.get("report_output_continuation") or remaining is None:
+        return app_config
+    from deerflow.config.subagents_config import SubagentOverrideConfig
+    from deerflow.config.token_budget_config import TokenBudgetConfig
+
+    subagents = app_config.subagents.model_copy(deep=True)
+    original = subagents.get_token_budget_for("sp-researcher")
+    budget = TokenBudgetConfig(
+        **{
+            **original.model_dump(),
+            "enabled": True,
+            "max_tokens": int(remaining),
+            "hard_stop_threshold": 1.0,
+            "max_input_tokens": task.metadata.get("report_delivery_input_remaining"),
+            "max_output_tokens": task.metadata.get("report_delivery_output_remaining"),
+        }
+    )
+    override = subagents.agents.get("sp-researcher") or SubagentOverrideConfig()
+    subagents.agents = {**subagents.agents, "sp-researcher": override.model_copy(update={"token_budget": budget})}
+    return app_config.model_copy(update={"subagents": subagents})
+
+
 @dataclass(slots=True)
 class DR2SPExecutorProvider:
     """Create DR2 SubagentExecutor instances bound to the active graph state."""
@@ -612,6 +637,12 @@ class DR2SPExecutorProvider:
                     )
 
             effective_app_config = app_config_for_report_outline(self.app_config, task)
+            effective_app_config = app_config_for_report_continuation(effective_app_config, task)
+            if report_role == "researcher":
+                task.metadata.setdefault("report_research_token_budget", effective_app_config.subagents.get_token_budget_for(subagent_config.name).model_dump())
+                if task.metadata.get("report_output_continuation"):
+                    limit = int(task.metadata["report_delivery_output_limit"])
+                    subagent_max_tokens = min(subagent_max_tokens, limit) if subagent_max_tokens > 0 else limit
             return SubagentExecutor(
                 config=subagent_config,
                 tools=available_tools,

@@ -137,6 +137,8 @@ def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
     from deerflow.sp.report.supplement_delivery import OUTPUT_INSTRUCTION, REPAIR_INSTRUCTION, is_supplement
 
     supplement = is_supplement(task)
+    from deerflow.sp.report.research_continuation import CONTINUE_INSTRUCTION
+
     markdown = is_markdown_research(task) or supplement
     payload = {
         "protocol": task.protocol_payload(),
@@ -164,7 +166,15 @@ def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
                 "recovery when the contract is not satisfied."
             ),
             *(
-                [REPAIR_INSTRUCTION if supplement and task.metadata.get("report_supplement_repair") else OUTPUT_INSTRUCTION if supplement else MARKDOWN_OUTPUT_INSTRUCTION]
+                [
+                    CONTINUE_INSTRUCTION
+                    if task.metadata.get("report_output_continuation")
+                    else REPAIR_INSTRUCTION
+                    if supplement and task.metadata.get("report_supplement_repair")
+                    else OUTPUT_INSTRUCTION
+                    if supplement
+                    else MARKDOWN_OUTPUT_INSTRUCTION
+                ]
                 if markdown
                 else [
                     "Return the task_result envelope fields implied by protocol.message_type. Do not expose private chain-of-thought; report only observable actions, evidence, tests, files, and blockers.",

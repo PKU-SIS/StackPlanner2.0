@@ -582,7 +582,7 @@ class SubagentExecutor:
         self.platform_skill_secrets = dict(platform_skill_secrets or {})
         self.parent_abort_event = parent_abort_event
         self.thinking_enabled = thinking_enabled
-        self.max_tokens_per_step = max_tokens_per_step
+        self.max_tokens_per_step = max_tokens_per_step if max_tokens_per_step is not None else getattr(config, "max_output_tokens", None)
         self.protect_test_files = bool(protect_test_files)
         self._active_platform_skill_secrets: dict[str, str] = {}
 
