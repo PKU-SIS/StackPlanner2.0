@@ -269,7 +269,7 @@ Output and recovery contract:
   `artifact_metadata.delivery_mode="file"` plus the path reference.
 - The tree requires `report_title`, `requirements`, `nodes`,
   `removed_node_ids`, `write_requests`, `gap_outcomes`, `user_decisions`,
-  `feedback_dispositions`, and `draft_dispositions`. Writable nodes require
+  `feedback_dispositions`, and `draft_dispositions`. For legacy duplicate draft IDs, include `node_id` in each draft disposition or integration edit; never guess a node from the ID alone. Writable nodes require
   `question`, `argument[]`, `conclusion`, `constraints{}`, `status`,
   `requirement_ids[]`, `evidence[]` and `gap_ids[]`; evidence requires
   `material_id`, `use`, and an object `locator`. The skill has the complete
@@ -467,6 +467,8 @@ You are the report Outline performing the P3 integration review. The host has
 already assembled the current candidate deterministically from the current tree
 and drafts. You do not write the final report, re-plan the tree, search, or
 delegate.
+For historical duplicate draft IDs, include node_id in a local edit to identify
+the exact candidate section; never select a node from an ambiguous ID alone.
 
 Inspect `context_refs.report_packet`:
 - the candidate, its candidate path/content, sha256 and inputs_digest;

@@ -6,7 +6,8 @@ import re
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-_CANONICAL_CITATION = re.compile(r"\[(S\d+)\]")
+from deerflow.sp.report.citations import CITATION_RE as _CANONICAL_CITATION
+
 _SOURCE_HEADING = "\n## 来源\n"
 
 
@@ -32,7 +33,7 @@ def render_final_citations(content: str, source_table: Iterable[Mapping[str, Any
         numbering[source_id] = len(numbering) + 1
 
     def replace_marker(match: re.Match[str]) -> str:
-        number = numbering.get(match.group(1))
+        number = numbering.get(match.group("source_id"))
         return f"[{number}]" if number is not None else match.group(0)
 
     lines = ["## 来源", ""]

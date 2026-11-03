@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Any
 
 from deerflow.sp.report import store as report_store
+from deerflow.sp.report.citations import CITATION_RE
 from deerflow.sp.report.ledger import ReportLedger, ReportValidationError, utc_now_iso
 
-CITATION_RE = re.compile(r"\[S(\d+)\]")
 HEADING_RE = re.compile(r"(?m)^#{1,6}\s")
 EDIT_KINDS = frozenset({"bridge", "terminology", "format", "dedupe"})
 ACTIVE_CANDIDATE_STATUSES = frozenset({"pending_review", "reviewed", "finalized"})
@@ -152,7 +152,7 @@ def _source_table(ledger: ReportLedger, sections: Iterable[Mapping[str, Any]]) -
     used_ids: set[str] = set()
     for section in sections:
         for match in CITATION_RE.finditer(str(section.get("body") or "")):
-            source_id = f"S{match.group(1)}"
+            source_id = match.group("source_id")
             if source_id not in sources_by_id:
                 raise ReportValidationError(f"citation references unknown source {source_id}")
             used_ids.add(source_id)
@@ -492,7 +492,7 @@ def final_binding_error(ledger: ReportLedger) -> str | None:
 
 
 def _citation_ids(text: str) -> set[str]:
-    return {f"S{match.group(1)}" for match in CITATION_RE.finditer(text)}
+    return {match.group("source_id") for match in CITATION_RE.finditer(text)}
 
 
 def apply_edits(ledger: ReportLedger, edits: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
@@ -524,7 +524,11 @@ def apply_edits(ledger: ReportLedger, edits: Iterable[Mapping[str, Any]]) -> dic
             raise ReportValidationError(f"edits[{index}].reason is required")
         if HEADING_RE.search(replacement):
             raise ReportValidationError(f"edits[{index}] would change heading structure; return revise instead")
-        target = next((section for section in sections if section.get("draft_id") == draft_id), None)
+        node_id = raw.get("node_id")
+        targets = [section for section in sections if section.get("draft_id") == draft_id and (node_id is None or section.get("node_id") == node_id)]
+        if len(targets) > 1:
+            raise ReportValidationError(f"edits[{index}] targets ambiguous draft {draft_id}; provide node_id")
+        target = targets[0] if targets else None
         if target is None:
             raise ReportValidationError(f"edits[{index}] targets a draft not visible in the current candidate")
         body = str(target.get("body") or "")
@@ -546,6 +550,7 @@ def apply_edits(ledger: ReportLedger, edits: Iterable[Mapping[str, Any]]) -> dic
                 "anchor": anchor,
                 "replacement": replacement,
                 "reason": reason,
+                "node_id": target.get("node_id"),
                 "source_candidate_id": current.get("candidate_id"),
                 "applied_at": utc_now_iso(),
             }

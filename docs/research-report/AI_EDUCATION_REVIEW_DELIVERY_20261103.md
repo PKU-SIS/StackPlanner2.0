@@ -14,3 +14,5 @@
 初始验证脚本误按 draft_id 单独比较 SHA，导致一项指标误报 false；改为 `(node_id,draft_id)` 后 20 份均一致。原指标保留为 `metrics.raw.json`，修正说明在 `metrics.json`，独立结果在 `audit.json`。未修改真实产物来迎合检查。
 
 产物：`logs/ai-education-review-delivery-20261103/final-report.md`、`metrics.json`、`audit.json`、`runtime-status-audit.json`。终稿是隔离副本的阶段测试产物；原页面现场保持原状。自动技术重试策略和本轮额外发现均未修改。
+
+后续已完成这两项代码修复及离线预览验证，未改写本次历史交付产物，见 [修复记录](CITATION_AND_DRAFT_ID_FIX_20261103.md)。

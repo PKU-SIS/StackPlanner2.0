@@ -37,8 +37,11 @@ def drafts(ledger: ReportLedger) -> list[dict[str, Any]]:
     return [item for item in raw if isinstance(item, dict)] if isinstance(raw, list) else []
 
 
-def draft(ledger: ReportLedger, draft_id: str) -> dict[str, Any] | None:
-    return next((item for item in drafts(ledger) if item.get("draft_id") == draft_id), None)
+def draft(ledger: ReportLedger, draft_id: str, *, node_id: str | None = None) -> dict[str, Any] | None:
+    matches = [item for item in drafts(ledger) if item.get("draft_id") == draft_id and (node_id is None or item.get("node_id") == node_id)]
+    if len(matches) > 1:
+        raise ReportValidationError(f"ambiguous draft id {draft_id}; provide a unique node_id and draft_id")
+    return matches[0] if matches else None
 
 
 def current_draft(ledger: ReportLedger, node_id: str) -> dict[str, Any] | None:
@@ -55,7 +58,11 @@ def next_feedback_id(ledger: ReportLedger) -> str:
 
 
 def next_draft_id(ledger: ReportLedger) -> str:
-    return report_store.next_identifier("d", [str(item.get("draft_id")) for item in drafts(ledger)])
+    reserved = [str(item.get("draft_id")) for item in drafts(ledger)]
+    for request in write_requests(ledger):
+        reserved.extend(str(request[key]) for key in ("draft_id", "last_draft_id", "prior_draft_id") if request.get(key))
+        reserved.extend(str(attempt["draft_id"]) for attempt in request.get("attempts") or [] if attempt.get("draft_id"))
+    return report_store.next_identifier("d", reserved)
 
 
 def next_action(entry: Mapping[str, Any]) -> str:
@@ -88,7 +95,7 @@ def begin_writer_attempt(ledger: ReportLedger, key: str, *, action_id: str, node
     _refresh(ledger)
     prior = current_draft(ledger, node_id)
     if prior is None and request.get("last_draft_id"):
-        prior = draft(ledger, str(request["last_draft_id"]))
+        prior = draft(ledger, str(request["last_draft_id"]), node_id=node_id)
     if prior is None:
         # An explicit rewrite disposition retires the old draft but must still
         # be the source of the next writing round, even when that round uses a
@@ -174,7 +181,7 @@ def accept_draft(
         prior["superseded_at"] = now
         prior["superseded_by"] = draft_id
     elif request.get("prior_draft_id"):
-        prior = draft(ledger, str(request["prior_draft_id"]))
+        prior = draft(ledger, str(request["prior_draft_id"]), node_id=node_id)
         prior_was_rewrite_source = prior is not None and prior.get("is_current") is not True and prior.get("disposition") == "rewrite"
     record = {
         "draft_id": draft_id,
@@ -289,27 +296,31 @@ def apply_draft_dispositions(
 ) -> list[dict[str, Any]]:
     current = [item for item in drafts(ledger) if item.get("is_current") is True]
     nodes = {str(node.get("node_id")): node for node in tree.get("nodes") or [] if isinstance(node, Mapping)}
-    required: dict[str, str] = {}
+    required: dict[tuple[str, str], str] = {}
     for item in current:
         draft_id = str(item.get("draft_id"))
         node_id = str(item.get("node_id"))
         if item.get("review_status") == "open":
-            required[draft_id] = "feedback_wanted review is open"
+            required[(node_id, draft_id)] = "feedback_wanted review is open"
             continue
         if node_id not in nodes:
-            required[draft_id] = f"node {node_id} was removed"
+            required[(node_id, draft_id)] = f"node {node_id} was removed"
             continue
         if str(item.get("applicable_fingerprint") or "") != str(fingerprints.get(node_id) or ""):
-            required[draft_id] = f"node {node_id} specification or referenced context changed"
+            required[(node_id, draft_id)] = f"node {node_id} specification or referenced context changed"
 
     raw = tree.get("draft_dispositions")
     items = [item for item in raw if isinstance(item, Mapping)] if isinstance(raw, list) else []
-    by_id: dict[str, dict[str, Any]] = {}
+    by_id: dict[tuple[str, str], dict[str, Any]] = {}
     for item in items:
         draft_id = str(item.get("draft_id") or "").strip()
         if not draft_id:
             raise ReportValidationError("draft_dispositions[].draft_id is required")
-        if draft_id in by_id:
+        record = draft(ledger, draft_id, node_id=item.get("node_id"))
+        if record is None:
+            raise ReportValidationError(f"draft disposition references unknown draft: {draft_id}")
+        identity = (str(record.get("node_id")), draft_id)
+        if identity in by_id:
             raise ReportValidationError(f"duplicate draft disposition: {draft_id}")
         action = str(item.get("action") or "").strip().lower()
         if action not in DRAFT_ACTIONS:
@@ -317,14 +328,14 @@ def apply_draft_dispositions(
         reason = str(item.get("reason") or "").strip()
         if not reason:
             raise ReportValidationError(f"draft disposition {draft_id} requires a reason")
-        by_id[draft_id] = {"action": action, "reason": reason}
-    missing = [f"{draft_id}: {reason}" for draft_id, reason in required.items() if draft_id not in by_id]
+        by_id[identity] = {"action": action, "reason": reason}
+    missing = [f"{draft_id} ({node_id}): {reason}" for (node_id, draft_id), reason in required.items() if (node_id, draft_id) not in by_id]
     if missing:
         raise ReportValidationError("draft dispositions required: " + "; ".join(missing))
 
     applied: list[dict[str, Any]] = []
-    for draft_id, decision in by_id.items():
-        record = draft(ledger, draft_id)
+    for (node_id, draft_id), decision in by_id.items():
+        record = draft(ledger, draft_id, node_id=node_id)
         if record is None:
             raise ReportValidationError(f"draft disposition references unknown draft: {draft_id}")
         if record.get("is_current") is not True:

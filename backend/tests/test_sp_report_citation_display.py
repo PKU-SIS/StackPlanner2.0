@@ -32,3 +32,13 @@ def test_unrecognized_legacy_layout_is_preserved_without_a_delivery_gate():
     assert render_final_citations(text, [{"source_id": "S181"}]) == (text, {})
     normal = "# Report\n\nNo citations.\n\n## 来源\n\n（无引用）\n"
     assert render_final_citations(normal, []) == (normal, {})
+
+
+def test_escaped_citations_share_source_identity_and_leave_math_untouched():
+    from deerflow.sp.report.assembly import _citation_ids
+    body = r"Evidence \[S11\], plain [S19], repeat \[S11\]. Math \[x+y\] and [100]."
+    assert _citation_ids(body) == {"S11", "S19"}
+    rendered, mapping = render_final_citations(body + "\n## 来源\n", [{"source_id": "S11", "title": "One"}, {"source_id": "S19", "title": "Two"}])
+    assert mapping == {"S11": 1, "S19": 2}
+    assert r"Evidence [1], plain [2], repeat [1]. Math \[x+y\] and [100]." in rendered
+    assert "S11" not in rendered and "S19" not in rendered

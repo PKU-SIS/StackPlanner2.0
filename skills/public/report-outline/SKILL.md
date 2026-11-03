@@ -528,3 +528,5 @@ local edits; the host applies them and a new review is required. Use
 `outcome="deliver"` and `status="ready"` only when no blocking finding or edit
 remains. Keep `artifact_metadata` to the artifact type, `report_task`, and
 summary status; do not duplicate the review there.
+
+When historical draft IDs repeat across nodes, include `node_id` together with `draft_id` in draft dispositions and local candidate edits. Resolve the exact node; an ambiguous ID alone must not be used to select a draft.

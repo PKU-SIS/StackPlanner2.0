@@ -746,3 +746,42 @@ def test_assembly_preserves_crlf_material_and_draft_identity(tmp_path):
     Path(material["path"]).write_bytes((text + "changed").encode("utf-8"))
     with pytest.raises(ReportValidationError, match="hash does not match"):
         assembly.base_inputs_digest(ledger)
+
+
+def test_escaped_only_citations_enter_assembly_source_table(tmp_path):
+    from deerflow.sp.report import assembly
+    from deerflow.sp.report.citation_display import render_final_citations
+
+    _, ledger = _seed(tmp_path, body=r"Evidence \[S1\]. Math \[x+y\].", with_sources=True)
+    candidate = assembly.ensure_candidate(ledger)
+    assert [s["source_id"] for s in candidate["source_table"]] == ["S1"]
+    assert candidate["citation_map"][0]["node_id"] == "n2"
+    rendered, _ = render_final_citations(assembly.candidate_file_content(candidate), candidate["source_table"])
+    assert r"Evidence [1]. Math \[x+y\]." in rendered
+
+
+def test_local_edit_disambiguates_legacy_draft_id_with_node_id(tmp_path):
+    from copy import deepcopy
+
+    from deerflow.sp.report import assembly
+
+    _, ledger = _seed(tmp_path, body="First body.\n")
+    tree = json.loads(Path(ledger.payload["tree"]["path"]).read_text())
+    other = dict(deepcopy(tree["nodes"][1]), node_id="n3", title="Other node")
+    tree["nodes"].append(other)
+    tree_path = Path(ledger.payload["tree"]["path"])
+    report_store.write_json_atomic(tree_path, tree)
+    ledger.payload["tree"]["sha256"] = report_store.sha256_text(report_store.read_text(tree_path))
+    other_path = ledger.paths.draft_file("n3", "d1")
+    report_store.write_text_atomic(other_path, "Second body.\n")
+    ledger.payload["drafts"].append({**ledger.payload["drafts"][0], "node_id": "n3", "path": str(other_path), "virtual_path": ledger.paths.virtual(other_path), "sha256": report_store.sha256_text("Second body.\n")})
+    ledger.save()
+    original = assembly.ensure_candidate(ledger)
+    edit = {"draft_id": "d1", "kind": "format", "anchor": "Second body.", "replacement": "Second body corrected.", "reason": "format"}
+    with pytest.raises(ReportValidationError, match="ambiguous"):
+        assembly.apply_edits(ledger, [edit])
+    assert ledger.payload["candidate"]["candidate_id"] == original["candidate_id"]
+    updated = assembly.apply_edits(ledger, [{**edit, "node_id": "n3"}])
+    by_node = {s["node_id"]: s for s in updated["sections"]}
+    assert by_node["n2"]["body"] == "First body.\n"
+    assert "corrected" in by_node["n3"]["body"]
