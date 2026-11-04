@@ -116,22 +116,21 @@ def _stable_tool_key(name: str, args: dict, fallback_key: str | None) -> str:
         start_line = args.get("start_line")
         end_line = args.get("end_line")
 
-        bucket_size = 200
         try:
             start_line = int(start_line) if start_line is not None else 1
         except (TypeError, ValueError):
             start_line = 1
+        # Distinct chunks are progress, even within the same 200-line region.
+        # An omitted end reads to EOF, rather than only the starting line.
+        if end_line is None:
+            return f"{path}:{max(start_line, 1)}-EOF"
         try:
-            end_line = int(end_line) if end_line is not None else start_line
+            end_line = int(end_line)
         except (TypeError, ValueError):
             end_line = start_line
 
         start_line, end_line = sorted((start_line, end_line))
-        bucket_start = max(start_line, 1)
-        bucket_end = max(end_line, 1)
-        bucket_start = (bucket_start - 1) // bucket_size
-        bucket_end = (bucket_end - 1) // bucket_size
-        return f"{path}:{bucket_start}-{bucket_end}"
+        return f"{path}:{max(start_line, 1)}-{max(end_line, 1)}"
 
     # write_file / str_replace are content-sensitive: same path may be updated
     # with different payloads during iteration. Using only salient fields (path)

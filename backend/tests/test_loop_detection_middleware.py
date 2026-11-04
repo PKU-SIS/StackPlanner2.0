@@ -149,6 +149,23 @@ class TestHashToolCalls:
 
         assert _hash_tool_calls([forward_call]) == _hash_tool_calls([reversed_call])
 
+    def test_disjoint_read_ranges_have_distinct_hashes(self):
+        calls = [{"name": "read_file", "args": {"path": "/tmp/document.txt", "start_line": start, "end_line": start + 29}} for start in range(1, 151, 30)]
+
+        assert len({_hash_tool_calls([call]) for call in calls}) == 5
+
+    def test_open_ended_read_is_distinct_from_a_single_line(self):
+        to_eof = {"name": "read_file", "args": {"path": "/tmp/document.txt", "start_line": 30}}
+        single_line = {"name": "read_file", "args": {"path": "/tmp/document.txt", "start_line": 30, "end_line": 30}}
+
+        assert _hash_tool_calls([to_eof]) != _hash_tool_calls([single_line])
+
+    def test_implicit_start_matches_explicit_first_line(self):
+        implicit = {"name": "read_file", "args": {"path": "/tmp/document.txt", "end_line": 30}}
+        explicit = {"name": "read_file", "args": {"path": "/tmp/document.txt", "start_line": 1, "end_line": 30}}
+
+        assert _hash_tool_calls([implicit]) == _hash_tool_calls([explicit])
+
     def test_stringified_non_dict_args_do_not_crash(self):
         non_dict_json_call = {"name": "bash", "args": '"echo hello"'}
         plain_string_call = {"name": "bash", "args": "echo hello"}
@@ -191,6 +208,30 @@ class TestHashToolCalls:
 
 
 class TestLoopDetection:
+    def test_scanning_distinct_chunks_does_not_warn_or_stop(self):
+        middleware = LoopDetectionMiddleware()
+        runtime = _make_runtime()
+
+        results = []
+        for start in range(1, 151, 30):
+            call = {"name": "read_file", "id": f"read-{start}", "args": {"path": "/tmp/document.txt", "start_line": start, "end_line": start + 29}}
+            results.append(middleware._apply(_make_state(tool_calls=[call]), runtime))
+        assert all(result is None for result in results)
+        assert not middleware._pending_warnings.get(_pending_key())
+        assert middleware.consume_stop_reason("test-run") is None
+
+    def test_identical_read_range_still_reaches_hard_stop(self):
+        middleware = LoopDetectionMiddleware()
+        runtime = _make_runtime()
+        call = {"name": "read_file", "id": "read-same", "args": {"path": "/tmp/document.txt", "start_line": 30, "end_line": 59}}
+
+        for _ in range(4):
+            assert middleware._apply(_make_state(tool_calls=[call]), runtime) is None
+        result = middleware._apply(_make_state(tool_calls=[call]), runtime)
+
+        assert result["messages"][0].tool_calls == []
+        assert middleware.consume_stop_reason("test-run") == "loop_capped"
+
     def test_no_tool_calls_returns_none(self):
         mw = LoopDetectionMiddleware()
         runtime = _make_runtime()
