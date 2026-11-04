@@ -158,6 +158,49 @@ def test_visible_text_blocks_do_not_expose_reasoning():
     assert extract(state) == ("Answer: False.", None)
 
 
+@pytest.mark.parametrize(
+    "error_name,status",
+    [
+        ("SPCentralEmptyResponse", "empty_response"),
+        ("SPCentralInvalidToolCall", "protocol_error"),
+        ("SPCentralToolProtocolError", "protocol_error"),
+    ],
+)
+def test_native_middleware_policy_fallback_is_not_an_infrastructure_error(
+    error_name, status
+):
+    from types import SimpleNamespace
+
+    from deerflow.agents.middlewares.llm_error_handling_middleware import (
+        LLMErrorHandlingMiddleware,
+    )
+    from deerflow.config.app_config import AppConfig
+    from deerflow.config.sandbox_config import SandboxConfig
+    from deerflow.sp import central_resilience
+
+    from dcc_harness.evaluation.benchmark_runner import failure_status
+
+    middleware = LLMErrorHandlingMiddleware(
+        app_config=AppConfig(sandbox=SandboxConfig(use="test"))
+    )
+    error_class = getattr(central_resilience, error_name)
+
+    async def invalid_model_output(_request):
+        raise error_class("Invalid generated control response")
+
+    message = asyncio.run(
+        middleware.awrap_model_call(SimpleNamespace(), invalid_model_output)
+    )
+
+    assert message.additional_kwargs["error_type"] == error_name
+    assert message.additional_kwargs["deerflow_error_fallback"] is True
+    state = direct_state(messages=[message])
+    with pytest.raises(DeliveryError) as error:
+        extract(state)
+    assert error.value.status == "unfinished"
+    assert failure_status(state) == status
+
+
 def test_timeout_after_a_visible_message_is_not_promoted(tmp_path, monkeypatch):
     import deerflow.sp.runtime as native
 

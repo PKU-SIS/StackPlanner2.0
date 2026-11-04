@@ -400,6 +400,9 @@ the evaluator. Plugins own their scoring and aggregation, including CUAD AUPR.
 Collection accepts native text answers after normal graph return as well as
 validated FINISH deliveries, while preserving incomplete-output and artifact gates.
 The manifest records the delivery contract and results identify the delivery source.
+Known Central empty responses and invalid control calls remain policy failures
+(`empty_response` or `protocol_error`); provider and unknown errors retain
+`infrastructure_error` even when native middleware converts them into messages.
 Benchmark runs are non-interactive by default: human-question tools are disabled,
 and unresolved evidence or verification gaps remain explicit failures.
 The former combined evaluation command is now evaluation-only; v2 run directories

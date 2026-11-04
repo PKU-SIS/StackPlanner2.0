@@ -28,6 +28,12 @@ from dcc_harness.model_transport import _loop_local_async_client
 
 from .benchmarks import PROTOCOL, DeliveryError, extract_delivery
 
+_CENTRAL_POLICY_FAILURE_STATUSES = {
+    "SPCentralEmptyResponse": "empty_response",
+    "SPCentralInvalidToolCall": "protocol_error",
+    "SPCentralToolProtocolError": "protocol_error",
+}
+
 
 class _LoopLocalTransport:
     """Keep native model behavior while isolating its asynchronous pool."""
@@ -156,7 +162,15 @@ def failure_status(state: dict) -> str:
     for message in reversed(json_value(state.get("messages") or [])):
         if message.get("type") != "ai":
             continue
-        if (message.get("additional_kwargs") or {}).get("error_type"):
+        error_type = (message.get("additional_kwargs") or {}).get("error_type")
+        if error_type:
+            # Native LLMErrorHandlingMiddleware serializes type(exc).__name__.
+            # These exact errors follow a returned, invalid policy generation;
+            # keep unknown/provider/transport errors on the infrastructure path.
+            if isinstance(error_type, str):
+                return _CENTRAL_POLICY_FAILURE_STATUSES.get(
+                    error_type, "infrastructure_error"
+                )
             return "infrastructure_error"
         if message.get("invalid_tool_calls") or (
             "DSML" in str(message.get("content", "")) and not message.get("tool_calls")

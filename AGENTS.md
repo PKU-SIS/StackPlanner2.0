@@ -292,6 +292,12 @@ specialist/tool message, hidden reasoning, truncated output, native incomplete
 guard or action-capped response. Reuse native artifact-request/report gates:
 file deliveries still require accepted FINISH and existing integrity checks.
 Unrecovered Qwen `<tool_call>` markup, chat protocol tokens and bare SP call JSON are protocol failures, never native text deliveries. Central attempts one bounded corrective retry through the normal model policy; text envelopes are never executed as tools.
+`benchmark_runner.failure_status` recognizes only the exact middleware `error_type`
+names `SPCentralEmptyResponse` (`empty_response`), `SPCentralInvalidToolCall` and
+`SPCentralToolProtocolError` (`protocol_error`) as policy failures. The native LLM
+error middleware stores `type(exc).__name__`; do not infer policy failure from
+fallback prose or broaden this allowlist to provider, transport, timeout or unknown
+errors, which remain `infrastructure_error`.
 Legacy manifests retain FINISH-only semantics and cannot be silently resumed
 under the new contract. Do not rewrite historical predictions in place.
 Benchmark Settings default to `non_interactive=true`. The native factory removes

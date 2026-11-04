@@ -1058,6 +1058,30 @@ def test_native_delivery_and_scoring_select_the_same_answer_beside_counts(answer
             },
             "infrastructure_error",
         ),
+        *(
+            (
+                {
+                    "type": "ai",
+                    "content": "LLM request failed",
+                    "additional_kwargs": {"error_type": error_type},
+                },
+                status,
+            )
+            for error_type, status in (
+                ("SPCentralEmptyResponse", "empty_response"),
+                ("SPCentralInvalidToolCall", "protocol_error"),
+                ("SPCentralToolProtocolError", "protocol_error"),
+                ("APIConnectionError", "infrastructure_error"),
+                ("RemoteProtocolError", "infrastructure_error"),
+                ("SPCentralModelTimeout", "infrastructure_error"),
+                ("TimeoutError", "infrastructure_error"),
+                ("InternalServerError", "infrastructure_error"),
+                ("UnknownError", "infrastructure_error"),
+                ("custom.SPCentralEmptyResponse", "infrastructure_error"),
+                ("SPCentralEmptyResponseSubclass", "infrastructure_error"),
+                ({"name": "SPCentralEmptyResponse"}, "infrastructure_error"),
+            )
+        ),
         ({"type": "ai", "content": "normal response"}, "unfinished"),
     ],
 )
