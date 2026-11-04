@@ -42,7 +42,7 @@ FinAuditing 文件检索测试集 220 题中 208 题被标记完成。两次实�
 所有修复使用独立实验目录，保留原始预测、真实失败及原评分口径。
 
 依据：[NBA 诊断](DCC_NBA_BASELINE_DIAGNOSIS.md)、[FinAuditing 文件模式](DCC_FINAUDITING_FILES.md)，
-以及服务器实验目录 `/home/qiuzh/work/dcc_runs/` 下的
+以及各自配置的实验产物根目录下的
 `20261102/nba-sp-baseline-deepseek-v4-audit`（代码 `58280a8`）和
 `20261103/finauditing-sp-files-test-deepseek-v1`（代码 `d048df5`）。两轮使用不同代码版本，
 此处用于问题归纳，不作修复前后的因果对照。
