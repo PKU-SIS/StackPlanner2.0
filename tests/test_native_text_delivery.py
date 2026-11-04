@@ -245,3 +245,20 @@ def test_real_native_graph_direct_answer_is_collected(tmp_path, monkeypatch):
     state = json.loads((tmp_path / "attempt/state.json").read_text())
     assert state["sp_non_interactive"] is True
     assert not state.get("sp_pending_human_interaction")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '<tool_call>{"name":"sp_finish","arguments":{"run_summary":"False"}}</tool_call>',
+        '<tool_call>{"name":"sp_finish"}',
+        "False. <|im_end|>",
+        "<|im_start|>assistant\nFalse",
+    ],
+)
+def test_unrecovered_qwen_protocol_is_not_a_native_text_delivery(text):
+    state = direct_state()
+    state["messages"][-1].content = text
+    with pytest.raises(DeliveryError) as error:
+        extract(state)
+    assert error.value.status == "protocol_error"

@@ -228,7 +228,10 @@ def _native_text_delivery(state: dict, *, run_id: str, native_returned: bool) ->
             )
         )
     )
-    if "DSML" in text:
+    if "DSML" in text or re.search(
+        r"</?tool_call\b|<\|(?:im_start|im_end|eot_id|start_header_id|end_header_id)\|>",
+        text,
+    ):
         raise DeliveryError(
             "protocol_error", "native response contains unrecovered tool syntax"
         )

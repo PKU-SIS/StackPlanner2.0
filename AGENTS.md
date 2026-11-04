@@ -291,6 +291,7 @@ and its matching implicit THINK state; never collect an intermediate state,
 specialist/tool message, hidden reasoning, truncated output, native incomplete
 guard or action-capped response. Reuse native artifact-request/report gates:
 file deliveries still require accepted FINISH and existing integrity checks.
+Unrecovered Qwen `<tool_call>` markup and chat protocol tokens are protocol failures, never native text deliveries.
 Legacy manifests retain FINISH-only semantics and cannot be silently resumed
 under the new contract. Do not rewrite historical predictions in place.
 Benchmark Settings default to `non_interactive=true`. The native factory removes

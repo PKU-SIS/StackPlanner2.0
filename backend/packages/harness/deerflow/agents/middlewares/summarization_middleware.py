@@ -9,7 +9,7 @@ from typing import Any, Protocol, override, runtime_checkable
 
 from langchain.agents import AgentState
 from langchain.agents.middleware import SummarizationMiddleware
-from langchain_core.messages import AnyMessage, HumanMessage, RemoveMessage, get_buffer_string, trim_messages
+from langchain_core.messages import AnyMessage, HumanMessage, RemoveMessage, SystemMessage, get_buffer_string, trim_messages
 from langgraph.config import get_config
 from langgraph.constants import TAG_NOSTREAM
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
@@ -83,6 +83,7 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
         self,
         *args,
         before_summarization: list[BeforeSummarizationHook] | None = None,
+        preserve_initial_system_messages: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
@@ -91,6 +92,7 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
             # of historical provider usage attached to retained messages.
             self._partial_token_counter = estimate_message_tokens
         self._before_summarization_hooks = before_summarization or []
+        self._preserve_initial_system_messages = preserve_initial_system_messages
         # The summary LLM call runs inside a LangGraph middleware hook, so its token
         # stream would otherwise be captured by the messages-tuple stream callback and
         # broadcast to the frontend as a phantom AI message. Tag a dedicated model copy
@@ -287,6 +289,12 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
             return None
 
         messages_to_summarize, preserved_messages = self._partition_messages(messages, cutoff_index)
+        if self._preserve_initial_system_messages:
+            initial_count = 0
+            while initial_count < len(messages_to_summarize) and isinstance(messages_to_summarize[initial_count], SystemMessage):
+                initial_count += 1
+            preserved_messages = [*messages_to_summarize[:initial_count], *preserved_messages]
+            messages_to_summarize = messages_to_summarize[initial_count:]
         messages_to_summarize, preserved_messages = self._preserve_dynamic_context_reminders(messages_to_summarize, preserved_messages)
         if not messages_to_summarize:
             return None
@@ -445,6 +453,7 @@ def create_summarization_middleware(
     keep: tuple[str, int | float] | None = None,
     main_model_name: str | None = None,
     output_token_limit: int | None = None,
+    preserve_initial_system_messages: bool = False,
 ) -> DeerFlowSummarizationMiddleware | None:
     """Create the configured summarization middleware.
 
@@ -540,6 +549,7 @@ def create_summarization_middleware(
         "keep": retained,
         "trim_tokens_to_summarize": trim_tokens,
         "token_counter": partial(estimate_message_tokens, use_usage_metadata_scaling=True),
+        "preserve_initial_system_messages": preserve_initial_system_messages,
     }
     if config.summary_prompt is not None:
         kwargs["summary_prompt"] = config.summary_prompt

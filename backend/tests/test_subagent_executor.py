@@ -362,6 +362,7 @@ class TestAgentConstruction:
 
         assert executor._should_enable_tool_thinking(app_config, [NamedTool("bash")]) is False
 
+    @pytest.mark.parametrize("max_tokens_per_step", [None, 16384])
     @pytest.mark.parametrize(("agent_name", "max_turns"), [("test-agent", 10), ("sp-researcher", 480)])
     def test_create_agent_threads_explicit_app_config_to_model_and_middlewares(
         self,
@@ -370,6 +371,7 @@ class TestAgentConstruction:
         monkeypatch: pytest.MonkeyPatch,
         agent_name,
         max_turns,
+        max_tokens_per_step,
     ):
         """Explicit app_config must flow into both model and middleware factories."""
         import deerflow.config as config_module
@@ -422,6 +424,7 @@ class TestAgentConstruction:
             tools=[],
             app_config=app_config,
             parent_model="parent-model",
+            max_tokens_per_step=max_tokens_per_step,
         )
 
         result = executor._create_agent()
@@ -436,6 +439,7 @@ class TestAgentConstruction:
             # this the subagent would emit both a model-level trace and a
             # graph-level trace per call.
             "attach_tracing": False,
+            **({"max_tokens": max_tokens_per_step} if max_tokens_per_step is not None else {}),
         }
         assert captured["middlewares"] == {
             "app_config": app_config,
@@ -443,6 +447,7 @@ class TestAgentConstruction:
             "lazy_init": True,
             "deferred_setup": None,
             "agent_name": agent_name,
+            **({"output_token_limit": max_tokens_per_step} if max_tokens_per_step is not None else {}),
         }
         assert captured["agent"]["model"] is model
         assert captured["agent"]["middleware"] is middlewares

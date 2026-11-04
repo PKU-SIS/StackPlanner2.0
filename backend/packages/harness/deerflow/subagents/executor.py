@@ -586,6 +586,8 @@ class SubagentExecutor:
             "deferred_setup": deferred_setup,
             "agent_name": self.config.name,
         }
+        if self.max_tokens_per_step is not None:
+            middleware_kwargs["output_token_limit"] = self.max_tokens_per_step
         if self.budgets:
             middleware_kwargs["budgets"] = self.budgets
         if self.memory_agent_name is not None:

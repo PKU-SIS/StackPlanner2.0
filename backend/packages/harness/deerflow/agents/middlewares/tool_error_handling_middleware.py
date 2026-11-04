@@ -289,6 +289,7 @@ def build_subagent_runtime_middlewares(
     deferred_setup: "DeferredToolSetup | None" = None,
     agent_name: str | None = None,
     memory_agent_name: str | None = None,
+    output_token_limit: int | None = None,
     budgets: dict[str, int] | None = None,
 ) -> list[AgentMiddleware]:
     """Middlewares shared by subagent runtime before subagent-only middlewares."""
@@ -325,6 +326,29 @@ def build_subagent_runtime_middlewares(
 
     if model_name is None and app_config.models:
         model_name = app_config.models[0].name
+
+    # Specialists accumulate tool evidence just like the lead. Reuse its
+    # context-aware compressor, but retain the specialist contract that lives
+    # in initial state (subagent graphs have no separate system_prompt).
+    if app_config.summarization.enabled:
+        from deerflow.agents.middlewares.durable_context_middleware import DurableContextMiddleware
+        from deerflow.agents.middlewares.summarization_middleware import create_summarization_middleware
+
+        middlewares.append(
+            DurableContextMiddleware(
+                skills_container_path=app_config.skills.container_path,
+                skill_file_read_tool_names=app_config.summarization.skill_file_read_tool_names,
+                include_delegations=False,
+            )
+        )
+        summary = create_summarization_middleware(
+            app_config=app_config,
+            main_model_name=model_name,
+            output_token_limit=output_token_limit,
+            preserve_initial_system_messages=True,
+        )
+        if summary is not None:
+            middlewares.append(summary)
 
     model_config = app_config.get_model_config(model_name) if model_name else None
     if model_config is not None and model_config.supports_vision:
