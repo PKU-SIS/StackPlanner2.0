@@ -12,7 +12,10 @@ from typing import Any, override
 from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelCallResult, ModelRequest, ModelResponse
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
+
+from deerflow.sp.control_protocol import has_unrecovered_control_syntax
+from deerflow.utils.messages import message_content_to_text
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +39,10 @@ class SPCentralInvalidToolCall(RuntimeError):
     """Raised when Central attempted an SP action whose JSON was truncated."""
 
     requires_more_tokens = True
+
+
+class SPCentralToolProtocolError(SPCentralInvalidToolCall):
+    """The provider returned an unparsed action envelope as visible text."""
 
 
 class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
@@ -108,7 +115,7 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
         except Exception:
             logger.debug("Failed to emit Central resilience event", exc_info=True)
 
-    def _retry_request(self, request: ModelRequest, *, expand_tokens: bool = False) -> ModelRequest:
+    def _retry_request(self, request: ModelRequest, *, expand_tokens: bool = False, repair_tool_protocol: bool = False) -> ModelRequest:
         settings = dict(getattr(request, "model_settings", {}) or {})
         current_max_tokens = settings.get("max_tokens")
         if not isinstance(current_max_tokens, int) or current_max_tokens <= 0:
@@ -117,7 +124,25 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
             settings["max_tokens"] = max(current_max_tokens, self.retry_max_tokens) if expand_tokens else min(current_max_tokens, self.retry_max_tokens)
         else:
             settings["max_tokens"] = self.retry_max_tokens
-        return request.override(model_settings=settings)
+        updates: dict[str, Any] = {"model_settings": settings}
+        if repair_tool_protocol:
+            updates["messages"] = [
+                *request.messages,
+                HumanMessage(
+                    name="sp_tool_protocol_retry",
+                    content=(
+                        "Your previous response was rejected as unparsed control syntax; no action was executed. "
+                        "Use only the currently exposed tool schemas and their exact argument names. "
+                        "Do not print an SP action envelope as ordinary text. "
+                        "sp_finish is unavailable until a complete artifact is registered. "
+                        "For a task that needs no output file, answer the user directly in the requested format once the evidence supports it. "
+                        "If execution or evidence is still needed, continue with an available action. "
+                        "For a requested file, first delegate its creation and verification, then select its registered reference; never invent an artifact."
+                    ),
+                    additional_kwargs={"hide_from_ui": True},
+                ),
+            ]
+        return request.override(**updates)
 
     def _mark_fallback_used(self, run_key: str, phase: str) -> bool:
         key = (run_key, phase)
@@ -165,8 +190,9 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
     def _result_failure(result: ModelCallResult) -> RuntimeError | None:
         """Reject silent model completions before the agent loop can terminate.
 
-        Central may use free-form text as an implicit THINK action, so any
-        non-empty content is valid.  Native tool calls are also valid.  An
+        Central may use free-form text as an implicit THINK action. Raw tool
+        envelopes must recover through the model before they can become a
+        decision; they are not final answers or executable calls. An
         empty message with no calls, however, cannot advance the SP protocol
         and would otherwise look like a successful terminal answer.
         """
@@ -179,12 +205,14 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
         for message in messages:
             if not isinstance(message, AIMessage):
                 continue
-            if message.tool_calls:
-                return None
             invalid_sp_calls = [call for call in (message.invalid_tool_calls or []) if str(call.get("name") or "").startswith("sp_")]
             if invalid_sp_calls:
                 names = ", ".join(sorted({str(call.get("name")) for call in invalid_sp_calls}))
                 return SPCentralInvalidToolCall(f"CentralAgent emitted invalid or truncated SP tool arguments: {names}")
+            if has_unrecovered_control_syntax(message_content_to_text(message.content)):
+                return SPCentralToolProtocolError("CentralAgent returned unparsed control syntax instead of a structured tool call or final text")
+            if message.tool_calls:
+                return None
             saw_length_limit = saw_length_limit or str(message.response_metadata.get("finish_reason") or "") == "length"
             content = message.content
             if isinstance(content, str) and content.strip():
@@ -267,6 +295,7 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
                     self._retry_request(
                         request,
                         expand_tokens=bool(getattr(first_exc, "requires_more_tokens", False)),
+                        repair_tool_protocol=isinstance(first_exc, SPCentralToolProtocolError),
                     ),
                     timeout_seconds=self.retry_timeout_seconds,
                 )

@@ -252,6 +252,8 @@ def test_real_native_graph_direct_answer_is_collected(tmp_path, monkeypatch):
     [
         '<tool_call>{"name":"sp_finish","arguments":{"run_summary":"False"}}</tool_call>',
         '<tool_call>{"name":"sp_finish"}',
+        '{"name":"sp_finish","arguments":{"result":"False"}}',
+        '{"name":"sp_delegate","arguments":{"task":"read"}}',
         "False. <|im_end|>",
         "<|im_start|>assistant\nFalse",
     ],
