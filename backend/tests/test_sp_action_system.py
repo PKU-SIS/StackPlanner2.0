@@ -3837,6 +3837,40 @@ def test_delegate_context_is_bounded_and_preserves_user_goal_and_pinned_feedback
     assert len(refs["artifact_refs"]["_history"]) == 12
 
 
+def test_delegate_context_preserves_full_current_question_and_bounds_history():
+    historical_question = "Original report request\n" + "historical context " * 200
+    current_question = "Scenario:\n" + "Complete public scenario details. " * 130 + "\n\nRequired output:\nAnswer: True/False\nIllegal Operation: <operation>\nProblematic Team: <team>"
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Complete question received.",
+            task_id="task-complete-question",
+        )
+    )
+
+    build_default_action_router(delegate_executor=executor).execute(
+        _action(
+            ActionType.DELEGATE,
+            action_id="act-complete-question",
+            target_agent="researcher",
+            task="Audit the complete current question and follow its output format.",
+        ),
+        state={
+            "messages": [
+                HumanMessage(content=historical_question),
+                HumanMessage(content=current_question),
+                HumanMessage(content="Internal protocol retry", additional_kwargs={"hide_from_ui": True}),
+            ],
+        },
+    )
+
+    refs = executor.tasks[0].context_refs
+    assert len(current_question) > 4000
+    assert refs["original_query"] == current_question
+    assert refs["latest_user_input"] == current_question
+    assert refs["thread_first_user_input"] == " ".join(historical_question.split())[:2400]
+
+
 def test_delegate_context_bounds_each_memory_entry_body():
     stack = TaskMemoryStack()
     observation = stack.append_observe(
