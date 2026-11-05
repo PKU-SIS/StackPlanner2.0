@@ -64,6 +64,7 @@ _EXTERNAL_EVIDENCE_PATTERN = re.compile(
     r")",
     re.IGNORECASE,
 )
+_EXTERNAL_RETRIEVAL_TOOL_NAMES = frozenset({"ragflow_retrieve", "web_search", "web_fetch"})
 _CODER_SOURCE_GAP_PATTERN = re.compile(
     r"(?:no\s+(?:non[- ]test\s+)?source\s+(?:file\s+)?changed"
     r"|no\s+non[- ]test\s+source\s+file"
@@ -394,6 +395,8 @@ class ActionRouter:
         """Repair clear researcher/coder role inversions at the action boundary."""
         if action.action_type is not ActionType.DELEGATE:
             return
+        if action.target_agent == "coder" and is_data_processing_coder(action.metadata):
+            return
         text = "\n".join(
             value
             for value in (
@@ -415,7 +418,9 @@ class ActionRouter:
             return
         if action.target_agent != "researcher":
             return
-        if _EXTERNAL_EVIDENCE_PATTERN.search(text):
+        requested_tools = action.metadata.get("tool_names")
+        retrieval_selected = isinstance(requested_tools, list) and bool(_EXTERNAL_RETRIEVAL_TOOL_NAMES.intersection(name.strip() for name in requested_tools if isinstance(name, str)))
+        if retrieval_selected or _EXTERNAL_EVIDENCE_PATTERN.search(text):
             return
         exact_combinatorial = bool(_LOCAL_COMBINATORIAL_WORK_PATTERN.search(text) and _EXACT_WORK_PATTERN.search(text))
         if not exact_combinatorial and not _LOCAL_CALCULATION_PATTERN.search(text):

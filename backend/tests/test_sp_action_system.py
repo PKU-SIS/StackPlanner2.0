@@ -2718,6 +2718,43 @@ def test_self_contained_exact_enumeration_is_rerouted_from_researcher_to_coder(
     assert any(event["event_type"] == "sp.delegate.target_normalized" and event["payload"]["from_target"] == "researcher" and event["payload"]["to_target"] == "coder" for event in result.run_events)
 
 
+def test_retrieval_scope_keeps_numeric_research_with_the_selected_researcher(tmp_path):
+    tools = ["read_file", "grep", "ragflow_retrieve"]
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Evidence inspected", artifact_metadata={"completion_status": "complete"}))
+    result = build_default_action_router(delegate_executor=executor).execute(
+        _action(ActionType.DELEGATE, target_agent="researcher", task="Read the supplied filings and calculate the requested total.", stage="research", metadata={"tool_names": tools}),
+        state=_thread_state_with_outputs(tmp_path),
+        run_id="run-1",
+    )
+
+    task = executor.tasks[0]
+    assert task.subagent_type == "researcher"
+    assert task.stage == "research"
+    assert task.metadata["tool_names"] == tools
+    observation = TaskMemoryStack.from_dict(result.state_update["sp_task_memory"]).entries[-1]
+    assert observation.actor == "researcher"
+    assert "execution_verification" not in observation.metadata
+
+
+@pytest.mark.parametrize("kind_key", ["task_kind", "coder_task_kind"])
+def test_router_keeps_explicit_data_processing_coder_for_api_audits(tmp_path, kind_key):
+    tools = ["read_file", "ragflow_retrieve", "bash"]
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Audit incomplete", artifact_metadata={"completion_status": "partial"}))
+    build_default_action_router(delegate_executor=executor).execute(
+        _action(
+            ActionType.DELEGATE, target_agent="coder", task="Query the official API and calculate the requested total.", stage="implementation", metadata={kind_key: "data_processing", "requires_implementation": False, "tool_names": tools}
+        ),
+        state=_thread_state_with_outputs(tmp_path),
+        run_id="run-1",
+    )
+
+    task = executor.tasks[0]
+    assert task.subagent_type == "coder"
+    assert task.stage == "implementation"
+    assert task.metadata["tool_names"] == tools
+    assert task.metadata["task_kind"] == "data_processing"
+
+
 def test_read_only_external_api_retrieval_is_rerouted_from_coder_to_researcher(
     tmp_path,
 ):

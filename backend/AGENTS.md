@@ -1051,6 +1051,10 @@ Never inherit a child's self-declared scope or a previous run's selection.
 `SP_REPORT_RECOVERY_MAX_ATTEMPTS` is owned by the Delegate handler and shared
 with Central's schema gate. Enforce it before executor dispatch even when no
 artifact was created; an exhausted partial result and its gaps stay incomplete.
+Router role heuristics respect explicit data-processing Coder metadata and
+explicit Researcher retrieval scopes (`ragflow_retrieve`, `web_search`,
+`web_fetch`). Numeric words alone do not make a retrieval task self-contained.
+Scope names still pass the ordinary runtime availability and role checks.
 
 Reporter defaults to Markdown for prose but honors explicit machine-readable file formats such as JSON. Keep control envelopes separate from delivered file bytes and preserve current-action filename ownership. This is also required by the optional CLAUSE RAG transport.
 

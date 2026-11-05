@@ -425,6 +425,9 @@ retaining the incomplete result and its remaining gaps.
 The retrieval tool describes its 1-indexed pages, 1-100 chunk page size, and
 `total` count. Evidence coverage may need later pages; an incomplete retrieval
 does not establish that a fact is absent from the source document.
+Numeric research stays with the selected Researcher when its explicit tool
+scope includes retrieval. Role repair also preserves an explicit data-processing
+Coder contract instead of treating an API audit as retrieval alone.
 The manifest records the delivery contract and results identify the delivery source.
 Both native delivery extraction and saved-state classification keep known
 Central empty responses and invalid control calls as policy failures
