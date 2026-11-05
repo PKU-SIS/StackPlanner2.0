@@ -1049,6 +1049,9 @@ unreadable or over-limit JSON remains an unchanged partial artifact with syntax
 diagnostics for the existing bounded revision flow. JSON-named inline fallbacks
 receive the same check; recovery preserves the requested format. This validates
 syntax only and must not infer answer content or benchmark labels.
+Explicit JSON output contracts also apply to inline/Markdown fallbacks.
+Ownership-filtered JSON paths remain format hints only: never read, overwrite or
+register discarded paths, and never let discarding a path bypass syntax checks.
 
 Qwen compatibility merges serialized system instructions into one leading system message without changing stored history or tool pairings. Report literal-token checks do not treat encoding names as mandatory answer content unless explicitly requested as literals. Both fixes preserve the existing native acceptance guards; tests cover Qwen messages and report encoding requirements.
 

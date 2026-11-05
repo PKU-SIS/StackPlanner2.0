@@ -405,6 +405,8 @@ validated FINISH deliveries, while preserving incomplete-output and artifact gat
 Reporter checks the complete contents of declared JSON deliverables before FINISH;
 invalid JSON stays partial and follows the bounded revision flow with parser
 diagnostics. Revisions preserve the requested format and keep the original file.
+Explicit JSON output requirements also validate inline fallbacks, including
+content that would otherwise be saved with a Markdown extension.
 Data-processing recovery retains previously requested retrieval tools and checks
 their availability and role permissions again on every retry.
 The manifest records the delivery contract and results identify the delivery source.

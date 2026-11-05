@@ -30,6 +30,13 @@ REPORTER_FEEDBACK_MAX_CHARS = 2400
 REPORTER_REQUIRED_LITERAL_MAX_ITEMS = 64
 REPORTER_UPLOAD_TEXT_MAX_CHARS = 1_000_000
 REPORTER_JSON_MAX_CHARS = 16 * 1024 * 1024
+_JSON_REPORT_CONTRACT_PATTERN = re.compile(
+    r"\b(?:return|output|respond\s+with|answer\s+with)\s+"
+    r"(?:(?:only|strictly|exactly|a|an|the|single|valid|strict|one|as|in|final|answer|must|be|is)\s+)*JSON\b"
+    r"|\b(?:required\s+deliverable|output\s+format|response\s+format|answer\s+format)\b[^\n]{0,100}(?:\.json\b|\bJSON\b)"
+    r"|(?:输出|返回|作答|交付|格式)(?:必须|应当|应|需|为|是|一个|严格|有效|的|仅|只|\s|:|：)*JSON",
+    re.IGNORECASE,
+)
 PERCEPTION_UPLOAD_BODY_MAX_ITEMS = 16
 PERCEPTION_UPLOAD_BODY_MAX_CHARS = 48_000
 PERCEPTION_UPLOAD_BODY_PER_ITEM_MAX_CHARS = 16_000
@@ -1390,6 +1397,8 @@ def _report_boundary_adjustment_gaps(
 def _report_json_artifact_checks(
     result: SPSubagentResult,
     *,
+    task: SPSubagentTask,
+    declared_paths: list[str],
     context: HandlerContext,
     artifact_adapter: SPArtifactAdapter,
 ) -> tuple[list[str], list[str]]:
@@ -1400,9 +1409,13 @@ def _report_json_artifact_checks(
     report-revision path; do not repair or choose answer content here.
     """
     paths = result.artifact_metadata.get("created_paths") or []
+    public_request = _clean_user_instruction(str(task.context_refs.get("latest_user_input") or task.context_refs.get("original_query") or task.task))
+    # Ownership filtering must not erase the format contract. Discarded paths
+    # are hints only: never read, overwrite or register them on this basis.
+    requires_json = bool(_JSON_REPORT_CONTRACT_PATTERN.search(public_request)) or any(PurePosixPath(path).suffix.lower() == ".json" for path in declared_paths)
     candidates: list[tuple[str, str | None, bool]] = []
     for path in paths:
-        if PurePosixPath(path).suffix.lower() != ".json":
+        if PurePosixPath(path).suffix.lower() != ".json" and not requires_json:
             continue
         materialized = artifact_adapter.read_text_artifact(
             {"virtual_path": path},
@@ -1412,10 +1425,11 @@ def _report_json_artifact_checks(
         )
         candidates.append((path, *(materialized if materialized is not None else (None, False))))
     filename = _text_artifact_filename_hint(result.artifact_metadata)
-    if not paths and filename and PurePosixPath(filename).suffix.lower() == ".json" and result.artifact_content is not None:
+    json_filename = bool(filename and PurePosixPath(filename).suffix.lower() == ".json")
+    if not paths and (requires_json or json_filename) and result.artifact_content is not None:
         content = result.artifact_content
         text = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
-        candidates.append((filename, text, len(text) > REPORTER_JSON_MAX_CHARS))
+        candidates.append((filename or "inline-report", text, len(text) > REPORTER_JSON_MAX_CHARS))
 
     gaps: list[str] = []
     for path, text, truncated in candidates:
@@ -1450,6 +1464,8 @@ def _apply_report_acceptance_checks(
     result.artifact_metadata["created_paths"] = valid_paths
     json_paths, json_gaps = _report_json_artifact_checks(
         result,
+        task=task,
+        declared_paths=declared_paths,
         context=context,
         artifact_adapter=artifact_adapter,
     )

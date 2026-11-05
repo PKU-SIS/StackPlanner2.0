@@ -2989,6 +2989,54 @@ def test_reporter_json_filename_fallback_is_validated_before_writing(tmp_path, c
     assert ref["metadata"]["completion_status"] == ("complete" if complete else "partial")
 
 
+@pytest.mark.parametrize(
+    "user_request,content,declared_paths,complete",
+    [
+        ("Return only a JSON array.", '[{"text":"missing "escape""}]', [], False),
+        ("Return only a JSON array.", '<tool_call>{"name":"write_file","arguments":{}}</tool_call>', [], False),
+        ("The required deliverable is a UTF-8 .json file containing only the requested JSON array.", "[] []", [], False),
+        ("输出严格的JSON数组。", "[] []", [], False),
+        ("Return the requested answer.", "[] []", ["/mnt/user-data/outputs/answer-old-action.json"], False),
+        ("Return only a JSON array.", "[]", [], True),
+        ("Write a Markdown guide to JSON arrays.", "# Guide\nJSON arrays use brackets.", [], True),
+    ],
+)
+def test_reporter_json_contract_cannot_be_bypassed_by_markdown_fallback(tmp_path, user_request, content, declared_paths, complete):
+    state = {**_thread_state_with_outputs(tmp_path), "messages": [HumanMessage(content=user_request)]}
+    old_file = None
+    if declared_paths:
+        from pathlib import Path
+
+        old_file = Path(state["thread_data"]["outputs_path"]) / "answer-old-action.json"
+        old_file.parent.mkdir(parents=True, exist_ok=True)
+        old_file.write_text("[]\n", encoding="utf-8")
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Answer ready.",
+            artifact_content=content,
+            artifact_type="report_revision",
+            artifact_metadata={"completion_status": "complete", "created_paths": declared_paths},
+        )
+    )
+    outcome = build_default_action_router(delegate_executor=executor).execute(
+        _action(ActionType.DELEGATE, action_id="json-fallback-check", target_agent="reporter", task="Deliver the user's requested answer.", stage="reporting"),
+        state=state,
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+    ref = outcome.state_update["sp_current_artifact_refs"]["report_revision"]
+    assert ref["metadata"]["completion_status"] == ("complete" if complete else "partial")
+    assert ref["virtual_path"].endswith(".md")
+    assert ref["metadata"]["created_paths"] == []
+    if old_file is not None:
+        assert old_file.read_text(encoding="utf-8") == "[]\n"
+    if not complete:
+        check = ref["metadata"]["quality_checks"]["json_artifact_syntax"]
+        assert check["passed"] is False
+        assert "JSON" in "; ".join(check["evidence_gaps"])
+
+
 def test_partial_data_observation_retains_handler_owned_tool_scope(tmp_path):
     executor = FakeSubagentExecutor(
         SPSubagentResult(
