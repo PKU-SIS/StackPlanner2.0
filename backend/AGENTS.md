@@ -1075,4 +1075,14 @@ read-before-write, ownership, JSON parsing and bounded revision gates still appl
 
 Qwen compatibility merges serialized system instructions into one leading system message without changing stored history or tool pairings. Report literal-token checks do not treat encoding names as mandatory answer content unless explicitly requested as literals. Both fixes preserve the existing native acceptance guards; tests cover Qwen messages and report encoding requirements.
 
+The tool-bound `VllmChatModel` compatibility path makes at most one same-model,
+same-schema format correction for explicit invalid tool calls or a leading
+unparsed `<tool_call>` envelope without valid calls. Ordinary JSON and native
+calls do not trigger recovery. Sync, async and tool-bound streaming share this
+path. Combine both requests' token usage, including nested details, before
+callbacks and budget accounting. Never execute guessed or repaired malformed
+text. A final structured `tool_protocol_recovery_exhausted` marker makes DR2
+normalization partial; an earlier marker cannot poison a later clean final AI
+step. Keep existing stop enums, tool budgets and artifact acceptance gates.
+
 `read_file` accepts either inclusive line bound independently (missing start means 1, missing end means EOF), rejects invalid ranges, and explicitly reports total lines when a range starts past EOF. Character truncation still requires narrower ranges; never interpret a truncated requested range as fully read. Regression coverage: tests/test_read_file_ranges.py.

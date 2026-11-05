@@ -983,6 +983,11 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         if malformed_contract or recovered_preview:
             artifact_metadata["completion_status"] = "partial"
             artifact_metadata["evidence_gaps"].append("Incomplete subagent output contract or recovered evidence preview; produce a complete deliverable before acceptance.")
+        final_ai_message = next((message for message in reversed(ai_messages if isinstance(ai_messages, list) else []) if isinstance(message, Mapping) and message.get("type", message.get("role")) in {"ai", "assistant"}), {})
+        final_ai_kwargs = final_ai_message.get("additional_kwargs")
+        if isinstance(final_ai_kwargs, Mapping) and final_ai_kwargs.get("tool_protocol_recovery_exhausted") is True:
+            artifact_metadata["completion_status"] = "partial"
+            artifact_metadata["evidence_gaps"].append("Final tool call remained malformed after one protocol correction and was not executed; produce a complete deliverable before acceptance.")
         if "disclosed_limitations" in artifact_metadata:
             limitations = artifact_metadata["disclosed_limitations"]
             artifact_metadata["disclosed_limitations"] = list(dict.fromkeys(str(item).strip() for item in limitations if str(item).strip()))[:12] if isinstance(limitations, list) else []

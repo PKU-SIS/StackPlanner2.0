@@ -28,16 +28,19 @@ from langchain_core.messages import (
     BaseMessageChunk,
     ChatMessageChunk,
     FunctionMessageChunk,
+    HumanMessage,
     HumanMessageChunk,
     SystemMessageChunk,
     ToolMessageChunk,
 )
+from langchain_core.messages.ai import add_usage
 from langchain_core.messages.tool import tool_call_chunk
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_openai import ChatOpenAI
 from langchain_openai.chat_models.base import _create_usage_metadata
 
 _QWEN_JSON_TOOL_CALL_RE = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
+_TOOL_PROTOCOL_CORRECTION = "Your previous tool call was not valid JSON and was not executed. Reissue the required call using the provided tool schema and strictly valid JSON arguments."
 
 
 def _normalize_vllm_chat_template_kwargs(payload: dict[str, Any]) -> None:
@@ -205,6 +208,47 @@ def _promote_disabled_reasoning_answer(message: AIMessage, *, extra_body: Any) -
     message.additional_kwargs.pop("reasoning", None)
     message.additional_kwargs.pop("reasoning_content", None)
     message.additional_kwargs["reasoning_promoted_to_content"] = True
+
+
+def _malformed_tool_protocol(message: Any) -> bool:
+    """Detect an unexecuted tool envelope, never ordinary JSON report content."""
+    return isinstance(message, AIMessage) and not message.tool_calls and bool(message.invalid_tool_calls or (isinstance(message.content, str) and message.content.lstrip().startswith("<tool_call>")))
+
+
+def _result_has_malformed_tool_protocol(result: ChatResult) -> bool:
+    return any(_malformed_tool_protocol(generation.message) for generation in result.generations)
+
+
+def _add_token_usage(previous: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
+    combined = {**previous, **current}
+    for key in previous.keys() & current.keys():
+        left, right = previous[key], current[key]
+        if isinstance(left, dict) and isinstance(right, dict):
+            combined[key] = _add_token_usage(left, right)
+        elif isinstance(left, int) and isinstance(right, int):
+            combined[key] = left + right
+    return combined
+
+
+def _combine_protocol_recovery(previous: ChatResult, current: ChatResult) -> ChatResult:
+    """Account for both provider requests and expose a bounded failure marker."""
+    previous_usage = (previous.llm_output or {}).get("token_usage") or {}
+    current_usage = (current.llm_output or {}).get("token_usage") or {}
+    if previous_usage or current_usage:
+        current.llm_output = {**(current.llm_output or {}), "token_usage": _add_token_usage(previous_usage, current_usage)}
+    for index, generation in enumerate(current.generations):
+        message = generation.message
+        if not isinstance(message, AIMessage):
+            continue
+        old_message = previous.generations[index].message if index < len(previous.generations) else None
+        if isinstance(old_message, AIMessage) and (old_message.usage_metadata or message.usage_metadata):
+            message.usage_metadata = add_usage(old_message.usage_metadata, message.usage_metadata)
+        if isinstance(old_message, AIMessage) and (old_usage := old_message.response_metadata.get("token_usage")):
+            message.response_metadata["token_usage"] = _add_token_usage(old_usage, message.response_metadata.get("token_usage") or {})
+        message.additional_kwargs["tool_protocol_recovery_attempts"] = 1
+        if _malformed_tool_protocol(message):
+            message.additional_kwargs["tool_protocol_recovery_exhausted"] = True
+    return current
 
 
 def _result_as_chunks(result: ChatResult) -> Iterator[ChatGenerationChunk]:
@@ -381,6 +425,28 @@ class VllmChatModel(ChatOpenAI):
             _promote_disabled_reasoning_answer(message, extra_body=self.extra_body)
 
         return result
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        """Reask once for a clearly malformed tool-bound protocol response."""
+        if not kwargs.get("tools"):
+            return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+        request_kwargs = {**kwargs, "stream": False}
+        result = super()._generate(messages, stop=stop, run_manager=run_manager, **request_kwargs)
+        if not _result_has_malformed_tool_protocol(result):
+            return result
+        corrected = super()._generate([*messages, HumanMessage(content=_TOOL_PROTOCOL_CORRECTION)], stop=stop, run_manager=run_manager, **request_kwargs)
+        return _combine_protocol_recovery(result, corrected)
+
+    async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        """Async counterpart; preserve the same model, tools and request limits."""
+        if not kwargs.get("tools"):
+            return await super()._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
+        request_kwargs = {**kwargs, "stream": False}
+        result = await super()._agenerate(messages, stop=stop, run_manager=run_manager, **request_kwargs)
+        if not _result_has_malformed_tool_protocol(result):
+            return result
+        corrected = await super()._agenerate([*messages, HumanMessage(content=_TOOL_PROTOCOL_CORRECTION)], stop=stop, run_manager=run_manager, **request_kwargs)
+        return _combine_protocol_recovery(result, corrected)
 
     def _stream(self, messages, stop=None, run_manager=None, **kwargs) -> Iterator[ChatGenerationChunk]:
         """Use one non-streaming request when Qwen emits tool calls as text."""

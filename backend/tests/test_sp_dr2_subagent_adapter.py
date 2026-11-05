@@ -716,6 +716,17 @@ def test_provider_length_metadata_survives_adapter_without_guard_reason():
     assert result.artifact_metadata["completion_status"] == "partial"
 
 
+@pytest.mark.parametrize("clean_final", [False, True])
+def test_only_final_ai_protocol_exhaustion_marks_output_partial(clean_final):
+    messages = [{"type": "ai", "content": "unexecuted tool envelope", "additional_kwargs": {"tool_protocol_recovery_exhausted": True}}]
+    if clean_final:
+        messages.extend([{"type": "tool", "content": "done"}, {"type": "ai", "content": "Complete result."}])
+    raw = FakeDR2Result(status="completed", result="Complete result.", ai_messages=messages)
+    result = DR2SubagentExecutorAdapter(lambda _: FakeDR2Executor(raw)).execute(_sp_task())
+    assert result.artifact_metadata["completion_status"] == ("complete" if clean_final else "partial")
+    assert any("tool call" in gap.lower() for gap in result.artifact_metadata["evidence_gaps"]) is (not clean_final)
+
+
 def test_coder_complete_claim_is_downgraded_without_successful_execution_evidence():
     executor = FakeDR2Executor(
         FakeDR2Result(

@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+
+import pytest
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_openai import ChatOpenAI
 
 from deerflow.models.vllm_provider import VllmChatModel
 
@@ -274,3 +279,109 @@ def test_vllm_provider_preserves_empty_reasoning_values_in_streaming_chunks():
     assert chunk.message.additional_kwargs["reasoning"] == ""
     assert "reasoning_content" not in chunk.message.additional_kwargs
     assert chunk.message.content == "Still replying..."
+
+
+_WRITE_TOOL = {
+    "type": "function",
+    "function": {"name": "write_file", "description": "Write a file.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}},
+}
+_BAD_ENVELOPE = '<tool_call>{name: "write_file", arguments: {}}</tool_call>'
+
+
+def _protocol_result(message: AIMessage, tokens: int = 2) -> ChatResult:
+    message.usage_metadata = {"input_tokens": tokens, "output_tokens": 1, "total_tokens": tokens + 1, "output_token_details": {"reasoning": 1}}
+    return ChatResult(generations=[ChatGeneration(message=message)], llm_output={"token_usage": {"prompt_tokens": tokens, "completion_tokens": 1, "total_tokens": tokens + 1, "completion_tokens_details": {"reasoning_tokens": 1}}})
+
+
+@pytest.mark.parametrize("mode", ["sync", "async", "stream", "astream"])
+def test_vllm_provider_reasks_once_with_original_tools_and_combines_usage(monkeypatch, mode):
+    model = _make_model()
+    messages = [HumanMessage(content="Write the requested file.")]
+    calls = []
+    replies = [
+        _protocol_result(AIMessage(content=_BAD_ENVELOPE)),
+        _protocol_result(AIMessage(content="", tool_calls=[{"name": "write_file", "args": {"path": "answer.json"}, "id": "call-1", "type": "tool_call"}]), tokens=3),
+    ]
+
+    def generate(_self, supplied_messages, stop=None, run_manager=None, **kwargs):
+        calls.append((supplied_messages, stop, kwargs))
+        return replies[len(calls) - 1]
+
+    async def agenerate(*args, **kwargs):
+        return generate(*args, **kwargs)
+
+    monkeypatch.setattr(ChatOpenAI, "_generate", generate)
+    monkeypatch.setattr(ChatOpenAI, "_agenerate", agenerate)
+    if mode == "sync":
+        result = model._generate(messages, tools=[_WRITE_TOOL], stop=["END"], max_tokens=123)
+        message = result.generations[0].message
+        assert result.llm_output["token_usage"] == {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7, "completion_tokens_details": {"reasoning_tokens": 2}}
+    elif mode == "async":
+        result = asyncio.run(model._agenerate(messages, tools=[_WRITE_TOOL], stop=["END"], max_tokens=123))
+        message = result.generations[0].message
+        assert result.llm_output["token_usage"]["total_tokens"] == 7
+    elif mode == "stream":
+        message = list(model.bind_tools([_WRITE_TOOL]).stream(messages, stop=["END"], max_tokens=123))[0]
+    else:
+
+        async def collect():
+            return [chunk async for chunk in model.bind_tools([_WRITE_TOOL]).astream(messages, stop=["END"], max_tokens=123)]
+
+        message = asyncio.run(collect())[0]
+    assert len(calls) == 2
+    assert calls[0][0] == messages
+    assert calls[1][0][:-1] == messages
+    assert isinstance(calls[1][0][-1], HumanMessage)
+    assert _BAD_ENVELOPE not in calls[1][0][-1].content
+    assert calls[0][1:] == calls[1][1:]
+    assert calls[1][2]["tools"][0]["function"]["name"] == "write_file"
+    assert calls[1][2]["max_tokens"] == 123
+    assert messages == [HumanMessage(content="Write the requested file.")]
+    assert message.tool_calls[0]["name"] == "write_file"
+    assert message.usage_metadata == {"input_tokens": 5, "output_tokens": 2, "total_tokens": 7, "output_token_details": {"reasoning": 2}}
+    assert message.additional_kwargs["tool_protocol_recovery_attempts"] == 1
+    assert not message.additional_kwargs.get("tool_protocol_recovery_exhausted")
+
+
+@pytest.mark.parametrize(
+    "message,tools",
+    [
+        (AIMessage(content='[{"text":"literal <tool_call>","explanation":"ordinary JSON"}]'), [_WRITE_TOOL]),
+        (AIMessage(content="Use <tool_call> only for tools."), [_WRITE_TOOL]),
+        (AIMessage(content="", tool_calls=[{"name": "write_file", "args": {}, "id": "call-1", "type": "tool_call"}]), [_WRITE_TOOL]),
+        (AIMessage(content=_BAD_ENVELOPE), []),
+    ],
+)
+def test_vllm_provider_does_not_retry_ordinary_content_or_native_calls(monkeypatch, message, tools):
+    calls = []
+
+    def generate(*args, **kwargs):
+        calls.append(kwargs)
+        return _protocol_result(message)
+
+    monkeypatch.setattr(ChatOpenAI, "_generate", generate)
+    result = _make_model()._generate([HumanMessage(content="Do the task.")], tools=tools)
+    assert len(calls) == 1
+    assert result.generations[0].message is message
+    assert "tool_protocol_recovery_attempts" not in message.additional_kwargs
+
+
+@pytest.mark.parametrize("invalid_native", [False, True])
+def test_vllm_provider_exhausts_after_one_correction_without_executing_bad_text(monkeypatch, invalid_native):
+    calls = []
+
+    def generate(*args, **kwargs):
+        calls.append(kwargs)
+        message = AIMessage(content=_BAD_ENVELOPE)
+        if invalid_native:
+            message = AIMessage(content="", invalid_tool_calls=[{"name": "write_file", "args": "{bad", "id": "bad-1", "error": "invalid JSON", "type": "invalid_tool_call"}])
+        return _protocol_result(message)
+
+    monkeypatch.setattr(ChatOpenAI, "_generate", generate)
+    result = _make_model()._generate([HumanMessage(content="Do the task.")], tools=[_WRITE_TOOL])
+    message = result.generations[0].message
+    assert len(calls) == 2
+    assert not message.tool_calls
+    assert message.additional_kwargs["tool_protocol_recovery_attempts"] == 1
+    assert message.additional_kwargs["tool_protocol_recovery_exhausted"] is True
+    assert message.usage_metadata["total_tokens"] == 6
