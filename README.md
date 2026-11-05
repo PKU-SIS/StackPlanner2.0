@@ -474,3 +474,8 @@ independent seven-metric scoring. Collaborators can install the same-repository
 CLAUSE Release to reuse the complete dataset and existing knowledge-base mapping
 without rebuilding the vector index. RAG access requires separately authorized
 service credentials. See [CLAUSE shared data, RAGFlow setup and evaluation](docs/clause_ragflow.md).
+
+Native RAGFlow retrieval exposes chunk filenames as `document_name`, accepting
+`document_name`, `docnm_kwd`, then `document_keyword` in that priority order.
+It preserves XML/content bytes, document IDs, sample scope and pagination so
+instance-document evidence retains its filename provenance across API versions.

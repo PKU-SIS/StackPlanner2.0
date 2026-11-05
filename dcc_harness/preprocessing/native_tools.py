@@ -61,6 +61,12 @@ def _retrieve_for_thread(
         }
         for chunk in result["chunks"]
     ]
+    for source, chunk in zip(result["chunks"], chunks):
+        for key in ("document_name", "docnm_kwd", "document_keyword"):
+            name = source.get(key)
+            if isinstance(name, str) and name.strip():
+                chunk["document_name"] = name
+                break
     return json.dumps(
         {"total": result.get("total", len(chunks)), "page": page, "chunks": chunks},
         ensure_ascii=False,

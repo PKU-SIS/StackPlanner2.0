@@ -211,6 +211,84 @@ def test_native_tool_uses_thread_scope_and_excludes_runtime_from_agent_schema(
         reset_current_user(token)
 
 
+@pytest.mark.parametrize(
+    ("names", "expected"),
+    [
+        ({"document_keyword": "instance.xml"}, "instance.xml"),
+        ({"docnm_kwd": "legacy.xml", "document_keyword": "instance.xml"}, "legacy.xml"),
+        (
+            {
+                "document_name": "canonical.xml",
+                "docnm_kwd": "legacy.xml",
+                "document_keyword": "instance.xml",
+            },
+            "canonical.xml",
+        ),
+        (
+            {
+                "document_name": "",
+                "docnm_kwd": None,
+                "document_keyword": "instance.xml",
+            },
+            "instance.xml",
+        ),
+    ],
+)
+def test_native_retrieval_normalizes_filename_aliases_without_changing_xml(
+    native_bundle, monkeypatch, names, expected
+):
+    from deerflow.runtime.user_context import reset_current_user, set_current_user
+
+    from dcc_harness.preprocessing import native_tools
+
+    _, task = native_bundle
+    observed = []
+    content = '<inst:Amount contextRef="ctx-1" unitRef="USD">123.45</inst:Amount>\n<period>2023</period>'
+
+    class FakeClient:
+        base_url = "https://rag.example"
+
+        def __init__(self, config):
+            self.session = SimpleNamespace(close=lambda: None)
+
+        def retrieve(self, payload):
+            observed.append(payload)
+            return {
+                "total": 7,
+                "chunks": [
+                    {
+                        "id": "chunk",
+                        "document_id": "doc",
+                        "content": content,
+                        "positions": [[1, 2]],
+                        **names,
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(native_tools, "RagflowClient", FakeClient)
+    token = set_current_user(SimpleNamespace(id="dcc-alice"))
+    try:
+        prepare_inputs(task.public_input(), "thread-filename")
+        result = json.loads(
+            native_tools._retrieve_for_thread(
+                "thread-filename", "amount", 2, 100, user_id="dcc-alice"
+            )
+        )
+    finally:
+        reset_current_user(token)
+    assert result["total"] == 7 and result["page"] == 2
+    assert len(result["chunks"]) == 1
+    chunk = result["chunks"][0]
+    assert chunk["document_name"] == expected
+    assert chunk["id"] == "chunk" and chunk["document_id"] == "doc"
+    assert chunk["content"] == content and chunk["positions"] == [[1, 2]]
+    assert observed[0]["document_ids"] == ["doc"] and observed[0]["dataset_ids"] == [
+        "kb"
+    ]
+    assert observed[0]["page"] == 2 and observed[0]["page_size"] == 100
+
+
 def test_v3_public_input_builder_stages_neutral_files_without_private_identifiers(
     native_bundle,
 ):
