@@ -49,7 +49,9 @@ def native_bundle(tmp_path, monkeypatch):
         {
             **index_identity(manifest, config["ragflow"]),
             "ready": True,
-            "configuration_sha256": digest(encoded(index_identity(manifest, config["ragflow"]))),
+            "configuration_sha256": digest(
+                encoded(index_identity(manifest, config["ragflow"]))
+            ),
             "schema_version": 2,
             "scopes": {"one": {"dataset_ids": ["kb"], "document_ids": ["doc"]}},
         },
@@ -63,7 +65,9 @@ def native_bundle(tmp_path, monkeypatch):
     return bundle, load_tasks(bundle / "public/tasks.jsonl")[0]
 
 
-def test_plugin_configures_native_tool_skill_and_official_evaluation_hooks(native_bundle):
+def test_plugin_configures_native_tool_skill_and_official_evaluation_hooks(
+    native_bundle,
+):
     from deerflow.config.app_config import AppConfig
 
     from dcc_harness.datasets.benchmark_plugins import (
@@ -71,8 +75,12 @@ def test_plugin_configures_native_tool_skill_and_official_evaluation_hooks(nativ
         resolve_dataset_plugin,
     )
 
-    plugin = resolve_dataset_plugin("dcc", ("dcc_harness.preprocessing.native:make_plugin",))
-    app = configure_dataset_app(AppConfig.from_file(str(ROOT / "configs/stackplanner_benchmarks.yaml")), plugin)
+    plugin = resolve_dataset_plugin(
+        "dcc", ("dcc_harness.preprocessing.native:make_plugin",)
+    )
+    app = configure_dataset_app(
+        AppConfig.from_file(str(ROOT / "configs/stackplanner_benchmarks.yaml")), plugin
+    )
     assert "ragflow_retrieve" in {tool.name for tool in app.tools}
     assert Path(app.skills.path) == ROOT / "configs/dcc/skills"
     assert callable(plugin.parse_answer) and callable(plugin.score_task)
@@ -94,7 +102,11 @@ def test_only_public_rules_and_context_enter_current_users_thread(native_bundle)
         content = "\n".join(file.read_text() for file in uploads.iterdir())
         assert "PUBLIC_RULE" in content and "PRIVATE_" not in content
         assert "DOCUMENT" not in content
-        assert not get_paths().sandbox_uploads_dir("thread-one", user_id="dcc-bob").exists()
+        assert (
+            not get_paths()
+            .sandbox_uploads_dir("thread-one", user_id="dcc-bob")
+            .exists()
+        )
         with pytest.raises(FileExistsError):
             prepare_inputs(task.public_input(), "thread-one")
     finally:
@@ -135,7 +147,12 @@ def test_native_adapter_rejects_context_from_an_older_knowledge_base(native_bund
         context_for_task(task, bundle)
 
 
-def test_native_tool_uses_thread_scope_and_excludes_runtime_from_agent_schema(native_bundle, monkeypatch):
+@pytest.mark.parametrize("user_channel", ["contextvar", "runtime", "conflicting"])
+def test_native_tool_uses_thread_scope_and_excludes_runtime_from_agent_schema(
+    native_bundle, monkeypatch, user_channel
+):
+    from contextvars import Context
+
     from deerflow.runtime.user_context import reset_current_user, set_current_user
 
     from dcc_harness.preprocessing import native_tools
@@ -151,14 +168,31 @@ def test_native_tool_uses_thread_scope_and_excludes_runtime_from_agent_schema(na
 
         def retrieve(self, payload):
             observed.append(payload)
-            return {"chunks": [{"doc_id": "doc", "content": "Evidence", "id": "chunk"}], "total": 1}
+            return {
+                "chunks": [{"doc_id": "doc", "content": "Evidence", "id": "chunk"}],
+                "total": 1,
+            }
 
     monkeypatch.setattr(native_tools, "RagflowClient", FakeClient)
     token = set_current_user(SimpleNamespace(id="dcc-alice"))
     try:
         prepare_inputs(task.public_input(), "thread-one")
         runtime = SimpleNamespace(context={"thread_id": "thread-one"}, config={})
-        result = asyncio.run(native_tools.ragflow_retrieve.coroutine(question="fact", runtime=runtime))
+        if user_channel != "contextvar":
+            runtime.context["user_id"] = "dcc-alice"
+        coroutine = native_tools.ragflow_retrieve.coroutine(
+            question="fact", runtime=runtime
+        )
+        if user_channel == "runtime":
+            result = Context().run(asyncio.run, coroutine)
+        elif user_channel == "conflicting":
+            other_token = set_current_user(SimpleNamespace(id="dcc-bob"))
+            try:
+                result = asyncio.run(coroutine)
+            finally:
+                reset_current_user(other_token)
+        else:
+            result = asyncio.run(coroutine)
         assert json.loads(result)["chunks"][0]["id"] == "chunk"
         assert observed[0]["document_ids"] == ["doc"]
         assert observed[0]["dataset_ids"] == ["kb"]
@@ -169,7 +203,9 @@ def test_native_tool_uses_thread_scope_and_excludes_runtime_from_agent_schema(na
         reset_current_user(token)
 
 
-def test_v3_public_input_builder_stages_neutral_files_without_private_identifiers(native_bundle):
+def test_v3_public_input_builder_stages_neutral_files_without_private_identifiers(
+    native_bundle,
+):
     from deerflow.config.paths import get_paths
     from deerflow.runtime.user_context import get_effective_user_id
 
@@ -180,18 +216,33 @@ def test_v3_public_input_builder_stages_neutral_files_without_private_identifier
 
     bundle, task = native_bundle
     public = task.public_input()
-    assert not hasattr(public, "id") and not hasattr(public, "gold") and not hasattr(public, "split")
+    assert (
+        not hasattr(public, "id")
+        and not hasattr(public, "gold")
+        and not hasattr(public, "split")
+    )
     assert "dcc" not in public.metadata
-    plugin = resolve_dataset_plugin("dcc", ("dcc_harness.preprocessing.native:make_plugin",))
+    plugin = resolve_dataset_plugin(
+        "dcc", ("dcc_harness.preprocessing.native:make_plugin",)
+    )
     inputs = build_inputs(plugin, public, "public-contract")
-    root = get_paths().sandbox_uploads_dir("public-contract", user_id=get_effective_user_id())
+    root = get_paths().sandbox_uploads_dir(
+        "public-contract", user_id=get_effective_user_id()
+    )
     context = json.loads((root / "dcc-context.json").read_text())
-    assert "sample_id" not in context and "dataset" not in context and "split" not in context
+    assert (
+        "sample_id" not in context
+        and "dataset" not in context
+        and "split" not in context
+    )
     assert "PRIVATE_" not in repr(inputs) and str(bundle) not in repr(inputs)
     assert "Sample: one" not in inputs["messages"][0].content
     assert "Split: test" not in inputs["messages"][0].content
     assert inputs["sp_task_contract"]["authoritative"] is True
-    assert {item["name"] for item in inputs["uploaded_files"]} == {"dcc-context.json", "dcc-rule-0.txt"}
+    assert {item["name"] for item in inputs["uploaded_files"]} == {
+        "dcc-context.json",
+        "dcc-rule-0.txt",
+    }
 
 
 def test_public_rule_file_integrity_is_checked_before_staging(native_bundle):
@@ -201,6 +252,12 @@ def test_public_rule_file_integrity_is_checked_before_staging(native_bundle):
 
     _, task = native_bundle
     public = task.public_input()
-    altered = dataclasses.replace(public, files=tuple(InputFile(item.name, "changed") if item.name == "dcc-rule-0.txt" else item for item in public.files))
+    altered = dataclasses.replace(
+        public,
+        files=tuple(
+            InputFile(item.name, "changed") if item.name == "dcc-rule-0.txt" else item
+            for item in public.files
+        ),
+    )
     with pytest.raises(ValueError, match="rule content changed"):
         prepare_inputs(altered, "tampered-rule")

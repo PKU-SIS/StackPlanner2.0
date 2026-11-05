@@ -167,6 +167,10 @@ its base. Index schema v2 rejects the old shared-dataset ledger. The adapter doe
 not modify the native agent loop. Keep private gold/source metadata and
 credentials out of uploads, prompts, and RAGFlow documents. Never broaden a
 sample's document IDs on an empty retrieval result.
+The retrieval tool resolves the user through `resolve_runtime_user_id(runtime)`
+before crossing its worker-thread boundary. Keep the authenticated runtime user
+authoritative when an ambient ContextVar is missing or belongs to another task;
+the thread's existing document scope remains unchanged.
 Builders consume only PublicTask and use native stage_files/build_inputs.
 Rendered files carry a public retrieval context and rules with neutral names;
 record IDs, split and source paths stay in host-side manifests. After upgrading

@@ -391,6 +391,7 @@ StackPlanner 2.0 建立在以下项目的工作基础之上：
 
 FinAuditing 可选择[原生文件检索模式](docs/DCC_FINAUDITING_FILES.md)：完整 XML 按题隔离上传，
 由 SP 文件工具检索，复用官方评测器。原 RAGFlow 配置和知识库保留，两种访问方式独立使用。
+RAGFlow 检索按原生运行时的用户和线程读取已准备的题目范围；后台线程缺少用户 ContextVar 时仍使用运行时身份。
 
 NBA 与 FinAuditing 实验中的[SP harness 共性问题](docs/DCC_SP_HARNESS_FINDINGS.md)汇总了已做处理、
 仍需 SP 主线解决的问题，以及数据集自身的限制。
