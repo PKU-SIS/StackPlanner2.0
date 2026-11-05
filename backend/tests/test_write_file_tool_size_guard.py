@@ -172,6 +172,23 @@ def test_reporter_cannot_append_invalid_json_to_its_complete_json_file(addition)
     sandbox.write_file.assert_not_called()
 
 
+def test_reporter_json_append_guard_preserves_actual_local_file_bytes(tmp_path, monkeypatch):
+    from test_read_file_tool_binary import _local_runtime
+
+    from deerflow.sandbox.local.local_sandbox import LocalSandbox
+
+    runtime = _local_runtime(tmp_path)
+    runtime.context["__sp_reporter_action_id"] = "spact_call_abcdefgh"
+    report = tmp_path / "outputs/report-spact_call_abcdefgh.json"
+    original = b'[{"text":"same","explanation":"verified"}]\n'
+    report.write_bytes(original)
+    monkeypatch.setattr(tools_module, "ensure_sandbox_initialized", lambda runtime: LocalSandbox("t1"))
+    monkeypatch.setattr(tools_module, "ensure_thread_directories_exist", lambda runtime: None)
+    result = write_file_tool.func(runtime, "Append the report again", "/mnt/user-data/outputs/report-spact_call_abcdefgh.json", original.decode(), True)
+    assert result.startswith("Error: write_file refused an append")
+    assert report.read_bytes() == original
+
+
 @pytest.mark.parametrize(
     "existing,content,path,action_id,append",
     [

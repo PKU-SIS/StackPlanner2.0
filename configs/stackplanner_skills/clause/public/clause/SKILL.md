@@ -17,14 +17,16 @@ The deliverable is a file, not a conversational report. Use the reporter role fo
 
 Keep the review focused on supported relationships within the document. Do not spend the answer budget on a prose report, a repeated copy of the contract, preliminary discussion, or promises of future work. Do not stop after reading the input: actually write the final array. Preserve the full-document review requirement and do not impose a fixed issue count.
 
-For more than a handful of findings, construct the JSON file incrementally instead of generating one huge `write_file` argument. Keep each write call below about 8,000 characters and normally at most 10 findings; this is a serialization batch size, NOT a limit on the total findings. Use this exact sequence:
+Prefer one `write_file` call with `json_content` set to the complete structured finding array, `append=false`, and `content` omitted. Pass the array itself as the tool argument, not a quoted JSON string. Preserve the actual quoted passages, newlines and backslashes in string values; the tool serializes them into valid JSON. Do not append the same complete array again. This changes serialization only and does not limit the number of findings.
+
+If the complete tool argument would be very large, retain the original string `content` path and construct the JSON file incrementally. Keep each write call below about 8,000 characters and normally at most 10 findings; this is a serialization batch size, NOT a limit on the total findings. For this fallback, use the following sequence:
 
 - First `write_file` with `append=false`: write `[` followed by the first batch of comma-separated complete finding objects. Do not close the array yet.
 - Each additional `write_file` with `append=true`: write a leading comma followed by the next batch of complete finding objects. Do not repeat earlier findings, reopen the array, or put a trailing comma after a batch.
 - After the final batch, `write_file` with `append=true`: write `]` to close the array. If the whole answer is small, one complete array written once is fine; a substantive no-issue answer is `[]`.
 - Only now read back and validate the finished file. Partial construction is not a deliverable: never return completion metadata or ask Central to FINISH before the array is closed and verified. Never send the entire large answer again as a single tool argument. Reserve tool calls for closing the array and one final read-back.
 
-Read the saved file back before reporting completion. Check that its entire content is one JSON array; each element has exactly `text` and `explanation`, both strings, with nonblank `text`. Escape quotes, backslashes and embedded newlines as JSON requires. There must be no Markdown fences, title, commentary, control-envelope keys or trailing text. If necessary, correct the file before returning. `[]` is a substantive no-issue answer, never a fallback for a failed audit.
+Read the saved file back before reporting completion. Check that its entire content is one JSON array; each element has exactly `text` and `explanation`, both strings, with nonblank `text`. `json_content` handles JSON escaping; only the string-chunk fallback requires manually encoded JSON quotes, backslashes and embedded newlines. There must be no Markdown fences, title, commentary, control-envelope keys or trailing text. If necessary, correct the file before returning. `[]` is a substantive no-issue answer, never a fallback for a failed audit.
 
 Return the normal internal SP specialist envelope separately: use `artifact_type: "report_revision"`, `artifact_content: null`, and put only the successfully written, verified JSON file path in `artifact_metadata.created_paths`. Keep the completion summary brief and list quality checks only in internal metadata. Do not put this envelope or its summary into the answer file.
 
@@ -34,7 +36,7 @@ Central must select the registered JSON file itself through native FINISH (`fina
 Completion sequence (do not loop):
 
 1. Read all required input ranges and complete the audit. Revisit a source range only to resolve a specific uncertainty.
-2. Write the answer array to the current action's JSON path, using bounded append batches when needed; close the array before proceeding.
+2. Write the complete answer array once with `json_content` to the current action's JSON path. For a very large answer, use the bounded string append fallback and close the array before proceeding.
 3. Read back that file and check the required shape. If it is valid, validation is finished. Rewrite only to correct an identified content or JSON error; never rewrite identical bytes or repeat a successful read-back.
 4. Immediately stop calling tools and return the native control envelope below as your final specialist message. The array-only restriction is for the answer FILE, not this internal message. Substitute the actual successfully written path, not the placeholder. Do not write this envelope into any answer file.
 

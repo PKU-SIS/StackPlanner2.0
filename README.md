@@ -244,6 +244,8 @@ models:
 
 Reporter 向当前 action 所属的 `outputs/*.json` 追加内容时，如果现有文件是完整合法 JSON、追加后将变成非法 JSON，`write_file` 会拒绝该次追加并保留原字节，提示读回或明确修订。未闭合文档的分块构造、空白追加、JSONL、覆盖写入和 `str_replace` 保持原有行为；此保护不把文件语法正确视为任务已经完成。
 
+`write_file` 也支持可选的 `json_content` 对象或数组，与字符串 `content` 二选一，仅用于 `.json` 且 `append=false`。工具按 UTF-8 JSON 序列化原始值，复用同一写入、大小限制和交付检查。CLAUSE 公共 Skill 优先一次写入完整 finding 数组，较大内容仍可采用原有字符串分块方式；题目、字段、完整文档检查和 finding 数量要求保持不变。
+
 ## 使用示例
 
 启动 Web 工作区后，可以直接输入以下任务。涉及外部数据、代码执行或额外文件格式时，需要配置相应工具、沙箱或转换能力。

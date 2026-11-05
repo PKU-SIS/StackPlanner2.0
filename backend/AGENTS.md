@@ -1095,4 +1095,13 @@ Missing/incomplete documents, valid whitespace, `.jsonl`, other actions/roles,
 overwrite and `str_replace` retain their existing behavior. Syntax validity
 does not bypass native completion, ownership, read-back or JSON acceptance.
 
+`write_file` accepts exactly one of legacy string `content` or optional structured
+`json_content` (object/array). Structured writes require `.json` and append=false;
+serialize with `json.dumps(ensure_ascii=False, allow_nan=False)` before the normal
+size, lock and sandbox path. Do not repair malformed input, filter fields, infer
+answers or bypass read-before-write/ownership/acceptance. Sync and async share
+the implementation and schema; preserve original string and chunking behavior.
+Public CLAUSE Skills prefer a complete structured array, with the original
+bounded string fallback for large answers and unchanged evidence/output rules.
+
 `read_file` accepts either inclusive line bound independently (missing start means 1, missing end means EOF), rejects invalid ranges, and explicitly reports total lines when a range starts past EOF. Character truncation still requires narrower ranges; never interpret a truncated requested range as fully read. Regression coverage: tests/test_read_file_ranges.py.
