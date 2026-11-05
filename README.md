@@ -479,3 +479,5 @@ Native RAGFlow retrieval exposes chunk filenames as `document_name`, accepting
 `document_name`, `docnm_kwd`, then `document_keyword` in that priority order.
 It preserves XML/content bytes, document IDs, sample scope and pagination so
 instance-document evidence retains its filename provenance across API versions.
+
+DCC 基准配置 `configs/stackplanner_benchmarks.yaml` 显式设置子智能体图步数上限为 480；中枢动作上限和每题超时通过基准运行器参数设置。

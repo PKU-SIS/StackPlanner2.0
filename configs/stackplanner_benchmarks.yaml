@@ -43,3 +43,7 @@ skills:
   container_path: /mnt/skills
 summarization:
   enabled: true
+
+# Match the verified DCC wide-budget experiment profile.
+subagents:
+  max_turns: 480

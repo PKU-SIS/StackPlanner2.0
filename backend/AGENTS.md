@@ -1105,3 +1105,5 @@ Public CLAUSE Skills prefer a complete structured array, with the original
 bounded string fallback for large answers and unchanged evidence/output rules.
 
 `read_file` accepts either inclusive line bound independently (missing start means 1, missing end means EOF), rejects invalid ranges, and explicitly reports total lines when a range starts past EOF. Character truncation still requires narrower ranges; never interpret a truncated requested range as fully read. Regression coverage: tests/test_read_file_ranges.py.
+
+DCC benchmark delegation accepts absent task metadata; the benchmark profile explicitly sets subagent graph depth to 480. Central actions and per-case timeout are supplied by the benchmark CLI.

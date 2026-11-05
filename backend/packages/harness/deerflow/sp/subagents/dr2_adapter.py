@@ -516,9 +516,9 @@ def _recover_research_tool_evidence(ai_messages: Any) -> str | None:
     return "\n".join(sections)
 
 
-def is_data_processing_coder(metadata: Mapping[str, Any]) -> bool:
+def is_data_processing_coder(metadata: Mapping[str, Any] | None) -> bool:
     """Distinguish data execution from the default software-change contract."""
-    return metadata.get("task_kind", metadata.get("coder_task_kind")) == "data_processing"
+    return bool(metadata and metadata.get("task_kind", metadata.get("coder_task_kind")) == "data_processing")
 
 
 def _coder_requires_execution_evidence(task: SPSubagentTask | None) -> bool:
