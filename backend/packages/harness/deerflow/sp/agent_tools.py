@@ -37,6 +37,7 @@ from deerflow.agents.thread_state import (
 )
 from deerflow.sp.actions import ActionType, ActionValidationError, SPAction, build_default_action_router
 from deerflow.sp.actions.handlers.context import allows_human_interaction
+from deerflow.sp.actions.handlers.delegate import SP_REPORT_RECOVERY_MAX_ATTEMPTS
 from deerflow.sp.actions.router import SP_SUMMARY_TURN_RESERVED_KEY
 from deerflow.sp.hitl import record_human_feedback
 from deerflow.sp.memory import StackMemoryEntry, TaskMemoryStack
@@ -184,7 +185,6 @@ _SP_REPORT_RECOVERY_EXHAUSTED_MESSAGE_NAME = "sp_report_recovery_exhausted"
 _SP_DELEGATE_RECOVERY_EXHAUSTED_MESSAGE_NAME = "sp_delegate_recovery_exhausted"
 _SP_DELEGATE_POLICY_CHECKPOINT_MESSAGE_NAME = "sp_delegate_policy_checkpoint"
 _CJK_TEXT_PATTERN = re.compile(r"[\u3400-\u9fff]")
-SP_REPORT_RECOVERY_MAX_ATTEMPTS = 3
 SP_DELEGATE_RECOVERY_MAX_ATTEMPTS = 3
 SP_CAPPED_DELEGATE_RECOVERY_MAX_ATTEMPTS = 2
 DEFAULT_SP_ACTION_LIMIT = 20
@@ -1156,12 +1156,13 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         delegate_incomplete = latest_delegate_status in {"partial", "blocked"}
         code_recovery = bool(delegate_incomplete and latest_delegate_observation is not None and str(latest_delegate_observation.metadata.get("target_agent") or latest_delegate_observation.actor or "") == "coder")
         recovery_role, recovery_attempts, recovery_limit = self._report_recovery_budget(state)
-        if incomplete_current_report is not None and recovery_attempts >= recovery_limit:
+        reporter_incomplete = incomplete_current_report is not None or (latest_delegate_observation is not None and latest_delegate_observation.actor == "reporter" and delegate_incomplete)
+        if reporter_incomplete and recovery_attempts >= recovery_limit:
             allow_human = self._allows_human_recovery(state)
             active_tools = [candidate for candidate in request.tools if allow_human and getattr(candidate, "name", None) == "sp_ask_human"]
             messages = list(request.messages)
             if not any(getattr(message, "name", None) == _SP_REPORT_RECOVERY_EXHAUSTED_MESSAGE_NAME for message in messages):
-                metadata = incomplete_current_report.get("metadata")
+                metadata = incomplete_current_report.get("metadata") if incomplete_current_report is not None else latest_delegate_observation.metadata
                 raw_gaps = metadata.get("evidence_gaps") if isinstance(metadata, Mapping) else None
                 gaps = [str(value).strip() for value in raw_gaps or [] if str(value).strip()]
                 gap_text = "; ".join(gaps[:5]) or ("the report still fails its acceptance checks")
@@ -1177,10 +1178,12 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                             + (
                                 "Call sp_ask_human exactly once, briefly explain "
                                 if allow_human
-                                else f"End with an explicit incomplete status, without asking questions or claiming success. Preserve the draft reference {incomplete_current_report.get('artifact_id')}. Briefly explain "
+                                else "End with an explicit incomplete status, without asking questions or claiming success. "
+                                + (f"Preserve the draft reference {incomplete_current_report.get('artifact_id')}. " if incomplete_current_report is not None else "No accepted report artifact was created. ")
+                                + "Briefly explain "
                             )
-                            + "that the latest partial artifact was retained, "
-                            "state the unresolved quality gap. "
+                            + ("that the latest partial artifact was retained, " if incomplete_current_report is not None else "that no accepted report artifact was created, ")
+                            + "state the unresolved quality gap. "
                             + ("Ask for the minimum decision or evidence needed to continue. " if allow_human else "Do not present the incomplete draft as an accepted final deliverable. ")
                             + "Match the latest visible user's "
                             f"language. Unresolved gap: {gap_text}\n"

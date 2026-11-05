@@ -1581,6 +1581,16 @@ def test_noninteractive_exhausted_report_preserves_incomplete_outcome(question):
     assert request.state["sp_current_artifact_refs"]["report"]["metadata"]["completion_status"] == "partial"
 
 
+def test_reporter_recovery_limit_applies_when_no_artifact_was_created():
+    request = _partial_report_request("Reporter created no artifact", question="Create a report; don't ask questions.", attempts=3)
+    request.state["sp_current_artifact_refs"] = {}
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
+
+    assert filtered.tools == []
+    assert "recovery limit" in filtered.messages[-1].content
+    assert "Reporter created no artifact" in filtered.messages[-1].content
+
+
 def test_report_recovery_returns_to_reporter_with_new_evidence_reference():
     request = _partial_report_request("HTTP 429, needs external sources")
     stack = TaskMemoryStack.from_dict(request.state["sp_task_memory"])

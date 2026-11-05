@@ -1044,6 +1044,13 @@ At the action boundary, explicit `task_kind: data_processing` (or its legacy
 `coder_task_kind` alias) keeps Coder and its validated execution tools. Never
 reroute this contract to Perception or Reporter solely from task prose; implicit
 read-only document inspection keeps its existing role normalization.
+Delegate observations also retain runtime-owned `skill_names`. An unresolved
+Reporter chain inherits omitted/empty tools and Skills only from its latest
+same-run observation; explicit new selections still use normal runtime checks.
+Never inherit a child's self-declared scope or a previous run's selection.
+`SP_REPORT_RECOVERY_MAX_ATTEMPTS` is owned by the Delegate handler and shared
+with Central's schema gate. Enforce it before executor dispatch even when no
+artifact was created; an exhausted partial result and its gaps stay incomplete.
 
 Reporter defaults to Markdown for prose but honors explicit machine-readable file formats such as JSON. Keep control envelopes separate from delivered file bytes and preserve current-action filename ownership. This is also required by the optional CLAUSE RAG transport.
 

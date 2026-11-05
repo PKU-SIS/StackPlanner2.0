@@ -3044,11 +3044,11 @@ def test_partial_data_observation_retains_handler_owned_tool_scope(tmp_path):
             result="One source still needs retrieval.",
             artifact_content="Partial extraction",
             artifact_type="generated_file",
-            artifact_metadata={"completion_status": "partial", "evidence_gaps": ["One source still needs retrieval."], "tool_names": ["web_search"]},
+            artifact_metadata={"completion_status": "partial", "evidence_gaps": ["One source still needs retrieval."], "tool_names": ["web_search"], "skill_names": ["child-invented"]},
         )
     )
     result = build_default_action_router(delegate_executor=executor).execute(
-        _action(ActionType.DELEGATE, target_agent="coder", task="Extract source data.", stage="research", metadata={"task_kind": "data_processing", "tool_names": ["ragflow_retrieve", "read_file", "bash"]}),
+        _action(ActionType.DELEGATE, target_agent="coder", task="Extract source data.", stage="research", metadata={"task_kind": "data_processing", "tool_names": ["ragflow_retrieve", "read_file", "bash"], "skill_names": ["source-audit"]}),
         state=_thread_state_with_outputs(tmp_path),
         run_id="run-1",
     )
@@ -3056,6 +3056,62 @@ def test_partial_data_observation_retains_handler_owned_tool_scope(tmp_path):
     assert observation.metadata["completion_status"] == "partial"
     assert observation.metadata["tool_names"] == executor.tasks[0].metadata["tool_names"]
     assert "web_search" not in observation.metadata["tool_names"]
+    assert observation.metadata["skill_names"] == ["source-audit"]
+    assert "child-invented" not in observation.metadata["skill_names"]
+
+
+@pytest.mark.parametrize("previous_run", ["run-1", "older-run"])
+@pytest.mark.parametrize("explicit", [False, True])
+@pytest.mark.parametrize("stage", ["revision", "reporting"])
+def test_reporter_revision_inherits_only_same_run_validated_scope(previous_run, explicit, stage):
+    from deerflow.sp.actions.handlers.base import HandlerContext
+    from deerflow.sp.actions.handlers.delegate import DelegateHandler
+
+    previous_tools = ["read_file", "grep", "write_file", "str_replace"]
+    stack = TaskMemoryStack()
+    stack.append_observe(
+        "Report needs revision",
+        actor="reporter",
+        run_id=previous_run,
+        metadata={"completion_status": "partial", "recovery_attempt": 1, "skill_names": ["source-audit"], "tool_names": previous_tools},
+    )
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Still incomplete", artifact_metadata={"completion_status": "partial"}))
+    metadata = {"skill_names": ["new-audit"], "tool_names": ["read_file"]} if explicit else {"skill_names": [], "tool_names": []}
+    DelegateHandler(executor=executor).handle(
+        _action(ActionType.DELEGATE, target_agent="reporter", task="Revise the original report", stage=stage, metadata=metadata),
+        HandlerContext(state={}, stack=stack, run_id="run-1"),
+    )
+    task = executor.tasks[0]
+    if explicit:
+        assert task.metadata["skill_names"] == ["new-audit"]
+        assert "str_replace" not in task.metadata["tool_names"]
+    elif previous_run == "run-1":
+        assert task.metadata["skill_names"] == ["source-audit"]
+        assert task.metadata["tool_names"] == previous_tools
+    else:
+        assert not task.metadata.get("skill_names")
+        assert "str_replace" not in task.metadata["tool_names"]
+
+
+def test_reporter_recovery_limit_is_enforced_before_executor_without_an_artifact():
+    from deerflow.sp.actions.handlers.base import HandlerContext
+    from deerflow.sp.actions.handlers.delegate import DelegateHandler
+
+    stack = TaskMemoryStack()
+    for attempt in range(1, 4):
+        stack.append_delegate("Write report", run_id="run-1", metadata={"target_agent": "reporter", "recovery_attempt": attempt})
+        stack.append_observe("No report artifact", actor="reporter", run_id="run-1", metadata={"completion_status": "partial", "recovery_attempt": attempt, "evidence_gaps": ["No report artifact"]})
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Must not run"))
+    result = DelegateHandler(executor=executor).handle(
+        _action(ActionType.DELEGATE, target_agent="reporter", task="Try another report", stage="revision"),
+        HandlerContext(state={}, stack=stack, run_id="run-1"),
+    )
+
+    assert executor.tasks == []
+    assert result.next_step == "error_recoverable"
+    assert "recovery limit" in result.error
+    assert stack.entries[-1].metadata["completion_status"] == "partial"
+    assert stack.entries[-1].metadata["evidence_gaps"] == ["No report artifact"]
 
 
 def test_reporter_literal_acceptance_guard_marks_missing_report_partial_and_retries_as_revision(

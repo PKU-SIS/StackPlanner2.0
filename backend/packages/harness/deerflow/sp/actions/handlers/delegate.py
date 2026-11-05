@@ -30,6 +30,7 @@ REPORTER_FEEDBACK_MAX_CHARS = 2400
 REPORTER_REQUIRED_LITERAL_MAX_ITEMS = 64
 REPORTER_UPLOAD_TEXT_MAX_CHARS = 1_000_000
 REPORTER_JSON_MAX_CHARS = 16 * 1024 * 1024
+SP_REPORT_RECOVERY_MAX_ATTEMPTS = 3
 _JSON_REPORT_CONTRACT_PATTERN = re.compile(
     r"\b(?:return|output|respond\s+with|answer\s+with)\s+"
     r"(?:(?:only|strictly|exactly|a|an|the|single|valid|strict|one|as|in|final|answer|must|be|is)\s+)*JSON\b"
@@ -488,7 +489,29 @@ class DelegateHandler:
             )
 
         if action.target_agent == "reporter":
+            attempts = context.stack.delegate_recovery_attempt_count("reporter", run_id=context.run_id)
+            if attempts >= SP_REPORT_RECOVERY_MAX_ATTEMPTS:
+                # Schema filtering is advisory to the model. Enforce the
+                # unresolved chain's hard bound at the execution boundary too.
+                return HandlerResult(
+                    next_step="error_recoverable",
+                    state_update={"sp_active_delegate_id": None},
+                    idempotency_key=action.idempotency_key,
+                    error=f"Reporter reached its recovery limit of {SP_REPORT_RECOVERY_MAX_ATTEMPTS} unresolved attempts; preserve the partial result and its evidence gaps.",
+                    run_events=[make_sp_event("sp.delegate.recovery_exhausted", action_id=action.action_id, run_id=context.run_id, target_agent="reporter", attempts=attempts)],
+                )
             _prepare_partial_report_retry(action, context.state)
+            previous = next((entry for entry in reversed(context.stack.entries) if entry.action == "observe" and entry.actor == "reporter" and entry.run_id == context.run_id), None)
+            if previous is not None and previous.metadata.get("completion_status") in {"partial", "blocked"}:
+                # The prior task's runtime-validated scope is authoritative;
+                # artifact metadata supplied by the child never grants it.
+                # Every inherited name is validated again by the runtime.
+                # A missing artifact may leave the next stage as reporting.
+                for key in ("tool_names", "skill_names"):
+                    if action.metadata.get(key) in (None, []):
+                        saved = previous.metadata.get(key)
+                        if isinstance(saved, list):
+                            action.metadata[key] = list(saved)
 
         if _is_unrequested_report_revision(action, context.state, run_id=context.run_id):
             entry = context.stack.append(
@@ -961,8 +984,9 @@ class DelegateHandler:
         acceptance_metadata.update({key: task.metadata[key] for key in ("requires_implementation", "verification_only", "task_kind", "coder_task_kind") if key in task.metadata})
         # Keep the handler/runtime task contract, not model-authored artifact
         # metadata, so bounded recovery can retain explicitly requested tools.
-        if isinstance(task.metadata.get("tool_names"), list):
-            acceptance_metadata["tool_names"] = list(task.metadata["tool_names"])
+        for key in ("tool_names", "skill_names"):
+            if isinstance(task.metadata.get(key), list):
+                acceptance_metadata[key] = list(task.metadata[key])
         observe_entry = context.stack.append_observe(
             observe_content,
             actor=str(action.target_agent),

@@ -418,6 +418,10 @@ Explicit data-processing Coder delegations retain their execution role even when
 the task starts with document inspection or ends in a report. Retrieval JSON is
 formatted across fields and chunks so externalized results can be paged with
 native `read_file` line ranges; its values and sample scope remain unchanged.
+Reporter recovery preserves the original validated tools and Skills within the
+same unresolved run. Its three-attempt limit also applies when no report file
+was produced, and the execution boundary prevents additional delegations while
+retaining the incomplete result and its remaining gaps.
 The manifest records the delivery contract and results identify the delivery source.
 Both native delivery extraction and saved-state classification keep known
 Central empty responses and invalid control calls as policy failures
