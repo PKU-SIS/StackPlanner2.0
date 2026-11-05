@@ -406,7 +406,8 @@ Reporter checks the complete contents of declared JSON deliverables before FINIS
 invalid JSON stays partial and follows the bounded revision flow with parser
 diagnostics. Revisions preserve the requested format and keep the original file.
 The manifest records the delivery contract and results identify the delivery source.
-Known Central empty responses and invalid control calls remain policy failures
+Both native delivery extraction and saved-state classification keep known
+Central empty responses and invalid control calls as policy failures
 (`empty_response` or `protocol_error`); provider and unknown errors retain
 `infrastructure_error` even when native middleware converts them into messages.
 Benchmark runs are non-interactive by default: human-question tools are disabled,

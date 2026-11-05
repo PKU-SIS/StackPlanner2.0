@@ -159,6 +159,32 @@ def test_visible_text_blocks_do_not_expose_reasoning():
 
 
 @pytest.mark.parametrize(
+    "error_type,status",
+    [
+        ("SPCentralEmptyResponse", "empty_response"),
+        ("SPCentralInvalidToolCall", "protocol_error"),
+        ("SPCentralToolProtocolError", "protocol_error"),
+        ("APIConnectionError", "infrastructure_error"),
+        ("UnknownError", "infrastructure_error"),
+        ({"unexpected": "shape"}, "infrastructure_error"),
+    ],
+)
+def test_current_native_text_error_preserves_exact_failure_classification(
+    error_type, status
+):
+    from dcc_harness.evaluation.benchmark_runner import failure_status
+
+    state = direct_state()
+    state["messages"][-1].additional_kwargs["error_type"] = error_type
+
+    with pytest.raises(DeliveryError) as error:
+        extract(state)
+
+    assert error.value.status == status
+    assert failure_status(state) == status
+
+
+@pytest.mark.parametrize(
     "error_name,status",
     [
         ("SPCentralEmptyResponse", "empty_response"),
