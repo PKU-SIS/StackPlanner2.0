@@ -1035,6 +1035,12 @@ SP delegates use independent graph and tool budgets: built-in graph defaults are
 
 Coder metadata uses `task_kind` canonically; legacy `coder_task_kind` is accepted at the boundary and host-authored metadata retains the alias for saved consumers. Task classification and verification flags come from the delegated contract, never child-declared artifact metadata. A successful data audit may report a negative business finding, but transport errors, tracebacks, nonzero exit codes and masked execution still fail. Software verification keeps the post-edit execution requirement.
 
+Delegation observations retain handler-owned `tool_names` for bounded recovery.
+Data-processing recovery preserves previously requested tools, including retrieval
+tools, alongside the existing local defaults. Every retry still validates tool
+availability, role restrictions, stage restrictions and Skill policy; never derive
+recovery permissions from a specialist's self-declared artifact metadata.
+
 Reporter defaults to Markdown for prose but honors explicit machine-readable file formats such as JSON. Keep control envelopes separate from delivered file bytes and preserve current-action filename ownership. This is also required by the optional CLAUSE RAG transport.
 
 Reporter acceptance parses declared `.json` files in full, independently of

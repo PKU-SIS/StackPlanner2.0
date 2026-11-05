@@ -2989,6 +2989,27 @@ def test_reporter_json_filename_fallback_is_validated_before_writing(tmp_path, c
     assert ref["metadata"]["completion_status"] == ("complete" if complete else "partial")
 
 
+def test_partial_data_observation_retains_handler_owned_tool_scope(tmp_path):
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="One source still needs retrieval.",
+            artifact_content="Partial extraction",
+            artifact_type="generated_file",
+            artifact_metadata={"completion_status": "partial", "evidence_gaps": ["One source still needs retrieval."], "tool_names": ["web_search"]},
+        )
+    )
+    result = build_default_action_router(delegate_executor=executor).execute(
+        _action(ActionType.DELEGATE, target_agent="coder", task="Extract source data.", stage="research", metadata={"task_kind": "data_processing", "tool_names": ["ragflow_retrieve", "read_file", "bash"]}),
+        state=_thread_state_with_outputs(tmp_path),
+        run_id="run-1",
+    )
+    observation = TaskMemoryStack.from_dict(result.state_update["sp_task_memory"]).entries[-1]
+    assert observation.metadata["completion_status"] == "partial"
+    assert observation.metadata["tool_names"] == executor.tasks[0].metadata["tool_names"]
+    assert "web_search" not in observation.metadata["tool_names"]
+
+
 def test_reporter_literal_acceptance_guard_marks_missing_report_partial_and_retries_as_revision(
     tmp_path,
 ):

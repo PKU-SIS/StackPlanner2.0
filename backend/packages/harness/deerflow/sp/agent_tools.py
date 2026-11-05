@@ -818,6 +818,13 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         latest = cls._latest_delegate_observation(state, target_agent=target)
         return target, cls._delegate_attempt_count(state, target), cls._delegate_recovery_limit(latest)
 
+    @staticmethod
+    def _recovery_tool_names(observation: StackMemoryEntry, *, defaults: list[str]) -> list[str]:
+        """Retain the prior task's tools; runtime revalidates every retry."""
+        requested = observation.metadata.get("tool_names")
+        requested = requested if isinstance(requested, list) else []
+        return list(dict.fromkeys([*(name.strip() for name in requested if isinstance(name, str) and name.strip()), *defaults]))
+
     @classmethod
     def _artifact_recovery_instruction(cls, state: Mapping[str, Any]) -> str:
         partial_observation = cls._latest_partial_report_observation(state)
@@ -922,7 +929,9 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 if verification_only:
                     stage = "verification"
                 coder_instruction = (
-                    ' For data processing recovery, preserve metadata={"task_kind": "data_processing", "requires_implementation": false, "tool_names": ["read_file", "bash"]}; '
+                    " For data processing recovery, preserve metadata="
+                    + json.dumps({"task_kind": "data_processing", "requires_implementation": False, "tool_names": cls._recovery_tool_names(latest_observation, defaults=["read_file", "bash"])})
+                    + "; "
                     "rerun the data extraction or calculation, verify the requested filters and completeness, and report observable execution evidence. Do not require a repository patch or software tests."
                     if data_processing
                     else (
@@ -1389,7 +1398,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             metadata["requires_implementation"] = code_contract and not verification_only
             if not code_contract:
                 metadata["task_kind"] = observation.metadata.get("task_kind", "data_processing")
-                metadata["tool_names"] = ["read_file", "write_file", "bash"]
+                metadata["tool_names"] = cls._recovery_tool_names(observation, defaults=["read_file", "write_file", "bash"])
                 task += " Preserve the data-processing contract; validate the requested output without introducing source edits or software tests."
             elif verification_only:
                 metadata.update(

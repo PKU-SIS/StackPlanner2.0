@@ -952,6 +952,10 @@ class DelegateHandler:
             if key in result.artifact_metadata
         }
         acceptance_metadata.update({key: task.metadata[key] for key in ("requires_implementation", "verification_only", "task_kind", "coder_task_kind") if key in task.metadata})
+        # Keep the handler/runtime task contract, not model-authored artifact
+        # metadata, so bounded recovery can retain explicitly requested tools.
+        if isinstance(task.metadata.get("tool_names"), list):
+            acceptance_metadata["tool_names"] = list(task.metadata["tool_names"])
         observe_entry = context.stack.append_observe(
             observe_content,
             actor=str(action.target_agent),

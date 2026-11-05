@@ -602,9 +602,10 @@ def test_partial_implementation_with_source_write_recovers_as_read_only_verifica
     assert "self-chosen examples" in instruction
 
 
-def test_partial_data_processing_recovery_preserves_its_acceptance_contract():
+@pytest.mark.parametrize("requested_tools", [[], ["ragflow_retrieve", "read_file"]])
+def test_partial_data_processing_recovery_preserves_its_acceptance_contract(requested_tools):
     stack = TaskMemoryStack()
-    metadata = {"target_agent": "coder", "coder_task_kind": "data_processing", "requires_implementation": False}
+    metadata = {"target_agent": "coder", "coder_task_kind": "data_processing", "requires_implementation": False, "tool_names": requested_tools}
     stack.append_delegate("Filter the source data", run_id="run-1", stage="verification", metadata=metadata)
     stack.append_observe(
         "One required row is missing.",
@@ -626,11 +627,14 @@ def test_partial_data_processing_recovery_preserves_its_acceptance_contract():
     instruction = filtered.messages[-1].content
     assert '"task_kind": "data_processing"' in instruction
     assert "source implementation recovery" not in instruction
+    for tool_name in requested_tools:
+        assert f'"{tool_name}"' in instruction
     update = middleware.after_model({**state, "messages": [*state["messages"], AIMessage(content="The data table is complete.")]}, SimpleNamespace(context={"run_id": "run-1"}))
     recovery = update["messages"][0].tool_calls[0]["args"]
     assert recovery["metadata"]["task_kind"] == "data_processing"
     assert recovery["metadata"]["requires_implementation"] is False
     assert recovery["metadata"].get("verification_only") is not True
+    assert set(requested_tools) <= set(recovery["metadata"]["tool_names"])
     assert "existing diff" not in recovery["task"]
     assert "edit it with a file tool" not in recovery["task"]
 
