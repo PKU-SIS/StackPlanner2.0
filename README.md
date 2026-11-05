@@ -402,6 +402,9 @@ only public tasks and staged UTF-8 files; labels and private metadata stay with
 the evaluator. Plugins own their scoring and aggregation, including CUAD AUPR.
 Collection accepts native text answers after normal graph return as well as
 validated FINISH deliveries, while preserving incomplete-output and artifact gates.
+Reporter checks the complete contents of declared JSON deliverables before FINISH;
+invalid JSON stays partial and follows the bounded revision flow with parser
+diagnostics. Revisions preserve the requested format and keep the original file.
 The manifest records the delivery contract and results identify the delivery source.
 Known Central empty responses and invalid control calls remain policy failures
 (`empty_response` or `protocol_error`); provider and unknown errors retain

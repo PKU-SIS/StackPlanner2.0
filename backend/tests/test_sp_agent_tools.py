@@ -892,7 +892,8 @@ def test_partial_report_delegate_forces_revision_before_finish():
     assert recovery.name == "sp_artifact_recovery_required"
     assert 'input_refs=["report-v1"]' in recovery.content
     assert "Missing REVIEWED-HIGH" in recovery.content
-    assert "return the complete revised Markdown in artifact_content" in recovery.content
+    assert "return the complete revised content in artifact_content" in recovery.content
+    assert "Preserve the user's requested file format" in recovery.content
 
 
 def test_current_run_partial_report_cannot_be_bypassed_by_revise():

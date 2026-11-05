@@ -886,7 +886,8 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 "every listed evidence gap. Preserve all unaffected content "
                 "and authoritative literals from the current report. The "
                 "reporter must either successfully call write_file or return "
-                "the complete revised Markdown in artifact_content. Do not "
+                "the complete revised content in artifact_content. Preserve the user's requested file format "
+                "(including JSON when requested); use Markdown only for an unspecified prose format. Do not "
                 "call FINISH, summarize, or invent a download URL in this turn.\n"
                 "</sp-artifact-recovery-required>"
             )

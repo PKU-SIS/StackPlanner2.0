@@ -2914,6 +2914,81 @@ def test_external_evidence_enumeration_stays_with_researcher(tmp_path):
     assert executor.tasks[0].subagent_type == "researcher"
 
 
+@pytest.mark.parametrize(
+    "content,complete",
+    [
+        ('[{"text": "unescaped "quote""}]', False),
+        ("[][]", False),
+        ('["' + "x" * 100_000 + '"]', True),
+        ('["' + "x" * 100_000 + '" "tail"]', False),
+        ("[]", True),
+    ],
+)
+def test_reporter_checks_actual_json_file_instead_of_self_report(tmp_path, content, complete):
+    state = _thread_state_with_outputs(tmp_path)
+    outputs = tmp_path / "threads" / "thread-1" / "user-data" / "outputs"
+    outputs.mkdir(parents=True, exist_ok=True)
+    path = outputs / "answer-report-json.json"
+    path.write_text(content, encoding="utf-8")
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="JSON written and checked.",
+            artifact_type="report_revision",
+            artifact_metadata={
+                "completion_status": "complete",
+                "created_paths": ["/mnt/user-data/outputs/answer-report-json.json"],
+                "quality_checks": {"json_array_only": True, "json_artifact_syntax": {"passed": True}},
+            },
+        )
+    )
+    router = build_default_action_router(delegate_executor=executor)
+    outcome = router.execute(
+        _action(ActionType.DELEGATE, action_id="report-json", target_agent="reporter", task="Write the requested JSON answer file.", stage="reporting"),
+        state=state,
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+
+    ref = outcome.state_update["sp_current_artifact_refs"]["report_revision"]
+    check = ref["metadata"]["quality_checks"]["json_artifact_syntax"]
+    assert check["passed"] is complete
+    assert ref["metadata"]["completion_status"] == ("complete" if complete else "partial")
+    assert path.read_text(encoding="utf-8") == content
+    if not complete:
+        assert "JSON" in "; ".join(ref["metadata"]["evidence_gaps"])
+        assert "line" in "; ".join(ref["metadata"]["evidence_gaps"])
+        rejected = router.execute(
+            _action(ActionType.FINISH, task="Done", metadata={"final_artifact_ref": ref["artifact_id"], "required_artifact_type": "report"}),
+            state={**state, **outcome.state_update},
+            thread_id="thread-1",
+            run_id="run-1",
+        )
+        assert rejected.next_step == "error_recoverable"
+
+
+@pytest.mark.parametrize("content,complete", [("[] []", False), ([], True)])
+def test_reporter_json_filename_fallback_is_validated_before_writing(tmp_path, content, complete):
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="JSON answer ready.",
+            artifact_content=content,
+            artifact_type="report_revision",
+            artifact_metadata={"completion_status": "complete", "filename": "answer.json"},
+        )
+    )
+    outcome = build_default_action_router(delegate_executor=executor).execute(
+        _action(ActionType.DELEGATE, action_id="json-fallback", target_agent="reporter", task="Write a JSON answer file.", stage="reporting"),
+        state=_thread_state_with_outputs(tmp_path),
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+    ref = outcome.state_update["sp_current_artifact_refs"]["report_revision"]
+    assert ref["metadata"]["quality_checks"]["json_artifact_syntax"]["passed"] is complete
+    assert ref["metadata"]["completion_status"] == ("complete" if complete else "partial")
+
+
 def test_reporter_literal_acceptance_guard_marks_missing_report_partial_and_retries_as_revision(
     tmp_path,
 ):

@@ -1037,6 +1037,13 @@ Coder metadata uses `task_kind` canonically; legacy `coder_task_kind` is accepte
 
 Reporter defaults to Markdown for prose but honors explicit machine-readable file formats such as JSON. Keep control envelopes separate from delivered file bytes and preserve current-action filename ownership. This is also required by the optional CLAUSE RAG transport.
 
+Reporter acceptance parses declared `.json` files in full, independently of
+model-authored quality claims and bounded finalization previews. Invalid,
+unreadable or over-limit JSON remains an unchanged partial artifact with syntax
+diagnostics for the existing bounded revision flow. JSON-named inline fallbacks
+receive the same check; recovery preserves the requested format. This validates
+syntax only and must not infer answer content or benchmark labels.
+
 Qwen compatibility merges serialized system instructions into one leading system message without changing stored history or tool pairings. Report literal-token checks do not treat encoding names as mandatory answer content unless explicitly requested as literals. Both fixes preserve the existing native acceptance guards; tests cover Qwen messages and report encoding requirements.
 
 `read_file` accepts either inclusive line bound independently (missing start means 1, missing end means EOF), rejects invalid ranges, and explicitly reports total lines when a range starts past EOF. Character truncation still requires narrower ranges; never interpret a truncated requested range as fully read. Regression coverage: tests/test_read_file_ranges.py.

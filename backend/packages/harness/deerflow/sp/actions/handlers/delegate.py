@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
@@ -28,6 +29,7 @@ REPORTER_FEEDBACK_MAX_ITEMS = 8
 REPORTER_FEEDBACK_MAX_CHARS = 2400
 REPORTER_REQUIRED_LITERAL_MAX_ITEMS = 64
 REPORTER_UPLOAD_TEXT_MAX_CHARS = 1_000_000
+REPORTER_JSON_MAX_CHARS = 16 * 1024 * 1024
 PERCEPTION_UPLOAD_BODY_MAX_ITEMS = 16
 PERCEPTION_UPLOAD_BODY_MAX_CHARS = 48_000
 PERCEPTION_UPLOAD_BODY_PER_ITEM_MAX_CHARS = 16_000
@@ -1381,6 +1383,54 @@ def _report_boundary_adjustment_gaps(
     return gaps
 
 
+def _report_json_artifact_checks(
+    result: SPSubagentResult,
+    *,
+    context: HandlerContext,
+    artifact_adapter: SPArtifactAdapter,
+) -> tuple[list[str], list[str]]:
+    """Check actual JSON deliverables, never bounded synthesis previews.
+
+    A specialist's format claims are not validation evidence. Preserve bad
+    files unchanged and return syntax diagnostics to the normal bounded
+    report-revision path; do not repair or choose answer content here.
+    """
+    paths = result.artifact_metadata.get("created_paths") or []
+    candidates: list[tuple[str, str | None, bool]] = []
+    for path in paths:
+        if PurePosixPath(path).suffix.lower() != ".json":
+            continue
+        materialized = artifact_adapter.read_text_artifact(
+            {"virtual_path": path},
+            state=context.state,
+            thread_id=context.thread_id,
+            max_chars=REPORTER_JSON_MAX_CHARS,
+        )
+        candidates.append((path, *(materialized if materialized is not None else (None, False))))
+    filename = _text_artifact_filename_hint(result.artifact_metadata)
+    if not paths and filename and PurePosixPath(filename).suffix.lower() == ".json" and result.artifact_content is not None:
+        content = result.artifact_content
+        text = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
+        candidates.append((filename, text, len(text) > REPORTER_JSON_MAX_CHARS))
+
+    gaps: list[str] = []
+    for path, text, truncated in candidates:
+        name = PurePosixPath(path).name
+        if text is None:
+            gaps.append(f"JSON artifact {name!r} cannot be read as UTF-8 text; write and read back a valid JSON file.")
+            continue
+        if truncated:
+            gaps.append(f"JSON artifact {name!r} exceeds the complete validation limit; a truncated preview cannot validate a JSON document.")
+            continue
+        try:
+            json.loads(text)
+        except json.JSONDecodeError as exc:
+            gaps.append(f"JSON artifact {name!r} is invalid at line {exc.lineno}, column {exc.colno}: {exc.msg}. Rewrite it as exactly one valid JSON document while preserving the requested content and format.")
+        except RecursionError:
+            gaps.append(f"JSON artifact {name!r} exceeds the JSON parser nesting limit; preserve the requested format with supported nesting.")
+    return [path for path, _, _ in candidates], gaps
+
+
 def _apply_report_acceptance_checks(
     result: SPSubagentResult,
     *,
@@ -1394,6 +1444,11 @@ def _apply_report_acceptance_checks(
     valid_paths = [value for value in declared_paths if _report_created_path_matches_action(value, task.action_id)]
     discarded_paths = [value for value in declared_paths if value not in valid_paths]
     result.artifact_metadata["created_paths"] = valid_paths
+    json_paths, json_gaps = _report_json_artifact_checks(
+        result,
+        context=context,
+        artifact_adapter=artifact_adapter,
+    )
 
     requirements = task.context_refs.get("report_requirements")
     raw_tokens = requirements.get("required_literal_tokens") if isinstance(requirements, Mapping) else None
@@ -1451,6 +1506,7 @@ def _apply_report_acceptance_checks(
         and not introduced_tokens
         and not source_precedence_gaps
         and not boundary_adjustment_gaps
+        and not json_gaps
         and declared_gaps
         and all(_MISSING_INPUT_DISCLOSURE_PATTERN.fullmatch(gap) for gap in declared_gaps)
         and not any(check is False or (isinstance(check, Mapping) and check.get("passed") is False) for check in quality_checks.values())
@@ -1460,6 +1516,12 @@ def _apply_report_acceptance_checks(
         "fallback_artifact_content": bool(result.artifact_content),
         "passed": not discarded_paths or bool(result.artifact_content),
     }
+    if json_paths:
+        quality_checks["json_artifact_syntax"] = {
+            "files": json_paths,
+            "evidence_gaps": json_gaps,
+            "passed": not json_gaps,
+        }
     if required:
         quality_checks["required_literal_tokens"] = {
             "required": required,
@@ -1508,7 +1570,7 @@ def _apply_report_acceptance_checks(
         limitations = [str(value).strip() for value in limitations if str(value).strip()] if isinstance(limitations, list) else []
         result.artifact_metadata["disclosed_limitations"] = list(dict.fromkeys([*limitations, *declared_gaps]))[:12]
         result.artifact_metadata["evidence_gaps"] = []
-    if not missing and not unsafe_links and not threshold_gaps and not unsupported_no_data_claims and not language_gaps and not introduced_tokens and not source_precedence_gaps and not boundary_adjustment_gaps:
+    if not missing and not unsafe_links and not threshold_gaps and not unsupported_no_data_claims and not language_gaps and not introduced_tokens and not source_precedence_gaps and not boundary_adjustment_gaps and not json_gaps:
         return
 
     status = str(result.artifact_metadata.get("completion_status") or "complete").strip().lower()
@@ -1543,6 +1605,9 @@ def _apply_report_acceptance_checks(
     for boundary_gap in boundary_adjustment_gaps:
         if boundary_gap not in gaps:
             gaps.append(boundary_gap)
+    for json_gap in json_gaps:
+        if json_gap not in gaps:
+            gaps.append(json_gap)
     result.artifact_metadata["evidence_gaps"] = gaps
 
 
