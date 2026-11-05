@@ -171,6 +171,9 @@ The retrieval tool resolves the user through `resolve_runtime_user_id(runtime)`
 before crossing its worker-thread boundary. Keep the authenticated runtime user
 authoritative when an ambient ContextVar is missing or belongs to another task;
 the thread's existing document scope remains unchanged.
+Serialize retrieval JSON with line breaks between fields and chunks so native
+line-range reads can page externalized results. Preserve every returned value;
+this transport formatting must not narrow or broaden the sample scope.
 Builders consume only PublicTask and use native stage_files/build_inputs.
 Rendered files carry a public retrieval context and rules with neutral names;
 record IDs, split and source paths stay in host-side manifests. After upgrading

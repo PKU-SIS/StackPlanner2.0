@@ -1040,6 +1040,10 @@ Data-processing recovery preserves previously requested tools, including retriev
 tools, alongside the existing local defaults. Every retry still validates tool
 availability, role restrictions, stage restrictions and Skill policy; never derive
 recovery permissions from a specialist's self-declared artifact metadata.
+At the action boundary, explicit `task_kind: data_processing` (or its legacy
+`coder_task_kind` alias) keeps Coder and its validated execution tools. Never
+reroute this contract to Perception or Reporter solely from task prose; implicit
+read-only document inspection keeps its existing role normalization.
 
 Reporter defaults to Markdown for prose but honors explicit machine-readable file formats such as JSON. Keep control envelopes separate from delivered file bytes and preserve current-action filename ownership. This is also required by the optional CLAUSE RAG transport.
 

@@ -194,6 +194,10 @@ def test_native_tool_uses_thread_scope_and_excludes_runtime_from_agent_schema(
         else:
             result = asyncio.run(coroutine)
         assert json.loads(result)["chunks"][0]["id"] == "chunk"
+        # Externalized retrieval output is read with inclusive line ranges.
+        # Keep each JSON field/chunk addressable without one giant result line.
+        assert len(result.splitlines()) > 5
+        assert max(map(len, result.splitlines())) < len(result)
         assert observed[0]["document_ids"] == ["doc"]
         assert observed[0]["dataset_ids"] == ["kb"]
         schema = native_tools.ragflow_retrieve.tool_call_schema.model_json_schema()

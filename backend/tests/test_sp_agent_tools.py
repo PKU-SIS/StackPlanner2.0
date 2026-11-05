@@ -1456,6 +1456,33 @@ def test_action_payload_reroutes_uploaded_document_inspection_to_perception():
     assert payload["metadata"]["requires_implementation"] is False
 
 
+@pytest.mark.parametrize("kind_key", ["task_kind", "coder_task_kind"])
+@pytest.mark.parametrize(
+    "task",
+    [
+        "Read the uploaded financial documents and extract their requested amounts.",
+        "Generate the final board Markdown report from the current authoritative data sources.",
+    ],
+)
+def test_explicit_data_processing_keeps_execution_role_and_requested_tools(kind_key, task):
+    tools = ["read_file", "grep", "ragflow_retrieve", "bash"]
+    payload = _action_payload(
+        "sp_delegate",
+        {
+            "target_agent": "coder",
+            "stage": "implementation",
+            "task": task,
+            "metadata": {kind_key: "data_processing", "requires_implementation": False, "tool_names": tools},
+        },
+        tool_call_id="explicit-data-contract",
+    )
+
+    assert payload["target_agent"] == "coder"
+    assert payload["stage"] == "implementation"
+    assert payload["metadata"]["tool_names"] == tools
+    assert "routing_reason" not in payload["metadata"]
+
+
 @pytest.mark.parametrize(
     "task",
     [

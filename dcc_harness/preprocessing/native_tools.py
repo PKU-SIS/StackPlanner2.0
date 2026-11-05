@@ -64,6 +64,7 @@ def _retrieve_for_thread(
     return json.dumps(
         {"total": result.get("total", len(chunks)), "page": page, "chunks": chunks},
         ensure_ascii=False,
+        indent=2,
     )
 
 

@@ -1710,6 +1710,11 @@ def _normalize_delegate_target(payload: dict[str, Any]) -> tuple[str, str | None
     target_agent = str(payload.get("target_agent") or "")
     if target_agent != "coder":
         return target_agent, None
+    # Explicit data-processing work needs executable tools even when its
+    # description starts with "read" or its final deliverable is a report.
+    # Role heuristics must not turn that contract into read-only Perception.
+    if is_data_processing_coder(payload.get("metadata")):
+        return target_agent, None
     text = "\n".join(str(value) for key in ("task", "expected_output", "reason") if (value := payload.get(key)) not in (None, ""))
     if _CODE_OR_APP_DELIVERABLE_PATTERN.search(text):
         return target_agent, None
