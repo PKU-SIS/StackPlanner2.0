@@ -1085,4 +1085,14 @@ text. A final structured `tool_protocol_recovery_exhausted` marker makes DR2
 normalization partial; an earlier marker cannot poison a later clean final AI
 step. Keep existing stop enums, tool budgets and artifact acceptance gates.
 
+SP runtime passes the current Reporter action ID as a host-owned executor
+parameter, exposed only for `sp-reporter` in reserved runtime context. Within
+the existing file lock, `write_file` rejects only an append to that action's
+`outputs/*.json` when the current full document parses but the proposed result
+does not. Reuse native filename ownership matching. Return an explicit error
+and leave bytes unchanged; never trim, repair or silently accept bad content.
+Missing/incomplete documents, valid whitespace, `.jsonl`, other actions/roles,
+overwrite and `str_replace` retain their existing behavior. Syntax validity
+does not bypass native completion, ownership, read-back or JSON acceptance.
+
 `read_file` accepts either inclusive line bound independently (missing start means 1, missing end means EOF), rejects invalid ranges, and explicitly reports total lines when a range starts past EOF. Character truncation still requires narrower ranges; never interpret a truncated requested range as fully read. Regression coverage: tests/test_read_file_ranges.py.

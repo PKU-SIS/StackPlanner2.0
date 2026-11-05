@@ -440,6 +440,7 @@ class SubagentExecutor:
         protect_test_files: bool = False,
         budgets: dict[str, int] | None = None,
         run_tool_budget: Any | None = None,
+        reporter_action_id: str | None = None,
     ):
         """Initialize the executor.
 
@@ -494,6 +495,8 @@ class SubagentExecutor:
             budgets: Per-delegation tool, search, and cumulative token ceilings.
             protect_test_files: Prevent benchmark subagents from mutating test
                 files that are owned by an external grader.
+            reporter_action_id: Host-owned current SP Reporter action. Protects
+                its complete JSON outputs from invalidating append operations.
         """
         self.config = config
         self.app_config = app_config
@@ -528,6 +531,7 @@ class SubagentExecutor:
         self.force_isolated_loop = force_isolated_loop
         self.platform_skill_secrets = dict(platform_skill_secrets or {})
         self.parent_abort_event = parent_abort_event
+        self.reporter_action_id = reporter_action_id
         self.thinking_enabled = thinking_enabled
         self.max_tokens_per_step = max_tokens_per_step
         self.protect_test_files = bool(protect_test_files)
@@ -949,6 +953,8 @@ class SubagentExecutor:
             if self.deerflow_trace_id:
                 context[DEERFLOW_TRACE_METADATA_KEY] = self.deerflow_trace_id
             context["is_subagent"] = True
+            if self.config.name == "sp-reporter" and self.reporter_action_id:
+                context["__sp_reporter_action_id"] = self.reporter_action_id
             context["__run_tool_budget"] = self.run_tool_budget
             if self.protect_test_files:
                 context["protect_test_files"] = True

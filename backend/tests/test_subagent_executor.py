@@ -1468,6 +1468,27 @@ class TestAsyncExecutionPath:
         assert "Task" in result.result
 
     @pytest.mark.anyio
+    @pytest.mark.parametrize("reporter_action_id", [None, "current-action"])
+    async def test_aexecute_propagates_host_reporter_action_scope(self, classes, base_config, reporter_action_id):
+        from langchain_core.messages import AIMessage
+
+        captured = {}
+
+        async def capturing_astream(state, **kwargs):
+            captured.update(kwargs["context"])
+            yield {"messages": [AIMessage(content="Done", id="msg-1")]}
+
+        base_config.name = "sp-reporter"
+        executor = classes["SubagentExecutor"](config=base_config, tools=[], thread_id="test-thread", reporter_action_id=reporter_action_id)
+        mock_agent = MagicMock()
+        mock_agent.astream = capturing_astream
+        with patch.object(executor, "_create_agent", return_value=mock_agent):
+            await executor._aexecute("Do the task")
+        assert captured.get("__sp_reporter_action_id") == reporter_action_id
+        if reporter_action_id is None:
+            assert "__sp_reporter_action_id" not in captured
+
+    @pytest.mark.anyio
     async def test_aexecute_passes_at_most_one_system_message_to_agent(
         self,
         classes,

@@ -496,6 +496,7 @@ class DR2SPExecutorProvider:
                 protect_test_files=protect_test_files,
                 budgets=dict(task.budgets),
                 run_tool_budget=run_tool_budget,
+                reporter_action_id=task.action_id if task.subagent_type == "reporter" else None,
             )
 
         def observe_raw_result(raw_result: Any) -> None:

@@ -8,7 +8,7 @@ import posixpath
 import re
 import shlex
 import tokenize
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from functools import lru_cache
 from pathlib import Path
 
@@ -2343,6 +2343,42 @@ def _effective_write_file_max_bytes() -> int:
         return _WRITE_FILE_CONTENT_MAX_BYTES
 
 
+def _reporter_json_append_error(runtime: Runtime, sandbox: Sandbox, *, requested_path: str, resolved_path: str, content: str) -> str | None:
+    """Keep a current-action Reporter's complete JSON intact on a bad append."""
+    context = runtime.context
+    action_id = context.get("__sp_reporter_action_id") if isinstance(context, Mapping) else None
+    normalized_path = posixpath.normpath(requested_path)
+    if not isinstance(action_id, str) or not action_id or not normalized_path.startswith(f"{VIRTUAL_PATH_PREFIX}/outputs/") or not normalized_path.lower().endswith(".json"):
+        return None
+    # Reuse the native acceptance ownership rule; this context is supplied
+    # by the host SP factory, never by tool arguments or artifact metadata.
+    from deerflow.sp.actions.handlers.delegate import _report_created_path_matches_action
+
+    if not _report_created_path_matches_action(normalized_path, action_id):
+        return None
+    try:
+        current = sandbox.read_file(resolved_path)
+    except Exception:
+        # Missing/unreadable files retain the normal write tool behavior.
+        return None
+    if not isinstance(current, str):
+        return None
+    try:
+        json.loads(current)
+    except (ValueError, TypeError):
+        # Incomplete documents may still be constructed in normal chunks.
+        return None
+    try:
+        json.loads(current + content)
+    except (ValueError, TypeError):
+        return (
+            "Error: write_file refused an append that would invalidate this current-action JSON report. "
+            "The file already contains a complete JSON document and was not modified. "
+            "Read it with read_file, then return its result envelope or make an intentional revision with write_file/str_replace."
+        )
+    return None
+
+
 @tool("write_file", parse_docstring=True)
 def write_file_tool(
     runtime: Runtime,
@@ -2412,6 +2448,10 @@ def write_file_tool(
                 path = _resolve_and_validate_user_data_path(path, thread_data)
             # Custom mount paths are resolved by LocalSandbox._resolve_path()
         with get_file_operation_lock(sandbox, path):
+            if append:
+                append_error = _reporter_json_append_error(runtime, sandbox, requested_path=requested_path, resolved_path=path, content=content)
+                if append_error:
+                    return append_error
             if not append:
                 try:
                     existing_content = sandbox.read_file(path)

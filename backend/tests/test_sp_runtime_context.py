@@ -746,6 +746,27 @@ def test_sp_executor_provider_applies_runtime_subagent_execution_overrides(monke
     assert captured["protect_test_files"] is True
 
 
+@pytest.mark.parametrize("role", ["reporter", "coder"])
+def test_sp_executor_json_protection_scope_comes_from_reporter_action(monkeypatch, role):
+    captured = {}
+    config = SubagentConfig(name=f"sp-{role}", description=role, skills=[], internal=True)
+
+    class FakeExecutor:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def execute(self, prompt):
+            return SimpleNamespace(status="completed", result="done", error=None, stop_reason=None, task_id="child", token_usage_records=[])
+
+    monkeypatch.setattr("deerflow.subagents.get_subagent_config", lambda name, app_config=None: config)
+    monkeypatch.setattr("deerflow.subagents.SubagentExecutor", FakeExecutor)
+    provider = DR2SPExecutorProvider(app_config=SimpleNamespace(), parent_model="test-model", runnable_config={})
+    provider._tools = []
+    executor = provider({}, SimpleNamespace(context={"thread_id": "thread-1", "run_id": "run-1"}, stream_writer=None))
+    executor.execute(SPSubagentTask(action_id="current-action", subagent_type=role, task="Produce the report", description="Need evidence", metadata={"reporter_action_id": "forged-action"}))
+    assert captured["reporter_action_id"] == ("current-action" if role == "reporter" else None)
+
+
 def test_sp_executor_provider_normalizes_command_names_in_tool_allowlist(monkeypatch):
     captured = {}
     config = SubagentConfig(
