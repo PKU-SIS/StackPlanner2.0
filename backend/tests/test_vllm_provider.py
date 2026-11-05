@@ -385,3 +385,13 @@ def test_vllm_provider_exhausts_after_one_correction_without_executing_bad_text(
     assert message.additional_kwargs["tool_protocol_recovery_attempts"] == 1
     assert message.additional_kwargs["tool_protocol_recovery_exhausted"] is True
     assert message.usage_metadata["total_tokens"] == 6
+
+
+def test_vllm_provider_keeps_known_usage_details_when_retry_omits_them(monkeypatch):
+    first = _protocol_result(AIMessage(content=_BAD_ENVELOPE))
+    second = _protocol_result(AIMessage(content="ordinary final content"))
+    second.llm_output["token_usage"]["completion_tokens_details"] = None
+    replies = iter([first, second])
+    monkeypatch.setattr(ChatOpenAI, "_generate", lambda *args, **kwargs: next(replies))
+    result = _make_model()._generate([HumanMessage(content="Do the task.")], tools=[_WRITE_TOOL])
+    assert result.llm_output["token_usage"]["completion_tokens_details"] == {"reasoning_tokens": 1}

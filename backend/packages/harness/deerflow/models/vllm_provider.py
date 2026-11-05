@@ -227,6 +227,8 @@ def _add_token_usage(previous: dict[str, Any], current: dict[str, Any]) -> dict[
             combined[key] = _add_token_usage(left, right)
         elif isinstance(left, int) and isinstance(right, int):
             combined[key] = left + right
+        elif right is None:
+            combined[key] = left
     return combined
 
 
