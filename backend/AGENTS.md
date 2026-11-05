@@ -1056,6 +1056,11 @@ syntax only and must not infer answer content or benchmark labels.
 Explicit JSON output contracts also apply to inline/Markdown fallbacks.
 Ownership-filtered JSON paths remain format hints only: never read, overwrite or
 register discarded paths, and never let discarding a path bypass syntax checks.
+Reporter may use the existing `str_replace` tool for localized corrections to
+its current-action file after reading it. Explicit `metadata.tool_names` can
+request `read_file`, `grep`, `write_file`, and `str_replace`. Keep host bash,
+web tools, nested delegation and presentation/clarification tools forbidden;
+read-before-write, ownership, JSON parsing and bounded revision gates still apply.
 
 Qwen compatibility merges serialized system instructions into one leading system message without changing stored history or tool pairings. Report literal-token checks do not treat encoding names as mandatory answer content unless explicitly requested as literals. Both fixes preserve the existing native acceptance guards; tests cover Qwen messages and report encoding requirements.
 

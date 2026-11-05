@@ -290,6 +290,41 @@ def test_delegate_tool_policy_ignores_output_formats_misfiled_as_tool_names():
     assert selected.tools is None
 
 
+def test_reporter_can_request_localized_revision_tools():
+    from deerflow.subagents.builtins import SP_SPECIALIST_CONFIGS
+
+    config = SP_SPECIALIST_CONFIGS["reporter"]
+    requested = ["read_file", "grep", "write_file", "str_replace"]
+    task = SPSubagentTask(
+        action_id="report-json-repair",
+        subagent_type="reporter",
+        task="Correct a JSON syntax error in this action's report file",
+        description="Localized file revision",
+        metadata={"tool_names": requested},
+    )
+
+    selected = _apply_task_tool_policy(config, task, available_tools=[SimpleNamespace(name=name) for name in requested])
+
+    assert selected.tools == requested
+    assert config.tools is None
+
+
+@pytest.mark.parametrize("name", ["bash", "web_search", "web_fetch", "task", "ask_clarification", "present_files"])
+def test_reporter_revision_scope_retains_role_restrictions(name):
+    from deerflow.subagents.builtins import SP_SPECIALIST_CONFIGS
+
+    task = SPSubagentTask(
+        action_id="report-forbidden-tool",
+        subagent_type="reporter",
+        task="Revise the report",
+        description="Role isolation check",
+        metadata={"tool_names": [name]},
+    )
+
+    with pytest.raises(ValueError, match="forbidden"):
+        _apply_task_tool_policy(SP_SPECIALIST_CONFIGS["reporter"], task, available_tools=[SimpleNamespace(name=name)])
+
+
 def test_delegate_tool_policy_maps_interpreter_aliases_to_bash():
     config = SubagentConfig(
         name="sp-coder",

@@ -273,6 +273,11 @@ REPORTER_CONFIG = SubagentConfig(
   created_paths. For a short report without a file requirement, put the complete
   report in artifact_content. Copy the current action_id exactly when practical;
   a filename containing its unique opaque suffix is also accepted.
+- After creating the current action's file, use `read_file` to inspect it and
+  prefer `str_replace` for a localized correction, such as a JSON punctuation
+  error. Edit only the current action's file; never modify a prior report.
+  Re-read the corrected file and return the complete deliverable through the
+  same created_paths contract. A patch alone is not the final report.
 - Never list a created_path unless you successfully called `write_file` for
   that exact path in this delegation. If `write_file` is unavailable or fails,
   return the complete report in artifact_content and leave created_paths empty.
@@ -310,7 +315,7 @@ REPORTER_CONFIG = SubagentConfig(
 """,
     ),
     tools=None,
-    disallowed_tools=["task", "ask_clarification", "present_files", "bash", "str_replace", "web_search", "web_fetch"],
+    disallowed_tools=["task", "ask_clarification", "present_files", "bash", "web_search", "web_fetch"],
     skills=["stackplanner-reporting"],
     model="inherit",
     max_turns=480,

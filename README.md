@@ -406,6 +406,10 @@ validated FINISH deliveries, while preserving incomplete-output and artifact gat
 Reporter checks the complete contents of declared JSON deliverables before FINISH;
 invalid JSON stays partial and follows the bounded revision flow with parser
 diagnostics. Revisions preserve the requested format and keep the original file.
+Reporter can use `str_replace` for a small correction after reading the file
+created by its current action. An explicit revision scope may request
+`read_file`, `grep`, `write_file`, and `str_replace`; earlier reports retain
+their ownership protection and corrected JSON still passes the full parser.
 Explicit JSON output requirements also validate inline fallbacks, including
 content that would otherwise be saved with a Markdown extension.
 Data-processing recovery retains previously requested retrieval tools and checks
