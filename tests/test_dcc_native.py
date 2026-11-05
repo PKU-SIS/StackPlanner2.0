@@ -148,8 +148,9 @@ def test_native_adapter_rejects_context_from_an_older_knowledge_base(native_bund
 
 
 @pytest.mark.parametrize("user_channel", ["contextvar", "runtime", "conflicting"])
+@pytest.mark.parametrize(("page", "page_size"), [(1, 10), (2, 100)])
 def test_native_tool_uses_thread_scope_and_excludes_runtime_from_agent_schema(
-    native_bundle, monkeypatch, user_channel
+    native_bundle, monkeypatch, user_channel, page, page_size
 ):
     from contextvars import Context
 
@@ -181,7 +182,7 @@ def test_native_tool_uses_thread_scope_and_excludes_runtime_from_agent_schema(
         if user_channel != "contextvar":
             runtime.context["user_id"] = "dcc-alice"
         coroutine = native_tools.ragflow_retrieve.coroutine(
-            question="fact", runtime=runtime
+            question="fact", runtime=runtime, page=page, page_size=page_size
         )
         if user_channel == "runtime":
             result = Context().run(asyncio.run, coroutine)
@@ -200,6 +201,9 @@ def test_native_tool_uses_thread_scope_and_excludes_runtime_from_agent_schema(
         assert max(map(len, result.splitlines())) < len(result)
         assert observed[0]["document_ids"] == ["doc"]
         assert observed[0]["dataset_ids"] == ["kb"]
+        assert observed[0]["page"] == page
+        assert observed[0]["page_size"] == page_size
+        assert json.loads(result)["page"] == page
         schema = native_tools.ragflow_retrieve.tool_call_schema.model_json_schema()
         assert "runtime" not in schema["properties"]
         assert "dataset_ids" not in schema["properties"]

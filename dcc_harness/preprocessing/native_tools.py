@@ -72,7 +72,16 @@ def _retrieve_for_thread(
 async def ragflow_retrieve(
     question: str, runtime: ToolRuntime[dict | None], page: int = 1, page_size: int = 10
 ) -> str:
-    """Search the current DCC sample's indexed documents via RAGFlow; return cited evidence chunks. Read the sample's rule files separately with native file tools."""
+    """Search only the current sample's indexed documents and return cited chunks.
+
+    The JSON result has total matching chunks, the current page, and chunks for
+    that page. page is 1-indexed; page_size is 1-100 (default 10). When total is
+    larger than the returned chunk count, inspect later pages with the same
+    query and page_size as needed for the task's evidence coverage. One page
+    does not guarantee whole-document coverage; incomplete retrieval cannot prove a fact is
+    absent from a document. Read rule files separately with read_file. Every
+    page keeps the current sample's fixed document scope.
+    """
     from deerflow.runtime.user_context import resolve_runtime_user_id
 
     context = runtime.context or {}

@@ -422,6 +422,9 @@ Reporter recovery preserves the original validated tools and Skills within the
 same unresolved run. Its three-attempt limit also applies when no report file
 was produced, and the execution boundary prevents additional delegations while
 retaining the incomplete result and its remaining gaps.
+The retrieval tool describes its 1-indexed pages, 1-100 chunk page size, and
+`total` count. Evidence coverage may need later pages; an incomplete retrieval
+does not establish that a fact is absent from the source document.
 The manifest records the delivery contract and results identify the delivery source.
 Both native delivery extraction and saved-state classification keep known
 Central empty responses and invalid control calls as policy failures

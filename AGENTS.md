@@ -174,6 +174,9 @@ the thread's existing document scope remains unchanged.
 Serialize retrieval JSON with line breaks between fields and chunks so native
 line-range reads can page externalized results. Preserve every returned value;
 this transport formatting must not narrow or broaden the sample scope.
+The native tool description exposes the existing page/page_size limits and
+total/chunks semantics. Keep paging within the same sample scope, and do not
+describe a partial retrieval as proof that source evidence does not exist.
 Builders consume only PublicTask and use native stage_files/build_inputs.
 Rendered files carry a public retrieval context and rules with neutral names;
 record IDs, split and source paths stay in host-side manifests. After upgrading
