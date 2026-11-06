@@ -1017,17 +1017,34 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         tool_names = (["read_file", "ragflow_retrieve"] if sources.get("document_ids") else ["read_file", "grep"]) if target == "researcher" else ["read_file", "grep", "write_file", "str_replace"]
         metadata = {"tool_names": tool_names, "skill_names": sources.get("skill_names", [])}
         stage = "research" if target == "researcher" else ("revision" if previous is not None else "reporting")
+        refs_instruction = ""
+        recovery_instruction = ""
+        if previous is not None and not sources.get("document_ids"):
+            if previous.result_ref:
+                refs_instruction = f"input_refs={json.dumps([previous.result_ref])}, "
+            raw_gaps = previous.metadata.get("evidence_gaps")
+            actual_gaps = [str(gap)[:500] for gap in raw_gaps[:5]] if isinstance(raw_gaps, list) else []
+            recovery_instruction = (
+                "Use a materially different recovery method that resolves the previous native auditor's actual gaps, not another identical evidence-only delegation. "
+                "Reuse the actual referenced draft for valid prior work; the current auditor still needs original source content. "
+                "For a file-only audit with all historical source reads complete, native prefetch re-reads those real files for this new model instance within its context budget. "
+                "Complete the original audit, including any analysis and final answer requested by the public task; do not stop at collecting rules or planning the analysis. "
+                "Previous native audit gaps: " + "; ".join(actual_gaps or ["The previous audit has no clean complete native status."]) + " "
+            )
         note = HumanMessage(
             name="sp_public_source_audit_required",
             content=(
                 "<sp-public-source-audit-required>\n"
                 "The required public source audit has not yet completed. The public contract already names its audit role; "
                 "do not repeat perception or route this evidence read to an unrelated coder. "
-                f'Call sp_delegate exactly once with target_agent="{target}", stage="{stage}", metadata={json.dumps(metadata, ensure_ascii=False)}. '
+                f'Call sp_delegate exactly once with target_agent="{target}", stage="{stage}", {refs_instruction}metadata={json.dumps(metadata, ensure_ascii=False)}. '
                 "Ask that auditor to use its allowed native tools to read all source_requirements.files and all scoped source_requirements.document_ids, "
                 "then audit the complete original task and return its public output format. Native host prefetch may provide the same real source reads; "
                 "the auditor must review their original visible content and read any remaining pages. Do not select a default answer, call FINISH, or claim a completed audit while source coverage is missing. "
-                "Current source gaps: " + "; ".join(gaps[:8]) + "\n</sp-public-source-audit-required>"
+                + recovery_instruction
+                + "Current source gaps: "
+                + "; ".join(gaps[:8])
+                + "\n</sp-public-source-audit-required>"
             ),
             additional_kwargs={"hide_from_ui": True},
         )

@@ -1234,3 +1234,14 @@ including `[]`; `None` and schema-invalid values never fill missing output.
 Recovery prompts request the complete raw public value or an actual successful
 write/readback, never a receipt alone. Tests cover failed, missing, mismatched,
 forged, stale-action and unreadable write evidence.
+
+For `document_ids=[]` only, prefetch re-reads required files when historical file
+coverage is already complete: a fresh auditor instance cannot review original
+content from proof counters or file metadata alone. New reads still require
+the current model-visibility observer. Partial file reads and mixed RAG documents
+keep the existing missing-range and old externalized-page continuation strategy.
+File-only source-audit recovery must carry the actual prior draft reference and
+native evidence gaps, requiring a materially different method and the complete
+original audit. Do not mark an unperformed analysis complete. Duplicate-role
+policy checkpoints retain priority over source-audit filtering; genuine partial
+delegations may retry under the router's existing bounded recovery policy.

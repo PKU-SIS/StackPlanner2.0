@@ -137,6 +137,32 @@ def test_public_source_coverage_without_a_completed_audit_still_requires_auditor
     assert filtered.messages[-1].name == "sp_public_source_audit_required"
 
 
+def test_source_audit_recovery_carries_actual_native_gaps_and_draft_without_hiding_policy_checkpoint():
+    stack = TaskMemoryStack()
+    stack.append_delegate("Audit every operation", run_id="run", metadata={"target_agent": "researcher"})
+    stack.append_observe(
+        "An unfinished audit draft exists", actor="researcher", run_id="run", result_ref="spart_actual_draft", metadata={"completion_status": "partial", "evidence_gaps": ["Detailed analysis of all operations is still required."]}
+    )
+    state = {
+        "sp_loop_run_id": "run",
+        "sp_non_interactive": True,
+        "sp_task_memory": stack.to_dict(),
+        "sp_task_contract": {"source_requirements": {"audit_agent": "researcher", "files": [], "document_ids": []}},
+        "messages": [HumanMessage(content="Complete the public audit.")],
+    }
+    request = _ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=state["messages"])
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
+    assert [tool.name for tool in filtered.tools] == ["sp_delegate"]
+    note = filtered.messages[-1]
+    assert "Detailed analysis of all operations is still required." in note.content
+    assert 'input_refs=["spart_actual_draft"]' in note.content
+    assert "materially different recovery method" in note.content
+    state["sp_last_handler_result"] = {"policy_checkpoint": "same_target_requires_intermediate_control_action"}
+    checkpoint = SPFinishAvailabilityMiddleware()._filter_request(request)
+    assert all(tool.name != "sp_delegate" for tool in checkpoint.tools)
+    assert checkpoint.messages[-1].name == "sp_delegate_policy_checkpoint"
+
+
 @pytest.mark.parametrize("mode,requires_file", [("inline", False), ("artifact", True)])
 def test_public_delivery_mode_overrides_conditional_transport_file_guidance(mode, requires_file):
     guidance = (

@@ -430,7 +430,21 @@ def test_public_nba_template_requires_complete_uploaded_rules_without_private_ro
         "files": [{"path": "/mnt/user-data/uploads/dcc-rule-0.txt", "total_lines": 2}],
         "document_ids": [],
     }
-    assert "output_schema" not in contract
+    assert contract["output_parse_mode"] == "text"
+    assert contract["output_schema"]["type"] == "string"
+    from deerflow.sp.output_contract import output_contract_gaps
+
+    for text in [
+        "Analysis of every operation.\nAnswer: False.",
+        "The completed public audit.\nAnswer: True. Illegal Operation: A. Problematic Team: B.",
+    ]:
+        assert output_contract_gaps({"sp_task_contract": contract}, text) == []
+    for text in [
+        "Detailed analysis remains required.",
+        "Answer: True. Illegal Operation: AA. Problematic Team: B.",
+        '{"summary":"Done","artifact_content":"Answer: False."}',
+    ]:
+        assert output_contract_gaps({"sp_task_contract": contract}, text)
     assert contract["delivery_mode"] == "inline"
     assert (
         public_output_contract(

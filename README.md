@@ -525,6 +525,10 @@ rules. Delivery requires the designated auditor's latest current-run native
 observation to be complete, without evidence gaps or any early-stop reason.
 NBA template recognition uses the prompt composer's normal monetary-dollar
 escaping and preserves the published salary assumptions.
+Its public text contract retains the original `Answer: False.` / `Answer: True.
+Illegal Operation: X. Problematic Team: Y.` ending, enabling the same complete
+audit delivery path as other public schemas. Research notes that leave the
+requested transaction analysis undone remain partial.
 These checks do
 not infer findings, require nonempty predictions or replace semantic auditing.
 
@@ -573,6 +577,11 @@ observer confirms that complete original tool pairs survive all input wrappers.
 Summarized or clipped originals never count as model-visible source evidence.
 A single oversized source line remains incomplete until it can be read within
 the model's real context.
+When a file-only audit is retried after historical source coverage is complete,
+native prefetch reads the original files again for the new auditor's actual
+model input. Historical source proof alone does not provide that input. Mixed
+RAG tasks retain missing-range/page continuation. File-only recovery also carries
+the previous real draft reference and native gaps to the new delegation.
 
 For schema-constrained deliveries, a model-declared output filename must be
 actually readable before it can take precedence over generated inline content.

@@ -173,6 +173,33 @@ async def test_real_native_lazy_sandbox_command_preserves_result_and_state():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("complete", [True, False])
+async def test_file_only_reaudit_reexposes_completed_sources_to_the_current_model(complete):
+    calls = []
+    path = "/mnt/user-data/uploads/document.txt"
+
+    @tool("read_file")
+    def read_file(path: str, description: str, start_line: int, end_line: int) -> str:
+        """Read exact original public file content for this auditor."""
+        calls.append((path, start_line, end_line))
+        return "\n".join(["first original source line", "second original source line"][start_line - 1 : end_line])
+
+    required = {"files": [{"path": path, "total_lines": 2}], "document_ids": []}
+    parent = {"run_id": "run", "reads": {path: [[1, 2 if complete else 1]]}, "pages": []}
+    state = {"messages": [HumanMessage(content="A previous audit is partial; complete the original audit, not a file-metadata summary.")]}
+    await prefetch_public_sources(state=state, tools=[read_file], middlewares=[], config={}, context={"run_id": "run"}, settings=_settings(), contract={"source_requirements": required}, observed_source_access=parent, token_counter=_counter)
+    assert calls == [(path, 1 if complete else 2, 2)]
+    recorded = [message.model_dump() for message in state["messages"]]
+    assert collect_source_access(recorded)["reads"] == {}
+    mark_prefetch_model_visibility(state["messages"], recorded)
+    current_access = collect_source_access(recorded)
+    assert current_access["reads"] == {path: [[1 if complete else 2, 2]]}
+    if complete:
+        assert "first original source line" in str(state["messages"])
+        assert source_access_gaps({"sp_task_contract": {"source_requirements": required}, "sp_source_access": current_access}) == []
+
+
+@pytest.mark.asyncio
 async def test_prefetch_resumes_real_parent_read_ranges_and_externalized_pages():
     calls = []
     artifact = "/mnt/user-data/outputs/.tool-results/old-real-page.json"

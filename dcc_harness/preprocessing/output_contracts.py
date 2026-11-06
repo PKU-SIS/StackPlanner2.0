@@ -122,7 +122,17 @@ def public_output_contract(task: PublicTask) -> dict:
         raise ValueError("conflicting published public output contracts")
     if not matches and not nba:
         return {}
-    contract = copy.deepcopy(matches[0]) if matches else {}
+    contract = (
+        copy.deepcopy(matches[0])
+        if matches
+        else {
+            "output_parse_mode": "text",
+            "output_schema": {
+                "type": "string",
+                "pattern": r"Answer: (?:False\.|True\. Illegal Operation: [A-Z]\. Problematic Team: [A-Z]\.)\s*$",
+            },
+        }
+    )
     contract["delivery_mode"] = "inline"
     context = next(
         (
@@ -143,8 +153,7 @@ def public_output_contract(task: PublicTask) -> dict:
         ],
         "document_ids": context.get("retrieval", {}).get("document_ids", []),
     }
-    if matches:
-        contract["output_file_extension"] = (
-            ".json" if contract["output_parse_mode"] == "json" else ".txt"
-        )
+    contract["output_file_extension"] = (
+        ".json" if contract["output_parse_mode"] == "json" else ".txt"
+    )
     return contract

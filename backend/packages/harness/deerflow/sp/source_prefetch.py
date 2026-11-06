@@ -291,14 +291,19 @@ async def prefetch_public_sources(
             await read_range(path, middle + 1, end)
         return result
 
+    # A fresh file-only audit instance must see the actual original files,
+    # even when an earlier (partial) auditor already established source proof.
+    # Keep incomplete file/RAG continuation on missing ranges/pages, so large
+    # mixed RAG documents do not restart their prefixes on each delegation.
+    reexpose_files = not required.get("document_ids") and covered(files=required.get("files", []))
     for file in required.get("files", []):
         if not isinstance(file, Mapping):
             continue
         path, lines = file.get("path"), file.get("total_lines")
         if isinstance(path, str) and path.startswith("/mnt/user-data/uploads/") and posixpath.normpath(path) == path and isinstance(lines, int) and not isinstance(lines, bool) and lines > 0:
-            if covered(files=[file]):
+            if not reexpose_files and covered(files=[file]):
                 continue
-            for start, end in _unread_line_ranges(lines, reads.get(path, [])):
+            for start, end in _unread_line_ranges(lines, [] if reexpose_files else reads.get(path, [])):
                 await read_range(path, start, end)
     for document_id in required.get("document_ids", []):
         if not isinstance(document_id, str) or not document_id:
