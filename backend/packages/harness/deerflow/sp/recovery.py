@@ -44,6 +44,54 @@ def recovery_limit(state: Mapping[str, Any] | None, kind: str) -> int:
     return normalize_recovery_limits(raw if isinstance(raw, Mapping) else None)[kind]
 
 
+def _is_run_reporter_artifact(ref: Mapping[str, Any], *, run_id: str | None) -> bool:
+    metadata = ref.get("metadata")
+    return bool(run_id and ref.get("run_id") == run_id and ref.get("type") in {"report", "report_revision", "final_report"} and isinstance(metadata, Mapping) and (ref.get("created_by") or metadata.get("target_agent")) == "reporter")
+
+
+def is_token_capped_report_artifact(ref: Mapping[str, Any], *, run_id: str | None) -> bool:
+    """Recognize a native current-run unfinished Reporter artifact, not its text."""
+    metadata = ref.get("metadata")
+    return bool(_is_run_reporter_artifact(ref, run_id=run_id) and metadata.get("completion_status") in {"partial", "blocked"} and (metadata.get("stop_reason") or metadata.get("subagent_stop_reason")) == "token_capped")
+
+
+def _run_reporter_artifacts(state: Mapping[str, Any], *, run_id: str) -> dict[str, Mapping[str, Any]]:
+    raw = state.get("sp_current_artifact_refs")
+    if not isinstance(raw, Mapping):
+        return {}
+    history = raw.get("_history")
+    return {str(ref["artifact_id"]): ref for ref in [*(history if isinstance(history, list) else []), *raw.values()] if isinstance(ref, Mapping) and ref.get("artifact_id") and _is_run_reporter_artifact(ref, run_id=run_id)}
+
+
+def _unresolved_capped_report_artifact_ids(refs: Mapping[str, Mapping[str, Any]], *, run_id: str) -> list[str]:
+    """Follow the current unfinished report's real artifact lineage across retries."""
+    current = [ref for ref in refs.values() if ref.get("is_current", True)]
+    if not current:
+        return []
+    latest = max(current, key=lambda ref: ref.get("version") if isinstance(ref.get("version"), int) else 0)
+    if (latest.get("metadata") or {}).get("completion_status") not in {"partial", "blocked"}:
+        return []
+    pending = [str(latest["artifact_id"])]
+    visited: set[str] = set()
+    capped: list[str] = []
+    while pending:
+        artifact_id = pending.pop()
+        if artifact_id in visited or artifact_id not in refs:
+            continue
+        visited.add(artifact_id)
+        ref = refs[artifact_id]
+        metadata = ref.get("metadata") or {}
+        # A genuinely completed report closes its earlier recovery ancestry.
+        if metadata.get("completion_status") == "complete":
+            continue
+        if is_token_capped_report_artifact(ref, run_id=run_id):
+            capped.append(artifact_id)
+        for values in (ref.get("parent_artifact_ids"), metadata.get("source_artifact_ids")):
+            if isinstance(values, list):
+                pending.extend(str(value) for value in values if value)
+    return capped
+
+
 def artifact_array_token_cap_instruction(state: Mapping[str, Any], *, stack: Any = None, run_id: str | None = None) -> str:
     """Guide the model after an actual current-run capped artifact-array audit.
 
@@ -64,14 +112,23 @@ def artifact_array_token_cap_instruction(state: Mapping[str, Any], *, stack: Any
 
         stack = TaskMemoryStack.from_dict(state.get("sp_task_memory"))
     previous = next((entry for entry in reversed(stack.entries) if entry.actor == "reporter" and entry.action in {"observe", "error"} and entry.run_id == run_id), None)
-    if previous is None or previous.action != "observe" or previous.metadata.get("completion_status") not in ("partial", "blocked"):
+    if previous is not None and previous.action == "observe" and previous.metadata.get("completion_status") == "complete":
         return ""
-    if (previous.metadata.get("stop_reason") or previous.metadata.get("subagent_stop_reason")) != "token_capped":
+    report_refs = _run_reporter_artifacts(state, run_id=run_id)
+    artifact_ids = _unresolved_capped_report_artifact_ids(report_refs, run_id=run_id)
+    previous_capped = (
+        previous is not None
+        and previous.action == "observe"
+        and previous.metadata.get("completion_status") in ("partial", "blocked")
+        and (previous.metadata.get("stop_reason") or previous.metadata.get("subagent_stop_reason")) == "token_capped"
+    )
+    if not artifact_ids and (report_refs or not previous_capped):
         return ""
     return (
         "<public-array-token-cap-recovery>\n"
-        "The previous native Reporter delivery was token_capped and is an unverified draft. "
-        "Rebuild the complete answer from the original public sources and verify supported prior findings. "
+        "A native current-run Reporter delivery was token_capped and remains an unverified, noncanonical draft. "
+        + ("Unresolved original draft artifact references: " + ", ".join(artifact_ids) + ". Inspect the unchanged full draft through native tools only as needed to verify supported findings. " if artifact_ids else "")
+        + "Rebuild the complete answer from the original public sources and verify supported prior findings. "
         "Include each distinct supported issue exactly once; consolidate repeated descriptions of the same issue. "
         "You are not required to reproduce repeated draft entries unchanged. Preserve every distinct supported issue. "
         "For evidence, retain the complete verbatim original sentences or passages required by the public task; "

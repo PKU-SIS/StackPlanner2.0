@@ -16,7 +16,7 @@ from deerflow.sp.actions.schema import HandlerResult, SPAction
 from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.memory import StackMemoryEntry
 from deerflow.sp.output_contract import output_contract_gaps
-from deerflow.sp.recovery import artifact_array_token_cap_instruction, recovery_limit
+from deerflow.sp.recovery import artifact_array_token_cap_instruction, is_token_capped_report_artifact, recovery_limit
 from deerflow.sp.source_access import merge_source_access, source_access_gaps
 from deerflow.sp.subagents import SPSubagentExecutorProtocol, SPSubagentResult, SPSubagentTask
 from deerflow.sp.subagents.dr2_adapter import coder_task_kind, coder_task_requires_implementation, is_data_processing_coder
@@ -769,6 +769,19 @@ class DelegateHandler:
                 continue
             content, truncated = materialized
             artifact_id = str(ref.get("artifact_id") or ref.get("virtual_path") or f"artifact-{index + 1}")
+            capped_preview = action.target_agent == "reporter" and is_token_capped_report_artifact(ref, run_id=context.run_id)
+            preview_metadata = {}
+            if capped_preview:
+                status = ref["metadata"]["completion_status"]
+                content = (
+                    f"[Unverified noncanonical Reporter draft: completion_status={status}; stop_reason=token_capped. "
+                    "Its body is omitted only from this transient preview; it is not the revision baseline. "
+                    f"The complete original artifact is unchanged and available through native read_file at {ref.get('virtual_path')}. "
+                    "Rebuild from the original public sources; read this draft as needed to verify prior findings, "
+                    "preserving every distinct supported finding and original quotation.]"
+                )
+                truncated = True
+                preview_metadata = {"content_omitted": True, "canonical": False, "completion_status": status, "stop_reason": "token_capped"}
             items.append(
                 {
                     "artifact_id": artifact_id,
@@ -779,6 +792,7 @@ class DelegateHandler:
                     "summary": ref.get("summary"),
                     "content": content,
                     "truncated": truncated,
+                    **preview_metadata,
                 }
             )
             remaining_chars -= len(content)

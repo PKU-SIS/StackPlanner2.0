@@ -233,7 +233,14 @@ REPORTER_CONFIG = SubagentConfig(
   artifacts. Read those bodies, not just their summaries. A truncated item must
   be treated as incomplete evidence and disclosed when it affects the answer.
 - `context_refs.report_requirements.human_feedback` is mandatory and outranks
-  older plans. For a revision, use the supplied prior report as the baseline,
+  older plans. A noncanonical, token_capped partial/blocked Reporter artifact
+  whose transient preview body is omitted is an unverified draft; this rule
+  overrides the ordinary prior-report baseline. Rebuild from the original public sources,
+  reading the unchanged full prior artifact through native tools only as needed
+  to verify its findings. Preserve every distinct supported finding and original
+  quotation; do not copy repeated entries as independent findings, invent a
+  finding count, or treat a clipped draft as a complete answer. The original
+  draft and references remain available. For other revisions, use the supplied prior report as the baseline,
   preserve unaffected sections and valid citations, and return the complete
   revised report rather than a patch or change list. Preserve every explicit
   factual correction, including a stated percentage-point boundary adjustment;

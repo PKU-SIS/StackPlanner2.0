@@ -643,6 +643,15 @@ auditor and its source tools continue. An executed result that cannot fit even
 as an unread marker remains unobserved in the tool audit; only its pending host
 request is removed from model input. Existing drafts and prior source context
 stay intact, and native source coverage still requires actual visible reads.
+During Reporter recovery, a current-run partial/blocked artifact with a real
+`token_capped` stop is an unverified, noncanonical draft. Its capped body is
+not automatically inlined as the revision baseline; the transient preview
+retains its status, reference, and native read path. Original artifact bytes
+remain unchanged and readable. The Reporter rebuilds from original public
+sources and may read the prior draft to verify distinct supported findings.
+This guidance follows the unfinished artifact's lineage across later errors or
+loop stops and ends at a newly completed report. Ordinary partial revisions and
+complete report baselines retain their existing behavior.
 When required public sources remain unread, Central's next tool binding directs
 the read to the contract-designated auditor with its ordinary scoped tools;
 unrelated perception/coder retries do not consume the audit before it begins.

@@ -1340,3 +1340,20 @@ untouched. Tool charges, native summarization, source gaps, guard stops and
 public-schema acceptance retain their ordinary behavior. Tests:
 `test_sp_prefetch_budget_handoff.py` reproduces the former exception with the
 real native summarizer and verifies model handoff and original-draft retention.
+
+Reporter transient materialization checks the native report family, current
+run, host-owned target_agent, partial/blocked status, and actual token_capped
+stop (including the native alias). Only those draft bodies get a noncanonical
+omitted-body marker with the unchanged artifact ID/path and actual status/stop;
+never deduplicate, reconstruct, overwrite, or delete their stored content.
+Ordinary noncapped partial and complete baselines, other runs, and other
+specialists retain normal materialization. Reporter system guidance gives this
+exception precedence over the generic preserve-baseline rule and requires
+original-source reconstruction with optional native draft inspection, preserving
+all distinct verified findings and quotations without a host-selected count.
+Public artifact-array recovery follows current unfinished parent/source artifact
+IDs through loop/error observations and memory compaction; a completed report
+closes that ancestry. Observation-only legacy state retains its previous strict
+latest-result scope. No source/format/FINISH acceptance or budget is changed.
+`test_sp_capped_report_preview.py` exercises real persistence, byte/ref retention,
+normal baseline controls, retry lineage, and complete/new-run boundaries.
