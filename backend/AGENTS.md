@@ -1262,3 +1262,15 @@ provider errors/truncation and guard stops keep their ordinary native handling.
 Keep the CLAUSE Skill's successful-final transport consistent with the raw
 public-schema instruction; claims/receipts never prove an actual write.
 Tests: `test_sp_public_format_repair.py`, schema-delivery and agent-tools suites.
+
+`artifact_array_token_cap_instruction` is prompt-only recovery for an explicit
+artifact JSON array after the latest actual same-run Reporter observation is
+partial/blocked with native `token_capped`. Central recovery and the next actual
+Reporter task share the instruction, even when Central omits it. Require model
+reconstruction from original sources, each distinct supported issue once,
+complete verbatim evidence and a closed schema-valid array. Do not copy repeated
+draft entries merely to preserve old content, remove distinct issues for token
+savings, or modify any draft/answer on the host. A newer non-capped observation,
+another run, inline/object/text delivery and non-Reporter tasks do not inherit
+this guidance. Budgets, stop handling and success gates remain unchanged.
+Tests: `test_sp_capped_array_recovery.py` and existing action/recovery suites.

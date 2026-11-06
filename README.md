@@ -609,6 +609,11 @@ Reporter workflow. The model supplies the corrected value; the host never joins
 JSON objects, extracts an answer, or substitutes an empty/default response.
 Exhausted correction remains incomplete. Actual blockers, provider truncation
 and native guard stops retain their existing failure behavior.
+When a current-run Reporter artifact array is token-capped, its next recovery
+asks the model to rebuild one complete array from original sources, consolidate
+repeated descriptions, and preserve every distinct supported issue and required
+complete verbatim quotation. The host leaves draft bytes and acceptance checks
+unchanged; inline deliveries and runtime budgets keep their existing behavior.
 When required public sources remain unread, Central's next tool binding directs
 the read to the contract-designated auditor with its ordinary scoped tools;
 unrelated perception/coder retries do not consume the audit before it begins.

@@ -42,7 +42,7 @@ from deerflow.sp.hitl import record_human_feedback
 from deerflow.sp.memory import StackMemoryEntry, TaskMemoryStack
 from deerflow.sp.output_contract import output_contract_gaps
 from deerflow.sp.public_format_repair import augment_public_format_request, public_format_repair_update
-from deerflow.sp.recovery import recovery_limit
+from deerflow.sp.recovery import artifact_array_token_cap_instruction, recovery_limit
 from deerflow.sp.source_access import public_audit_completion_gaps, source_access_gaps
 from deerflow.sp.subagents import SPSubagentExecutorProtocol
 from deerflow.sp.subagents.dr2_adapter import is_data_processing_coder, observation_requires_code_recovery
@@ -895,6 +895,12 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             if artifact_id and latest is not None and latest.actor != "reporter" and latest.result_ref:
                 input_ref_text = f"input_refs={json.dumps(list(dict.fromkeys([artifact_id, latest.result_ref])))}, "
             contract = state.get("sp_task_contract")
+            capped_array_instruction = artifact_array_token_cap_instruction(state)
+            preservation_instruction = (
+                "Preserve all distinct supported findings and authoritative original quotations. " + capped_array_instruction
+                if capped_array_instruction
+                else "Preserve all unaffected content and authoritative literals from the current report. "
+            )
             delivery_instruction = (
                 "For the explicit public output_schema, have the reporter return the complete revised raw public JSON/text value directly, without an outer envelope or receipt. "
                 "The native host can persist this real value. If using a file, successfully write_file and read back its exact path; a promise, invented path or receipt alone is not delivery. "
@@ -907,8 +913,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 f"is incomplete: {gap_text}. Call sp_delegate exactly once "
                 'with target_agent="reporter", stage="revision", '
                 f"{input_ref_text}and a non-empty revision_reason that resolves "
-                "every listed evidence gap. Preserve all unaffected content "
-                "and authoritative literals from the current report. " + delivery_instruction + "Preserve the user's requested file format "
+                "every listed evidence gap. " + preservation_instruction + delivery_instruction + "Preserve the user's requested file format "
                 "(including JSON when requested); use Markdown only for an unspecified prose format. Do not "
                 "call FINISH, summarize, or invent a download URL in this turn.\n"
                 "</sp-artifact-recovery-required>"
@@ -1032,6 +1037,8 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 "Complete the original audit, including any analysis and final answer requested by the public task; do not stop at collecting rules or planning the analysis. "
                 "Previous native audit gaps: " + "; ".join(actual_gaps or ["The previous audit has no clean complete native status."]) + " "
             )
+        if target == "reporter":
+            recovery_instruction += artifact_array_token_cap_instruction(state)
         note = HumanMessage(
             name="sp_public_source_audit_required",
             content=(

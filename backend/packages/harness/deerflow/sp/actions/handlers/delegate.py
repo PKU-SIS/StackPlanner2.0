@@ -16,7 +16,7 @@ from deerflow.sp.actions.schema import HandlerResult, SPAction
 from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.memory import StackMemoryEntry
 from deerflow.sp.output_contract import output_contract_gaps
-from deerflow.sp.recovery import recovery_limit
+from deerflow.sp.recovery import artifact_array_token_cap_instruction, recovery_limit
 from deerflow.sp.source_access import merge_source_access, source_access_gaps
 from deerflow.sp.subagents import SPSubagentExecutorProtocol, SPSubagentResult, SPSubagentTask
 from deerflow.sp.subagents.dr2_adapter import coder_task_kind, coder_task_requires_implementation, is_data_processing_coder
@@ -703,10 +703,11 @@ class DelegateHandler:
         allowed_tools = task_metadata.get("tool_names")
         allowed_tools = list(dict.fromkeys(str(value).strip() for value in allowed_tools if isinstance(value, str) and value.strip())) if isinstance(allowed_tools, list) else []
 
+        recovery_instruction = artifact_array_token_cap_instruction(context.state, stack=context.stack, run_id=context.run_id) if action.target_agent == "reporter" else ""
         task = SPSubagentTask(
             action_id=action.action_id,
             subagent_type=str(action.target_agent),
-            task=str(action.task),
+            task=str(action.task) + ("\n\n" + recovery_instruction if recovery_instruction else ""),
             description=action.reason,
             input_refs=input_refs,
             expected_output=action.expected_output,
