@@ -655,6 +655,13 @@ complete report baselines retain their existing behavior.
 When required public sources remain unread, Central's next tool binding directs
 the read to the contract-designated auditor with its ordinary scoped tools;
 unrelated perception/coder retries do not consume the audit before it begins.
+RAG document enumeration puts a transport-only pagination header before the
+original chunks: actual total/returned chunk counts, page count, next page, and
+end/out-of-range facts. Empty pages beyond that range do not imply missing
+indexed pages. Existing source coverage and substantive audit checks remain
+independent. Recovery carries the previous native auditor's actual gaps and
+result reference to Central and the next scoped RAG auditor, which must verify
+those claims against the returned pagination and complete the original audit.
 Later delegations resume the host's actual same-run source ledger: skip covered
 files/documents, read only missing file ranges, and continue unread content lines
 in already externalized native RAG pages. Existing evidence paths remain the

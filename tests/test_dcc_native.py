@@ -379,6 +379,155 @@ def test_native_document_enumeration_is_scoped_complete_and_cached(
         )
 
 
+@pytest.mark.parametrize(
+    ("total", "page", "returned", "total_pages", "next_page", "out_of_range"),
+    [
+        (10, 1, 10, 1, None, False),
+        (7, 1, 7, 1, None, False),
+        *((total, page, 0, 1, None, True) for total in (10, 7) for page in (2, 3, 4)),
+        (210, 1, 100, 3, 2, False),
+        (210, 2, 100, 3, 3, False),
+        (210, 3, 10, 3, None, False),
+        (0, 1, 0, 0, None, True),
+    ],
+)
+def test_native_document_pagination_is_transport_only_and_preserves_source_proof(
+    native_bundle,
+    monkeypatch,
+    total,
+    page,
+    returned,
+    total_pages,
+    next_page,
+    out_of_range,
+):
+    from deerflow.runtime.user_context import get_effective_user_id
+    from deerflow.sp.source_access import (
+        collect_source_access,
+        public_audit_completion_gaps,
+        source_access_gaps,
+    )
+
+    from dcc_harness.preprocessing import native_tools
+
+    _, task = native_bundle
+    prepare_inputs(task.public_input(), "pagination-thread")
+    chunks = [
+        {
+            "id": f"chunk-{(page - 1) * 100 + i}",
+            "document_id": "doc",
+            "content": f'<fact id="{i}">Exact original XML quotation.\nSecond line.</fact>',
+        }
+        for i in range(returned)
+    ]
+    observed = []
+
+    class Client:
+        def __init__(self, config):
+            self.session = SimpleNamespace(close=lambda: None)
+
+        def document_chunks(self, dataset, document, page, page_size):
+            observed.append((dataset, document, page, page_size))
+            return {
+                "total": total,
+                "chunks": chunks,
+                "doc": {"size": 9000, "update_time": 123},
+            }
+
+    monkeypatch.setattr(native_tools, "RagflowClient", Client)
+
+    def call():
+        return native_tools._retrieve_for_thread(
+            "pagination-thread",
+            "Read original source",
+            page,
+            100,
+            user_id=get_effective_user_id(),
+            document_id="doc",
+        )
+
+    rendered = call()
+    value = json.loads(rendered)
+    assert value["total"] == total and value["page"] == page
+    assert value["chunks"] == chunks
+    assert [chunk["content"].encode() for chunk in value["chunks"]] == [
+        chunk["content"].encode() for chunk in chunks
+    ]
+    assert value["pagination"] == {
+        "total_chunks": total,
+        "returned_chunks": returned,
+        "page": page,
+        "page_size": 100,
+        "total_pages": total_pages,
+        "has_more": next_page is not None,
+        "next_page": next_page,
+        "end_of_indexed_document": next_page is None,
+        "out_of_range": out_of_range,
+    }
+    assert rendered.index('"pagination"') < rendered.index('"chunks"')
+    coverage = value["source_coverage"]
+    assert coverage == {
+        "mode": "document",
+        "document_id": "doc",
+        "page": page,
+        "page_size": 100,
+        "total": total,
+        "returned": returned,
+        "chunk_ids": [chunk["id"] for chunk in chunks],
+        "document_bytes": 9000,
+        "snapshot_update_time": 123,
+    }
+    # Cached snapshots get the same transport facts without another service call.
+    assert json.loads(call()) == value
+    assert observed == [("kb", "doc", page, 100)]
+    # Legacy cached wrappers gain only transient pagination; keep their original
+    # snapshot bytes and source proof untouched, without a new service request.
+    from deerflow.config.paths import get_paths
+
+    uploads = get_paths().sandbox_uploads_dir(
+        "pagination-thread", user_id=get_effective_user_id()
+    )
+    cache = uploads.parent.parent / ".dcc-document-cache" / f"doc-{page}-100.json"
+    legacy = {key: item for key, item in value.items() if key != "pagination"}
+    cache.write_text(json.dumps(legacy, ensure_ascii=False))
+    original_cache_bytes = cache.read_bytes()
+    assert json.loads(call()) == value
+    assert cache.read_bytes() == original_cache_bytes
+    assert observed == [("kb", "doc", page, 100)]
+    messages = [
+        {
+            "type": "ai",
+            "tool_calls": [
+                {
+                    "id": "read",
+                    "name": "ragflow_retrieve",
+                    "args": {"document_id": "doc", "page": page, "page_size": 100},
+                }
+            ],
+        },
+        {
+            "type": "tool",
+            "name": "ragflow_retrieve",
+            "tool_call_id": "read",
+            "content": rendered,
+        },
+    ]
+    state = {
+        "sp_loop_run_id": "run",
+        "sp_task_contract": {
+            "source_requirements": {
+                "audit_agent": "researcher",
+                "files": [],
+                "document_ids": ["doc"],
+            }
+        },
+        "sp_source_access": {"run_id": "run", **collect_source_access(messages)},
+    }
+    # EOF on an out-of-range empty page does not certify unseen earlier chunks.
+    assert bool(source_access_gaps(state)) is (total == 0 or returned != total)
+    assert public_audit_completion_gaps(state)
+
+
 def test_clause_source_contract_requires_full_document_and_preserves_audit_role():
     from dcc_harness.data import InputFile, PublicTask
     from dcc_harness.preprocessing.output_contracts import public_output_contract

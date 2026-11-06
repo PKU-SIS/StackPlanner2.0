@@ -44,6 +44,30 @@ def recovery_limit(state: Mapping[str, Any] | None, kind: str) -> int:
     return normalize_recovery_limits(raw if isinstance(raw, Mapping) else None)[kind]
 
 
+def source_audit_recovery_instruction(previous: Any, *, has_documents: bool) -> str:
+    """Expose actual prior gaps and transport semantics, without resolving them."""
+    raw_gaps = previous.metadata.get("evidence_gaps")
+    actual_gaps = [str(gap)[:500] for gap in raw_gaps[:5]] if isinstance(raw_gaps, list) else []
+    instruction = (
+        "Use a materially different recovery method that resolves the previous native auditor's actual gaps, not another identical evidence-only delegation. "
+        "Reuse the actual referenced draft for valid prior work; the current auditor still needs original source content. "
+        "Complete the original audit, including any analysis and final answer requested by the public task; do not stop at collecting rules or planning the analysis. "
+        + (f"Previous native audit result_ref: {previous.result_ref}. " if previous.result_ref else "")
+        + "Previous native audit gaps: "
+        + "; ".join(actual_gaps or ["The previous audit has no clean complete native status."])
+        + " "
+    )
+    if has_documents:
+        return instruction + (
+            "For RAG document enumeration, use the actual native pagination header: total_chunks is a chunk count, total_pages is ceil(total_chunks/page_size), "
+            "and returned_chunks is the actual returned count, not page_size. Follow next_page only while has_more. "
+            "Empty out_of_range pages are beyond the end of the indexed document, not missing source pages. "
+            "Recheck previous coverage claims against these actual service facts and inspect every actual original chunk. "
+            "Indexed pagination is not proof that the substantive audit is complete; preserve partial status for any genuine remaining requirement. "
+        )
+    return instruction + "For a file-only audit with all historical source reads complete, native prefetch re-reads those real files for this new model instance within its context budget. "
+
+
 def _is_run_reporter_artifact(ref: Mapping[str, Any], *, run_id: str | None) -> bool:
     metadata = ref.get("metadata")
     return bool(run_id and ref.get("run_id") == run_id and ref.get("type") in {"report", "report_revision", "final_report"} and isinstance(metadata, Mapping) and (ref.get("created_by") or metadata.get("target_agent")) == "reporter")

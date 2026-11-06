@@ -137,7 +137,8 @@ def test_public_source_coverage_without_a_completed_audit_still_requires_auditor
     assert filtered.messages[-1].name == "sp_public_source_audit_required"
 
 
-def test_source_audit_recovery_carries_actual_native_gaps_and_draft_without_hiding_policy_checkpoint():
+@pytest.mark.parametrize("document_ids", [[], ["scoped-document"]])
+def test_source_audit_recovery_carries_actual_native_gaps_and_draft_without_hiding_policy_checkpoint(document_ids):
     stack = TaskMemoryStack()
     stack.append_delegate("Audit every operation", run_id="run", metadata={"target_agent": "researcher"})
     stack.append_observe(
@@ -147,7 +148,7 @@ def test_source_audit_recovery_carries_actual_native_gaps_and_draft_without_hidi
         "sp_loop_run_id": "run",
         "sp_non_interactive": True,
         "sp_task_memory": stack.to_dict(),
-        "sp_task_contract": {"source_requirements": {"audit_agent": "researcher", "files": [], "document_ids": []}},
+        "sp_task_contract": {"source_requirements": {"audit_agent": "researcher", "files": [], "document_ids": document_ids}},
         "messages": [HumanMessage(content="Complete the public audit.")],
     }
     request = _ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=state["messages"])
@@ -157,6 +158,11 @@ def test_source_audit_recovery_carries_actual_native_gaps_and_draft_without_hidi
     assert "Detailed analysis of all operations is still required." in note.content
     assert 'input_refs=["spart_actual_draft"]' in note.content
     assert "materially different recovery method" in note.content
+    assert ("For a file-only audit" in note.content) is (not document_ids)
+    if document_ids:
+        assert "total_pages" in note.content and "out_of_range" in note.content
+        assert "not missing source pages" in note.content
+        assert "not proof that the substantive audit is complete" in note.content
     state["sp_last_handler_result"] = {"policy_checkpoint": "same_target_requires_intermediate_control_action"}
     checkpoint = SPFinishAvailabilityMiddleware()._filter_request(request)
     assert all(tool.name != "sp_delegate" for tool in checkpoint.tools)

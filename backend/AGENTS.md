@@ -1357,3 +1357,18 @@ closes that ancestry. Observation-only legacy state retains its previous strict
 latest-result scope. No source/format/FINISH acceptance or budget is changed.
 `test_sp_capped_report_preview.py` exercises real persistence, byte/ref retention,
 normal baseline controls, retry lineage, and complete/new-run boundaries.
+
+RAG document results retain total/chunks/original content/source_coverage and
+prepend a pagination header computed from the actual service total and requested
+page_size. It reports actual returned_chunks, total_pages, has_more, next_page,
+end_of_indexed_document, and out_of_range. These are transport facts only: an
+empty out-of-range page does not certify earlier source visibility or a completed
+audit. Cached wrappers receive the same header without rewriting their snapshot
+or making another request. Shared source_audit_recovery_instruction exposes the
+previous native gaps/result_ref for both file and RAG modes; only file mode
+promises native file re-exposure. The next current-run designated RAG Researcher
+also receives this instruction and reference directly, even if Central omits
+them. Keep document scope, partial status, source/format/FINISH gates and budgets
+unchanged. Regression tests: tests/test_dcc_native.py exercises real tool/cache
+transport and the native source/audit gates; test_sp_agent_tools.py and
+test_sp_rag_audit_recovery.py cover Central and actual delegated-task feedback.

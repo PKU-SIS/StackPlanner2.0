@@ -42,7 +42,7 @@ from deerflow.sp.hitl import record_human_feedback
 from deerflow.sp.memory import StackMemoryEntry, TaskMemoryStack
 from deerflow.sp.output_contract import output_contract_gaps
 from deerflow.sp.public_format_repair import augment_public_format_request, public_format_repair_update
-from deerflow.sp.recovery import artifact_array_token_cap_instruction, recovery_limit
+from deerflow.sp.recovery import artifact_array_token_cap_instruction, recovery_limit, source_audit_recovery_instruction
 from deerflow.sp.source_access import public_audit_completion_gaps, source_access_gaps
 from deerflow.sp.subagents import SPSubagentExecutorProtocol
 from deerflow.sp.subagents.dr2_adapter import is_data_processing_coder, observation_requires_code_recovery
@@ -1025,18 +1025,10 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         stage = "research" if target == "researcher" else ("revision" if previous is not None else "reporting")
         refs_instruction = ""
         recovery_instruction = ""
-        if previous is not None and not sources.get("document_ids"):
+        if previous is not None:
             if previous.result_ref:
                 refs_instruction = f"input_refs={json.dumps([previous.result_ref])}, "
-            raw_gaps = previous.metadata.get("evidence_gaps")
-            actual_gaps = [str(gap)[:500] for gap in raw_gaps[:5]] if isinstance(raw_gaps, list) else []
-            recovery_instruction = (
-                "Use a materially different recovery method that resolves the previous native auditor's actual gaps, not another identical evidence-only delegation. "
-                "Reuse the actual referenced draft for valid prior work; the current auditor still needs original source content. "
-                "For a file-only audit with all historical source reads complete, native prefetch re-reads those real files for this new model instance within its context budget. "
-                "Complete the original audit, including any analysis and final answer requested by the public task; do not stop at collecting rules or planning the analysis. "
-                "Previous native audit gaps: " + "; ".join(actual_gaps or ["The previous audit has no clean complete native status."]) + " "
-            )
+            recovery_instruction = source_audit_recovery_instruction(previous, has_documents=bool(sources.get("document_ids")))
         if target == "reporter":
             recovery_instruction += artifact_array_token_cap_instruction(state)
         note = HumanMessage(

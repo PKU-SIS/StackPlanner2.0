@@ -16,7 +16,7 @@ from deerflow.sp.actions.schema import HandlerResult, SPAction
 from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.memory import StackMemoryEntry
 from deerflow.sp.output_contract import output_contract_gaps
-from deerflow.sp.recovery import artifact_array_token_cap_instruction, is_token_capped_report_artifact, recovery_limit
+from deerflow.sp.recovery import artifact_array_token_cap_instruction, is_token_capped_report_artifact, recovery_limit, source_audit_recovery_instruction
 from deerflow.sp.source_access import merge_source_access, source_access_gaps
 from deerflow.sp.subagents import SPSubagentExecutorProtocol, SPSubagentResult, SPSubagentTask
 from deerflow.sp.subagents.dr2_adapter import coder_task_kind, coder_task_requires_implementation, is_data_processing_coder
@@ -677,6 +677,14 @@ class DelegateHandler:
 
         latest_uploaded_refs = _latest_uploaded_file_refs(context.state)
         input_refs = list(action.input_refs)
+        source_requirements = (context.state.get("sp_task_contract") or {}).get("source_requirements") or {}
+        previous_rag_audit = None
+        if action.target_agent == "researcher" and isinstance(source_requirements, Mapping) and source_requirements.get("audit_agent") == "researcher" and source_requirements.get("document_ids") and context.run_id:
+            previous = next((entry for entry in reversed(context.stack.entries) if entry.actor == "researcher" and entry.action in {"observe", "error"} and entry.run_id == context.run_id), None)
+            if previous is not None and (previous.action == "error" or previous.metadata.get("completion_status") in {"partial", "blocked"}):
+                previous_rag_audit = previous
+                if previous.result_ref:
+                    input_refs = list(dict.fromkeys([*input_refs, previous.result_ref]))
         if action.target_agent in {"perception", "reporter"}:
             input_refs = list(
                 dict.fromkeys(
@@ -704,6 +712,8 @@ class DelegateHandler:
         allowed_tools = list(dict.fromkeys(str(value).strip() for value in allowed_tools if isinstance(value, str) and value.strip())) if isinstance(allowed_tools, list) else []
 
         recovery_instruction = artifact_array_token_cap_instruction(context.state, stack=context.stack, run_id=context.run_id) if action.target_agent == "reporter" else ""
+        if previous_rag_audit is not None:
+            recovery_instruction += source_audit_recovery_instruction(previous_rag_audit, has_documents=True)
         task = SPSubagentTask(
             action_id=action.action_id,
             subagent_type=str(action.target_agent),
