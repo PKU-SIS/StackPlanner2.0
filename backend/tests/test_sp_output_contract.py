@@ -50,6 +50,33 @@ def test_text_enum_requires_exact_raw_public_label():
     assert output_contract_gaps(state, "The answer is Reversal.")
 
 
+def test_public_schema_audit_preserves_original_quotes_without_prose_report_heuristics():
+    import json
+    from types import SimpleNamespace
+
+    from deerflow.sp.actions.handlers.base import HandlerContext
+    from deerflow.sp.actions.handlers.delegate import _apply_report_acceptance_checks
+    from deerflow.sp.memory import TaskMemoryStack
+    from deerflow.sp.subagents import SPSubagentResult, SPSubagentStatus, SPSubagentTask
+
+    contract = _contract({"type": "array", "items": {"type": "object", "required": ["text", "explanation"]}})
+    contract["source_requirements"] = {"audit_agent": "reporter", "files": []}
+    answer = [{"text": "The company records the highest revenue, below the 5% threshold.", "explanation": "The source contradicts the supplied definitions."}]
+    result = SPSubagentResult(status=SPSubagentStatus.COMPLETED, artifact_content=json.dumps(answer), artifact_metadata={"completion_status": "complete"})
+    task = SPSubagentTask(
+        action_id="spact_schema123",
+        subagent_type="reporter",
+        task="Audit the original document",
+        description="Audit",
+        context_refs={"latest_user_input": "请保留完整英文原句，只输出指定JSON。", "report_requirements": {"required_literal_tokens": ["THE_REAL_ID"]}},
+    )
+    _apply_report_acceptance_checks(result, task=task, context=HandlerContext(state={"sp_task_contract": contract}, stack=TaskMemoryStack()), artifact_adapter=SimpleNamespace())
+    assert result.artifact_metadata["completion_status"] == "complete"
+    checks = result.artifact_metadata["quality_checks"]
+    assert checks["public_output_schema"]["passed"]
+    assert not {"required_literal_tokens", "threshold_consistency", "no_data_grounding", "language_alignment"}.intersection(checks)
+
+
 def test_report_schema_uses_actual_file_not_duplicate_inline_preview():
     from types import SimpleNamespace
 
@@ -106,7 +133,9 @@ def test_schema_propagates_through_bounded_public_task_context():
     from deerflow.sp.actions.handlers.context import _bounded_task_contract
 
     contract = _contract({"type": "array", "items": {"type": "string"}})
+    contract["delivery_mode"] = "inline"
     assert _bounded_task_contract(contract)["output_schema"] == contract["output_schema"]
+    assert _bounded_task_contract(contract)["delivery_mode"] == "inline"
 
 
 @pytest.mark.parametrize("role", ["reporter", "researcher"])

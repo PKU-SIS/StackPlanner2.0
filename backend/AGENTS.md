@@ -1219,3 +1219,18 @@ never private dataset metadata, and preserve its original text output format.
 When FINISH is unbound, dynamically explain ordinary final assistant delivery;
 strip Central controls only for clean completed public audits without artifact
 obligations. Preserve native file finalization and duplicate-role checkpoints.
+
+Public `delivery_mode` is authoritative over conversational file-request regexes
+and propagates through bounded task context. FinAuditing/NBA stay inline even
+after a specialist creates an incidental artifact; CLAUSE stays artifact-based.
+The adapter records `SPSubagentResult.created_path_evidence` only from paired
+successful native file-tool results, bound to the exact executor action ID.
+Never deserialize that proof from model metadata. Reporter ownership accepts
+these actual writes, then requires readable file bytes and the public schema.
+Schema audit acceptance bypasses generic prose literal/threshold/no-data/language
+heuristics; explicit schema constraints and real source/native-status gates
+remain mandatory. A schema-valid artifact value can be usable without summary,
+including `[]`; `None` and schema-invalid values never fill missing output.
+Recovery prompts request the complete raw public value or an actual successful
+write/readback, never a receipt alone. Tests cover failed, missing, mismatched,
+forged, stale-action and unreadable write evidence.

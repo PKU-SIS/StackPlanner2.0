@@ -360,6 +360,11 @@ def _required_report_literal_tokens(
     context_refs: Mapping[str, Any],
 ) -> list[str]:
     """Extract exact label/ID tokens when the request requires preservation."""
+    contract = context.state.get("sp_task_contract")
+    if isinstance(contract, Mapping) and "output_schema" in contract:
+        # A schema-constrained value is not a prose report. Tool instructions,
+        # example IDs and quoted evidence cannot add inferred answer literals.
+        return []
     latest_query = str(context_refs.get("latest_user_input") or context_refs.get("original_query") or "")
     request_text = "\n".join(
         value
@@ -1504,7 +1509,9 @@ def _apply_report_acceptance_checks(
     """Reject reports with missing literals or non-portable local links."""
     raw_created_paths = result.artifact_metadata.get("created_paths")
     declared_paths = [str(value) for value in raw_created_paths if isinstance(value, str)] if isinstance(raw_created_paths, list) else []
-    valid_paths = [value for value in declared_paths if _report_created_path_matches_action(value, task.action_id)]
+    evidence = result.created_path_evidence
+    written_paths = evidence.get("paths", []) if isinstance(evidence, Mapping) and evidence.get("action_id") == task.action_id else []
+    valid_paths = [value for value in declared_paths if _report_created_path_matches_action(value, task.action_id) or value in written_paths]
     discarded_paths = [value for value in declared_paths if value not in valid_paths]
     public_schema = isinstance(context.state.get("sp_task_contract"), Mapping) and "output_schema" in context.state["sp_task_contract"]
     unreadable_paths = []
@@ -1534,6 +1541,35 @@ def _apply_report_acceptance_checks(
             text = content if isinstance(content, str) or content is None else json.dumps(content, ensure_ascii=False)
             schema_gaps.extend(output_contract_gaps(context.state, text))
         json_gaps.extend(schema_gaps)
+
+    if public_schema:
+        # Public audit outputs can quote contradictions verbatim. Generic prose
+        # report heuristics would mistake the quoted defect for a new report
+        # claim, or infer tool-example IDs as required answer text. The actual
+        # public schema, native status/source gates and file evidence own this
+        # contract; preserve any existing incomplete status/gaps unchanged.
+        checks = result.artifact_metadata.get("quality_checks")
+        quality_checks = dict(checks) if isinstance(checks, Mapping) else {}
+        ownership_passed = not discarded_paths or bool(valid_paths) or result.artifact_content is not None
+        quality_checks["public_output_schema"] = {"passed": not schema_gaps, "evidence_gaps": schema_gaps}
+        quality_checks["created_path_ownership"] = {
+            "discarded_paths": discarded_paths,
+            "unreadable_paths": unreadable_paths,
+            "fallback_artifact_content": result.artifact_content is not None,
+            "passed": ownership_passed,
+        }
+        if json_paths:
+            quality_checks["json_artifact_syntax"] = {"files": json_paths, "evidence_gaps": json_gaps, "passed": not json_gaps}
+        result.artifact_metadata["quality_checks"] = quality_checks
+        if json_gaps or not ownership_passed:
+            result.artifact_metadata["completion_status"] = "partial"
+            gaps = result.artifact_metadata.get("evidence_gaps")
+            gaps = list(gaps) if isinstance(gaps, list) else []
+            gaps.extend(gap for gap in json_gaps if gap not in gaps)
+            if not ownership_passed:
+                gaps.append("Declared output paths lack current-action ownership; return the complete raw public value or create and read back the actual output file.")
+            result.artifact_metadata["evidence_gaps"] = gaps
+        return
 
     requirements = task.context_refs.get("report_requirements")
     raw_tokens = requirements.get("required_literal_tokens") if isinstance(requirements, Mapping) else None

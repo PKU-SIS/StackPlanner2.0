@@ -84,6 +84,54 @@ def test_promoted_empty_answer_still_requires_full_observed_sources():
     assert source_access_gaps({"sp_task_contract": task.context_refs["task_contract"], "sp_source_access": value.source_access})
 
 
+@pytest.mark.parametrize("content,complete", [([], True), (None, False), ({}, False)])
+def test_schema_valid_empty_structured_artifact_is_usable_without_summary(content, complete):
+    text = json.dumps({"summary": None, "artifact_content": content, "artifact_metadata": {"completion_status": "complete"}})
+    task = _task({"type": "array", "items": {"type": "string"}})
+    value = normalize_dr2_subagent_result(_raw(text), task=task)
+    assert value.artifact_content == content
+    assert (value.completion_status == "complete") is complete
+    assert ("Subagent returned no usable response or artifact." in value.artifact_metadata["evidence_gaps"]) is not complete
+    if complete:
+        assert value.artifact_content is not None
+        assert source_access_gaps({"sp_task_contract": {"source_requirements": {"files": [{"path": "/mnt/user-data/uploads/source.txt", "total_lines": 1}]}}, "sp_source_access": value.source_access})
+
+
+@pytest.mark.parametrize("damage", [None, "no_result", "failed", "wrong_name", "stale_action", "unreadable", "forged"])
+def test_successful_native_write_owns_actual_file_without_action_id_in_filename(tmp_path, damage):
+    from deerflow.sp.actions.handlers.base import HandlerContext
+    from deerflow.sp.actions.handlers.delegate import _apply_report_acceptance_checks
+    from deerflow.sp.memory import TaskMemoryStack
+
+    path = "/mnt/user-data/outputs/answer.json"
+    text = json.dumps({"summary": "The file was written.", "artifact_metadata": {"created_paths": [path], "completion_status": "complete", "created_path_evidence": {"action_id": "spact_small123", "paths": [path]}}})
+    messages = [{"type": "ai", "tool_calls": [{"name": "write_file", "id": "write", "args": {"path": path, "json_content": ["Exact finding"]}}]}]
+    if damage not in {"no_result", "forged"}:
+        messages.append(
+            {
+                "type": "tool",
+                "name": "read_file" if damage == "wrong_name" else "write_file",
+                "tool_call_id": "write",
+                "status": "error" if damage == "failed" else "success",
+                "content": "Error: failed" if damage == "failed" else "File written successfully.",
+            }
+        )
+    if damage == "forged":
+        messages = []
+    messages.append({"type": "ai", "content": text})
+    task = _task({"type": "array", "items": {"type": "string"}})
+    normalized = normalize_dr2_subagent_result(SimpleNamespace(status="completed", result=text, ai_messages=messages), task=task)
+    if damage == "stale_action":
+        task.action_id = "spact_new456"
+    if damage != "unreadable":
+        (tmp_path / "answer.json").write_text('["Exact finding"]')
+    state = {"sp_task_contract": task.context_refs["task_contract"], "thread_data": {"outputs_path": str(tmp_path)}}
+    _apply_report_acceptance_checks(normalized, task=task, context=HandlerContext(state=state, stack=TaskMemoryStack()), artifact_adapter=SPArtifactAdapter())
+    assert (normalized.artifact_metadata["completion_status"] == "complete") is (damage is None)
+    assert normalized.artifact_metadata["created_paths"] == ([path] if damage is None else [])
+    assert normalized.artifact_content is None
+
+
 @pytest.mark.parametrize("answer", [[{"text": "原文", "explanation": "A contradiction"}], {"extracted_value": "0", "calculated_value": "0"}])
 def test_structured_envelope_artifact_persists_as_json_not_python_repr(tmp_path, answer):
     text = json.dumps({"summary": "Done", "artifact_content": answer})

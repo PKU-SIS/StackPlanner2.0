@@ -531,6 +531,10 @@ When no finalizable artifact exists, Central receives the actual binding protoco
 final assistant content in the requested public shape. After a clean public
 audit and complete source coverage, Central's control tools are removed for
 that final response. File-producing requests retain native artifact finalization.
+The host public contract records `delivery_mode`: FinAuditing/NBA use `inline`,
+CLAUSE uses `artifact`. Conditional transport guidance cannot turn an inline
+answer into a file request. Incidental specialist artifacts remain context for
+the inline final answer.
 
 `ragflow_retrieve` additionally accepts an optional sample-scoped `document_id`.
 With `page_size=100` it enumerates original indexed chunks without semantic
@@ -573,6 +577,14 @@ actually readable before it can take precedence over generated inline content.
 If the claimed file does not exist, the native fallback validates and saves the
 original inline answer under its current-action filename. A receipt without
 either a real file or an actual valid inline answer remains incomplete.
+An actual paired successful native write also establishes current-action path
+ownership, even when its filename omits the action ID; the host still reads and
+validates the real file. Model-authored write claims cannot establish ownership.
+Schema-valid structured empty arrays remain usable output when no summary is
+present. Missing output is never converted to an empty answer. Public schema
+audits use their explicit value contract and native evidence/status gates;
+generic prose-report heuristics do not reject original source quotations or
+require tool-example placeholder IDs in the answer.
 
 For explicit public output schemas, successful Reporter/auditor finals use the
 raw public JSON/text value directly. The harness replaces its generic outer

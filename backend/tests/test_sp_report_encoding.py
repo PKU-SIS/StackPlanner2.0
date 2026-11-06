@@ -29,3 +29,15 @@ def test_backticked_encoding_is_still_format_not_content():
     action = SPAction.create(ActionType.DELEGATE, reason="audit", target_agent="reporter", task=text)
     tokens = _required_report_literal_tokens(action, SimpleNamespace(state={}), context_refs={"latest_user_input": text})
     assert "UTF-8" not in tokens
+
+
+def test_explicit_public_schema_does_not_infer_transport_placeholder_as_answer_literal():
+    text = (
+        "Preserve the exact output format from the question/rule file. "
+        'For each scoped ID call ragflow_retrieve(question="Read complete indexed source", document_id=THE_REAL_ID, page=1, page_size=100). '
+        "Inspect every returned chunk content; continue until all total chunks are returned and read."
+    )
+    action = SPAction.create(ActionType.DELEGATE, reason="audit", target_agent="reporter", task=text)
+    schema = {"type": "array", "items": {"type": "string"}}
+    tokens = _required_report_literal_tokens(action, SimpleNamespace(state={"sp_task_contract": {"output_schema": schema}}), context_refs={"latest_user_input": text})
+    assert tokens == []

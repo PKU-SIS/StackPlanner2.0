@@ -185,7 +185,7 @@ def _bounded_task_contract(value: Any) -> dict[str, Any] | None:
         "authoritative": bool(value.get("authoritative", True)),
         "immutable": bool(value.get("immutable", True)),
     }
-    for key in ("mode", "instance_id", "source_edit_only", "output_file_extension"):
+    for key in ("mode", "instance_id", "source_edit_only", "output_file_extension", "delivery_mode"):
         if key in value:
             contract[key] = value[key]
     for key in ("original_issue", "acceptance_policy"):

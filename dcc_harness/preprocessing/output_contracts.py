@@ -70,6 +70,7 @@ def _has_public_nba_instructions(body: str) -> bool:
 def public_output_contract(task: PublicTask) -> dict:
     if task.benchmark == "clause":
         return {
+            "delivery_mode": "artifact",
             "output_file_extension": ".json",
             "output_parse_mode": "json",
             "output_schema": {
@@ -116,6 +117,7 @@ def public_output_contract(task: PublicTask) -> dict:
     if not matches and not nba:
         return {}
     contract = copy.deepcopy(matches[0]) if matches else {}
+    contract["delivery_mode"] = "inline"
     context = next(
         (
             json.loads(item.text)

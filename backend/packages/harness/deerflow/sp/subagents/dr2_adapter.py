@@ -946,6 +946,40 @@ def _recover_created_paths(raw_result: Any, ai_messages: Any) -> list[str]:
     return list(dict.fromkeys(recovered))
 
 
+def _successful_output_writes(ai_messages: Any) -> list[str]:
+    """Bind only actual paired successful file-tool results to this action."""
+    calls: dict[str, tuple[str, str]] = {}
+    paths: list[str] = []
+    for message in ai_messages if isinstance(ai_messages, list) else []:
+        if not isinstance(message, Mapping):
+            continue
+        if message.get("type", message.get("role")) in {"ai", "assistant"}:
+            for call in message.get("tool_calls") or []:
+                if not isinstance(call, Mapping) or call.get("name") not in _FILE_WRITE_TOOLS or not call.get("id"):
+                    continue
+                args = _tool_call_args(call.get("args"))
+                path = _output_path(args.get("path")) if args is not None else None
+                if path is not None:
+                    calls[call["id"]] = (call["name"], path)
+            continue
+        if message.get("type", message.get("role")) != "tool" or not _tool_result_succeeded(message):
+            continue
+        pair = calls.get(message.get("tool_call_id"))
+        if pair is not None and message.get("name") == pair[0]:
+            paths.append(pair[1])
+    return list(dict.fromkeys(paths))
+
+
+def _has_schema_artifact_content(content: Any, task: SPSubagentTask | None) -> bool:
+    contract = _public_schema_delivery_contract(task)
+    if content is None or contract is None:
+        return False
+    from deerflow.sp.output_contract import output_contract_gaps
+
+    text = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
+    return not output_contract_gaps({"sp_task_contract": contract}, text)
+
+
 def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = None) -> SPSubagentResult:
     """Normalize DR2 SubagentResult-like objects into SPSubagentResult."""
     from deerflow.sp.source_access import collect_source_access
@@ -1055,7 +1089,7 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
             artifact_metadata["completion_status"] = "partial"
         if stop_reason and not artifact_metadata["evidence_gaps"]:
             artifact_metadata["evidence_gaps"] = [f"Subagent execution ended early: {stop_reason}"]
-        if not str(normalized_result or "").strip() or str(normalized_result).strip() == "No response generated":
+        if (not str(normalized_result or "").strip() or str(normalized_result).strip() == "No response generated") and not _has_schema_artifact_content(artifact_content, task):
             if artifact_metadata["completion_status"] == "complete":
                 artifact_metadata["completion_status"] = "partial"
             if _NO_RESPONSE_GAP not in artifact_metadata["evidence_gaps"]:
@@ -1131,6 +1165,7 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         changed_files=list(dict.fromkeys(changed_files)),
         tests=tests,
         source_access=collect_source_access(ai_messages if isinstance(ai_messages, list) else []),
+        created_path_evidence={"action_id": task.action_id, "paths": _successful_output_writes(ai_messages)} if task is not None else None,
     )
 
 

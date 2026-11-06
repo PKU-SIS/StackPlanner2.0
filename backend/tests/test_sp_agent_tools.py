@@ -106,7 +106,8 @@ def test_missing_public_sources_route_to_contract_auditor_before_perception_reco
 
 
 @pytest.mark.parametrize("format_contract", [{}, {"output_parse_mode": "text", "output_schema": {"type": "string"}}, {"output_parse_mode": "json", "output_schema": {"type": "array"}}])
-def test_completed_public_text_audit_explains_unbound_finish_and_requires_direct_final(format_contract):
+@pytest.mark.parametrize("incidental_artifact", [False, True])
+def test_completed_public_text_audit_explains_unbound_finish_and_requires_direct_final(format_contract, incidental_artifact):
     stack = TaskMemoryStack()
     stack.append_delegate("Audit all operations", run_id="run", metadata={"target_agent": "researcher"})
     stack.append_observe("Public audit completed", actor="researcher", run_id="run", metadata={"completion_status": "complete", "evidence_gaps": []})
@@ -117,6 +118,9 @@ def test_completed_public_text_audit_explains_unbound_finish_and_requires_direct
         "sp_task_contract": {**format_contract, "source_requirements": {"audit_agent": "researcher", "files": []}},
         "messages": [HumanMessage(content="Audit the operations and conclude in the requested text format.")],
     }
+    if incidental_artifact:
+        state["sp_task_contract"]["delivery_mode"] = "inline"
+        state["sp_current_artifact_refs"] = {"generated_file": {"artifact_id": "incidental", "type": "generated_file", "run_id": "run", "virtual_path": "/mnt/user-data/outputs/audit.json", "metadata": {"completion_status": "complete"}}}
     request = _ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=state["messages"])
     filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
     assert filtered.tools == []
@@ -131,6 +135,31 @@ def test_public_source_coverage_without_a_completed_audit_still_requires_auditor
     filtered = SPFinishAvailabilityMiddleware()._filter_request(_ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=state["messages"]))
     assert [tool.name for tool in filtered.tools] == ["sp_delegate"]
     assert filtered.messages[-1].name == "sp_public_source_audit_required"
+
+
+@pytest.mark.parametrize("mode,requires_file", [("inline", False), ("artifact", True)])
+def test_public_delivery_mode_overrides_conditional_transport_file_guidance(mode, requires_file):
+    guidance = (
+        "This is an unattended benchmark. Complete the task without asking the user questions. "
+        "Delegate the complete original question, all evidence paths, and its exact answer format to an execution or reporting specialist. "
+        "Read the supplied rule files with native read_file before answering. Use grep and line ranges for large evidence. "
+        "Delegate only tool_names that actually include every tool needed by the specialist. Follow the currently bound native tool schemas exactly. "
+        "If no FINISH tool is available, return the completed answer directly as ordinary text in the required task format. "
+        "Never output a JSON object or XML block representing an unavailable tool call. "
+        "For a requested file, first delegate its creation and verification, then select its registered reference; never invent an artifact."
+    )
+    state = {"sp_task_contract": {"delivery_mode": mode}, "messages": [HumanMessage(content=guidance + "\nAudit the original scenario.")]}
+    assert SPFinishAvailabilityMiddleware._requires_artifact_delivery(state) is requires_file
+
+
+def test_schema_report_recovery_requires_raw_value_or_actual_file_instead_of_receipt():
+    stack = TaskMemoryStack()
+    stack.append_observe("No real output was delivered", actor="reporter", run_id="run", metadata={"completion_status": "partial", "evidence_gaps": ["Output was only a receipt."]})
+    state = {"sp_loop_run_id": "run", "sp_task_memory": stack.to_dict(), "sp_task_contract": {"output_schema": {"type": "array"}, "delivery_mode": "artifact"}}
+    instruction = SPFinishAvailabilityMiddleware._artifact_recovery_instruction(state)
+    assert "complete revised raw public JSON/text value" in instruction
+    assert "write_file and read back its exact path" in instruction
+    assert "receipt alone is not delivery" in instruction
 
 
 def test_action_budget_sets_independent_central_action_limit():

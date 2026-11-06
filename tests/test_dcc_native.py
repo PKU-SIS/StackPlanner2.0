@@ -389,6 +389,7 @@ def test_clause_source_contract_requires_full_document_and_preserves_audit_role(
         files=(InputFile("document.txt", "first\nsecond\nlast\n"),),
     )
     contract = public_output_contract(public)
+    assert contract["delivery_mode"] == "artifact"
     assert contract["source_requirements"]["audit_agent"] == "reporter"
     assert contract["source_requirements"]["skill_names"] == ["clause"]
     assert contract["source_requirements"]["files"] == [
@@ -428,6 +429,7 @@ def test_public_nba_template_requires_complete_uploaded_rules_without_private_ro
         "document_ids": [],
     }
     assert "output_schema" not in contract
+    assert contract["delivery_mode"] == "inline"
     assert (
         public_output_contract(
             PublicTask(
@@ -438,6 +440,25 @@ def test_public_nba_template_requires_complete_uploaded_rules_without_private_ro
         )
         == {}
     )
+
+
+@pytest.mark.parametrize("subtask", ["finre", "finsm", "finmr"])
+def test_published_filing_tasks_keep_inline_delivery_regardless_of_transport_guidance(
+    subtask,
+):
+    from dcc_harness.data import PublicTask
+    from dcc_harness.preprocessing.output_contracts import public_output_contract
+
+    prompt = (ROOT / f"configs/dcc/prompts/finauditing/{subtask}.md").read_text()
+    public = PublicTask(
+        "dcc",
+        "For a requested file, first delegate its creation and verification.\n"
+        + prompt,
+    )
+    contract = public_output_contract(public)
+    assert contract["delivery_mode"] == "inline"
+    assert contract["source_requirements"]["audit_agent"] == "researcher"
+    assert "output_schema" in contract
 
 
 def test_v3_public_input_builder_stages_neutral_files_without_private_identifiers(
