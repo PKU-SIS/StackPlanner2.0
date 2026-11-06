@@ -175,14 +175,14 @@ class SourcePrefetchVisibilityMiddleware(AgentMiddleware):
         return await handler(complete if within_context else request)
 
 
-def _would_compact(messages: list, middlewares: list) -> bool:
+def _would_compact(messages: list, middlewares: list, *, extra_tokens: int = 0) -> bool:
     for middleware in middlewares:
         if not all(hasattr(middleware, name) for name in ("_messages_for_trigger_count", "_should_summarize", "token_counter")):
             continue
         trigger_messages = middleware._messages_for_trigger_count(messages, None)
         # Leave native estimator room for small before-model annotations as
         # well as respecting the independently counted exact context budget.
-        if middleware._should_summarize(trigger_messages, middleware.token_counter(trigger_messages) + 1024):
+        if middleware._should_summarize(trigger_messages, middleware.token_counter(trigger_messages) + 1024 + extra_tokens):
             return True
     return False
 
@@ -303,7 +303,7 @@ async def prefetch_public_sources(
         return await asyncio.to_thread(count_source_prompt_tokens, messages, tools, settings, thinking_enabled)
 
     async def fits(messages, extra=0):
-        return await count(messages) + extra <= limit and not _would_compact(messages, middlewares)
+        return await count(messages) + extra <= limit and not _would_compact(messages, middlewares, extra_tokens=extra)
 
     messages = state.get("messages", [])
     if not messages:
@@ -348,7 +348,26 @@ async def prefetch_public_sources(
             result = result.model_copy(update={"content": f"[truncated: public source exceeds the remaining prefetch context budget; source remains unread. Read {path or 'the original public source'} with native paginated tools.]"})
             stopped = True
         if not await fits([*messages, result]):
-            raise ValueError("Source prefetch cannot fit the native result reference within its reserved context")
+            # The exact shorter unread marker was checked before execution.
+            # Keep the actual native result's status/metadata; this is only
+            # model-visible budget feedback, never source-read evidence.
+            result = result.model_copy(update={"content": minimal.content})
+            stopped = True
+        if not await fits([*messages, result]):
+            # A native tool can change execution context after preflight.
+            # Hand off to normal summarization/model handling without an
+            # unpaired host call. Remove only this not-yet-exposed request,
+            # preserving every original model answer and prior source pair.
+            stopped = True
+            for index, message in enumerate(messages):
+                if message is ai:
+                    messages.pop(index)
+                    break
+            result = result.model_copy(update={"id": result.id or call_id + "_result", "additional_kwargs": {**result.additional_kwargs, "sp_host_source_prefetch": True, "sp_host_source_prefetch_visible": False}})
+            if capture is not None:
+                capture([ai, result])
+            logger.info("Public-source prefetch stopped after native context changed; unexposed results remain unread and native audit handling continues")
+            return None, False
         result = result.model_copy(update={"id": result.id or call_id + "_result", "additional_kwargs": {**result.additional_kwargs, "sp_host_source_prefetch": True}})
         messages.append(result)
         if capture is not None:

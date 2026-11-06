@@ -637,6 +637,12 @@ A rejected FINISH receives its actual native error and current registered
 artifact references on the next model request, so the model can correct its
 control call or return to the underlying unfinished work. This feedback leaves
 the artifact bytes and native FINISH checks unchanged.
+Optional source prefetch reserves result room against both the exact tokenizer
+and the native summarizer threshold. When that room is unavailable, the normal
+auditor and its source tools continue. An executed result that cannot fit even
+as an unread marker remains unobserved in the tool audit; only its pending host
+request is removed from model input. Existing drafts and prior source context
+stay intact, and native source coverage still requires actual visible reads.
 When required public sources remain unread, Central's next tool binding directs
 the read to the contract-designated auditor with its ordinary scoped tools;
 unrelated perception/coder retries do not consume the audit before it begins.

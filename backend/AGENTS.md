@@ -1326,3 +1326,17 @@ status, or bypass FinishHandler's real file/schema/source checks. Keep source
 recovery and ordinary action budgets unchanged. No prior FINISH rejection means
 no feedback. Tests: `test_sp_finish_control_feedback.py` exercises real rejected
 and corrected FinishHandler calls, including a subsequently invalid artifact.
+
+Source prefetch's `fits(..., extra)` applies the same requested reserve to the
+exact tokenizer and native summarizer trigger. A lower summary threshold must
+not admit a short placeholder without room for the actual native result/ref.
+Budget pressure stops optional prefetch and returns control to the real audit;
+never abort the executor merely because a result reference cannot fit. Use the
+previously checked short unread marker as the final bounded representation. If
+native tool context changed and even that marker no longer fits, remove only
+the current unexposed host AI request, retain its actual execution in capture
+with visibility=false, and leave all original model drafts/earlier source pairs
+untouched. Tool charges, native summarization, source gaps, guard stops and
+public-schema acceptance retain their ordinary behavior. Tests:
+`test_sp_prefetch_budget_handoff.py` reproduces the former exception with the
+real native summarizer and verifies model handoff and original-draft retention.
