@@ -6,7 +6,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 
-from deerflow.sp.source_access import collect_source_access, source_access_gaps
+from deerflow.sp.source_access import collect_source_access, merge_source_access, source_access_gaps
 from deerflow.sp.source_prefetch import SourcePrefetchSettings, mark_prefetch_model_visibility, prefetch_public_sources
 
 
@@ -170,3 +170,65 @@ async def test_real_native_lazy_sandbox_command_preserves_result_and_state():
     recorded = [message.model_dump() for message in state["messages"]]
     mark_prefetch_model_visibility(state["messages"], recorded)
     assert collect_source_access(recorded)["reads"] == {"/mnt/user-data/uploads/rules.txt": [[1, 2]]}
+
+
+@pytest.mark.asyncio
+async def test_prefetch_resumes_real_parent_read_ranges_and_externalized_pages():
+    calls = []
+    artifact = "/mnt/user-data/outputs/.tool-results/old-real-page.json"
+
+    @tool("read_file")
+    def read_file(path: str, description: str, start_line: int, end_line: int) -> str:
+        """Resume the remaining original source line."""
+        calls.append((path, start_line, end_line))
+        return "remaining original source line"
+
+    @tool("ragflow_retrieve")
+    def retrieve(question: str, document_id: str, page: int, page_size: int) -> str:
+        """Fetch only pages that are not already genuinely saved."""
+        raise AssertionError("Existing real externalized page must be resumed, not re-fetched")
+
+    required = {"files": [{"path": "/mnt/user-data/uploads/complete.txt", "total_lines": 2}, {"path": "/mnt/user-data/uploads/partial.txt", "total_lines": 2}], "document_ids": ["doc"]}
+    parent = {
+        "run_id": "run",
+        "reads": {"/mnt/user-data/uploads/complete.txt": [[1, 2]], "/mnt/user-data/uploads/partial.txt": [[1, 1]], artifact: [[3, 3]]},
+        "pages": [{"mode": "document", "document_id": "doc", "page": 1, "page_size": 100, "total": 2, "returned": 2, "chunk_ids": ["a", "b"], "inline_complete": False, "externalized_path": artifact, "content_lines": [3, 5]}],
+    }
+    # A later duplicate RAG response must not erase the old page's progress.
+    parent["pages"].append({**parent["pages"][0], "externalized_path": "/mnt/user-data/outputs/.tool-results/new-unused-copy.json"})
+    state = {"messages": [HumanMessage(content="Continue the audit.")]}
+    await prefetch_public_sources(
+        state=state, tools=[read_file, retrieve], middlewares=[], config={}, context={"run_id": "run"}, settings=_settings(), contract={"source_requirements": required}, observed_source_access=parent, token_counter=_counter
+    )
+    assert calls == [("/mnt/user-data/uploads/partial.txt", 2, 2), (artifact, 5, 5)]
+    recorded = [message.model_dump() for message in state["messages"]]
+    mark_prefetch_model_visibility(state["messages"], recorded)
+    access = merge_source_access(parent, collect_source_access(recorded))
+    assert source_access_gaps({"sp_loop_run_id": "run", "sp_task_contract": {"source_requirements": required}, "sp_source_access": access}) == []
+
+
+@pytest.mark.asyncio
+async def test_prefetch_does_not_skip_sources_from_a_different_run():
+    calls = []
+
+    @tool("read_file")
+    def read_file(path: str, description: str, start_line: int, end_line: int) -> str:
+        """Read the source for this actual run."""
+        calls.append((start_line, end_line))
+        return "first\nsecond"
+
+    path = "/mnt/user-data/uploads/rules.txt"
+    parent = {"run_id": "old", "reads": {path: [[1, 2]]}, "pages": []}
+    state = {"messages": [HumanMessage(content="Audit source in the new run.")]}
+    await prefetch_public_sources(
+        state=state,
+        tools=[read_file],
+        middlewares=[],
+        config={},
+        context={"run_id": "new"},
+        settings=_settings(),
+        contract={"source_requirements": {"files": [{"path": path, "total_lines": 2}]}},
+        observed_source_access=parent,
+        token_counter=_counter,
+    )
+    assert calls == [(1, 2)]

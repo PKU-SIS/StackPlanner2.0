@@ -1202,3 +1202,9 @@ designated auditor has recovery budget, bind only `sp_delegate` and direct it
 to that auditor's allowed read/RAG tools and public Skills. Keep duplicate-role
 policy checkpoints and bounded recovery intact; do not broaden another role's
 permissions or infer coverage from the model's completion claims.
+Pass prior `sp_source_access` to prefetch through the host-only executor field,
+never model/task metadata. Validate run isolation, use the same source coverage
+checks to skip completed sources, and resume exact missing file ranges and old
+native externalized page content lines. Prefer the most progressed genuine page
+snapshot; do not re-fetch it under a new path and restart the prefix. New reads
+still need the model-visibility observer before entering the source proof ledger.

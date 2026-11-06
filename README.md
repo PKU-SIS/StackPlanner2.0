@@ -572,3 +572,7 @@ source-access and native execution checks remain mandatory.
 When required public sources remain unread, Central's next tool binding directs
 the read to the contract-designated auditor with its ordinary scoped tools;
 unrelated perception/coder retries do not consume the audit before it begins.
+Later delegations resume the host's actual same-run source ledger: skip covered
+files/documents, read only missing file ranges, and continue unread content lines
+in already externalized native RAG pages. Existing evidence paths remain the
+source of truth, so repeated prefetch cannot spend its budget on the same prefix.

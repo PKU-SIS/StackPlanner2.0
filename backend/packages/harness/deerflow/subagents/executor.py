@@ -443,6 +443,7 @@ class SubagentExecutor:
         reporter_action_id: str | None = None,
         source_prefetch_settings: Any | None = None,
         source_prefetch_contract: Mapping[str, Any] | None = None,
+        source_prefetch_access: Mapping[str, Any] | None = None,
     ):
         """Initialize the executor.
 
@@ -502,6 +503,7 @@ class SubagentExecutor:
             source_prefetch_settings: Trusted opt-in public-source token budgets
                 and local tokenizer; kept outside graph/model state.
             source_prefetch_contract: Public source requirements for this auditor.
+            source_prefetch_access: Host-observed prior source reads for this run.
         """
         self.config = config
         self.app_config = app_config
@@ -539,6 +541,7 @@ class SubagentExecutor:
         self.reporter_action_id = reporter_action_id
         self.source_prefetch_settings = source_prefetch_settings
         self.source_prefetch_contract = source_prefetch_contract
+        self.source_prefetch_access = source_prefetch_access
         self._runtime_middlewares: list[Any] = []
         self._prefetch_captured: list[dict[str, Any]] = []
         self.thinking_enabled = thinking_enabled
@@ -1018,6 +1021,7 @@ class SubagentExecutor:
                     context=context,
                     settings=self.source_prefetch_settings,
                     contract=self.source_prefetch_contract,
+                    observed_source_access=self.source_prefetch_access,
                     capture=capture_prefetch,
                     thinking_enabled=self.thinking_enabled,
                     max_tool_calls=self.budgets.get("max_tool_calls", 50),

@@ -516,6 +516,7 @@ class DR2SPExecutorProvider:
                 reporter_action_id=task.action_id if task.subagent_type == "reporter" else None,
                 source_prefetch_settings=source_prefetch_settings if prefetch_for_auditor else None,
                 source_prefetch_contract=public_contract if prefetch_for_auditor else None,
+                source_prefetch_access=state.get("sp_source_access") if prefetch_for_auditor else None,
             )
 
         def observe_raw_result(raw_result: Any) -> None:

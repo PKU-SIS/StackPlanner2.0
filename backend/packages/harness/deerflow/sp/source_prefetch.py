@@ -122,6 +122,21 @@ def _source_coverage(result: ToolMessage) -> dict:
     return parsed.get("source_coverage", {}) if isinstance(parsed, dict) else {}
 
 
+def _unread_line_ranges(total: int, ranges: list) -> list[tuple[int, int]]:
+    cursor = 1
+    missing = []
+    valid = sorted((pair[0], pair[1]) for pair in ranges if isinstance(pair, list | tuple) and len(pair) == 2 and all(isinstance(value, int) and not isinstance(value, bool) for value in pair) and pair[0] > 0 and pair[1] >= pair[0])
+    for lower, upper in valid:
+        if lower > cursor:
+            missing.append((cursor, min(total, lower - 1)))
+        cursor = max(cursor, upper + 1)
+        if cursor > total:
+            break
+    if cursor <= total:
+        missing.append((cursor, total))
+    return missing
+
+
 async def _native_call(request: ToolCallRequest, middlewares: list) -> ToolMessage:
     """Use exactly the graph's native interceptor order, including guardrails."""
 
@@ -181,6 +196,7 @@ async def prefetch_public_sources(
     thinking_enabled: bool | None = None,
     max_tool_calls: int = 50,
     cancelled: Callable[[], bool] | None = None,
+    observed_source_access: Mapping[str, Any] | None = None,
 ) -> None:
     """Append genuine source reads within a prompt budget; never create answers."""
     required = contract.get("source_requirements")
@@ -189,6 +205,19 @@ async def prefetch_public_sources(
     available = {tool.name: tool for tool in tools if tool.name in {"read_file", "ragflow_retrieve"}}
     if not available:
         return
+    from deerflow.sp.source_access import source_access_gaps
+
+    observed = observed_source_access if isinstance(observed_source_access, Mapping) else {}
+    if observed.get("run_id") and context.get("run_id") and observed["run_id"] != context["run_id"]:
+        observed = {}
+    reads = observed.get("reads") or {}
+
+    def covered(*, files=None, document_ids=None):
+        return not source_access_gaps({"sp_loop_run_id": context.get("run_id"), "sp_task_contract": {"source_requirements": {"files": files or [], "document_ids": document_ids or []}}, "sp_source_access": observed})
+
+    def line_read(path, line):
+        return any(lower <= line <= upper for lower, upper in reads.get(path, []))
+
     limit = settings.context_tokens - settings.response_tokens - _RESERVED_OVERHEAD_TOKENS
 
     async def count(messages):
@@ -255,23 +284,64 @@ async def prefetch_public_sources(
             return
         body = result.content if isinstance(result.content, str) else ""
         if result.status == "error" or body.startswith(("Error:", "(empty")):
-            return
+            return result
         if (not retained or "[truncated:" in body or "[Full read_file output saved to" in body) and end > start and not stopped:
             middle = (start + end) // 2
             await read_range(path, start, middle)
             await read_range(path, middle + 1, end)
+        return result
 
     for file in required.get("files", []):
         if not isinstance(file, Mapping):
             continue
         path, lines = file.get("path"), file.get("total_lines")
         if isinstance(path, str) and path.startswith("/mnt/user-data/uploads/") and posixpath.normpath(path) == path and isinstance(lines, int) and not isinstance(lines, bool) and lines > 0:
-            await read_range(path, 1, lines)
+            if covered(files=[file]):
+                continue
+            for start, end in _unread_line_ranges(lines, reads.get(path, [])):
+                await read_range(path, start, end)
     for document_id in required.get("document_ids", []):
         if not isinstance(document_id, str) or not document_id:
             continue
+        if covered(document_ids=[document_id]):
+            continue
+        # Reuse actual saved native pages rather than issuing another RAG call
+        # with a fresh externalized path and rereading the same first chunks.
+        saved_pages = {}
+        for saved in observed.get("pages", []):
+            if saved.get("mode") != "document" or saved.get("document_id") != document_id or not isinstance(saved.get("page"), int) or saved["page"] < 1:
+                continue
+            path = saved.get("externalized_path")
+            inline = saved.get("inline_complete") is True
+            if not inline and not (isinstance(path, str) and path.startswith("/mnt/user-data/outputs/") and posixpath.normpath(path) == path and saved.get("content_lines")):
+                continue
+            key = (saved["page"], saved.get("page_size"))
+            remaining = 0 if inline else sum(not line_read(path, line) for line in saved["content_lines"])
+            if key not in saved_pages or remaining < saved_pages[key][0]:
+                saved_pages[key] = (remaining, saved)
+        reusable = set()
+        for _, saved in sorted(saved_pages.values(), key=lambda pair: pair[1]["page"]):
+            path = saved.get("externalized_path")
+            usable = True
+            if not saved.get("inline_complete"):
+                for line in saved.get("content_lines", []):
+                    if not isinstance(line, int) or isinstance(line, bool) or line < 1 or line_read(path, line):
+                        continue
+                    result = await read_range(path, line, line)
+                    if result is not None and (result.status == "error" or str(result.content).startswith(("Error:", "(empty"))):
+                        usable = False
+                        break
+            if usable and saved.get("page_size") == 100 and isinstance(saved.get("total"), int) and (saved["total"] > 0 or saved.get("document_bytes") == 0):
+                reusable.add(saved["page"])
+        totals = [saved["total"] for _, saved in saved_pages.values() if isinstance(saved.get("total"), int) and saved["total"] >= 0]
+        known_last = max(1, math.ceil(max(totals) / 100)) if totals else None
         page = 1
         while not stopped:
+            if page in reusable:
+                if known_last is not None and page >= known_last:
+                    break
+                page += 1
+                continue
             result, _ = await call("ragflow_retrieve", {"question": "Read complete scoped public source evidence", "document_id": document_id, "page": page, "page_size": 100})
             if result is None or result.status == "error":
                 break
