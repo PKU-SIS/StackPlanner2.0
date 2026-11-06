@@ -208,6 +208,24 @@ class TestHashToolCalls:
 
 
 class TestLoopDetection:
+    def test_ragflow_distinct_pages_and_documents_are_progress(self):
+        middleware = LoopDetectionMiddleware()
+        runtime = _make_runtime()
+        for document in ("one", "two"):
+            for page in range(1, 5):
+                call = {"name": "ragflow_retrieve", "id": f"{document}-{page}", "args": {"question": "audit", "query": "audit", "document_id": document, "page": page, "page_size": 100}}
+                assert middleware._apply(_make_state(tool_calls=[call]), runtime) is None
+        assert middleware.consume_stop_reason("test-run") is None
+
+    def test_identical_ragflow_page_still_reaches_hard_stop(self):
+        middleware = LoopDetectionMiddleware()
+        runtime = _make_runtime()
+        call = {"name": "ragflow_retrieve", "id": "same", "args": {"question": "audit", "query": "audit", "document_id": "one", "page": 1, "page_size": 100}}
+        for _ in range(4):
+            assert middleware._apply(_make_state(tool_calls=[call]), runtime) is None
+        assert middleware._apply(_make_state(tool_calls=[call]), runtime)["messages"][0].tool_calls == []
+        assert middleware.consume_stop_reason("test-run") == "loop_capped"
+
     def test_scanning_distinct_chunks_does_not_warn_or_stop(self):
         middleware = LoopDetectionMiddleware()
         runtime = _make_runtime()

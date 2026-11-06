@@ -124,6 +124,8 @@ class SPSubagentResult:
     recommended_action: str | None = None
     changed_files: list[str] = field(default_factory=list)
     tests: list[dict[str, Any]] = field(default_factory=list)
+    # Host-derived access only; never deserialized from a model result payload.
+    source_access: dict[str, Any] | None = None
 
     def protocol_payload(self, *, task: SPSubagentTask | None = None) -> dict[str, Any]:
         """Return a compact result envelope; never include hidden reasoning."""

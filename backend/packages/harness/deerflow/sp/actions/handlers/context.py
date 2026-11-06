@@ -185,7 +185,7 @@ def _bounded_task_contract(value: Any) -> dict[str, Any] | None:
         "authoritative": bool(value.get("authoritative", True)),
         "immutable": bool(value.get("immutable", True)),
     }
-    for key in ("mode", "instance_id", "source_edit_only"):
+    for key in ("mode", "instance_id", "source_edit_only", "output_file_extension"):
         if key in value:
             contract[key] = value[key]
     for key in ("original_issue", "acceptance_policy"):
@@ -200,6 +200,9 @@ def _bounded_task_contract(value: Any) -> dict[str, Any] | None:
     if isinstance(schema, dict) and len(json.dumps(schema, ensure_ascii=False)) <= MAX_HANDLER_TASK_CONTRACT_CHARS:
         contract["output_schema"] = schema
         contract["output_parse_mode"] = value.get("output_parse_mode", "json")
+    sources = value.get("source_requirements")
+    if isinstance(sources, dict) and len(json.dumps(sources, ensure_ascii=False)) <= MAX_HANDLER_TASK_CONTRACT_CHARS:
+        contract["source_requirements"] = sources
     return contract
 
 

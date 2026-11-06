@@ -547,6 +547,12 @@ def merge_skill_context(existing: list[SkillEntry] | None, new: list[SkillEntry]
     return merged
 
 
+def merge_sp_source_access(left: dict | None, right: dict | None) -> dict:
+    from deerflow.sp.source_access import merge_source_access
+
+    return merge_source_access(left, right)
+
+
 class ThreadState(AgentState):
     sandbox: SandboxStateField
     thread_data: NotRequired[ThreadDataState | None]
@@ -565,6 +571,7 @@ class ThreadState(AgentState):
     sp_non_interactive: NotRequired[bool]
     sp_recovery_limits: NotRequired[dict[str, int]]
     sp_recovery_exhausted: NotRequired[dict[str, Any] | None]
+    sp_source_access: Annotated[NotRequired[dict[str, Any] | None], merge_sp_source_access]
     sp_task_memory: Annotated[SPTaskMemoryState | None, merge_sp_task_memory]
     sp_consumed_tool_observation_ids: ConsumedToolObservationIdsField
     sp_current_stage: Annotated[NotRequired[str | None], merge_sp_last_value]

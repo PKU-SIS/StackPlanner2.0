@@ -511,3 +511,23 @@ actual content line numbers for native `read_file`, matching/returned/excerpted
 counts and explicit unread source markers. Excerpts do not establish complete
 retrieval or an evidence audit. Larger preview budgets can show more chunks;
 complete evidence remains available in the saved file.
+
+Evidence-required native tasks carry public `source_requirements`: exact source
+file paths/line counts and, for FinAuditing RAG, the sample's public document IDs.
+Actual successful tool results establish read ranges and document-page coverage;
+model-authored completion metadata cannot supply this proof. Truncated reads,
+zero-match queries and previews remain incomplete. Missing reads trigger bounded
+recovery before any final answer, including a format-valid `[]` or raw label.
+CLAUSE retains its Reporter/clause audit policy and requires the complete public
+document; FinAuditing retains Researcher for filing evidence. These checks do
+not infer findings, require nonempty predictions or replace semantic auditing.
+
+`ragflow_retrieve` additionally accepts an optional sample-scoped `document_id`.
+With `page_size=100` it enumerates original indexed chunks without semantic
+filtering; page until all chunks are received. The first per-thread/page snapshot
+is cached outside the sandbox mount and retains source update time. Complete
+inline results count as read; externalized results count only after actual native
+reads cover their content lines. Larger documents can be read in bounded ranges.
+Paging/different documents have distinct loop-detection identities; the same
+request still reaches the usual cap. Native textual JSON fallback artifacts use
+the published `.json` extension.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from functools import lru_cache
 from pathlib import Path
 
@@ -46,6 +47,22 @@ def _published_formats() -> tuple[tuple[str, dict], ...]:
 
 
 def public_output_contract(task: PublicTask) -> dict:
+    if task.benchmark == "clause":
+        return {
+            "output_file_extension": ".json",
+            "source_requirements": {
+                "audit_agent": "reporter",
+                "skill_names": ["clause"],
+                "document_ids": [],
+                "files": [
+                    {
+                        "path": f"/mnt/user-data/uploads/{item.name}",
+                        "total_lines": len(item.text.splitlines()),
+                    }
+                    for item in task.files
+                ],
+            },
+        }
     if task.benchmark not in {"dcc", "dcc_files", "dcc_inline"}:
         return {}
     bodies = [task.prompt, *(item.text for item in task.files)]
@@ -59,4 +76,29 @@ def public_output_contract(task: PublicTask) -> dict:
     # Return independent state, never expose a mutable shared template.
     import copy
 
-    return copy.deepcopy(matches[0]) if matches else {}
+    if not matches:
+        return {}
+    contract = copy.deepcopy(matches[0])
+    context = next(
+        (
+            json.loads(item.text)
+            for item in task.files
+            if item.name == "dcc-context.json"
+        ),
+        {},
+    )
+    contract["source_requirements"] = {
+        "audit_agent": "researcher",
+        "files": [
+            {
+                "path": f"/mnt/user-data/uploads/{item.name}",
+                "total_lines": len(item.text.splitlines()),
+            }
+            for item in task.files
+        ],
+        "document_ids": context.get("retrieval", {}).get("document_ids", []),
+    }
+    contract["output_file_extension"] = (
+        ".json" if contract["output_parse_mode"] == "json" else ".txt"
+    )
+    return contract

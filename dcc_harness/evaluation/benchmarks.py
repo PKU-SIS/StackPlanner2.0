@@ -158,10 +158,14 @@ def extract_delivery(
 
 def _check_public_output_contract(state: dict, text: str) -> None:
     from deerflow.sp.output_contract import output_contract_gaps
+    from deerflow.sp.source_access import source_access_gaps
 
     gaps = output_contract_gaps(state, text)
     if gaps:
         raise DeliveryError("final_parse_error", "; ".join(gaps))
+    gaps = source_access_gaps(state)
+    if gaps:
+        raise DeliveryError("unfinished", "; ".join(gaps))
 
 
 def _native_text_delivery(state: dict, *, run_id: str, native_returned: bool) -> str:

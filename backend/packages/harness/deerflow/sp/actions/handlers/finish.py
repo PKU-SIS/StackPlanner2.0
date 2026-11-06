@@ -13,6 +13,7 @@ from deerflow.sp.actions.handlers.base import HandlerContext
 from deerflow.sp.actions.schema import HandlerResult, SPAction
 from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.output_contract import output_contract_gaps
+from deerflow.sp.source_access import source_access_gaps
 from deerflow.utils.messages import message_to_text
 
 _REPORT_ARTIFACT_TYPES = frozenset({"report", "report_revision", "final_report"})
@@ -385,7 +386,7 @@ class FinishHandler:
         if selected is not None and isinstance(context.state.get("sp_task_contract"), Mapping) and "output_schema" in context.state["sp_task_contract"]:
             materialized = SPArtifactAdapter().read_text_artifact(selected, state=context.state, thread_id=context.thread_id, max_chars=16 * 1024 * 1024)
             validation_text = materialized[0] if materialized is not None and not materialized[1] else None
-        gaps = output_contract_gaps(context.state, validation_text)
+        gaps = [*output_contract_gaps(context.state, validation_text), *source_access_gaps(context.state)]
         if gaps:
             return HandlerResult(
                 next_step="error_recoverable", idempotency_key=action.idempotency_key, error="; ".join(gaps),

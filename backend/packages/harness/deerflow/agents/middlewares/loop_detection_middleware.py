@@ -140,6 +140,21 @@ def _stable_tool_key(name: str, args: dict, fallback_key: str | None) -> str:
             return fallback_key
         return json.dumps(args, sort_keys=True, default=str)
 
+    if name == "ragflow_retrieve":
+        # A page or document change is source progress. In document mode the
+        # question is descriptive only, so changing it cannot evade the cap.
+        stable_args = {"document_id": args.get("document_id")}
+        if not stable_args["document_id"]:
+            stable_args["question"] = args.get("question", args.get("query"))
+        for field, default in (("page", 1), ("page_size", 10)):
+            value = args.get(field, default)
+            try:
+                value = int(value)
+            except (TypeError, ValueError):
+                pass
+            stable_args[field] = value
+        return json.dumps(stable_args, sort_keys=True, default=str)
+
     salient_fields = ("path", "url", "query", "command", "pattern", "glob", "cmd")
     stable_args = {field: args[field] for field in salient_fields if args.get(field) is not None}
     if stable_args:

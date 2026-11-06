@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import shlex
 import uuid
 from collections.abc import Awaitable, Callable
@@ -515,6 +516,21 @@ def _patch_tool_message(
         return msg
 
     update: dict[str, Any] = {"content": replacement}
+    if tool_name == "ragflow_retrieve":
+        try:
+            raw = json.loads(text)
+            coverage = raw.get("source_coverage")
+        except (ValueError, AttributeError):
+            coverage = None
+        if isinstance(coverage, dict) and coverage.get("mode") == "document":
+            location = re.search(r"Full (?:unmodified JSON|ragflow_retrieve output) saved to (/\S+)", replacement)
+            artifact = dict(msg.artifact) if isinstance(msg.artifact, dict) else {}
+            artifact["native_source_coverage"] = {
+                **coverage,
+                "externalized_path": location.group(1) if location else None,
+                "content_lines": [index for index, line in enumerate(text.splitlines(), 1) if line.lstrip().startswith('"content": ')],
+            }
+            update["artifact"] = artifact
     if getattr(msg, "response_metadata", None):
         update["response_metadata"] = dict(msg.response_metadata)
     if getattr(msg, "additional_kwargs", None):

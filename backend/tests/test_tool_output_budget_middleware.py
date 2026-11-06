@@ -111,6 +111,19 @@ def test_small_retrieval_preview_marks_unshown_chunks_and_matches_line_numbers()
         assert '"content":' in content.splitlines()[int(line) - 1]
 
 
+def test_externalized_document_keeps_host_coverage_in_tool_artifact(tmp_path):
+    from deerflow.agents.middlewares.tool_output_budget_middleware import _patch_tool_message
+
+    coverage = {"mode": "document", "document_id": "doc", "total": 1, "chunk_ids": ["c"]}
+    body = json.dumps({"chunks": [{"content": "SOURCE" * 1000}], "source_coverage": coverage}, indent=2)
+    result = _patch_tool_message(_tm(body, name="ragflow_retrieve"), config=ToolOutputConfig(externalize_min_chars=500), outputs_path=str(tmp_path))
+    source = result.artifact["native_source_coverage"]
+    assert source["document_id"] == "doc"
+    assert source["externalized_path"].startswith("/mnt/user-data/outputs/")
+    for line in source["content_lines"]:
+        assert '"content":' in body.splitlines()[line - 1]
+
+
 class TestSnapToLineBoundary:
     def test_snaps_to_newline(self):
         text = "line1\nline2\nline3"

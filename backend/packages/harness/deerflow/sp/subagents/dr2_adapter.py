@@ -556,9 +556,9 @@ def coder_task_kind(task: SPSubagentTask) -> str:
     return "inspection"
 
 
-def coder_task_requires_implementation(task: SPSubagentTask) -> bool:
+def coder_task_requires_implementation(task: SPSubagentTask | None) -> bool:
     """A software mutation needs source evidence; verification alone never does."""
-    if task.subagent_type != "coder":
+    if task is None or task.subagent_type != "coder":
         return False
     if is_data_processing_coder(task.metadata):
         return False
@@ -906,6 +906,8 @@ def _recover_created_paths(raw_result: Any, ai_messages: Any) -> list[str]:
 
 def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = None) -> SPSubagentResult:
     """Normalize DR2 SubagentResult-like objects into SPSubagentResult."""
+    from deerflow.sp.source_access import collect_source_access
+
     raw_status = getattr(result, "status", None)
     status_value = getattr(raw_status, "value", raw_status)
     try:
@@ -1077,6 +1079,7 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         recommended_action="retry" if retryable else "accept",
         changed_files=list(dict.fromkeys(changed_files)),
         tests=tests,
+        source_access=collect_source_access(ai_messages if isinstance(ai_messages, list) else []),
     )
 
 
@@ -1111,6 +1114,11 @@ def _merge_research_continuations(
 ) -> SPSubagentResult:
     if len(results) == 1:
         return results[0]
+    from deerflow.sp.source_access import merge_source_access
+
+    access = {}
+    for result in results:
+        access = merge_source_access(access, result.source_access)
 
     successful = [result for result in results if result.status == SPSubagentStatus.COMPLETED]
     base = successful[-1] if successful else results[-1]
@@ -1164,6 +1172,7 @@ def _merge_research_continuations(
         recommended_action="retry" if (base.retryable or failed_tail is not None) else "accept",
         changed_files=list(dict.fromkeys(path for result in results for path in result.changed_files)),
         tests=[test for result in results for test in result.tests],
+        source_access=access,
     )
 
 

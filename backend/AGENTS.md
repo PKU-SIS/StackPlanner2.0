@@ -1134,3 +1134,19 @@ uses the existing head+tail budget for evenly distributed original chunk
 excerpts, exact saved content-line references and explicit unread/paging
 counts. Never infer absence or audit completion from those excerpts. Other
 tools and failed persistence retain their existing preview/fallback behavior.
+
+`sp/source_access.py` implements the public source-read gate. Only captured,
+paired successful ToolMessages populate the host-only SPSubagentResult field;
+model JSON cannot set it. Read ranges and fully observed document pages merge
+across same-run delegations and Researcher continuations, with run isolation and
+idempotent sibling merging. Reporter/Researcher acceptance, Central text, FINISH
+and offline extraction all retain missing source coverage as blocking. Explicit
+limitations cannot waive this gate. CLAUSE requires its complete public file and
+preserves Reporter/clause; Fin requires public rule/context reads plus every
+sample-scoped document page. No gold or nonempty-answer heuristic is involved.
+`ragflow_retrieve(document_id=...)` uses scoped GET chunk enumeration and a
+host-only first-snapshot cache. Its source coverage survives externalization in
+a tool artifact; previews do not count as a full read. Read actual content lines.
+The ragflow loop key includes document/page/page_size and semantic question only
+when querying; changing descriptive text cannot evade identical-document caps.
+Keep the gate's proof checks separate from semantic accuracy claims.

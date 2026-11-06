@@ -3169,6 +3169,16 @@ def test_reporter_dispatch_uses_same_explicit_budget_as_schema_gate():
     assert stack.entries[-1].metadata["completion_status"] == "partial"
 
 
+def test_native_inline_json_materialization_obeys_public_file_extension(tmp_path):
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Report complete", artifact_content="[]", artifact_metadata={"completion_status": "complete", "filename": "draft.md"}))
+    state = {**_thread_state_with_outputs(tmp_path), "sp_task_contract": {"output_file_extension": ".json"}}
+    result = build_default_action_router(delegate_executor=executor).execute(
+        _action(ActionType.DELEGATE, target_agent="reporter", task="Return JSON array", stage="reporting"), state=state, run_id="run-1",
+    )
+    ref = result.state_update["sp_current_artifact_refs"]["report_revision"]
+    assert ref["virtual_path"].endswith(".json")
+
+
 def test_reporter_literal_acceptance_guard_marks_missing_report_partial_and_retries_as_revision(
     tmp_path,
 ):

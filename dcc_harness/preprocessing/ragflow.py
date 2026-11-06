@@ -138,6 +138,15 @@ class RagflowClient:
             raise RagflowError("retrieval did not return a chunks list")
         return data
 
+    def document_chunks(self, dataset_id: str, document_id: str, page: int, page_size: int) -> dict:
+        """Enumerate a caller-validated document without semantic filtering."""
+        from urllib.parse import quote
+
+        data = self._request("GET", f"/datasets/{quote(dataset_id, safe='')}/documents/{quote(document_id, safe='')}/chunks", params={"page": page, "page_size": page_size})
+        if not isinstance(data, dict) or not isinstance(data.get("chunks"), list) or not isinstance(data.get("total"), int):
+            raise RagflowError("document chunk listing did not return chunks and an integer total")
+        return data
+
     def embedding_models(self) -> list[dict]:
         """RAGFlow 0.26+ model readiness probe, excluding provider secrets."""
         data = self._request("GET", "/models", params={"type": "embedding"})

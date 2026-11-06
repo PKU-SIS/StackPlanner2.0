@@ -303,6 +303,45 @@ def test_native_retrieval_normalizes_filename_aliases_without_changing_xml(
     assert observed[0]["page"] == 2 and observed[0]["page_size"] == 100
 
 
+def test_native_document_enumeration_is_scoped_complete_and_cached(native_bundle, monkeypatch):
+    from deerflow.runtime.user_context import get_effective_user_id
+
+    from dcc_harness.preprocessing import native_tools
+
+    _, task = native_bundle
+    prepare_inputs(task.public_input(), "document-thread")
+    observed = []
+
+    class Client:
+        def __init__(self, config):
+            self.session = SimpleNamespace(close=lambda: None)
+
+        def document_chunks(self, dataset, document, page, page_size):
+            observed.append((dataset, document, page, page_size))
+            return {"total": 1, "doc": {"size": 17, "update_time": 123}, "chunks": [{"id": "c", "document_id": "doc", "content": "<fact>100</fact>"}]}
+
+    monkeypatch.setattr(native_tools, "RagflowClient", Client)
+    for _ in range(2):
+        value = json.loads(native_tools._retrieve_for_thread("document-thread", "read source", 1, 100, user_id=get_effective_user_id(), document_id="doc"))
+        assert value["chunks"][0]["content"] == "<fact>100</fact>"
+        assert value["source_coverage"]["mode"] == "document"
+    assert observed == [("kb", "doc", 1, 100)]
+    with pytest.raises(ValueError, match="scope"):
+        native_tools._retrieve_for_thread("document-thread", "read", 1, 100, user_id=get_effective_user_id(), document_id="other")
+
+
+def test_clause_source_contract_requires_full_document_and_preserves_audit_role():
+    from dcc_harness.data import InputFile, PublicTask
+    from dcc_harness.preprocessing.output_contracts import public_output_contract
+
+    public = PublicTask("clause", "Audit the entire document.", files=(InputFile("document.txt", "first\nsecond\nlast\n"),))
+    contract = public_output_contract(public)
+    assert contract["source_requirements"]["audit_agent"] == "reporter"
+    assert contract["source_requirements"]["skill_names"] == ["clause"]
+    assert contract["source_requirements"]["files"] == [{"path": "/mnt/user-data/uploads/document.txt", "total_lines": 3}]
+    assert contract["output_file_extension"] == ".json"
+
+
 def test_v3_public_input_builder_stages_neutral_files_without_private_identifiers(
     native_bundle,
 ):

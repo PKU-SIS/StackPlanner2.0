@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -16,6 +17,7 @@ from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.memory import StackMemoryEntry
 from deerflow.sp.output_contract import output_contract_gaps
 from deerflow.sp.recovery import recovery_limit
+from deerflow.sp.source_access import merge_source_access, source_access_gaps
 from deerflow.sp.subagents import SPSubagentExecutorProtocol, SPSubagentResult, SPSubagentTask
 from deerflow.sp.subagents.dr2_adapter import coder_task_kind, coder_task_requires_implementation, is_data_processing_coder
 
@@ -716,9 +718,22 @@ class DelegateHandler:
         task.validate_protocol()
 
         result = self._executor.execute(task)
+        access = merge_source_access(context.state.get("sp_source_access"), {**(result.source_access or {}), "run_id": context.run_id})
+        context = replace(context, state={**context.state, "sp_source_access": access})
+        if action.target_agent in {"researcher", "reporter"}:
+            gaps = source_access_gaps(context.state)
+            if gaps:
+                result.artifact_metadata["completion_status"] = "partial"
+                result.artifact_metadata["evidence_gaps"] = list(dict.fromkeys([*(result.artifact_metadata.get("evidence_gaps") or []), *gaps]))
+                result.completion_status = "partial"
+                result.retryable = True
+                result.recommended_action = "retry"
         if result.is_success:
-            return self._handle_success(action, context, delegate_entry, result, task=task)
-        return self._handle_failure(action, context, delegate_entry, result)
+            handled = self._handle_success(action, context, delegate_entry, result, task=task)
+        else:
+            handled = self._handle_failure(action, context, delegate_entry, result)
+        handled.state_update["sp_source_access"] = access
+        return handled
 
     def _materialize_stage_artifacts(self, action: SPAction, context: HandlerContext) -> dict[str, Any]:
         candidates = _artifact_candidates_for_role(action, context)
@@ -898,6 +913,10 @@ class DelegateHandler:
                 }
                 else _text_artifact_filename_hint(result.artifact_metadata)
             )
+            public_contract = context.state.get("sp_task_contract") or {}
+            extension = public_contract.get("output_file_extension")
+            if action.target_agent == "reporter" and extension in {".json", ".txt"}:
+                filename_hint = f"{action.action_id}{extension}"
             previous_artifact_id = _current_artifact_id(
                 context.state.get("sp_current_artifact_refs"),
                 artifact_type,
@@ -1551,6 +1570,7 @@ def _apply_report_acceptance_checks(
     status = str(result.artifact_metadata.get("completion_status") or "complete").strip().lower()
     accept_disclosed_data_gap = bool(
         no_data_constraint
+        and not source_access_gaps(context.state)
         and status in {"partial", "blocked"}
         and not result.stop_reason
         and output
