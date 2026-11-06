@@ -444,6 +444,7 @@ class SubagentExecutor:
         source_prefetch_settings: Any | None = None,
         source_prefetch_contract: Mapping[str, Any] | None = None,
         source_prefetch_access: Mapping[str, Any] | None = None,
+        public_output_contract: Mapping[str, Any] | None = None,
     ):
         """Initialize the executor.
 
@@ -504,6 +505,8 @@ class SubagentExecutor:
                 and local tokenizer; kept outside graph/model state.
             source_prefetch_contract: Public source requirements for this auditor.
             source_prefetch_access: Host-observed prior source reads for this run.
+            public_output_contract: Public artifact schema eligible for bounded
+                format feedback inside this same native auditor instance.
         """
         self.config = config
         self.app_config = app_config
@@ -542,6 +545,7 @@ class SubagentExecutor:
         self.source_prefetch_settings = source_prefetch_settings
         self.source_prefetch_contract = source_prefetch_contract
         self.source_prefetch_access = source_prefetch_access
+        self.public_output_contract = public_output_contract
         self._runtime_middlewares: list[Any] = []
         self._prefetch_captured: list[dict[str, Any]] = []
         self.thinking_enabled = thinking_enabled
@@ -623,6 +627,12 @@ class SubagentExecutor:
         # is picked up automatically.
         self._stop_reason_middlewares = [m for m in middlewares if hasattr(m, "consume_stop_reason")]
         self._runtime_middlewares = middlewares
+        if self.public_output_contract is not None:
+            from deerflow.sp.public_format_repair import PublicArtifactFormatRepairMiddleware
+
+            # Reverse after_model order: native cost/safety guards must run
+            # before a format-correction jump can re-enter the model.
+            middlewares.insert(0, PublicArtifactFormatRepairMiddleware(self.public_output_contract, action_id=self.reporter_action_id))
         if self.source_prefetch_settings is not None:
             from deerflow.sp.source_prefetch import SourcePrefetchVisibilityMiddleware
 

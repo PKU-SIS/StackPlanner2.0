@@ -1245,3 +1245,20 @@ native evidence gaps, requiring a materially different method and the complete
 original audit. Do not mark an unperformed analysis complete. Duplicate-role
 policy checkpoints retain priority over source-audit filtering; genuine partial
 delegations may retry under the router's existing bounded recovery policy.
+
+`sp/public_format_repair.py` provides two bounded native `jump_to=model`
+corrections for invalid public final values. Artifact auditors retain their
+source/draft context through executor middleware. For inline delivery, Central
+uses this feedback only after both source coverage and actual auditor completion
+are clean; it must not convert pure format repair into a new file Reporter task.
+Host feedback markers retain candidate bytes, scope attempts to the native
+run/action, and inject nonpersistent schema errors in the next model request.
+The lead factory's `outer_middlewares` and the executor's outermost correction
+middleware keep retry `after_model` hooks after native token/loop/safety guards.
+Guard stop markers suppress correction; never jump past guard accounting.
+Never host-wrap NDJSON, manufacture a missing answer, or relax the public schema.
+Explicit partial/blocked envelopes, real successful file writes, tool intent,
+provider errors/truncation and guard stops keep their ordinary native handling.
+Keep the CLAUSE Skill's successful-final transport consistent with the raw
+public-schema instruction; claims/receipts never prove an actual write.
+Tests: `test_sp_public_format_repair.py`, schema-delivery and agent-tools suites.

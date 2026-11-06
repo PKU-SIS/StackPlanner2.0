@@ -517,6 +517,7 @@ class DR2SPExecutorProvider:
                 source_prefetch_settings=source_prefetch_settings if prefetch_for_auditor else None,
                 source_prefetch_contract=public_contract if prefetch_for_auditor else None,
                 source_prefetch_access=state.get("sp_source_access") if prefetch_for_auditor else None,
+                public_output_contract=public_contract if schema_instruction is not None and public_contract.get("delivery_mode") == "artifact" else None,
             )
 
         def observe_raw_result(raw_result: Any) -> None:
@@ -759,6 +760,7 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
         sp_config,
         app_config=resolved_app_config,
         extra_tools=[tool for tool in build_sp_control_tools() if not non_interactive or tool.name != "sp_ask_human"],
+        outer_middlewares=[SPFinishAvailabilityMiddleware()],
         extra_middlewares=[
             TaskMemoryMiddleware(context_builder=PromptContextBuilder(), inject_context=True, non_interactive=non_interactive, recovery_limits=recovery_limits),
             # SP keeps long-term memory out of CentralAgent's prompt, but it
@@ -777,7 +779,6 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
             ),
             SPTerminalActionMiddleware(),
             SPAcknowledgementMiddleware(),
-            SPFinishAvailabilityMiddleware(),
             SPActionBudgetMiddleware(max_actions=max_central_actions),
             SPControlActionMiddleware(executor_provider=executor_provider),
             SPThinkLabelMiddleware(),

@@ -602,6 +602,13 @@ raw public JSON/text value directly. The harness replaces its generic outer
 envelope instruction for those roles, validates the unchanged value and saves it
 natively. Actual blockers still use partial/blocked envelopes with concrete gaps;
 source-access and native execution checks remain mandatory.
+Malformed artifact values receive up to two format corrections in the same
+auditor instance, retaining its original source and draft. Completed inline
+audits receive the same bounded feedback in Central instead of entering a file
+Reporter workflow. The model supplies the corrected value; the host never joins
+JSON objects, extracts an answer, or substitutes an empty/default response.
+Exhausted correction remains incomplete. Actual blockers, provider truncation
+and native guard stops retain their existing failure behavior.
 When required public sources remain unread, Central's next tool binding directs
 the read to the contract-designated auditor with its ordinary scoped tools;
 unrelated perception/coder retries do not consume the audit before it begins.

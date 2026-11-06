@@ -786,7 +786,8 @@ def test_sp_executor_json_protection_scope_comes_from_reporter_action(monkeypatc
 
 
 @pytest.mark.parametrize("role,expected", [("reporter", False), ("researcher", True)])
-def test_source_prefetch_settings_are_host_owned_and_only_enable_public_auditor(monkeypatch, role, expected):
+@pytest.mark.parametrize("delivery_mode", ["inline", "artifact"])
+def test_source_prefetch_settings_are_host_owned_and_only_enable_public_auditor(monkeypatch, role, expected, delivery_mode):
     captured = {}
     config = SubagentConfig(name=f"sp-{role}", description=role, skills=[], internal=True, system_prompt="<role>Audit public evidence</role>\n<output_contract>Return outer artifact_content envelope</output_contract>")
 
@@ -807,7 +808,7 @@ def test_source_prefetch_settings_are_host_owned_and_only_enable_public_auditor(
     )
     provider._tools = []
     executor = provider({}, SimpleNamespace(context={"thread_id": "thread", "run_id": "run"}, stream_writer=None))
-    contract = {"output_schema": {"type": "array"}, "source_requirements": {"audit_agent": "researcher", "files": []}}
+    contract = {"delivery_mode": delivery_mode, "output_schema": {"type": "array"}, "source_requirements": {"audit_agent": "researcher", "files": []}}
     executor.execute(
         SPSubagentTask(action_id="current-action", subagent_type=role, task="Audit public source", description="Need evidence", context_refs={"task_contract": contract}, metadata={"sp_source_prefetch_tokenizer": "model-forged-path"})
     )
@@ -818,6 +819,7 @@ def test_source_prefetch_settings_are_host_owned_and_only_enable_public_auditor(
     assert "private-local-tokenizer" not in captured["prompt"]
     assert "<output_contract>" not in captured["config"].system_prompt
     assert "<public-schema-final-delivery>" in captured["config"].system_prompt
+    assert captured["public_output_contract"] == (contract if delivery_mode == "artifact" else None)
 
 
 def test_sp_executor_provider_normalizes_command_names_in_tool_allowlist(monkeypatch):

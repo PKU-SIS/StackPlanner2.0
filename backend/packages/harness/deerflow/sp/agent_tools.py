@@ -41,6 +41,7 @@ from deerflow.sp.actions.router import SP_SUMMARY_TURN_RESERVED_KEY
 from deerflow.sp.hitl import record_human_feedback
 from deerflow.sp.memory import StackMemoryEntry, TaskMemoryStack
 from deerflow.sp.output_contract import output_contract_gaps
+from deerflow.sp.public_format_repair import augment_public_format_request, public_format_repair_update
 from deerflow.sp.recovery import recovery_limit
 from deerflow.sp.source_access import public_audit_completion_gaps, source_access_gaps
 from deerflow.sp.subagents import SPSubagentExecutorProtocol
@@ -1592,6 +1593,11 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             # Missing evidence must recover its actual role, not be relabelled
             # as a presentation-only repair. The existing guard handles it.
             return None
+        contract = state.get("sp_task_contract") or {}
+        if contract.get("delivery_mode") == "inline" and not evidence_gaps and "output_schema" in contract:
+            # A completed inline audit needs a format correction in its
+            # current Central context, not a fresh file/report workflow.
+            return public_format_repair_update(state, contract, central=True)
         sources = (state.get("sp_task_contract") or {}).get("source_requirements", {})
         target = sources.get("audit_agent", "researcher") if evidence_gaps else "reporter"
         attempts = cls._delegate_attempt_count(state, target)
@@ -1645,9 +1651,11 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         )
         return {"messages": [guarded]}
 
+    @hook_config(can_jump_to=["model"])
     def after_model(self, state: AgentState, runtime: Any) -> dict[str, Any] | None:
         return self._after_model_update(state, runtime)
 
+    @hook_config(can_jump_to=["model"])
     async def aafter_model(self, state: AgentState, runtime: Any) -> dict[str, Any] | None:
         return self._after_model_update(state, runtime)
 
@@ -1656,14 +1664,14 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         request: ModelRequest,
         handler: Callable[[ModelRequest], ModelResponse],
     ) -> ModelCallResult:
-        return handler(self._filter_request(request))
+        return handler(augment_public_format_request(self._filter_request(request)))
 
     async def awrap_model_call(
         self,
         request: ModelRequest,
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelCallResult:
-        return await handler(self._filter_request(request))
+        return await handler(augment_public_format_request(self._filter_request(request)))
 
 
 class SPActionBudgetMiddleware(AgentMiddleware[AgentState]):

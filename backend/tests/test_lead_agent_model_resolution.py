@@ -122,6 +122,25 @@ def test_internal_make_lead_agent_uses_explicit_app_config(monkeypatch):
     assert result["model"] is not None
 
 
+def test_outer_model_retry_middleware_follows_native_after_model_guards(monkeypatch):
+    import deerflow.tools as tools_module
+
+    app_config = _make_app_config([_make_model("safe-model", supports_thinking=False)])
+    correction, native_guard = object(), object()
+    monkeypatch.setattr(tools_module, "get_available_tools", lambda **kwargs: [])
+    monkeypatch.setattr(lead_agent_module, "build_middlewares", lambda *args, **kwargs: [native_guard])
+    monkeypatch.setattr(lead_agent_module, "build_tracing_callbacks", lambda: [])
+    monkeypatch.setattr(lead_agent_module, "create_chat_model", lambda **kwargs: object())
+    monkeypatch.setattr(lead_agent_module, "create_agent", lambda **kwargs: kwargs)
+    result = lead_agent_module._make_lead_agent(
+        {"configurable": {"model_name": "safe-model"}},
+        app_config=app_config,
+        outer_middlewares=[correction],
+    )
+    # LangChain after_model hooks run in reverse registration order.
+    assert result["middleware"] == [correction, native_guard]
+
+
 def test_internal_make_lead_agent_can_bind_only_explicit_control_tools(monkeypatch):
     from deerflow.sp.agent_tools import build_sp_control_tools
 

@@ -410,6 +410,7 @@ def _make_lead_agent(
     app_config: AppConfig,
     extra_tools: list | None = None,
     extra_middlewares: list[AgentMiddleware] | None = None,
+    outer_middlewares: list[AgentMiddleware] | None = None,
     prompt_prefix: str = "",
     identity_name: str | None = None,
     include_base_tools: bool = True,
@@ -426,6 +427,9 @@ def _make_lead_agent(
     resolved_app_config = app_config
     extra_tools = list(extra_tools or [])
     extra_middlewares = list(extra_middlewares or [])
+    # Outermost middleware runs its after_model hook after native guards.
+    # A model-retry jump must not skip token/loop/safety accounting.
+    outer_middlewares = list(outer_middlewares or [])
 
     # Extract user_id for user-scoped skill loading.
     # LangGraph gateway injects user_id into config["configurable"];
@@ -574,7 +578,8 @@ def _make_lead_agent(
         return create_agent(
             model=create_chat_model(name=model_name, thinking_enabled=thinking_enabled, app_config=resolved_app_config, attach_tracing=False, **central_model_overrides),
             tools=final_tools,
-            middleware=build_middlewares(
+            middleware=outer_middlewares
+            + build_middlewares(
                 middleware_config,
                 model_name=model_name,
                 available_skills=set(_BOOTSTRAP_SKILL_NAMES),
@@ -650,7 +655,8 @@ def _make_lead_agent(
     return create_agent(
         model=create_chat_model(name=model_name, thinking_enabled=thinking_enabled, reasoning_effort=reasoning_effort, app_config=resolved_app_config, attach_tracing=False, **central_model_overrides),
         tools=final_tools,
-        middleware=build_middlewares(
+        middleware=outer_middlewares
+        + build_middlewares(
             middleware_config,
             model_name=model_name,
             agent_name=agent_name,
