@@ -627,7 +627,12 @@ the public schema. A completion claim or source summary without that payload
 stays partial and recovers the original audit, even after every source was read.
 The host neither extracts a conclusion from prose nor fills a missing answer.
 File-only inline auditors also receive up to two same-instance corrections for
-an invalid public final, with the actual schema error. JSON artifact corrections
+an invalid public final, with the actual schema error. Text-mode feedback asks
+for the raw required text without added JSON serialization quotes, while retaining
+literal quotes, line breaks and other content required by the task/schema. JSON
+mode still requires a valid JSON value, including quotes for a JSON string. The
+model makes the correction; the host never strips quotes or selects a label.
+JSON artifact corrections
 temporarily retain read tools and unbind file editing tools so the model returns
 one complete raw value instead of a nested write-call string. The normal native
 artifact path persists that actual value; all source, stop and acceptance gates

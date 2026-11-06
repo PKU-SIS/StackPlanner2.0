@@ -1261,7 +1261,18 @@ Explicit partial/blocked envelopes, real successful file writes, native tool
 calls, provider errors/truncation and guard stops keep their ordinary handling.
 Keep the CLAUSE Skill's successful-final transport consistent with the raw
 public-schema instruction; claims/receipts never prove an actual write.
-Tests: `test_sp_public_format_repair.py`, schema-delivery and agent-tools suites.
+Feedback must distinguish the actual output_parse_mode. Text-mode schema JSON
+is metadata describing allowed text: request the raw required plain-text value,
+without added JSON serialization quotes, while retaining literal quotation
+marks, line breaks and other content required by the task/schema. Do not impose
+a single-label or single-line restriction on generic text schemas. JSON mode
+requires one valid JSON value, with serialization quotes for string schemas.
+The model corrects its own output; never strip quotes, choose an enum value or
+rewrite a candidate on the host. Existing two-repair budget, source/auditor gates
+and stop handling remain unchanged. Tests: test_sp_text_format_repair.py uses
+the actual native Central graph for text enums, required literal quotes,
+multiline text and JSON-string controls, retaining the original candidates and
+audit records. Also run test_sp_public_format_repair.py and agent-tools suites.
 
 `artifact_array_token_cap_instruction` is prompt-only recovery for an explicit
 artifact JSON array after the latest actual same-run Reporter observation is

@@ -120,6 +120,17 @@ def augment_public_format_request(request):
     info = latest.additional_kwargs.get(_FEEDBACK) if isinstance(latest, AIMessage) else None
     if not isinstance(info, Mapping):
         return request
+    text_mode = info["mode"] == "text"
+    format_instruction = (
+        "Return the complete raw plain-text public value required by the original task and schema. Do not JSON-serialize that text or add surrounding serialization quotes. "
+        "For a text enum, return the supported enum text itself; JSON notation quotes in the schema do not add output punctuation. "
+        "Preserve literal quotation marks, line breaks, punctuation, and other content actually required by the original task/schema. "
+        "Do not add transport wrappers or commentary beyond that required content. "
+        if text_mode
+        else "Return exactly one complete valid JSON value matching the original public schema, without Markdown fences, separate JSON documents, an SP envelope, promises, or a file receipt. "
+        "For a JSON string schema, include its required serialization quotes and escape string content correctly. "
+    )
+    schema_description = "Public output_schema (describes allowed plain text, not JSON serialization)" if text_mode else "Public output_schema"
     json_delivery = info["mode"] == "json" and not info.get("central")
     json_instruction = (
         "During this JSON correction, write_file/str_replace are temporarily unbound. Return the complete public JSON value directly; native artifact persistence handles that actual value. "
@@ -134,12 +145,12 @@ def augment_public_format_request(request):
             "<public-format-correction>\n"
             f"Your previous ordinary final failed the public format check (correction {info['attempt']}/{_MAX_REPAIRS}). "
             "Correct your own complete final value now in this same audit context. Preserve all supported findings and original quotations. A malformed serialization is an unverified draft, not a canonical baseline to copy unchanged. "
-            "Use the original source and actual draft already in this conversation. Do not invent findings, change the answer to a default, omit supported findings, or return an empty array to conceal unfinished work. "
-            "Return the complete raw public JSON/text value, without Markdown fences, separate JSON documents, an SP envelope, promises, or a file receipt. "
-            "The native host persists the real complete value when a file is required. A claim that a file was written is not file-tool evidence. "
+            "Use the original source and actual draft already in this conversation. Do not invent findings, change the answer to a default, omit supported findings, or return empty/default content to conceal unfinished work. "
+            + format_instruction
+            + "The native host persists the real complete value when a file is required. A claim that a file was written is not file-tool evidence. "
             + json_instruction
             + "If the substantive audit is actually incomplete, return an honest partial/blocked SP envelope with concrete gaps instead.\n"
-            f"Parse mode: {info['mode']}. Public output_schema: {json.dumps(info['schema'], ensure_ascii=False)}\n"
+            f"Parse mode: {info['mode']}. {schema_description}: {json.dumps(info['schema'], ensure_ascii=False)}\n"
             "Actual format errors: " + "; ".join(info["gaps"]) + "\n</public-format-correction>"
         ),
     )
