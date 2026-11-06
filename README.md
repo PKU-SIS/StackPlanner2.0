@@ -531,3 +531,10 @@ reads cover their content lines. Larger documents can be read in bounded ranges.
 Paging/different documents have distinct loop-detection identities; the same
 request still reaches the usual cap. Native textual JSON fallback artifacts use
 the published `.json` extension.
+# Small public JSON deliveries
+
+When a Reporter or contract-designated auditor returns a complete answer matching the explicit public output
+schema, the native harness preserves that original response as an artifact even
+below the generic large-result threshold. This includes short FinAuditing values
+and CLAUSE arrays. Structured envelope artifacts remain JSON when saved; the
+observed-source requirements still apply to empty and nonempty answers alike.

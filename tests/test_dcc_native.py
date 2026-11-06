@@ -29,14 +29,39 @@ from dcc_harness.preprocessing.ragflow import index_identity
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.parametrize("name,mode,type_", [("finre", "text", "string"), ("finmr", "json", "object"), ("finsm", "json", "array")])
-def test_build_inputs_derives_shape_only_from_exact_public_finauditing_template(tmp_path, monkeypatch, name, mode, type_):
+@pytest.mark.parametrize(
+    "name,mode,type_",
+    [
+        ("finre", "text", "string"),
+        ("finmr", "json", "object"),
+        ("finsm", "json", "array"),
+    ],
+)
+def test_build_inputs_derives_shape_only_from_exact_public_finauditing_template(
+    tmp_path, monkeypatch, name, mode, type_
+):
     from dcc_harness.data import InputFile, PublicTask
     from dcc_harness.datasets.benchmark_plugins import BenchmarkPlugin, build_inputs
 
     monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path / "native"))
-    public = PublicTask("dcc", "Audit the supplied filing.", "", {}, (InputFile("rule0.txt", (ROOT / f"configs/dcc/prompts/finauditing/{name}.md").read_text()),))
-    plugin = BenchmarkPlugin(name="dcc", prepare_task=lambda task: task.prompt, prepare_inputs=lambda task, thread: {}, skills_path=tmp_path)
+    public = PublicTask(
+        "dcc",
+        "Audit the supplied filing.",
+        "",
+        {},
+        (
+            InputFile(
+                "rule0.txt",
+                (ROOT / f"configs/dcc/prompts/finauditing/{name}.md").read_text(),
+            ),
+        ),
+    )
+    plugin = BenchmarkPlugin(
+        name="dcc",
+        prepare_task=lambda task: task.prompt,
+        prepare_inputs=lambda task, thread: {},
+        skills_path=tmp_path,
+    )
     contract = build_inputs(plugin, public, "contract-thread")["sp_task_contract"]
     assert contract["output_parse_mode"] == mode
     assert contract["output_schema"]["type"] == type_
@@ -303,7 +328,9 @@ def test_native_retrieval_normalizes_filename_aliases_without_changing_xml(
     assert observed[0]["page"] == 2 and observed[0]["page_size"] == 100
 
 
-def test_native_document_enumeration_is_scoped_complete_and_cached(native_bundle, monkeypatch):
+def test_native_document_enumeration_is_scoped_complete_and_cached(
+    native_bundle, monkeypatch
+):
     from deerflow.runtime.user_context import get_effective_user_id
 
     from dcc_harness.preprocessing import native_tools
@@ -318,28 +345,66 @@ def test_native_document_enumeration_is_scoped_complete_and_cached(native_bundle
 
         def document_chunks(self, dataset, document, page, page_size):
             observed.append((dataset, document, page, page_size))
-            return {"total": 1, "doc": {"size": 17, "update_time": 123}, "chunks": [{"id": "c", "document_id": "doc", "content": "<fact>100</fact>"}]}
+            return {
+                "total": 1,
+                "doc": {"size": 17, "update_time": 123},
+                "chunks": [
+                    {"id": "c", "document_id": "doc", "content": "<fact>100</fact>"}
+                ],
+            }
 
     monkeypatch.setattr(native_tools, "RagflowClient", Client)
     for _ in range(2):
-        value = json.loads(native_tools._retrieve_for_thread("document-thread", "read source", 1, 100, user_id=get_effective_user_id(), document_id="doc"))
+        value = json.loads(
+            native_tools._retrieve_for_thread(
+                "document-thread",
+                "read source",
+                1,
+                100,
+                user_id=get_effective_user_id(),
+                document_id="doc",
+            )
+        )
         assert value["chunks"][0]["content"] == "<fact>100</fact>"
         assert value["source_coverage"]["mode"] == "document"
     assert observed == [("kb", "doc", 1, 100)]
     with pytest.raises(ValueError, match="scope"):
-        native_tools._retrieve_for_thread("document-thread", "read", 1, 100, user_id=get_effective_user_id(), document_id="other")
+        native_tools._retrieve_for_thread(
+            "document-thread",
+            "read",
+            1,
+            100,
+            user_id=get_effective_user_id(),
+            document_id="other",
+        )
 
 
 def test_clause_source_contract_requires_full_document_and_preserves_audit_role():
     from dcc_harness.data import InputFile, PublicTask
     from dcc_harness.preprocessing.output_contracts import public_output_contract
 
-    public = PublicTask("clause", "Audit the entire document.", files=(InputFile("document.txt", "first\nsecond\nlast\n"),))
+    public = PublicTask(
+        "clause",
+        "Audit the entire document.",
+        files=(InputFile("document.txt", "first\nsecond\nlast\n"),),
+    )
     contract = public_output_contract(public)
     assert contract["source_requirements"]["audit_agent"] == "reporter"
     assert contract["source_requirements"]["skill_names"] == ["clause"]
-    assert contract["source_requirements"]["files"] == [{"path": "/mnt/user-data/uploads/document.txt", "total_lines": 3}]
+    assert contract["source_requirements"]["files"] == [
+        {"path": "/mnt/user-data/uploads/document.txt", "total_lines": 3}
+    ]
     assert contract["output_file_extension"] == ".json"
+    from deerflow.sp.output_contract import output_contract_gaps
+
+    for text in ["[]", '[{"text":"Exact sentence.","explanation":""}]']:
+        assert output_contract_gaps({"sp_task_contract": contract}, text) == []
+    for text in [
+        '[{"text":"  ","explanation":"reason"}]',
+        '[{"text":"sentence","explanation":"reason","extra":1}]',
+        '{"summary":"Done"}',
+    ]:
+        assert output_contract_gaps({"sp_task_contract": contract}, text)
 
 
 def test_v3_public_input_builder_stages_neutral_files_without_private_identifiers(

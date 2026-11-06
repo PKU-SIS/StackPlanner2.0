@@ -1150,3 +1150,11 @@ a tool artifact; previews do not count as a full read. Read actual content lines
 The ragflow loop key includes document/page/page_size and semantic question only
 when querying; changing descriptive text cannot evade identical-document caps.
 Keep the gate's proof checks separate from semantic accuracy claims.
+# Public schema delivery normalization
+
+`sp/subagents/dr2_adapter.py` promotes a small direct Reporter or contract-designated auditor response only when
+it is the actual final model content, has no early-stop/tool-call condition, and
+matches an explicit public output schema. Preserve its bytes, do not extract or
+repair answers from wrappers, and retain source-access gating. Structured
+envelope `artifact_content` uses the artifact adapter's JSON serialization.
+Regression coverage lives in `tests/test_sp_schema_delivery.py`.

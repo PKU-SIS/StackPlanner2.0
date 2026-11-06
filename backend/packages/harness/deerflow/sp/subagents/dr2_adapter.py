@@ -943,6 +943,15 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
     if is_memory_recaller:
         normalized_result = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) if payload is not None else raw_result
 
+    # A complete public answer can be much smaller than the generic large-body
+    # threshold (including a legitimate empty array). Preserve only an actual
+    # final audit/delivery response that independently satisfies the public schema;
+    # never extract an answer from a receipt, tool result, or malformed wrapper.
+    if artifact_content is None and not recovered_created_paths and status == SPSubagentStatus.COMPLETED and not stop_reason and _is_public_schema_delivery(raw_result, ai_messages, task):
+        artifact_content = raw_result
+        artifact_type = artifact_type or _default_artifact_type(task.subagent_type)
+        malformed_contract = False
+
     if artifact_content is None and not recovered_created_paths and isinstance(raw_result, str) and len(raw_result) > DEFAULT_LARGE_RESULT_THRESHOLD and status == SPSubagentStatus.COMPLETED and not is_memory_recaller:
         artifact_content = raw_result
         artifact_type = artifact_type or _default_artifact_type(task.subagent_type if task is not None else None)
@@ -1081,6 +1090,24 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         tests=tests,
         source_access=collect_source_access(ai_messages if isinstance(ai_messages, list) else []),
     )
+
+
+def _is_public_schema_delivery(raw_result: Any, ai_messages: Any, task: SPSubagentTask | None) -> bool:
+    from deerflow.sp.output_contract import output_contract_gaps
+
+    if task is None or not isinstance(raw_result, str):
+        return False
+    contract = task.context_refs.get("task_contract")
+    if not isinstance(contract, Mapping) or "output_schema" not in contract:
+        return False
+    requirements = contract.get("source_requirements")
+    audit_agent = requirements.get("audit_agent") if isinstance(requirements, Mapping) else None
+    if task.subagent_type not in {"reporter", audit_agent}:
+        return False
+    final_ai = next((message for message in reversed(ai_messages if isinstance(ai_messages, list) else []) if isinstance(message, Mapping) and message.get("type", message.get("role")) in {"ai", "assistant"}), None)
+    if final_ai is None or final_ai.get("tool_calls") or final_ai.get("invalid_tool_calls") or _message_text(final_ai.get("content")).strip() != raw_result.strip():
+        return False
+    return not output_contract_gaps({"sp_task_contract": contract}, raw_result)
 
 
 def _default_artifact_type(subagent_type: str | None) -> str:

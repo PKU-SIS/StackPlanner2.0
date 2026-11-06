@@ -50,6 +50,19 @@ def public_output_contract(task: PublicTask) -> dict:
     if task.benchmark == "clause":
         return {
             "output_file_extension": ".json",
+            "output_parse_mode": "json",
+            "output_schema": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["text", "explanation"],
+                    "additionalProperties": False,
+                    "properties": {
+                        "text": {"type": "string", "pattern": r"\S"},
+                        "explanation": {"type": "string"},
+                    },
+                },
+            },
             "source_requirements": {
                 "audit_agent": "reporter",
                 "skill_names": ["clause"],
