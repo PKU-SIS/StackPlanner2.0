@@ -444,6 +444,7 @@ class SubagentExecutor:
         source_prefetch_settings: Any | None = None,
         source_prefetch_contract: Mapping[str, Any] | None = None,
         source_prefetch_access: Mapping[str, Any] | None = None,
+        source_prefetch_auditor_role: str | None = None,
         public_output_contract: Mapping[str, Any] | None = None,
     ):
         """Initialize the executor.
@@ -505,6 +506,8 @@ class SubagentExecutor:
                 and local tokenizer; kept outside graph/model state.
             source_prefetch_contract: Public source requirements for this auditor.
             source_prefetch_access: Host-observed prior source reads for this run.
+            source_prefetch_auditor_role: Host-bound designated public auditor,
+                used to scope current-input file audit completion guidance.
             public_output_contract: Public artifact schema eligible for bounded
                 format feedback inside this same native auditor instance.
         """
@@ -545,6 +548,7 @@ class SubagentExecutor:
         self.source_prefetch_settings = source_prefetch_settings
         self.source_prefetch_contract = source_prefetch_contract
         self.source_prefetch_access = source_prefetch_access
+        self.source_prefetch_auditor_role = source_prefetch_auditor_role
         self.public_output_contract = public_output_contract
         self._runtime_middlewares: list[Any] = []
         self._prefetch_captured: list[dict[str, Any]] = []
@@ -638,7 +642,15 @@ class SubagentExecutor:
 
             # Last is innermost: inspect the actual request after every native
             # summary, sanitization and historical-output wrapper has run.
-            middlewares.append(SourcePrefetchVisibilityMiddleware(self._prefetch_captured))
+            middlewares.append(
+                SourcePrefetchVisibilityMiddleware(
+                    self._prefetch_captured,
+                    contract=self.source_prefetch_contract,
+                    settings=self.source_prefetch_settings,
+                    auditor_role=self.source_prefetch_auditor_role,
+                    thinking_enabled=self.thinking_enabled,
+                )
+            )
 
         # system_prompt is included in initial state messages (see _build_initial_state)
         # to avoid multiple SystemMessages which some LLM APIs don't support.

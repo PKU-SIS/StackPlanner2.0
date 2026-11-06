@@ -77,6 +77,10 @@ _TEST_COMMAND_PATTERN = re.compile(
 )
 _UNVERIFIED_TEST_GAP = "Coder claimed test verification without a successful test-command result after the latest source change."
 _NO_RESPONSE_GAP = "Subagent returned no usable response or artifact."
+_MISSING_PUBLIC_AUDIT_PAYLOAD_GAP = (
+    "The designated file-only auditor did not deliver an actual final payload matching the public output_schema/output_parse_mode. "
+    "Perform the complete original audit using the actual original sources and return the full raw public final answer; a completion claim, source receipt, coverage map or summary alone is insufficient."
+)
 _MASKED_TEST_EXIT_GAP = "Coder test command masked or discarded the test runner exit status."
 _OBSERVABLE_FALSE_CHECK_PATTERN = re.compile(
     r"(?im)^\s*[^\n:]{0,80}\b(?:PASS(?:ED)?|CHECK|ASSERT(?:ION)?|OK)\s*[:=]\s*(?:false|fail(?:ed)?)\b"
@@ -980,6 +984,29 @@ def _has_schema_artifact_content(content: Any, task: SPSubagentTask | None) -> b
     return not output_contract_gaps({"sp_task_contract": contract}, text)
 
 
+def _requires_inline_file_audit_payload(task: SPSubagentTask | None) -> bool:
+    contract = _public_schema_delivery_contract(task)
+    if task is None or task.subagent_type != "researcher" or contract is None or contract.get("delivery_mode") != "inline":
+        return False
+    required = contract.get("source_requirements")
+    return isinstance(required, Mapping) and required.get("audit_agent") == "researcher" and required.get("document_ids") == [] and isinstance(required.get("files"), list) and bool(required["files"])
+
+
+def _has_original_public_audit_payload(raw_result: Any, ai_messages: Any, task: SPSubagentTask) -> bool:
+    if _is_public_schema_delivery(raw_result, ai_messages, task):
+        return True
+    if not _is_actual_final_response(raw_result, ai_messages):
+        return False
+    # Preserve the existing explicit artifact envelope transport, but validate
+    # only a value actually present in this final response. Do not recover a
+    # conclusion from prose, clean a nested wrapper, or trust model metadata.
+    try:
+        payload = json.loads(raw_result)
+    except (ValueError, TypeError):
+        return False
+    return isinstance(payload, dict) and _has_schema_artifact_content(payload.get("artifact_content"), task)
+
+
 def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = None) -> SPSubagentResult:
     """Normalize DR2 SubagentResult-like objects into SPSubagentResult."""
     from deerflow.sp.source_access import collect_source_access
@@ -1094,6 +1121,11 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
                 artifact_metadata["completion_status"] = "partial"
             if _NO_RESPONSE_GAP not in artifact_metadata["evidence_gaps"]:
                 artifact_metadata["evidence_gaps"].append(_NO_RESPONSE_GAP)
+        if _requires_inline_file_audit_payload(task) and not _has_original_public_audit_payload(raw_result, ai_messages, task):
+            if artifact_metadata["completion_status"] == "complete":
+                artifact_metadata["completion_status"] = "partial"
+            if _MISSING_PUBLIC_AUDIT_PAYLOAD_GAP not in artifact_metadata["evidence_gaps"]:
+                artifact_metadata["evidence_gaps"].append(_MISSING_PUBLIC_AUDIT_PAYLOAD_GAP)
         if _coder_requires_execution_evidence(task):
             data_processing = is_data_processing_coder(task.metadata)
             verification = _execution_verification(ai_messages, reject_masked_commands=data_processing, allow_negative_findings=data_processing)
@@ -1172,15 +1204,17 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
 def _is_public_schema_delivery(raw_result: Any, ai_messages: Any, task: SPSubagentTask | None) -> bool:
     from deerflow.sp.output_contract import output_contract_gaps
 
-    if not isinstance(raw_result, str):
-        return False
     contract = _public_schema_delivery_contract(task)
-    if contract is None:
-        return False
-    final_ai = next((message for message in reversed(ai_messages if isinstance(ai_messages, list) else []) if isinstance(message, Mapping) and message.get("type", message.get("role")) in {"ai", "assistant"}), None)
-    if final_ai is None or final_ai.get("tool_calls") or final_ai.get("invalid_tool_calls") or _message_text(final_ai.get("content")).strip() != raw_result.strip():
+    if contract is None or not _is_actual_final_response(raw_result, ai_messages):
         return False
     return not output_contract_gaps({"sp_task_contract": contract}, raw_result)
+
+
+def _is_actual_final_response(raw_result: Any, ai_messages: Any) -> bool:
+    if not isinstance(raw_result, str):
+        return False
+    final_ai = next((message for message in reversed(ai_messages if isinstance(ai_messages, list) else []) if isinstance(message, Mapping) and message.get("type", message.get("role")) in {"ai", "assistant"}), None)
+    return final_ai is not None and not final_ai.get("tool_calls") and not final_ai.get("invalid_tool_calls") and _message_text(final_ai.get("content")).strip() == raw_result.strip()
 
 
 def _default_artifact_type(subagent_type: str | None) -> str:

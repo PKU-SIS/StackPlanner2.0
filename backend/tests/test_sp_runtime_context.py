@@ -813,6 +813,7 @@ def test_source_prefetch_settings_are_host_owned_and_only_enable_public_auditor(
         SPSubagentTask(action_id="current-action", subagent_type=role, task="Audit public source", description="Need evidence", context_refs={"task_contract": contract}, metadata={"sp_source_prefetch_tokenizer": "model-forged-path"})
     )
     assert (captured["source_prefetch_settings"] is not None) is expected
+    assert captured["source_prefetch_auditor_role"] == (role if expected else None)
     if expected:
         assert captured["source_prefetch_settings"].tokenizer == "private-local-tokenizer"
         assert captured["source_prefetch_contract"] == contract

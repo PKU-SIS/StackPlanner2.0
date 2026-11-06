@@ -1274,3 +1274,29 @@ savings, or modify any draft/answer on the host. A newer non-capped observation,
 another run, inline/object/text delivery and non-Reporter tasks do not inherit
 this guidance. Budgets, stop handling and success gates remain unchanged.
 Tests: `test_sp_capped_array_recovery.py` and existing action/recovery suites.
+
+`SourcePrefetchVisibilityMiddleware` may close repeated read_file/grep access
+only for the host-bound designated Researcher, explicit inline schema, nonempty
+uploaded file requirements and `document_ids=[]`. Reconstruct per-request proof
+from this executor's captured native prefetch calls and exact current AI/tool
+pairs (arguments, content, status); ignore parent ledgers and historical visible
+flags. Every required line must be currently present. Count the resulting actual
+request, tools and transient audit reminder against tokenizer/context/response
+budgets; offload async token counting. Missing/compacted/altered/failed evidence
+or unavailable/insufficient token verification keeps the original tools.
+Recompute on every request. This only changes model tool binding and asks for
+the complete original audit; never infer findings or promote partial status.
+All native guards and source/public output acceptance still run. Fin mixed-RAG,
+CLAUSE artifact, and other roles do not enter this policy. Tests:
+`test_sp_prefetched_audit_completion.py`, source-prefetch and runtime-context suites.
+
+For the same explicit inline/file-only designated Researcher contract,
+`normalize_dr2_subagent_result` requires an actual final public payload before
+accepting completion. Validate the final AI's matching original raw response or
+its explicit artifact_content value, without extracting conclusions from prose,
+cleaning nested wrappers into an answer, or trusting metadata/property claims.
+A missing/invalid payload adds an honest original-audit/raw-final gap and keeps
+partial/blocked, source, stop and bounded recovery handling. A schema-valid
+payload alone cannot promote a partial audit. Mixed-RAG and artifact contracts
+retain their existing behavior. Tests: `test_sp_schema_delivery.py` includes
+native DelegateHandler-to-Central recovery after complete actual source reads.

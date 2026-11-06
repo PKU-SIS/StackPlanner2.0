@@ -15,7 +15,7 @@ from functools import lru_cache
 from typing import Any
 
 from langchain.agents.middleware import AgentMiddleware
-from langchain_core.messages import AIMessage, ToolMessage, convert_to_openai_messages
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage, convert_to_openai_messages
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langgraph.prebuilt.tool_node import ToolCallRequest, ToolRuntime
 from langgraph.types import Command
@@ -86,16 +86,93 @@ def mark_prefetch_model_visibility(messages: list, captured: list[dict]) -> None
 class SourcePrefetchVisibilityMiddleware(AgentMiddleware):
     """Innermost model wrapper: summaries/previews do not count as full input."""
 
-    def __init__(self, captured: list[dict]):
+    def __init__(self, captured: list[dict], *, contract: Mapping[str, Any] | None = None, settings: SourcePrefetchSettings | None = None, auditor_role: str | None = None, thinking_enabled: bool | None = None):
         self._captured = captured
+        self._contract = contract
+        self._settings = settings
+        self._auditor_role = auditor_role
+        self._thinking_enabled = thinking_enabled
+
+    def _complete_file_audit_request(self, request):
+        """Use fresh original pairs in this request, never a parent's read ledger."""
+        contract = self._contract
+        if self._settings is None or self._auditor_role != "researcher" or not isinstance(contract, Mapping) or contract.get("delivery_mode") != "inline" or "output_schema" not in contract:
+            return None
+        required = contract.get("source_requirements")
+        if not isinstance(required, Mapping) or required.get("audit_agent") != "researcher" or required.get("document_ids") != []:
+            return None
+        files = required.get("files")
+        if not isinstance(files, list) or not files:
+            return None
+        for file in files:
+            if (
+                not isinstance(file, Mapping)
+                or not isinstance(file.get("path"), str)
+                or not file["path"].startswith("/mnt/user-data/uploads/")
+                or not isinstance(file.get("total_lines"), int)
+                or isinstance(file["total_lines"], bool)
+                or file["total_lines"] < 1
+            ):
+                return None
+        from deerflow.sp.source_access import collect_source_access, source_access_gaps
+
+        current_calls = {call.get("id"): call for message in request.messages if isinstance(message, AIMessage) for call in message.tool_calls}
+        current_results = {(message.tool_call_id, message.name): message for message in request.messages if isinstance(message, ToolMessage)}
+        saved_calls = {call.get("id"): call for saved in self._captured if saved.get("type") == "ai" and (saved.get("additional_kwargs") or {}).get("sp_host_source_prefetch") for call in saved.get("tool_calls", [])}
+        original_pairs = []
+        for saved in self._captured:
+            if saved.get("type") != "tool" or not (saved.get("additional_kwargs") or {}).get("sp_host_source_prefetch"):
+                continue
+            call_id = saved.get("tool_call_id")
+            call = saved_calls.get(call_id)
+            result = current_results.get((call_id, saved.get("name")))
+            if call is None or current_calls.get(call_id) != call or result is None or result.content != saved.get("content") or result.status != "success" or saved.get("status") != "success":
+                continue
+            original_pairs.extend([{"type": "ai", "tool_calls": [call]}, {**saved, "additional_kwargs": {**saved["additional_kwargs"], "sp_host_source_prefetch_visible": True}}])
+        # Recompute coverage from only these exact current-request originals.
+        # Older visibility flags and source_access from any run are irrelevant.
+        access = collect_source_access(original_pairs)
+        if source_access_gaps({"sp_task_contract": contract, "sp_source_access": access}):
+            return None
+        tools = [tool for tool in request.tools if getattr(tool, "name", None) not in {"read_file", "grep"}]
+        if len(tools) == len(request.tools):
+            return None
+        note = HumanMessage(
+            name="sp_complete_visible_file_audit",
+            additional_kwargs={"hide_from_ui": True},
+            content=(
+                "<complete-visible-file-audit>\n"
+                "All required public file sources are present as complete original native read_file results in this exact model input. "
+                "Review that original content and perform the complete original audit now, including the requested analysis and final answer. "
+                "Repeated read_file/grep tools are temporarily unavailable while these originals remain fully visible. "
+                "A rules catalogue, coverage map, source-read receipt or plan alone does not complete the original task. "
+                "Use the original scenario and all relevant source rules to form your own supported conclusion, then return the exact raw public output required by output_schema/output_parse_mode. "
+                "The host has not performed the substantive audit or chosen an answer. Do not select a default answer, fabricate evidence, or hide incomplete work. "
+                "If a substantive requirement genuinely remains unresolved, return honest partial status with concrete evidence gaps. "
+                "All native token, turn, loop, safety and public-schema checks still apply.\n"
+                "</complete-visible-file-audit>"
+            ),
+        )
+        return request.override(tools=tools, messages=[*request.messages, note])
+
+    def _within_context(self, request) -> bool:
+        try:
+            count = count_source_prompt_tokens(request.messages, request.tools, self._settings, self._thinking_enabled)
+        except Exception:
+            logger.debug("Current-source audit token verification unavailable; retaining native source tools", exc_info=True)
+            return False
+        return count + self._settings.response_tokens + _RESERVED_OVERHEAD_TOKENS <= self._settings.context_tokens
 
     def wrap_model_call(self, request, handler):
         mark_prefetch_model_visibility(request.messages, self._captured)
-        return handler(request)
+        complete = self._complete_file_audit_request(request)
+        return handler(complete if complete is not None and self._within_context(complete) else request)
 
     async def awrap_model_call(self, request, handler):
         mark_prefetch_model_visibility(request.messages, self._captured)
-        return await handler(request)
+        complete = self._complete_file_audit_request(request)
+        within_context = complete is not None and await asyncio.to_thread(self._within_context, complete)
+        return await handler(complete if within_context else request)
 
 
 def _would_compact(messages: list, middlewares: list) -> bool:

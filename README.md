@@ -614,6 +614,18 @@ asks the model to rebuild one complete array from original sources, consolidate
 repeated descriptions, and preserve every distinct supported issue and required
 complete verbatim quotation. The host leaves draft bytes and acceptance checks
 unchanged; inline deliveries and runtime budgets keep their existing behavior.
+For a file-only inline Researcher audit, repeated read_file/grep tools are
+temporarily unbound only when every required original file is still fully
+present in that model request as exact native prefetch tool pairs, and the
+complete request passes its token budget. The auditor then completes the
+original analysis and public answer from those sources. Summarized, clipped,
+missing or stale evidence retains read tools; external-document and artifact
+deliveries retain their existing behavior. Source coverage alone never proves
+the audit complete or supplies an answer.
+That inline file-only auditor must also deliver an actual final payload matching
+the public schema. A completion claim or source summary without that payload
+stays partial and recovers the original audit, even after every source was read.
+The host neither extracts a conclusion from prose nor fills a missing answer.
 When required public sources remain unread, Central's next tool binding directs
 the read to the contract-designated auditor with its ordinary scoped tools;
 unrelated perception/coder retries do not consume the audit before it begins.

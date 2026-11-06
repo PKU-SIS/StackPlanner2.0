@@ -76,6 +76,145 @@ def test_recovered_or_early_stopped_result_is_not_a_final_schema_delivery():
     assert normalize_dr2_subagent_result(raw, task=task).artifact_content is None
 
 
+def _file_audit_task():
+    task = _task({"type": "string", "pattern": r"^Audit conclusion: (allowed|prohibited)\.$"}, "text")
+    task.subagent_type = "researcher"
+    task.context_refs["task_contract"].update(
+        delivery_mode="inline",
+        source_requirements={"audit_agent": "researcher", "files": [{"path": "/mnt/user-data/uploads/rules.txt", "total_lines": 1}], "document_ids": []},
+    )
+    return task
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "The audit is complete; see the source coverage map.",
+        '{"summary":"All files reviewed.","artifact_metadata":{"completion_status":"complete","evidence_gaps":[]}}',
+        '{"summary":"Done","artifact_content":null,"artifact_metadata":{"completion_status":"complete"}}',
+        '{"summary":"Done","artifact_content":"No original conclusion was delivered."}',
+        '{"summary":"Done","artifact_content":"```text\\nAudit conclusion: allowed.\\n```"}',
+        "Here is a receipt, not the public value: Audit conclusion: allowed.",
+    ],
+)
+def test_file_only_inline_auditor_summary_without_real_public_payload_is_partial(text):
+    value = normalize_dr2_subagent_result(_raw(text), task=_file_audit_task())
+    assert value.completion_status == "partial"
+    assert value.retryable is True
+    assert value.recommended_action == "retry"
+    assert any("complete original audit" in gap and "raw public final" in gap for gap in value.artifact_metadata["evidence_gaps"])
+
+
+@pytest.mark.parametrize("envelope", [False, True])
+@pytest.mark.parametrize("conclusion", ["allowed", "prohibited"])
+def test_file_only_inline_auditor_accepts_actual_schema_valid_payload_without_selecting_an_answer(envelope, conclusion):
+    answer = f"Audit conclusion: {conclusion}."
+    text = json.dumps({"summary": "Completed the original audit.", "artifact_content": answer}) if envelope else answer
+    value = normalize_dr2_subagent_result(_raw(text), task=_file_audit_task())
+    assert value.completion_status == "complete"
+    assert value.artifact_content == answer
+    assert value.artifact_metadata["evidence_gaps"] == []
+
+
+@pytest.mark.parametrize("condition", ["native_stop", "partial", "blocked", "evidence_gap"])
+def test_real_file_audit_payload_never_promotes_unfinished_native_status(condition):
+    answer = "Audit conclusion: allowed."
+    metadata = {"completion_status": "complete", "evidence_gaps": []}
+    if condition in {"partial", "blocked"}:
+        metadata["completion_status"] = condition
+    elif condition == "evidence_gap":
+        metadata["evidence_gaps"] = ["Original substantive audit remains unfinished."]
+    text = json.dumps({"summary": "The audit draft", "artifact_content": answer, "artifact_metadata": metadata})
+    raw = _raw(text, stop_reason="token_capped" if condition == "native_stop" else None)
+    value = normalize_dr2_subagent_result(raw, task=_file_audit_task())
+    assert value.completion_status != "complete"
+    assert value.retryable is True
+    assert value.artifact_content == answer
+
+
+@pytest.mark.parametrize("damage", ["tool_only", "different_final", "tool_intent", "invalid_tool_intent", "host_property", "forged_metadata"])
+def test_file_only_inline_auditor_requires_actual_final_payload_not_a_claim_or_other_message(damage):
+    answer = "Audit conclusion: allowed."
+    raw = _raw(answer)
+    if damage == "tool_only":
+        raw.ai_messages = [{"type": "tool", "content": answer}]
+    elif damage == "different_final":
+        raw.ai_messages[-1]["content"] = "Done"
+    elif damage == "tool_intent":
+        raw.ai_messages[-1]["tool_calls"] = [{"id": "unfinished", "name": "read_file", "args": {"path": "/mnt/user-data/uploads/rules.txt"}}]
+    elif damage == "invalid_tool_intent":
+        raw.ai_messages[-1]["invalid_tool_calls"] = [{"name": "read_file", "args": "bad"}]
+    elif damage == "host_property":
+        raw = _raw("Done", artifact_content=answer)
+    else:
+        raw = _raw(json.dumps({"summary": "Done", "artifact_metadata": {"completion_status": "complete", "public_audit_payload": answer}}))
+    value = normalize_dr2_subagent_result(raw, task=_file_audit_task())
+    assert value.completion_status == "partial"
+    assert value.artifact_metadata["evidence_gaps"]
+
+
+@pytest.mark.parametrize("change", ["rag", "artifact", "other_role", "other_auditor", "no_files", "no_schema"])
+def test_missing_inline_file_audit_payload_gate_keeps_other_contracts_unchanged(change):
+    task = _file_audit_task()
+    contract = task.context_refs["task_contract"]
+    if change == "rag":
+        contract["source_requirements"]["document_ids"] = ["document"]
+    elif change == "artifact":
+        contract["delivery_mode"] = "artifact"
+    elif change == "other_role":
+        task.subagent_type = "coder"
+    elif change == "other_auditor":
+        contract["source_requirements"]["audit_agent"] = "reporter"
+    elif change == "no_files":
+        contract["source_requirements"]["files"] = []
+    else:
+        contract.pop("output_schema")
+    value = normalize_dr2_subagent_result(_raw("All source files were reviewed."), task=task)
+    assert value.completion_status == "complete"
+
+
+def test_missing_public_audit_payload_recovers_actual_auditor_even_after_complete_source_reads(tmp_path):
+    from langchain_core.messages import HumanMessage
+
+    from deerflow.sp.actions import SPAction
+    from deerflow.sp.actions.handlers.base import HandlerContext
+    from deerflow.sp.actions.handlers.delegate import DelegateHandler
+    from deerflow.sp.agent_tools import SPFinishAvailabilityMiddleware, build_sp_control_tools
+    from deerflow.sp.memory import TaskMemoryStack
+    from deerflow.sp.source_access import public_audit_completion_gaps
+
+    task = _file_audit_task()
+    raw = _raw('{"summary":"All files reviewed.","artifact_metadata":{"completion_status":"complete"}}')
+    raw.ai_messages[:0] = [
+        {"type": "ai", "tool_calls": [{"id": "read", "name": "read_file", "args": {"path": "/mnt/user-data/uploads/rules.txt"}}]},
+        {"type": "tool", "tool_call_id": "read", "name": "read_file", "content": "Original rule text"},
+    ]
+    value = normalize_dr2_subagent_result(raw, task=task)
+    state = {"sp_loop_run_id": "run", "sp_non_interactive": True, "sp_task_contract": task.context_refs["task_contract"], "thread_data": {"outputs_path": str(tmp_path)}}
+    stack = TaskMemoryStack()
+    action = SPAction.create("DELEGATE", target_agent="researcher", task="Perform the complete original audit", reason="Audit public sources")
+    result = DelegateHandler(executor=SimpleNamespace(execute=lambda _: value)).handle(action, HandlerContext(state=state, stack=stack, thread_id="thread", run_id="run"))
+    state.update(result.state_update)
+    state["sp_task_memory"] = stack.to_dict()
+    assert source_access_gaps(state) == []
+    assert public_audit_completion_gaps(state)
+
+    class Request:
+        def __init__(self, *, tools, messages):
+            self.state = state
+            self.tools = tools
+            self.messages = messages
+
+        def override(self, **changes):
+            return Request(tools=changes.get("tools", self.tools), messages=changes.get("messages", self.messages))
+
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(Request(tools=build_sp_control_tools(), messages=[HumanMessage(content="Audit the original scenario.")]))
+    assert [tool.name for tool in filtered.tools] == ["sp_delegate"]
+    assert filtered.messages[-1].name == "sp_public_source_audit_required"
+    assert "complete original audit" in filtered.messages[-1].content
+    assert "raw public final" in filtered.messages[-1].content
+
+
 def test_promoted_empty_answer_still_requires_full_observed_sources():
     task = _task({"type": "array"})
     task.context_refs["task_contract"]["source_requirements"] = {"files": [{"path": "/mnt/user-data/uploads/document.txt", "total_lines": 2}]}

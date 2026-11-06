@@ -517,6 +517,7 @@ class DR2SPExecutorProvider:
                 source_prefetch_settings=source_prefetch_settings if prefetch_for_auditor else None,
                 source_prefetch_contract=public_contract if prefetch_for_auditor else None,
                 source_prefetch_access=state.get("sp_source_access") if prefetch_for_auditor else None,
+                source_prefetch_auditor_role=task.subagent_type if prefetch_for_auditor else None,
                 public_output_contract=public_contract if schema_instruction is not None and public_contract.get("delivery_mode") == "artifact" else None,
             )
 
