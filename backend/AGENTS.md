@@ -1158,3 +1158,22 @@ matches an explicit public output schema. Preserve its bytes, do not extract or
 repair answers from wrappers, and retain source-access gating. Structured
 envelope `artifact_content` uses the artifact adapter's JSON serialization.
 Regression coverage lives in `tests/test_sp_schema_delivery.py`.
+
+`sp/source_prefetch.py` implements optional host prefetch at the subagent
+executor boundary, before the first model call. Resolve its four
+`sp_source_prefetch_*` settings from trusted run configuration, never task
+metadata. `sp/runtime.py` enables it only for `source_requirements.audit_agent`.
+Only the final policy/skill-filtered native read/RAG tools may execute; use the
+same runtime tool interceptors and per-run budget. Append host-marked real
+AI/Tool message pairs and capture them before streaming, so transport failure
+cannot erase actual reads. Count the local tokenizer's full chat/tool template
+and reply prefix, with explicit reply reserve plus 2,048 tokens. Keep tokenizer
+paths outside serialized graph/model state. Native externalization preserves
+raw results, and only actual visible full reads can establish source coverage.
+An innermost model wrapper marks host pairs visible only after their complete
+original content survives native summarization and input trimming; source access
+ignores unobserved host results. Also honor the native summarizer's actual
+trigger while filling the initial prompt. Do not treat host execution by itself
+as observation by the model.
+Do not infer audit quality or add generated findings during prefetch. Tests are
+`test_sp_source_prefetch.py`, provider context tests and executor failure capture.

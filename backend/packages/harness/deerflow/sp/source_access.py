@@ -43,6 +43,11 @@ def collect_source_access(messages: list | None) -> dict:
             continue
         if message.get("type", message.get("role")) != "tool" or message.get("status") == "error":
             continue
+        extra = message.get("additional_kwargs") or {}
+        if isinstance(extra, Mapping) and extra.get("sp_host_source_prefetch") and not extra.get("sp_host_source_prefetch_visible"):
+            # Host execution alone is not model observation: native summary or
+            # input trimming may remove a prefetched original before first use.
+            continue
         call = calls.get(message.get("tool_call_id"))
         if not call or call.get("name") != message.get("name"):
             continue
@@ -118,7 +123,6 @@ def source_access_gaps(state: Mapping[str, Any]) -> list[str]:
             chunks.update(value for value in page.get("chunk_ids", []) if isinstance(value, str) and value)
         if len(totals) != 1 or len(chunks) != next(iter(totals), -1):
             gaps.append(
-                f"Required external source evidence remains unread: document_id={document_id}. "
-                "Enumerate all pages with ragflow_retrieve(document_id=..., page_size=100); read complete chunk content, not a preview or a zero-match query."
+                f"Required external source evidence remains unread: document_id={document_id}. Enumerate all pages with ragflow_retrieve(document_id=..., page_size=100); read complete chunk content, not a preview or a zero-match query."
             )
     return gaps

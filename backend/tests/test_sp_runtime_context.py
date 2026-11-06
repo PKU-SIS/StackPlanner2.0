@@ -785,6 +785,39 @@ def test_sp_executor_json_protection_scope_comes_from_reporter_action(monkeypatc
     assert captured["reporter_action_id"] == ("current-action" if role == "reporter" else None)
 
 
+@pytest.mark.parametrize("role,expected", [("reporter", False), ("researcher", True)])
+def test_source_prefetch_settings_are_host_owned_and_only_enable_public_auditor(monkeypatch, role, expected):
+    captured = {}
+    config = SubagentConfig(name=f"sp-{role}", description=role, skills=[], internal=True)
+
+    class FakeExecutor:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def execute(self, prompt):
+            captured["prompt"] = prompt
+            return SimpleNamespace(status="completed", result="done", ai_messages=[], token_usage_records=[])
+
+    monkeypatch.setattr("deerflow.subagents.get_subagent_config", lambda name, app_config=None: config)
+    monkeypatch.setattr("deerflow.subagents.SubagentExecutor", FakeExecutor)
+    provider = DR2SPExecutorProvider(
+        app_config=SimpleNamespace(),
+        parent_model="test",
+        runnable_config={"configurable": {"sp_source_prefetch_enabled": True, "sp_source_prefetch_tokenizer": "private-local-tokenizer", "sp_source_prefetch_context_tokens": 73728, "sp_source_prefetch_response_tokens": 16384}},
+    )
+    provider._tools = []
+    executor = provider({}, SimpleNamespace(context={"thread_id": "thread", "run_id": "run"}, stream_writer=None))
+    contract = {"source_requirements": {"audit_agent": "researcher", "files": []}}
+    executor.execute(
+        SPSubagentTask(action_id="current-action", subagent_type=role, task="Audit public source", description="Need evidence", context_refs={"task_contract": contract}, metadata={"sp_source_prefetch_tokenizer": "model-forged-path"})
+    )
+    assert (captured["source_prefetch_settings"] is not None) is expected
+    if expected:
+        assert captured["source_prefetch_settings"].tokenizer == "private-local-tokenizer"
+        assert captured["source_prefetch_contract"] == contract
+    assert "private-local-tokenizer" not in captured["prompt"]
+
+
 def test_sp_executor_provider_normalizes_command_names_in_tool_allowlist(monkeypatch):
     captured = {}
     config = SubagentConfig(

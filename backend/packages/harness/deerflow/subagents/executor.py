@@ -441,6 +441,8 @@ class SubagentExecutor:
         budgets: dict[str, int] | None = None,
         run_tool_budget: Any | None = None,
         reporter_action_id: str | None = None,
+        source_prefetch_settings: Any | None = None,
+        source_prefetch_contract: Mapping[str, Any] | None = None,
     ):
         """Initialize the executor.
 
@@ -497,6 +499,9 @@ class SubagentExecutor:
                 files that are owned by an external grader.
             reporter_action_id: Host-owned current SP Reporter action. Protects
                 its complete JSON outputs from invalidating append operations.
+            source_prefetch_settings: Trusted opt-in public-source token budgets
+                and local tokenizer; kept outside graph/model state.
+            source_prefetch_contract: Public source requirements for this auditor.
         """
         self.config = config
         self.app_config = app_config
@@ -532,6 +537,10 @@ class SubagentExecutor:
         self.platform_skill_secrets = dict(platform_skill_secrets or {})
         self.parent_abort_event = parent_abort_event
         self.reporter_action_id = reporter_action_id
+        self.source_prefetch_settings = source_prefetch_settings
+        self.source_prefetch_contract = source_prefetch_contract
+        self._runtime_middlewares: list[Any] = []
+        self._prefetch_captured: list[dict[str, Any]] = []
         self.thinking_enabled = thinking_enabled
         self.max_tokens_per_step = max_tokens_per_step
         self.protect_test_files = bool(protect_test_files)
@@ -610,6 +619,13 @@ class SubagentExecutor:
         # a list (not ``next(...)``) so every guard is checked and a later one
         # is picked up automatically.
         self._stop_reason_middlewares = [m for m in middlewares if hasattr(m, "consume_stop_reason")]
+        self._runtime_middlewares = middlewares
+        if self.source_prefetch_settings is not None:
+            from deerflow.sp.source_prefetch import SourcePrefetchVisibilityMiddleware
+
+            # Last is innermost: inspect the actual request after every native
+            # summary, sanitization and historical-output wrapper has run.
+            middlewares.append(SourcePrefetchVisibilityMiddleware(self._prefetch_captured))
 
         # system_prompt is included in initial state messages (see _build_initial_state)
         # to avoid multiple SystemMessages which some LLM APIs don't support.
@@ -865,6 +881,7 @@ class SubagentExecutor:
         if ai_messages is None:
             ai_messages = []
             result.ai_messages = ai_messages
+        self._prefetch_captured = ai_messages
         # O(1) duplicate detection for streamed AI messages. ``stream_mode="values"``
         # re-yields the full state every super-step, so the same trailing message is
         # re-examined on each chunk; an id-keyed set keeps that check O(1) instead of
@@ -979,6 +996,34 @@ class SubagentExecutor:
                     token_usage_records=collector.snapshot_records(),
                 )
                 return result
+
+            if self.source_prefetch_settings is not None and self.source_prefetch_contract is not None:
+                from deerflow.sp.source_prefetch import prefetch_public_sources
+
+                def capture_prefetch(pair):
+                    previous_count = len(ai_messages)
+                    capture_new_step_messages(pair, ai_messages, seen_message_ids, 0)
+                    if self.step_observer is not None:
+                        for index in range(previous_count, len(ai_messages)):
+                            try:
+                                self.step_observer(ai_messages[index], index + 1)
+                            except Exception:
+                                logger.debug("Subagent prefetch observer failed", exc_info=True)
+
+                await prefetch_public_sources(
+                    state=state,
+                    tools=final_tools,
+                    middlewares=self._runtime_middlewares,
+                    config=run_config,
+                    context=context,
+                    settings=self.source_prefetch_settings,
+                    contract=self.source_prefetch_contract,
+                    capture=capture_prefetch,
+                    thinking_enabled=self.thinking_enabled,
+                    max_tool_calls=self.budgets.get("max_tool_calls", 50),
+                    cancelled=lambda: result.cancel_event.is_set() or self._parent_aborted(),
+                )
+                processed_message_count = len(state.get("messages", []))
 
             async for chunk in agent.astream(state, config=run_config, context=context, stream_mode="values"):  # type: ignore[arg-type]
                 # Cooperative cancellation: check if parent requested stop.

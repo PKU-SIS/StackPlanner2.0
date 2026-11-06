@@ -538,3 +538,22 @@ schema, the native harness preserves that original response as an artifact even
 below the generic large-result threshold. This includes short FinAuditing values
 and CLAUSE arrays. Structured envelope artifacts remain JSON when saved; the
 observed-source requirements still apply to empty and nonempty answers alike.
+
+Public source prefetch is opt-in. The trusted run configuration may set
+`sp_source_prefetch_enabled`, `sp_source_prefetch_tokenizer` (an existing local
+Transformers tokenizer directory), `sp_source_prefetch_context_tokens`, and
+`sp_source_prefetch_response_tokens`. Only the public contract's audit agent
+prefetches its declared uploaded files and scoped document IDs. The host executes
+the policy-filtered native tools through their ordinary tool interceptors and
+records explicitly marked calls/results. It counts the actual tokenizer chat
+template, exposed tool schemas and generation prefix, reserving the configured
+reply budget plus 2,048 tokens. Oversized results use native lossless
+externalization and real line reads; unread previews never satisfy source gates.
+The private tokenizer path stays outside model/graph state. Native summarization
+still manages subsequent model/tool history, so configure its response reserve
+to match the run. Prefetch also stays below the native summarizer's actual
+trigger. Host execution alone does not establish a read: an innermost model-call
+observer confirms that complete original tool pairs survive all input wrappers.
+Summarized or clipped originals never count as model-visible source evidence.
+A single oversized source line remains incomplete until it can be read within
+the model's real context.

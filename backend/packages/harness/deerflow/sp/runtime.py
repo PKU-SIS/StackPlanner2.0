@@ -469,6 +469,13 @@ class DR2SPExecutorProvider:
                         }
                     )
 
+            from deerflow.sp.source_prefetch import SourcePrefetchSettings
+
+            source_prefetch_settings = SourcePrefetchSettings.from_config({**configurable, **{key: context[key] for key in context if key.startswith("sp_source_prefetch_")}})
+            public_contract = task.context_refs.get("task_contract")
+            source_requirements = public_contract.get("source_requirements") if isinstance(public_contract, Mapping) else None
+            prefetch_for_auditor = isinstance(source_requirements, Mapping) and source_requirements.get("audit_agent") == task.subagent_type
+
             return SubagentExecutor(
                 config=subagent_config,
                 tools=available_tools,
@@ -498,6 +505,8 @@ class DR2SPExecutorProvider:
                 budgets=dict(task.budgets),
                 run_tool_budget=run_tool_budget,
                 reporter_action_id=task.action_id if task.subagent_type == "reporter" else None,
+                source_prefetch_settings=source_prefetch_settings if prefetch_for_auditor else None,
+                source_prefetch_contract=public_contract if prefetch_for_auditor else None,
             )
 
         def observe_raw_result(raw_result: Any) -> None:

@@ -904,6 +904,33 @@ class TestAsyncExecutionPath:
     """Test _aexecute() async execution path."""
 
     @pytest.mark.anyio
+    async def test_host_prefetch_steps_survive_subsequent_model_failure(self, classes, base_config, mock_agent, monkeypatch):
+        from deerflow.sp import source_prefetch
+
+        pair = [
+            classes["AIMessage"](content="Host prefetch", id="host-call", tool_calls=[{"name": "read_file", "args": {"path": "/mnt/user-data/uploads/rules.txt"}, "id": "call"}], additional_kwargs={"sp_host_source_prefetch": True}),
+            classes["ToolMessage"](content="Original source", tool_call_id="call", name="read_file", id="host-result", additional_kwargs={"sp_host_source_prefetch": True}),
+        ]
+
+        async def fake_prefetch(**kwargs):
+            kwargs["state"]["messages"].extend(pair)
+            kwargs["capture"](pair)
+
+        async def failing_stream(*args, **kwargs):
+            raise RuntimeError("Model transport failed after source reads")
+            yield
+
+        monkeypatch.setattr(source_prefetch, "prefetch_public_sources", fake_prefetch)
+        mock_agent.astream = failing_stream
+        observed = []
+        executor = classes["SubagentExecutor"](config=base_config, tools=[], source_prefetch_settings=object(), source_prefetch_contract={"source_requirements": {}}, step_observer=lambda message, index: observed.append((message, index)))
+        with patch.object(executor, "_create_agent", return_value=mock_agent):
+            result = await executor._aexecute("Audit the public source")
+        assert result.status == classes["SubagentStatus"].FAILED
+        assert [message["id"] for message in result.ai_messages] == ["host-call", "host-result"]
+        assert len(observed) == 2
+
+    @pytest.mark.anyio
     async def test_aexecute_success(self, classes, base_config, mock_agent, msg):
         """Test successful async execution returns completed result."""
         SubagentExecutor = classes["SubagentExecutor"]
