@@ -18,6 +18,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage, ToolMessage, convert_to_openai_messages
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langgraph.prebuilt.tool_node import ToolCallRequest, ToolRuntime
+from langgraph.types import Command
 
 logger = logging.getLogger(__name__)
 _TOKENIZER_LOCK = threading.Lock()
@@ -139,8 +140,17 @@ async def _native_call(request: ToolCallRequest, middlewares: list) -> ToolMessa
 
         handler = wrapped
     result = await handler(request)
+    if isinstance(result, Command) and isinstance(result.update, Mapping) and not result.goto and result.graph is None and result.resume is None:
+        updates = result.update
+        returned = updates.get("messages", [])
+        # Native lazy sandbox acquisition wraps the genuine ToolMessage in a
+        # state-update Command. Apply its non-message state before continuing;
+        # the caller appends the one actual result with normal budget handling.
+        if isinstance(returned, list) and len(returned) == 1 and isinstance(returned[0], ToolMessage) and returned[0].tool_call_id == request.tool_call["id"]:
+            request.state.update({key: value for key, value in updates.items() if key != "messages"})
+            result = returned[0]
     if not isinstance(result, ToolMessage):
-        raise TypeError("Public source read returned an unsupported native control result")
+        raise TypeError(f"Public source read returned an unsupported native control result: {type(result).__module__}.{type(result).__qualname__}")
     return result
 
 

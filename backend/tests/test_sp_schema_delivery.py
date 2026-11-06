@@ -78,3 +78,32 @@ def test_structured_envelope_artifact_persists_as_json_not_python_repr(tmp_path,
 
     assert json.loads(Path(written.metadata.workspace_path).read_text()) == answer
     assert written.metadata.virtual_path.endswith("/spact_small123.json")
+
+
+@pytest.mark.parametrize("answer", ["[]", [], [{"text": "Exact sentence.", "explanation": "A contradiction"}]])
+def test_native_reporter_fallback_saves_real_answer_despite_phantom_current_action_receipt(tmp_path, answer):
+    from deerflow.sp.actions import SPAction
+    from deerflow.sp.actions.handlers.base import HandlerContext
+    from deerflow.sp.actions.handlers.delegate import DelegateHandler
+    from deerflow.sp.memory import TaskMemoryStack
+    from deerflow.sp.subagents import SPSubagentResult, SPSubagentStatus
+
+    def execute(task):
+        return SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Done",
+            artifact_content=answer,
+            artifact_type="report_revision",
+            artifact_metadata={"completion_status": "complete", "created_paths": [f"/mnt/user-data/outputs/clause_answer-{task.action_id}.json"]},
+        )
+
+    state = {"thread_data": {"outputs_path": str(tmp_path)}, "sp_task_contract": {"output_schema": {"type": "array"}, "output_file_extension": ".json"}}
+    action = SPAction.create("DELEGATE", target_agent="reporter", task="Deliver public JSON answer", reason="Audit")
+    result = DelegateHandler(executor=SimpleNamespace(execute=execute)).handle(action, HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="thread", run_id="run"))
+    refs = result.state_update["sp_current_artifact_refs"]
+    ref = refs["report_revision"]
+    assert ref["virtual_path"].endswith(f"/{action.action_id}.json")
+    assert ref["metadata"]["completion_status"] == "complete"
+    paths = list(tmp_path.rglob("*.json"))
+    assert len(paths) == 1
+    assert json.loads(paths[0].read_text()) == (json.loads(answer) if isinstance(answer, str) else answer)

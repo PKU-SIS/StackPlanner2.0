@@ -149,3 +149,24 @@ async def test_native_tool_interceptor_is_used_and_can_refuse_prefetch():
     await prefetch_public_sources(state=state, tools=[read_file], middlewares=[Refuse()], config={}, context={}, settings=_settings(), contract={"source_requirements": required}, token_counter=_counter)
     assert calls == ["read_file"]
     assert source_access_gaps({"sp_task_contract": {"source_requirements": required}, "sp_source_access": collect_source_access([m.model_dump() for m in state["messages"]])})
+
+
+@pytest.mark.asyncio
+async def test_real_native_lazy_sandbox_command_preserves_result_and_state():
+    from langgraph.prebuilt.tool_node import ToolRuntime
+
+    from deerflow.sandbox.middleware import SandboxMiddleware
+
+    @tool("read_file")
+    def read_file(runtime: ToolRuntime, path: str, description: str, start_line: int, end_line: int) -> str:
+        """Native read with lazy sandbox acquisition."""
+        runtime.state["sandbox"] = {"sandbox_id": "newly-acquired-native-sandbox"}
+        return "first original line\nsecond original line"
+
+    required = {"files": [{"path": "/mnt/user-data/uploads/rules.txt", "total_lines": 2}], "document_ids": []}
+    state = {"messages": [HumanMessage(content="Audit source.")]}
+    await prefetch_public_sources(state=state, tools=[read_file], middlewares=[SandboxMiddleware(lazy_init=True)], config={}, context={}, settings=_settings(), contract={"source_requirements": required}, token_counter=_counter)
+    assert state["sandbox"] == {"sandbox_id": "newly-acquired-native-sandbox"}
+    recorded = [message.model_dump() for message in state["messages"]]
+    mark_prefetch_model_visibility(state["messages"], recorded)
+    assert collect_source_access(recorded)["reads"] == {"/mnt/user-data/uploads/rules.txt": [[1, 2]]}

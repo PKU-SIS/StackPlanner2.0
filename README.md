@@ -557,3 +557,9 @@ observer confirms that complete original tool pairs survive all input wrappers.
 Summarized or clipped originals never count as model-visible source evidence.
 A single oversized source line remains incomplete until it can be read within
 the model's real context.
+
+For schema-constrained deliveries, a model-declared output filename must be
+actually readable before it can take precedence over generated inline content.
+If the claimed file does not exist, the native fallback validates and saves the
+original inline answer under its current-action filename. A receipt without
+either a real file or an actual valid inline answer remains incomplete.

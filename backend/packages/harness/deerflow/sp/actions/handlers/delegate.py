@@ -1506,6 +1506,15 @@ def _apply_report_acceptance_checks(
     declared_paths = [str(value) for value in raw_created_paths if isinstance(value, str)] if isinstance(raw_created_paths, list) else []
     valid_paths = [value for value in declared_paths if _report_created_path_matches_action(value, task.action_id)]
     discarded_paths = [value for value in declared_paths if value not in valid_paths]
+    public_schema = isinstance(context.state.get("sp_task_contract"), Mapping) and "output_schema" in context.state["sp_task_contract"]
+    unreadable_paths = []
+    if public_schema:
+        # A model's current-action filename is still only a claim. A missing
+        # claimed file must not hide the actual generated inline answer, which
+        # the ordinary native fallback can validate and persist unchanged.
+        unreadable_paths = [path for path in valid_paths if artifact_adapter.read_text_artifact({"virtual_path": path}, state=context.state, thread_id=context.thread_id, max_chars=REPORTER_JSON_MAX_CHARS) is None]
+        valid_paths = [path for path in valid_paths if path not in unreadable_paths]
+        discarded_paths.extend(unreadable_paths)
     result.artifact_metadata["created_paths"] = valid_paths
     json_paths, json_gaps = _report_json_artifact_checks(
         result,
@@ -1592,9 +1601,11 @@ def _apply_report_acceptance_checks(
     )
     quality_checks["created_path_ownership"] = {
         "discarded_paths": discarded_paths,
-        "fallback_artifact_content": bool(result.artifact_content),
-        "passed": not discarded_paths or bool(result.artifact_content),
+        "fallback_artifact_content": result.artifact_content is not None if public_schema else bool(result.artifact_content),
+        "passed": not discarded_paths or (result.artifact_content is not None if public_schema else bool(result.artifact_content)),
     }
+    if public_schema:
+        quality_checks["created_path_ownership"]["unreadable_paths"] = unreadable_paths
     if json_paths:
         quality_checks["json_artifact_syntax"] = {
             "files": json_paths,

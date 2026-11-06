@@ -69,6 +69,27 @@ def test_report_schema_uses_actual_file_not_duplicate_inline_preview():
         assert (result.artifact_metadata["completion_status"] == "complete") is passes
 
 
+@pytest.mark.parametrize("inline", ["[]", None])
+def test_unreadable_model_declared_path_does_not_hide_real_inline_schema_delivery(inline):
+    from types import SimpleNamespace
+
+    from deerflow.sp.actions.handlers.base import HandlerContext
+    from deerflow.sp.actions.handlers.delegate import _apply_report_acceptance_checks
+    from deerflow.sp.memory import TaskMemoryStack
+    from deerflow.sp.subagents import SPSubagentResult, SPSubagentStatus, SPSubagentTask
+
+    state = {"sp_task_contract": _contract({"type": "array", "items": {"type": "string"}})}
+    task = SPSubagentTask(action_id="spact_call_current123", subagent_type="reporter", task="Deliver JSON array", description="Format")
+    phantom = "/mnt/user-data/outputs/clause_answer-spact_call_current123.json"
+    result = SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Done", artifact_content=inline, artifact_metadata={"created_paths": [phantom], "completion_status": "complete"})
+    _apply_report_acceptance_checks(result, task=task, context=HandlerContext(state=state, stack=TaskMemoryStack()), artifact_adapter=SimpleNamespace(read_text_artifact=lambda *args, **kwargs: None))
+    assert result.artifact_metadata["created_paths"] == []
+    checks = result.artifact_metadata["quality_checks"]
+    assert checks["created_path_ownership"]["discarded_paths"] == [phantom]
+    assert checks["public_output_schema"]["passed"] is (inline is not None)
+    assert (result.artifact_metadata["completion_status"] == "complete") is (inline is not None)
+
+
 def test_finish_handler_rejects_bad_schema_without_accepting_finish():
     from deerflow.sp.actions import SPAction
     from deerflow.sp.actions.handlers.base import HandlerContext

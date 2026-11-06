@@ -1177,3 +1177,14 @@ trigger while filling the initial prompt. Do not treat host execution by itself
 as observation by the model.
 Do not infer audit quality or add generated findings during prefetch. Tests are
 `test_sp_source_prefetch.py`, provider context tests and executor failure capture.
+
+For explicit public output schemas, Reporter acceptance filters model-declared
+current-action paths through actual readable artifact contents. Missing claims
+are recorded in host `created_path_ownership.unreadable_paths` and cannot hide
+real `artifact_content`. Native fallback may validate/persist that original
+inline answer; a missing file plus absent/invalid inline content remains partial.
+Do not treat model-authored file/readback receipts as actual filesystem evidence.
+The host prefetch tool executor accepts the native lazy-sandbox
+`Command(update={sandbox: ..., messages: [ToolMessage]})`, applies its state update
+and preserves the real tool result. It must not swallow graph/goto/resume control
+commands or replace their semantics with a fabricated successful result.
