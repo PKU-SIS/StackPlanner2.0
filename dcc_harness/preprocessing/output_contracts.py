@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from functools import lru_cache
 from pathlib import Path
+from string import Template
 
 from dcc_harness.data import PublicTask
 
@@ -52,7 +53,12 @@ def _published_nba_parts() -> tuple[str, str, str]:
         Path(__file__).resolve().parents[2]
         / "configs/dcc/prompts/rulearena-nba/task.md"
     )
-    before_rules, remainder = path.read_text().strip().split("${rules}", 1)
+    # Match the public rendered prompt, including string.Template's $$ -> $
+    # monetary-dollar escaping. Substitution values are not expanded again.
+    rendered = Template(path.read_text().strip()).substitute(
+        rules="${rules}", document_text="${document_text}"
+    )
+    before_rules, remainder = rendered.split("${rules}", 1)
     between, after_scenario = remainder.split("${document_text}", 1)
     return before_rules, between, after_scenario
 

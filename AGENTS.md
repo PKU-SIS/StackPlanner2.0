@@ -212,6 +212,10 @@ tables, or split complexity levels into train/validation/test. The raw evaluator
 is provenance only: read prompt constants with AST and never execute it.
 Release construction is injectable via `release_builder`; the NBA baseline checks
 source/input/label parity and uses the shared archive/download implementation.
+Recognize the NBA public source contract after the same `string.Template`
+substitution used by prompt composition, including literal monetary-dollar
+escaping. Test the rendered template, never a placeholder-only replacement that
+leaves `$$` in the public prefix. Do not edit frozen task inputs to match it.
 See `docs/DCC_RULEARENA_NBA.md` and `tests/test_dcc_rulearena.py`.
 `preprocessing.rulearena-nba.audit-v1.json` is an opt-in execution-prompt variant;
 it preserves the original scenarios/rules/labels/template, adds no domain facts,

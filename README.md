@@ -523,6 +523,8 @@ document; FinAuditing retains Researcher for filing evidence. The unchanged
 published NBA task template also requires Researcher to read the complete uploaded
 rules. Delivery requires the designated auditor's latest current-run native
 observation to be complete, without evidence gaps or any early-stop reason.
+NBA template recognition uses the prompt composer's normal monetary-dollar
+escaping and preserves the published salary assumptions.
 These checks do
 not infer findings, require nonempty predictions or replace semantic auditing.
 

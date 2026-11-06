@@ -409,12 +409,14 @@ def test_clause_source_contract_requires_full_document_and_preserves_audit_role(
 
 
 def test_public_nba_template_requires_complete_uploaded_rules_without_private_routing():
+    from string import Template
+
     from dcc_harness.data import InputFile, PublicTask
     from dcc_harness.preprocessing.output_contracts import public_output_contract
 
     template = (ROOT / "configs/dcc/prompts/rulearena-nba/task.md").read_text()
-    prompt = template.replace("${rules}", "Read dcc-rule-0.txt").replace(
-        "${document_text}", "A public transaction scenario."
+    prompt = Template(template).substitute(
+        rules="Read dcc-rule-0.txt", document_text="A public transaction scenario."
     )
     contract = public_output_contract(
         PublicTask(
