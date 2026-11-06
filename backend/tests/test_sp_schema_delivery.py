@@ -22,6 +22,21 @@ def _raw(text, **kwargs):
     return SimpleNamespace(status="completed", result=text, ai_messages=[{"type": "ai", "content": text}], **kwargs)
 
 
+@pytest.mark.parametrize("role", ["reporter", "researcher"])
+def test_public_schema_success_prompt_uses_raw_value_without_double_encoded_envelope(role):
+    from deerflow.sp.subagents.dr2_adapter import render_sp_subagent_prompt
+
+    task = _task({"type": "array", "items": {"type": "string"}})
+    task.subagent_type = role
+    task.context_refs["task_contract"]["source_requirements"] = {"audit_agent": role}
+    prompt = render_sp_subagent_prompt(task)
+    assert "<public-schema-final-delivery>" in prompt
+    assert "not a JSON string containing that value" in prompt
+    assert "Honor the subagent output contract: return compact JSON with summary" not in prompt
+    assert "partial" in prompt and "blocked" in prompt
+    assert "Never use an empty array" in prompt
+
+
 @pytest.mark.parametrize(
     "text,schema,mode",
     [

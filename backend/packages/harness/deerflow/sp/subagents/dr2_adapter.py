@@ -135,6 +135,40 @@ def _json_safe(value: Any) -> Any:
     return repr(value)
 
 
+def _public_schema_delivery_contract(task: SPSubagentTask | None) -> Mapping[str, Any] | None:
+    if task is None:
+        return None
+    contract = task.context_refs.get("task_contract")
+    if not isinstance(contract, Mapping) or "output_schema" not in contract:
+        return None
+    requirements = contract.get("source_requirements")
+    audit_agent = requirements.get("audit_agent") if isinstance(requirements, Mapping) else None
+    return contract if task.subagent_type in {"reporter", audit_agent} else None
+
+
+def public_schema_delivery_instruction(task: SPSubagentTask) -> str | None:
+    """Use the declared answer value as transport without changing its schema."""
+    contract = _public_schema_delivery_contract(task)
+    if contract is None:
+        return None
+    mode = contract.get("output_parse_mode", "json")
+    shape = "the raw JSON value matching context_refs.task_contract.output_schema, not a JSON string containing that value" if mode == "json" else "the exact raw text value matching context_refs.task_contract.output_schema"
+    return (
+        "<public-schema-final-delivery>\n"
+        "For a successful completed audit, return only " + shape + ". "
+        "Do not wrap the successful final answer in summary/artifact_content/artifact_metadata, Markdown, code fences, or a file receipt. "
+        "This task-specific successful-final transport replaces generic SP envelope and file-receipt instructions. "
+        "Use the available native tools normally to inspect all required public source evidence and perform the requested audit. "
+        "The host validates the original final value, checks actual model-visible source access and execution status, and persists the original value as its native current-action artifact when needed. "
+        "Do not invent a filename, claim that an unwritten file exists, or double-encode original source quotations into an outer JSON string. "
+        "Inside the public JSON value, escape quotation marks and control characters correctly once. "
+        "Never use an empty array, default label, fabricated finding or missing-value marker to conceal an incomplete audit. "
+        "If a mandatory source or requirement remains unresolved, do not produce a schema-shaped success answer: instead return the ordinary SP failure envelope with "
+        'artifact_metadata.completion_status="partial" or "blocked" and the concrete unresolved artifact_metadata.evidence_gaps. '
+        "No private chain-of-thought.\n</public-schema-final-delivery>"
+    )
+
+
 def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
     """Render a structured SP task for a DR2 subagent prompt."""
     task.validate_protocol()
@@ -149,6 +183,19 @@ def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
         "context_refs": task.context_refs,
         "metadata": task.metadata,
     }
+    schema_instruction = public_schema_delivery_instruction(task)
+    output_instructions = (
+        [schema_instruction]
+        if schema_instruction is not None
+        else [
+            "Return the task_result envelope fields implied by protocol.message_type. Do not expose private chain-of-thought; report only observable actions, evidence, tests, files, and blockers.",
+            "Honor the subagent output contract: return compact JSON with summary, artifact_content, artifact_type, and artifact_metadata.",
+            'Set artifact_metadata.completion_status to "complete", "partial", or "blocked", and list unmet requirements in artifact_metadata.evidence_gaps.',
+            "Put non-blocking source or coverage caveats in artifact_metadata.disclosed_limitations, and disclose them in artifact_content. These do not waive unmet requirements in evidence_gaps.",
+            "Use artifact_metadata.filename for a desired text-artifact filename. Use artifact_metadata.created_paths only for absolute /mnt/user-data/outputs/... files that were actually created by a file tool.",
+            "Full reports, outlines, research bodies, and other large text belong in artifact_content, never in summary.",
+        ]
+    )
     return "\n".join(
         [
             "<sp-subagent-task>",
@@ -163,13 +210,8 @@ def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
                 "narrower interpretation from the latest delegated wording; report a gap or request "
                 "recovery when the contract is not satisfied."
             ),
-            "Return the task_result envelope fields implied by protocol.message_type. Do not expose private chain-of-thought; report only observable actions, evidence, tests, files, and blockers.",
-            "Honor the subagent output contract: return compact JSON with summary, artifact_content, artifact_type, and artifact_metadata.",
-            'Set artifact_metadata.completion_status to "complete", "partial", or "blocked", and list unmet requirements in artifact_metadata.evidence_gaps.',
-            "Put non-blocking source or coverage caveats in artifact_metadata.disclosed_limitations, and disclose them in artifact_content. These do not waive unmet requirements in evidence_gaps.",
+            *output_instructions,
             "Do not impose an official-source-only requirement unless the original task contract requires it. Respect explicitly allowed missing-value markers without inventing facts or omitting required rows.",
-            "Use artifact_metadata.filename for a desired text-artifact filename. Use artifact_metadata.created_paths only for absolute /mnt/user-data/outputs/... files that were actually created by a file tool.",
-            "Full reports, outlines, research bodies, and other large text belong in artifact_content, never in summary.",
         ]
     )
 
@@ -1095,14 +1137,10 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
 def _is_public_schema_delivery(raw_result: Any, ai_messages: Any, task: SPSubagentTask | None) -> bool:
     from deerflow.sp.output_contract import output_contract_gaps
 
-    if task is None or not isinstance(raw_result, str):
+    if not isinstance(raw_result, str):
         return False
-    contract = task.context_refs.get("task_contract")
-    if not isinstance(contract, Mapping) or "output_schema" not in contract:
-        return False
-    requirements = contract.get("source_requirements")
-    audit_agent = requirements.get("audit_agent") if isinstance(requirements, Mapping) else None
-    if task.subagent_type not in {"reporter", audit_agent}:
+    contract = _public_schema_delivery_contract(task)
+    if contract is None:
         return False
     final_ai = next((message for message in reversed(ai_messages if isinstance(ai_messages, list) else []) if isinstance(message, Mapping) and message.get("type", message.get("role")) in {"ai", "assistant"}), None)
     if final_ai is None or final_ai.get("tool_calls") or final_ai.get("invalid_tool_calls") or _message_text(final_ai.get("content")).strip() != raw_result.strip():

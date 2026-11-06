@@ -449,6 +449,15 @@ class DR2SPExecutorProvider:
                 available_tools=available_tools,
             )
             subagent_config = _apply_sp_stage_tool_policy(subagent_config, task)
+            from deerflow.sp.subagents.dr2_adapter import public_schema_delivery_instruction
+
+            schema_instruction = public_schema_delivery_instruction(task)
+            if schema_instruction is not None:
+                # The public success value is the final transport. Retain the
+                # specialist's execution policy but replace the conflicting
+                # generic outer-envelope system contract.
+                system_prompt = re.sub(r"<output_contract>.*?</output_contract>", "", subagent_config.system_prompt or "", flags=re.DOTALL).strip()
+                subagent_config = replace(subagent_config, system_prompt=system_prompt + "\n\n" + schema_instruction)
             thread_id = str(context.get("thread_id") or task.thread_id or "") or None
             run_id = str(context.get("run_id") or task.run_id or "") or None
             stream_task_id = _task_stream_id(task)

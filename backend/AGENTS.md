@@ -1188,3 +1188,17 @@ The host prefetch tool executor accepts the native lazy-sandbox
 `Command(update={sandbox: ..., messages: [ToolMessage]})`, applies its state update
 and preserves the real tool result. It must not swallow graph/goto/resume control
 commands or replace their semantics with a fabricated successful result.
+
+`public_schema_delivery_instruction` is shared by task rendering and runtime
+system-prompt construction for Reporter/public audit roles. Replace the generic
+`<output_contract>` outer envelope for successful schema-constrained finals with
+the raw public value; keep the specialist execution policy. Failure envelopes
+remain partial/blocked with concrete gaps. Never repair quotations or manufacture
+an answer while converting transport. Normalization and source checks remain
+authoritative for native acceptance and persistence.
+`SPFinishAvailabilityMiddleware` also makes the public source prerequisite
+explicit before model selection: while source coverage is missing and the
+designated auditor has recovery budget, bind only `sp_delegate` and direct it
+to that auditor's allowed read/RAG tools and public Skills. Keep duplicate-role
+policy checkpoints and bounded recovery intact; do not broaden another role's
+permissions or infer coverage from the model's completion claims.

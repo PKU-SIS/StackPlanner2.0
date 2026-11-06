@@ -84,6 +84,27 @@ class _ModelRequestStub:
         )
 
 
+def test_missing_public_sources_route_to_contract_auditor_before_perception_recovery():
+    stack = TaskMemoryStack()
+    stack.append_delegate("Inspect the task", run_id="run", metadata={"target_agent": "perception"})
+    stack.append_observe("Source not in inline context", actor="perception", run_id="run", metadata={"completion_status": "blocked", "evidence_gaps": ["Need original source"]})
+    state = {
+        "sp_loop_run_id": "run",
+        "sp_non_interactive": True,
+        "sp_task_memory": stack.to_dict(),
+        "sp_task_contract": {"source_requirements": {"audit_agent": "researcher", "files": [{"path": "/mnt/user-data/uploads/rules.txt", "total_lines": 2}], "document_ids": ["scoped-doc"]}},
+        "messages": [HumanMessage(content="Audit public sources.")],
+    }
+    request = _ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=state["messages"])
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
+    assert [tool.name for tool in filtered.tools] == ["sp_delegate"]
+    note = filtered.messages[-1]
+    assert note.name == "sp_public_source_audit_required"
+    assert 'target_agent="researcher"' in note.content
+    assert "ragflow_retrieve" in note.content and "read_file" in note.content
+    assert "do not repeat perception" in note.content
+
+
 def test_action_budget_sets_independent_central_action_limit():
     middleware = SPActionBudgetMiddleware(max_actions=7)
 
@@ -1011,11 +1032,16 @@ def test_exhausted_research_without_file_has_explicit_incomplete_state():
     stack = TaskMemoryStack()
     stack.append_delegate("Audit evidence", run_id="run-1", metadata={"target_agent": "researcher"})
     stack.append_observe("Audit incomplete", actor="researcher", run_id="run-1", metadata={"completion_status": "partial", "evidence_gaps": ["Unread evidence remains"]})
-    update = SPFinishAvailabilityMiddleware().after_model({
-        "sp_loop_run_id": "run-1", "sp_non_interactive": True,
-        "sp_task_memory": stack.to_dict(), "sp_recovery_limits": {"delegate": 1},
-        "messages": [HumanMessage(content="Audit the supplied sources."), AIMessage(content="Unable to finish.", id="last")],
-    }, None)
+    update = SPFinishAvailabilityMiddleware().after_model(
+        {
+            "sp_loop_run_id": "run-1",
+            "sp_non_interactive": True,
+            "sp_task_memory": stack.to_dict(),
+            "sp_recovery_limits": {"delegate": 1},
+            "messages": [HumanMessage(content="Audit the supplied sources."), AIMessage(content="Unable to finish.", id="last")],
+        },
+        None,
+    )
     assert update["sp_recovery_exhausted"] == {"target_agent": "researcher", "attempts": 1, "limit": 1, "evidence_gaps": ["Unread evidence remains"]}
     assert update["messages"][0].additional_kwargs["stackplanner"]["status"] == "incomplete"
 

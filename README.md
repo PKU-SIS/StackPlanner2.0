@@ -563,3 +563,12 @@ actually readable before it can take precedence over generated inline content.
 If the claimed file does not exist, the native fallback validates and saves the
 original inline answer under its current-action filename. A receipt without
 either a real file or an actual valid inline answer remains incomplete.
+
+For explicit public output schemas, successful Reporter/auditor finals use the
+raw public JSON/text value directly. The harness replaces its generic outer
+envelope instruction for those roles, validates the unchanged value and saves it
+natively. Actual blockers still use partial/blocked envelopes with concrete gaps;
+source-access and native execution checks remain mandatory.
+When required public sources remain unread, Central's next tool binding directs
+the read to the contract-designated auditor with its ordinary scoped tools;
+unrelated perception/coder retries do not consume the audit before it begins.
