@@ -10,6 +10,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import replace
 from typing import Any, Protocol
 
+from deerflow.sp.public_format_repair import has_unexecuted_public_tool_intent
 from deerflow.sp.subagents.adapter import SPSubagentResult, SPSubagentStatus, SPSubagentTask
 from deerflow.subagents.status_contract import model_response_stop_reason
 
@@ -1033,6 +1034,8 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
     artifact_type = getattr(result, "artifact_type", None)
     artifact_metadata = getattr(result, "artifact_metadata", None)
     ai_messages = getattr(result, "ai_messages", None)
+    public_contract = _public_schema_delivery_contract(task)
+    textual_tool_intent = public_contract is not None and has_unexecuted_public_tool_intent(raw_result, public_contract)
     stop_reason = stop_reason or model_response_stop_reason(ai_messages if isinstance(ai_messages, list) else [])
     malformed_contract = (
         isinstance(raw_result, str) and (payload is None or not any(key in payload for key in ("summary", "artifact_content", "artifact_metadata"))) and bool(re.search(r'"(?:summary|artifact_content|artifact_metadata)"\s*:', raw_result))
@@ -1049,6 +1052,13 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
             artifact_metadata = {}
         if isinstance(payload_metadata, dict):
             artifact_metadata = {**payload_metadata, **artifact_metadata}
+    if public_contract is not None and not is_memory_recaller:
+        textual_tool_intent = textual_tool_intent or has_unexecuted_public_tool_intent(_clean_artifact_content(artifact_content), public_contract)
+    if textual_tool_intent:
+        # Preserve the actual AI/raw record, but never turn an unexecuted call
+        # envelope (including one with an artifact_content field) into a report.
+        artifact_content = None
+        summary = raw_result
 
     normalized_result = _compact_result(summary)
     if is_memory_recaller:
@@ -1058,12 +1068,20 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
     # threshold (including a legitimate empty array). Preserve only an actual
     # final audit/delivery response that independently satisfies the public schema;
     # never extract an answer from a receipt, tool result, or malformed wrapper.
-    if artifact_content is None and not recovered_created_paths and status == SPSubagentStatus.COMPLETED and not stop_reason and _is_public_schema_delivery(raw_result, ai_messages, task):
+    if not textual_tool_intent and artifact_content is None and not recovered_created_paths and status == SPSubagentStatus.COMPLETED and not stop_reason and _is_public_schema_delivery(raw_result, ai_messages, task):
         artifact_content = raw_result
         artifact_type = artifact_type or _default_artifact_type(task.subagent_type)
         malformed_contract = False
 
-    if artifact_content is None and not recovered_created_paths and isinstance(raw_result, str) and len(raw_result) > DEFAULT_LARGE_RESULT_THRESHOLD and status == SPSubagentStatus.COMPLETED and not is_memory_recaller:
+    if (
+        not textual_tool_intent
+        and artifact_content is None
+        and not recovered_created_paths
+        and isinstance(raw_result, str)
+        and len(raw_result) > DEFAULT_LARGE_RESULT_THRESHOLD
+        and status == SPSubagentStatus.COMPLETED
+        and not is_memory_recaller
+    ):
         artifact_content = raw_result
         artifact_type = artifact_type or _default_artifact_type(task.subagent_type if task is not None else None)
 
@@ -1102,6 +1120,11 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         if not isinstance(evidence_gaps, list):
             evidence_gaps = []
         artifact_metadata["evidence_gaps"] = [str(item) for item in evidence_gaps if str(item).strip()][:12]
+        if textual_tool_intent:
+            if artifact_metadata["completion_status"] == "complete":
+                artifact_metadata["completion_status"] = "partial"
+            artifact_metadata["unexecuted_public_tool_intent"] = True
+            artifact_metadata["evidence_gaps"].append("Unexecuted textual tool intent is not a public deliverable or file-write evidence; return the complete raw public value or execute a valid native tool call.")
         if malformed_contract or recovered_preview:
             artifact_metadata["completion_status"] = "partial"
             artifact_metadata["evidence_gaps"].append("Incomplete subagent output contract or recovered evidence preview; produce a complete deliverable before acceptance.")

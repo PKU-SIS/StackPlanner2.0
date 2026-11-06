@@ -650,8 +650,15 @@ retains its status, reference, and native read path. Original artifact bytes
 remain unchanged and readable. The Reporter rebuilds from original public
 sources and may read the prior draft to verify distinct supported findings.
 This guidance follows the unfinished artifact's lineage across later errors or
-loop stops and ends at a newly completed report. Ordinary partial revisions and
-complete report baselines retain their existing behavior.
+loop stops and ends at a newly completed report. Native public JSON validation
+also marks a rejected partial/blocked Reporter draft noncanonical in its next
+transient preview, using the actual validation errors. The model reconstructs
+single-layer JSON from original sources and verified findings instead of copying
+broken escaping or merged fields. Unexecuted textual tool calls, including ones
+inside an output envelope, remain partial and cannot become report artifacts;
+raw model records are retained. Valid partial revisions and complete report
+baselines retain their existing behavior. Sources, schemas, budgets and final
+acceptance checks remain unchanged.
 When required public sources remain unread, Central's next tool binding directs
 the read to the contract-designated auditor with its ordinary scoped tools;
 unrelated perception/coder retries do not consume the audit before it begins.

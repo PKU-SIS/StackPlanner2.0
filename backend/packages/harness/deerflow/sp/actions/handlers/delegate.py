@@ -16,7 +16,8 @@ from deerflow.sp.actions.schema import HandlerResult, SPAction
 from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.memory import StackMemoryEntry
 from deerflow.sp.output_contract import output_contract_gaps
-from deerflow.sp.recovery import artifact_array_token_cap_instruction, is_token_capped_report_artifact, recovery_limit, source_audit_recovery_instruction
+from deerflow.sp.public_format_repair import public_json_reconstruction_instruction
+from deerflow.sp.recovery import artifact_array_token_cap_instruction, is_token_capped_report_artifact, recovery_limit, report_public_format_errors, source_audit_recovery_instruction
 from deerflow.sp.source_access import merge_source_access, source_access_gaps
 from deerflow.sp.subagents import SPSubagentExecutorProtocol, SPSubagentResult, SPSubagentTask
 from deerflow.sp.subagents.dr2_adapter import coder_task_kind, coder_task_requires_implementation, is_data_processing_coder
@@ -714,6 +715,18 @@ class DelegateHandler:
         recovery_instruction = artifact_array_token_cap_instruction(context.state, stack=context.stack, run_id=context.run_id) if action.target_agent == "reporter" else ""
         if previous_rag_audit is not None:
             recovery_instruction += source_audit_recovery_instruction(previous_rag_audit, has_documents=True)
+        format_drafts = [item for item in (context_refs.get("artifact_bodies") or {}).get("items", []) if item.get("recovery_kind") == "public_format"]
+        if action.target_agent == "reporter" and format_drafts:
+            recovery_instruction += (
+                "\n<public-json-draft-reconstruction>\n"
+                + public_json_reconstruction_instruction()
+                + "Native rejected draft references: "
+                + ", ".join(str(item["artifact_id"]) for item in format_drafts)
+                + ". "
+                + "Actual native format errors: "
+                + "; ".join(gap for item in format_drafts for gap in item["format_errors"])
+                + "\n</public-json-draft-reconstruction>\n"
+            )
         task = SPSubagentTask(
             action_id=action.action_id,
             subagent_type=str(action.target_agent),
@@ -780,6 +793,7 @@ class DelegateHandler:
             content, truncated = materialized
             artifact_id = str(ref.get("artifact_id") or ref.get("virtual_path") or f"artifact-{index + 1}")
             capped_preview = action.target_agent == "reporter" and is_token_capped_report_artifact(ref, run_id=context.run_id)
+            format_errors = report_public_format_errors(ref, context.state.get("sp_task_contract") or {}, run_id=context.run_id) if action.target_agent == "reporter" else []
             preview_metadata = {}
             if capped_preview:
                 status = ref["metadata"]["completion_status"]
@@ -792,6 +806,16 @@ class DelegateHandler:
                 )
                 truncated = True
                 preview_metadata = {"content_omitted": True, "canonical": False, "completion_status": status, "stop_reason": "token_capped"}
+            elif format_errors:
+                status = ref["metadata"]["completion_status"]
+                content = (
+                    f"[Noncanonical Reporter draft rejected by native public JSON validation; completion_status={status}. "
+                    "Only this transient body is omitted; do not copy it as the revision baseline. "
+                    f"The unchanged complete draft remains readable through native read_file at {ref.get('virtual_path')}. "
+                    "Reconstruct malformed encoding from original sources, preserving every verified distinct finding and quotation.]"
+                )
+                truncated = True
+                preview_metadata = {"content_omitted": True, "canonical": False, "completion_status": status, "recovery_kind": "public_format", "format_errors": format_errors}
             items.append(
                 {
                     "artifact_id": artifact_id,

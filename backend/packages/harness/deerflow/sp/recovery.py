@@ -79,6 +79,23 @@ def is_token_capped_report_artifact(ref: Mapping[str, Any], *, run_id: str | Non
     return bool(_is_run_reporter_artifact(ref, run_id=run_id) and metadata.get("completion_status") in {"partial", "blocked"} and (metadata.get("stop_reason") or metadata.get("subagent_stop_reason")) == "token_capped")
 
 
+def report_public_format_errors(ref: Mapping[str, Any], contract: Mapping[str, Any], *, run_id: str | None) -> list[str]:
+    """Use native validation records, never infer invalidity from a clipped body."""
+    if not _is_run_reporter_artifact(ref, run_id=run_id) or contract.get("output_parse_mode", "json") != "json" or "output_schema" not in contract:
+        return []
+    metadata = ref["metadata"]
+    if metadata.get("completion_status") not in {"partial", "blocked"}:
+        return []
+    checks = metadata.get("quality_checks")
+    if not isinstance(checks, Mapping):
+        return []
+    for kind in ("public_output_schema", "json_artifact_syntax"):
+        check = checks.get(kind)
+        if isinstance(check, Mapping) and check.get("passed") is False and isinstance(check.get("evidence_gaps"), list) and check["evidence_gaps"]:
+            return [str(gap)[:500] for gap in check["evidence_gaps"][:5]]
+    return []
+
+
 def _run_reporter_artifacts(state: Mapping[str, Any], *, run_id: str) -> dict[str, Mapping[str, Any]]:
     raw = state.get("sp_current_artifact_refs")
     if not isinstance(raw, Mapping):

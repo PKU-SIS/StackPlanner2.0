@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from collections.abc import Mapping
 from typing import Any
@@ -17,6 +18,39 @@ from deerflow.utils.messages import message_to_text
 
 _FEEDBACK = "sp_public_format_feedback"
 _MAX_REPAIRS = 2
+
+
+def has_unexecuted_public_tool_intent(text: Any, contract: Mapping[str, Any]) -> bool:
+    """Recognize a schema-invalid call envelope without executing/extracting it."""
+    if not isinstance(text, str) or not output_contract_gaps({"sp_task_contract": contract}, text):
+        return False
+    candidate = text.strip()
+    fence = re.fullmatch(r"```(?:json|xml)?\s*(.*?)\s*```", candidate, re.DOTALL | re.IGNORECASE)
+    if fence:
+        candidate = fence.group(1).strip()
+    if re.match(r"<tool_call(?:\s|>)", candidate, re.IGNORECASE):
+        return True
+    try:
+        value = json.loads(candidate)
+    except (ValueError, RecursionError):
+        return False
+    if not isinstance(value, Mapping):
+        return False
+    function = value.get("function") or value
+    return isinstance(function, Mapping) and isinstance(function.get("name"), str) and ("arguments" in function or "parameters" in function)
+
+
+def public_json_reconstruction_instruction() -> str:
+    example = json.dumps({"value": 'a "quoted" phrase'}, ensure_ascii=False)
+    return (
+        "Use single-layer JSON encoding: structural quotation marks are unescaped; escape literal quotation marks inside each string value exactly once. "
+        f"Encoding illustration only, not task content: {example}. "
+        "Rebuild malformed serialization from the original sources and verified semantic field values if the same encoding error recurs; "
+        "do not preserve damaged escape sequences, copy a merged text/explanation field, or patch serialized fragments as the baseline. "
+        "Preserve all distinct supported findings, complete original quotations, and independently verified valid work; verify any untrusted prior finding against the sources. "
+        "Return the complete raw value matching the original public schema, not a string containing JSON, a tool argument object, or <tool_call> text. "
+        "Never invent findings, omit a supported finding, select a default/empty answer to hide unfinished work, or claim an unexecuted write. "
+    )
 
 
 def public_format_repair_update(state: Mapping[str, Any], contract: Mapping[str, Any], *, central: bool = False, scope: str | None = None) -> dict[str, Any] | None:
@@ -41,7 +75,7 @@ def public_format_repair_update(state: Mapping[str, Any], contract: Mapping[str,
         envelope = json.loads(text)
     except (ValueError, RecursionError):
         envelope = None
-    if isinstance(envelope, Mapping):
+    if isinstance(envelope, Mapping) and not has_unexecuted_public_tool_intent(text, contract):
         metadata = envelope.get("artifact_metadata") or {}
         if envelope.get("completion_status") in ("partial", "blocked") or (isinstance(metadata, Mapping) and (metadata.get("completion_status") in ("partial", "blocked") or metadata.get("evidence_gaps"))):
             return None
@@ -89,9 +123,7 @@ def augment_public_format_request(request):
     json_delivery = info["mode"] == "json" and not info.get("central")
     json_instruction = (
         "During this JSON correction, write_file/str_replace are temporarily unbound. Return the complete public JSON value directly; native artifact persistence handles that actual value. "
-        "Do not emit <tool_call> text, a write_file argument object, or a JSON string containing the entire answer. Those are not executed file writes or public delivery. "
-        "Use unescaped quotation marks for JSON structural delimiters and escape original quotation marks inside JSON string values exactly once. "
-        "Keep complete verbatim evidence and every distinct supported finding. Do not copy the same malformed serialization or replace the audit with a receipt. "
+        "Do not emit <tool_call> text, a write_file argument object, or a JSON string containing the entire answer. Those are not executed file writes or public delivery. " + public_json_reconstruction_instruction()
         if json_delivery
         else ""
     )
@@ -101,7 +133,7 @@ def augment_public_format_request(request):
         content=(
             "<public-format-correction>\n"
             f"Your previous ordinary final failed the public format check (correction {info['attempt']}/{_MAX_REPAIRS}). "
-            "Correct your own complete final value now in this same audit context. Preserve all supported findings and original quotations; change only what is needed to satisfy the declared format. "
+            "Correct your own complete final value now in this same audit context. Preserve all supported findings and original quotations. A malformed serialization is an unverified draft, not a canonical baseline to copy unchanged. "
             "Use the original source and actual draft already in this conversation. Do not invent findings, change the answer to a default, omit supported findings, or return an empty array to conceal unfinished work. "
             "Return the complete raw public JSON/text value, without Markdown fences, separate JSON documents, an SP envelope, promises, or a file receipt. "
             "The native host persists the real complete value when a file is required. A claim that a file was written is not file-tool evidence. "

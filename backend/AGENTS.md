@@ -1257,8 +1257,8 @@ The lead factory's `outer_middlewares` and the executor's outermost correction
 middleware keep retry `after_model` hooks after native token/loop/safety guards.
 Guard stop markers suppress correction; never jump past guard accounting.
 Never host-wrap NDJSON, manufacture a missing answer, or relax the public schema.
-Explicit partial/blocked envelopes, real successful file writes, tool intent,
-provider errors/truncation and guard stops keep their ordinary native handling.
+Explicit partial/blocked envelopes, real successful file writes, native tool
+calls, provider errors/truncation and guard stops keep their ordinary handling.
 Keep the CLAUSE Skill's successful-final transport consistent with the raw
 public-schema instruction; claims/receipts never prove an actual write.
 Tests: `test_sp_public_format_repair.py`, schema-delivery and agent-tools suites.
@@ -1346,7 +1346,7 @@ run, host-owned target_agent, partial/blocked status, and actual token_capped
 stop (including the native alias). Only those draft bodies get a noncanonical
 omitted-body marker with the unchanged artifact ID/path and actual status/stop;
 never deduplicate, reconstruct, overwrite, or delete their stored content.
-Ordinary noncapped partial and complete baselines, other runs, and other
+Valid noncapped partial and complete baselines, other runs, and other
 specialists retain normal materialization. Reporter system guidance gives this
 exception precedence over the generic preserve-baseline rule and requires
 original-source reconstruction with optional native draft inspection, preserving
@@ -1372,3 +1372,26 @@ them. Keep document scope, partial status, source/format/FINISH gates and budget
 unchanged. Regression tests: tests/test_dcc_native.py exercises real tool/cache
 transport and the native source/audit gates; test_sp_agent_tools.py and
 test_sp_rag_audit_recovery.py cover Central and actual delegated-task feedback.
+
+
+Native public JSON format rejection also makes a current-run partial/blocked
+Reporter draft noncanonical in its transient materialization. Use the actual
+failed public_output_schema/json_artifact_syntax quality records and their gaps;
+never infer malformed JSON by parsing a clipped preview. The next actual
+Reporter task receives the native errors, unchanged draft references and
+single-layer reconstruction guidance even when Central omits them. Preserve
+verified distinct findings and complete source quotations; do not use damaged
+escape sequences or merged fields as the mandatory baseline. Keep stored bytes,
+references, schema, source gates, retry budgets and acceptance unchanged.
+Schema-invalid textual tool-call envelopes cannot become public deliverables
+through large-result fallback or explicit/nested artifact_content. Normalization
+retains raw AI records, drops only the unexecuted-intent artifact promotion, and
+keeps partial/blocked status with a concrete gap. Honest partial/blocked SP
+failure envelopes still use ordinary native recovery. Public JSON that legitimately
+quotes tool syntax remains valid. Bounded same-instance correction retains read
+tools and requests the complete raw value; never execute/extract textual call
+arguments, repair an answer on the host, or synthesize successful file evidence.
+Tests: test_sp_malformed_public_draft_recovery.py covers real native persistence,
+unchanged draft bytes/refs, failed validation previews, long/nested textual tool
+intent, honest failure envelopes and same-instance bad JSON/tool-text/valid JSON
+correction with the original AI history retained.
