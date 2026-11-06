@@ -29,6 +29,7 @@ from deerflow.sp.central import CENTRAL_AGENT_ACTION_PROMPT
 from deerflow.sp.central.runtime_context import SPCentralRuntimeContext, build_sp_central_runtime_context
 from deerflow.sp.central_resilience import DEFAULT_CENTRAL_RETRY_TIMEOUT_SECONDS, DEFAULT_CENTRAL_TIMEOUT_SECONDS, SPCentralResilienceMiddleware
 from deerflow.sp.memory.entry import utc_now_iso
+from deerflow.sp.recovery import runtime_recovery_limits
 from deerflow.sp.subagents import (
     A2A_PROGRESS_MESSAGE,
     DR2SubagentExecutorAdapter,
@@ -670,7 +671,8 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
         max_central_actions = int(runtime.get("sp_max_actions") or DEFAULT_SP_ACTION_LIMIT)
     except (TypeError, ValueError):
         max_central_actions = DEFAULT_SP_ACTION_LIMIT
-    max_central_actions = max(2, min(max_central_actions, DEFAULT_SP_ACTION_LIMIT))
+    max_central_actions = max(2, min(max_central_actions, 256))
+    recovery_limits = runtime_recovery_limits(runtime)
     metadata = dict(config.get("metadata") or {})
     metadata.update(
         {
@@ -682,6 +684,8 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
             "sp_agent_name": central_context.agent_name or "default",
             "available_skills": sorted(central_context.available_skill_names) if central_context.available_skill_names is not None else None,
             "non_interactive": non_interactive,
+            "sp_max_actions": max_central_actions,
+            "sp_recovery_limits": recovery_limits,
         }
     )
     sp_config = dict(config)
@@ -737,7 +741,7 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
         app_config=resolved_app_config,
         extra_tools=[tool for tool in build_sp_control_tools() if not non_interactive or tool.name != "sp_ask_human"],
         extra_middlewares=[
-            TaskMemoryMiddleware(context_builder=PromptContextBuilder(), inject_context=True, non_interactive=non_interactive),
+            TaskMemoryMiddleware(context_builder=PromptContextBuilder(), inject_context=True, non_interactive=non_interactive, recovery_limits=recovery_limits),
             # SP keeps long-term memory out of CentralAgent's prompt, but it
             # must still persist stable user context after a completed run.
             # This explicit write-only middleware reuses DeerFlow's scoped,

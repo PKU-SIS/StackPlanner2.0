@@ -14,6 +14,8 @@ from deerflow.sp.actions.handlers.context import build_handler_context_refs
 from deerflow.sp.actions.schema import HandlerResult, SPAction
 from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.memory import StackMemoryEntry
+from deerflow.sp.output_contract import output_contract_gaps
+from deerflow.sp.recovery import recovery_limit
 from deerflow.sp.subagents import SPSubagentExecutorProtocol, SPSubagentResult, SPSubagentTask
 from deerflow.sp.subagents.dr2_adapter import coder_task_kind, coder_task_requires_implementation, is_data_processing_coder
 
@@ -30,7 +32,6 @@ REPORTER_FEEDBACK_MAX_CHARS = 2400
 REPORTER_REQUIRED_LITERAL_MAX_ITEMS = 64
 REPORTER_UPLOAD_TEXT_MAX_CHARS = 1_000_000
 REPORTER_JSON_MAX_CHARS = 16 * 1024 * 1024
-SP_REPORT_RECOVERY_MAX_ATTEMPTS = 3
 _JSON_REPORT_CONTRACT_PATTERN = re.compile(
     r"\b(?:return|output|respond\s+with|answer\s+with)\s+"
     r"(?:(?:only|strictly|exactly|a|an|the|single|valid|strict|one|as|in|final|answer|must|be|is)\s+)*JSON\b"
@@ -490,15 +491,16 @@ class DelegateHandler:
 
         if action.target_agent == "reporter":
             attempts = context.stack.delegate_recovery_attempt_count("reporter", run_id=context.run_id)
-            if attempts >= SP_REPORT_RECOVERY_MAX_ATTEMPTS:
+            limit = recovery_limit(context.state, "reporter")
+            if attempts >= limit:
                 # Schema filtering is advisory to the model. Enforce the
                 # unresolved chain's hard bound at the execution boundary too.
                 return HandlerResult(
                     next_step="error_recoverable",
-                    state_update={"sp_active_delegate_id": None},
+                    state_update={"sp_active_delegate_id": None, "sp_recovery_exhausted": {"target_agent": "reporter", "attempts": attempts, "limit": limit}},
                     idempotency_key=action.idempotency_key,
-                    error=f"Reporter reached its recovery limit of {SP_REPORT_RECOVERY_MAX_ATTEMPTS} unresolved attempts; preserve the partial result and its evidence gaps.",
-                    run_events=[make_sp_event("sp.delegate.recovery_exhausted", action_id=action.action_id, run_id=context.run_id, target_agent="reporter", attempts=attempts)],
+                    error=f"Reporter reached its recovery limit of {limit} unresolved attempts; preserve the partial result and its evidence gaps.",
+                    run_events=[make_sp_event("sp.delegate.recovery_exhausted", action_id=action.action_id, run_id=context.run_id, target_agent="reporter", attempts=attempts, limit=limit)],
                 )
             _prepare_partial_report_retry(action, context.state)
             previous = next((entry for entry in reversed(context.stack.entries) if entry.action == "observe" and entry.actor == "reporter" and entry.run_id == context.run_id), None)
@@ -1493,6 +1495,17 @@ def _apply_report_acceptance_checks(
         context=context,
         artifact_adapter=artifact_adapter,
     )
+    schema_gaps: list[str] = []
+    if isinstance(context.state.get("sp_task_contract"), Mapping) and "output_schema" in context.state["sp_task_contract"]:
+        if valid_paths:
+            for path in valid_paths:
+                materialized = artifact_adapter.read_text_artifact({"virtual_path": path}, state=context.state, thread_id=context.thread_id, max_chars=REPORTER_JSON_MAX_CHARS)
+                schema_gaps.extend(output_contract_gaps(context.state, materialized[0] if materialized is not None and not materialized[1] else None))
+        else:
+            content = result.artifact_content
+            text = content if isinstance(content, str) or content is None else json.dumps(content, ensure_ascii=False)
+            schema_gaps.extend(output_contract_gaps(context.state, text))
+        json_gaps.extend(schema_gaps)
 
     requirements = task.context_refs.get("report_requirements")
     raw_tokens = requirements.get("required_literal_tokens") if isinstance(requirements, Mapping) else None
@@ -1533,6 +1546,8 @@ def _apply_report_acceptance_checks(
     declared_gaps = [str(gap).strip() for gap in declared_gaps if str(gap).strip()] if isinstance(declared_gaps, list) else []
     checks = result.artifact_metadata.get("quality_checks")
     quality_checks = dict(checks) if isinstance(checks, Mapping) else {}
+    if isinstance(context.state.get("sp_task_contract"), Mapping) and "output_schema" in context.state["sp_task_contract"]:
+        quality_checks["public_output_schema"] = {"passed": not schema_gaps, "evidence_gaps": schema_gaps}
     status = str(result.artifact_metadata.get("completion_status") or "complete").strip().lower()
     accept_disclosed_data_gap = bool(
         no_data_constraint

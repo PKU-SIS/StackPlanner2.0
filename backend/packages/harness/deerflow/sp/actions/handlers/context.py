@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping
 from typing import Any
@@ -195,6 +196,10 @@ def _bounded_task_contract(value: Any) -> dict[str, Any] | None:
         raw = value.get(key)
         if isinstance(raw, list):
             contract[key] = [str(item)[:500] for item in raw[:50] if str(item).strip()]
+    schema = value.get("output_schema")
+    if isinstance(schema, dict) and len(json.dumps(schema, ensure_ascii=False)) <= MAX_HANDLER_TASK_CONTRACT_CHARS:
+        contract["output_schema"] = schema
+        contract["output_parse_mode"] = value.get("output_parse_mode", "json")
     return contract
 
 

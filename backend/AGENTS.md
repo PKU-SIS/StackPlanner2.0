@@ -1107,3 +1107,30 @@ bounded string fallback for large answers and unchanged evidence/output rules.
 `read_file` accepts either inclusive line bound independently (missing start means 1, missing end means EOF), rejects invalid ranges, and explicitly reports total lines when a range starts past EOF. Character truncation still requires narrower ranges; never interpret a truncated requested range as fully read. Regression coverage: tests/test_read_file_ranges.py.
 
 DCC benchmark delegation accepts absent task metadata; the benchmark profile explicitly sets subagent graph depth to 480. Central actions and per-case timeout are supplied by the benchmark CLI.
+Host execution budgets: `sp/recovery.py` normalizes configurable Reporter,
+ordinary and capped-delegate recovery limits (defaults 3/3/2, bounded 1–32).
+`TaskMemoryMiddleware` writes the host-owned limits at graph entry; both
+`SPFinishAvailabilityMiddleware` and `DelegateHandler` read the same state.
+The runtime accepts `sp_max_actions` up to 256, rather than silently clamping
+explicit increases to the default 20. Graph depth, token and loop guards remain
+independent. Exhausted native work retains acceptance gaps in
+`sp_recovery_exhausted`; the benchmark extractor reports `recovery_exhausted`
+and never scores its incomplete prose as an answer. See budget, dispatch,
+factory and native-text regressions.
+
+Public output shape validation lives in `sp/output_contract.py` (JSON Schema,
+no external references or answer repair). Preserve `output_schema` and
+`output_parse_mode` through the bounded public task contract. Central plain
+text, actual Reporter artifact contents and FINISH use this same contract;
+invalid text triggers bounded Reporter repair, while an existing partial
+specialist recovers its own evidence role. An already partial audit cannot end
+as a format-valid `[]`. Strict JSON rejects duplicate keys, fences, non-JSON
+constants and narrative; allowed zero strings and empty arrays are unchanged.
+Fin mapping recognizes exact published public instruction bodies, never
+private task metadata. Native extraction defensively rejects invalid shapes.
+
+RAG externalization preserves raw JSON bytes. Its retrieval-specific preview
+uses the existing head+tail budget for evenly distributed original chunk
+excerpts, exact saved content-line references and explicit unread/paging
+counts. Never infer absence or audit completion from those excerpts. Other
+tools and failed persistence retain their existing preview/fallback behavior.

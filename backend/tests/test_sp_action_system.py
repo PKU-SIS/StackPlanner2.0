@@ -3151,6 +3151,24 @@ def test_reporter_recovery_limit_is_enforced_before_executor_without_an_artifact
     assert stack.entries[-1].metadata["evidence_gaps"] == ["No report artifact"]
 
 
+def test_reporter_dispatch_uses_same_explicit_budget_as_schema_gate():
+    from deerflow.sp.actions.handlers.base import HandlerContext
+    from deerflow.sp.actions.handlers.delegate import DelegateHandler
+
+    stack = TaskMemoryStack()
+    for attempt in range(1, 4):
+        stack.append_delegate("Write report", run_id="run-1", metadata={"target_agent": "reporter", "recovery_attempt": attempt})
+        stack.append_observe("No report artifact", actor="reporter", run_id="run-1", metadata={"completion_status": "partial", "recovery_attempt": attempt, "evidence_gaps": ["No report artifact"]})
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Still incomplete", artifact_metadata={"completion_status": "partial", "evidence_gaps": ["No report artifact"]}))
+    DelegateHandler(executor=executor).handle(
+        _action(ActionType.DELEGATE, target_agent="reporter", task="Try another report", stage="revision", metadata={"recovery_attempt": 100}),
+        HandlerContext(state={"sp_recovery_limits": {"reporter": 6}}, stack=stack, run_id="run-1"),
+    )
+    assert len(executor.tasks) == 1
+    assert executor.tasks[0].metadata["recovery_attempt"] == 4
+    assert stack.entries[-1].metadata["completion_status"] == "partial"
+
+
 def test_reporter_literal_acceptance_guard_marks_missing_report_partial_and_retries_as_revision(
     tmp_path,
 ):

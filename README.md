@@ -481,3 +481,33 @@ It preserves XML/content bytes, document IDs, sample scope and pagination so
 instance-document evidence retains its filename provenance across API versions.
 
 DCC 基准配置 `configs/stackplanner_benchmarks.yaml` 显式设置子智能体图步数上限为 480；中枢动作上限和每题超时通过基准运行器参数设置。
+StackPlanner execution budgets can be raised explicitly through trusted
+`configurable` runtime settings: `sp_max_actions` (default 20, range 2–256),
+`sp_report_recovery_max_attempts` (3), `sp_delegate_recovery_max_attempts` (3),
+and `sp_capped_delegate_recovery_max_attempts` (2). Recovery limits are 1–32;
+capped specialist retries cannot exceed ordinary retries. For example, a long
+non-interactive audit may use 40 actions and recovery limits 6/6/4. These are
+independent of specialist graph depth, output tokens, and loop detection. The
+schema and Reporter dispatch share the effective limits; increasing them never
+accepts a partial artifact. Exhaustion retains the gaps and is recorded as
+`sp_recovery_exhausted` / `recovery_exhausted`, rather than a completed empty
+prediction. Effective limits are included in graph metadata.
+
+Native public output contracts use `sp_task_contract.output_schema` (local JSON
+Schema) and `output_parse_mode` (`json` or `text`). FinAuditing input construction
+recognizes the exact published public FinRE/FinMR/FinSM instruction templates;
+it does not receive private metadata or gold. FinRE requires a raw published
+label, FinMR the two required string-valued fields (including legal `0`), and
+FinSM a JSON string array (including a genuine empty result). Plain-text,
+Reporter files and FINISH all validate the same shape. An invalid attempted
+answer starts bounded native recovery; incomplete evidence stays blocking even
+when a candidate is `[]`. No format repair manufactures an answer or changes
+an official scorer.
+
+Externalized `ragflow_retrieve` results keep their complete original JSON
+bytes. The preview spends the configured head+tail character budget on source
+content excerpts spread across chunks, rather than document metadata. It shows
+actual content line numbers for native `read_file`, matching/returned/excerpted
+counts and explicit unread source markers. Excerpts do not establish complete
+retrieval or an evidence audit. Larger preview budgets can show more chunks;
+complete evidence remains available in the saved file.

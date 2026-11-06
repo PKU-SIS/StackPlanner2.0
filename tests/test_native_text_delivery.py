@@ -8,6 +8,12 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from dcc_harness.evaluation.benchmarks import DeliveryError, extract_delivery
 
 
+def test_native_recovery_exhaustion_is_never_an_empty_prediction():
+    with pytest.raises(DeliveryError) as exc:
+        extract_delivery({"sp_recovery_exhausted": {"target_agent": "reporter", "attempts": 6, "limit": 6}}, thread_id="t", run_id="r", native_returned=True)
+    assert exc.value.status == "recovery_exhausted"
+
+
 def direct_state(**overrides):
     return {
         "messages": [

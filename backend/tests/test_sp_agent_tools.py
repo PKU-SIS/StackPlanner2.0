@@ -981,6 +981,45 @@ def test_partial_report_recovery_stops_after_three_reporter_attempts():
     assert "same citation gap remains unresolved" in instruction.content
 
 
+def test_report_recovery_uses_caller_budget_without_accepting_partial():
+    stack = TaskMemoryStack()
+    for index in range(3):
+        stack.append_delegate(f"Reporter attempt {index}", run_id="run-1", metadata={"target_agent": "reporter"})
+    state = {
+        "sp_loop_run_id": "run-1",
+        "sp_recovery_limits": {"reporter": 6},
+        "sp_task_memory": stack.to_dict(),
+        "sp_current_artifact_refs": {
+            "report": {"artifact_id": "draft", "type": "report", "run_id": "run-1", "is_current": True, "metadata": {"completion_status": "partial"}},
+        },
+    }
+    request = _ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=[HumanMessage(content="Finish the report.")])
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
+    assert {tool.name for tool in filtered.tools} == {"sp_delegate"}
+    assert SPFinishAvailabilityMiddleware._report_recovery_budget(state) == ("reporter", 3, 6)
+    assert not SPFinishAvailabilityMiddleware._has_finalizable_artifact(state)
+
+
+def test_capped_delegate_budget_can_be_raised_by_caller():
+    from deerflow.sp.memory import StackMemoryEntry
+
+    observation = StackMemoryEntry(action="observe", actor="researcher", content="Incomplete", metadata={"completion_status": "partial", "stop_reason": "loop_capped"})
+    assert SPFinishAvailabilityMiddleware._delegate_recovery_limit(observation, {"sp_recovery_limits": {"delegate": 8, "capped_delegate": 4}}) == 4
+
+
+def test_exhausted_research_without_file_has_explicit_incomplete_state():
+    stack = TaskMemoryStack()
+    stack.append_delegate("Audit evidence", run_id="run-1", metadata={"target_agent": "researcher"})
+    stack.append_observe("Audit incomplete", actor="researcher", run_id="run-1", metadata={"completion_status": "partial", "evidence_gaps": ["Unread evidence remains"]})
+    update = SPFinishAvailabilityMiddleware().after_model({
+        "sp_loop_run_id": "run-1", "sp_non_interactive": True,
+        "sp_task_memory": stack.to_dict(), "sp_recovery_limits": {"delegate": 1},
+        "messages": [HumanMessage(content="Audit the supplied sources."), AIMessage(content="Unable to finish.", id="last")],
+    }, None)
+    assert update["sp_recovery_exhausted"] == {"target_agent": "researcher", "attempts": 1, "limit": 1, "evidence_gaps": ["Unread evidence remains"]}
+    assert update["messages"][0].additional_kwargs["stackplanner"]["status"] == "incomplete"
+
+
 def test_partial_coder_recovery_stops_after_three_attempts_even_after_reflection():
     stack = TaskMemoryStack()
     for index in range(3):

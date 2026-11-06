@@ -29,6 +29,20 @@ from dcc_harness.preprocessing.ragflow import index_identity
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize("name,mode,type_", [("finre", "text", "string"), ("finmr", "json", "object"), ("finsm", "json", "array")])
+def test_build_inputs_derives_shape_only_from_exact_public_finauditing_template(tmp_path, monkeypatch, name, mode, type_):
+    from dcc_harness.data import InputFile, PublicTask
+    from dcc_harness.datasets.benchmark_plugins import BenchmarkPlugin, build_inputs
+
+    monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path / "native"))
+    public = PublicTask("dcc", "Audit the supplied filing.", "", {}, (InputFile("rule0.txt", (ROOT / f"configs/dcc/prompts/finauditing/{name}.md").read_text()),))
+    plugin = BenchmarkPlugin(name="dcc", prepare_task=lambda task: task.prompt, prepare_inputs=lambda task, thread: {}, skills_path=tmp_path)
+    contract = build_inputs(plugin, public, "contract-thread")["sp_task_contract"]
+    assert contract["output_parse_mode"] == mode
+    assert contract["output_schema"]["type"] == type_
+    assert "PRIVATE" not in json.dumps(contract)
+
+
 @pytest.fixture
 def native_bundle(tmp_path, monkeypatch):
     config = {"loader": "manifest", "ragflow": {"base_url": "https://rag.example"}}

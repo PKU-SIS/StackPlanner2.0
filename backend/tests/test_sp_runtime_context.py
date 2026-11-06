@@ -61,6 +61,24 @@ def test_native_factory_filters_human_tool_and_records_runtime_policy(monkeypatc
     assert captured["config"]["configurable"]["non_interactive"] is non_interactive
 
 
+def test_native_factory_honors_explicit_execution_budgets(monkeypatch, tmp_path):
+    from deerflow.config.app_config import AppConfig
+    from deerflow.sp.agent_tools import SPActionBudgetMiddleware
+    from deerflow.sp.middlewares import TaskMemoryMiddleware
+    from deerflow.sp.runtime import make_sp_agent
+
+    captured = {}
+    monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path / "native"))
+    monkeypatch.setattr("deerflow.agents.lead_agent.agent._make_lead_agent", lambda config, **kwargs: captured.update(kwargs) or SimpleNamespace())
+    app = AppConfig.from_file(str(Path(__file__).resolve().parents[2] / "configs/stackplanner_benchmarks.yaml"))
+    graph = make_sp_agent({"configurable": {"sp_max_actions": 64, "sp_report_recovery_max_attempts": 6, "sp_delegate_recovery_max_attempts": 8, "sp_capped_delegate_recovery_max_attempts": 4}}, app_config=app)
+    budget = next(item for item in captured["extra_middlewares"] if isinstance(item, SPActionBudgetMiddleware))
+    assert budget._max_actions == 64
+    memory = next(item for item in captured["extra_middlewares"] if isinstance(item, TaskMemoryMiddleware))
+    assert memory._recovery_limits == {"reporter": 6, "delegate": 8, "capped_delegate": 4}
+    assert graph.metadata["sp_max_actions"] == 64
+
+
 def test_runtime_context_keeps_long_term_memory_on_demand(monkeypatch):
     profile = SimpleNamespace(
         name="sp-professor",

@@ -42,6 +42,8 @@ class DeliveryError(ValueError):
 def extract_delivery(
     state: dict, *, thread_id: str, run_id: str, native_returned: bool = False
 ) -> tuple[str, dict | None]:
+    if state.get("sp_recovery_exhausted"):
+        raise DeliveryError("recovery_exhausted", "native recovery budget exhausted with unresolved acceptance gaps")
     if state.get("sp_pending_human_interaction"):
         raise DeliveryError("ask_human", "native SP requests human input")
     if (
@@ -56,6 +58,7 @@ def extract_delivery(
         text = str(state.get("sp_last_run_summary") or "").strip()
         if not text:
             raise DeliveryError("final_parse_error", "accepted text delivery is empty")
+        _check_public_output_contract(state, text)
         return text, None
     refs = state.get("sp_current_artifact_refs") or {}
     candidates = [
@@ -149,7 +152,16 @@ def extract_delivery(
         selected_ref.update(
             observed_sha256=observed_hash, integrity="native_existing_file_snapshot"
         )
+    _check_public_output_contract(state, text)
     return text, selected_ref
+
+
+def _check_public_output_contract(state: dict, text: str) -> None:
+    from deerflow.sp.output_contract import output_contract_gaps
+
+    gaps = output_contract_gaps(state, text)
+    if gaps:
+        raise DeliveryError("final_parse_error", "; ".join(gaps))
 
 
 def _native_text_delivery(state: dict, *, run_id: str, native_returned: bool) -> str:
@@ -257,6 +269,7 @@ def _native_text_delivery(state: dict, *, run_id: str, native_returned: bool) ->
         raise DeliveryError(
             "final_parse_error", "native text delivery is empty, invalid, or oversized"
         )
+    _check_public_output_contract(state, text)
     return text
 
 
