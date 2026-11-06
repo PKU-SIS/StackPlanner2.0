@@ -1059,12 +1059,50 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         messages = [message for message in request.messages if getattr(message, "name", None) != note.name]
         return request.override(tools=tools, messages=[*messages, note])
 
+    @classmethod
+    def _rejected_finish_feedback(cls, request: ModelRequest, state: Mapping[str, Any]):
+        previous = state.get("sp_last_handler_result")
+        if not (isinstance(previous, Mapping) and previous.get("action_type") == ActionType.FINISH.value and previous.get("next_step") == "error_recoverable"):
+            return request
+        run_id = str(state.get("sp_loop_run_id") or "")
+        refs = []
+        for ref in cls._artifact_candidates(state):
+            if not run_id or str(ref.get("run_id") or "") != run_id or not ref.get("is_current", True) or not _artifact_is_complete(ref) or ref.get("type") in _INTERMEDIATE_ARTIFACT_TYPES:
+                continue
+            refs.append({key: ref[key] for key in ("artifact_id", "virtual_path", "type") if ref.get(key)})
+            if len(refs) >= 8:
+                break
+        last_args = None
+        for message in reversed(request.messages):
+            if isinstance(message, AIMessage):
+                call = next((call for call in reversed(message.tool_calls) if call.get("name") == "sp_finish"), None)
+                if call is not None:
+                    last_args = {key: call["args"][key] for key in ("final_artifact_ref", "required_artifact_type", "allow_without_artifact") if key in call.get("args", {})}
+                    break
+        note = HumanMessage(
+            name="sp_rejected_finish_control",
+            additional_kwargs={"hide_from_ui": True},
+            content=(
+                "<rejected-finish-control>\n"
+                "The actual native FINISH call was rejected. Read its error and correct the control call or the underlying work; do not repeat the same rejected request or replace file delivery with ordinary prose. "
+                "For a reference/type mismatch, select an exact registered artifact_id or virtual_path and its compatible artifact type from the current-run references below. "
+                "If the error concerns missing evidence, invalid content, a partial/stale artifact or another unmet requirement, resolve that underlying work through its original specialist before retrying FINISH. "
+                "Do not invent a reference, claim a file write, set an acceptance bypass, or treat a registered reference as proof that all native checks passed. "
+                f"Actual native rejection: {str(previous.get('error') or 'Inspect the failed sp_finish ToolMessage for the concrete error.')[:1200]}\n"
+                f"Actual rejected call fields: {json.dumps(last_args, ensure_ascii=False)}\n"
+                f"Registered complete current-run deliverable references: {json.dumps(refs, ensure_ascii=False)}\n"
+                "Source, public-schema, completion and execution guards remain authoritative.\n</rejected-finish-control>"
+            ),
+        )
+        return request.override(messages=[*[message for message in request.messages if getattr(message, "name", None) != note.name], note])
+
     def _filter_request(self, request: ModelRequest) -> ModelRequest:
         state = request.state if isinstance(request.state, Mapping) else {}
         if not state.get("messages"):
             state = {**state, "messages": request.messages}
         if not self._allows_human_recovery(state):
             request = request.override(tools=[candidate for candidate in request.tools if getattr(candidate, "name", None) not in {"sp_ask_human", "ask_clarification"}])
+        request = self._rejected_finish_feedback(request, state)
         previous = state.get("sp_last_handler_result")
         if isinstance(previous, Mapping) and previous.get("policy_checkpoint") == "same_target_requires_intermediate_control_action":
             # The router records a rejected duplicate as an effective THINK

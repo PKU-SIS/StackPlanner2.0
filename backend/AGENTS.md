@@ -1300,3 +1300,29 @@ partial/blocked, source, stop and bounded recovery handling. A schema-valid
 payload alone cannot promote a partial audit. Mixed-RAG and artifact contracts
 retain their existing behavior. Tests: `test_sp_schema_delivery.py` includes
 native DelegateHandler-to-Central recovery after complete actual source reads.
+
+The host-bound inline/file-only designated Researcher also uses the existing
+two same-instance public-format corrections before normal partial recovery.
+Propagate this eligibility from the actual task/contract, not model metadata;
+mixed RAG and other inline roles remain excluded. Normalization retains actual
+schema diagnostics alongside the missing-public-payload gap. Native guard stops
+still suppress retries. During non-Central JSON corrections, temporarily remove
+write_file/str_replace from that request, retain read tools, and request the
+complete raw public value with single-layer JSON escaping. Never execute textual
+tool envelopes, manufacture file evidence, or alter candidate bytes. Actual
+successful native file delivery keeps its existing path and acceptance checks.
+`collect_source_access` counts native ranged read output by its real newline
+join semantics, preserving terminal blank lines (even an empty one-line read);
+unbounded reads retain splitlines/EOF semantics and failure/truncation exclusions.
+Tests: `test_sp_public_audit_format_recovery.py`, source-access, schema-delivery,
+public-format and runtime-context suites.
+
+`SPFinishAvailabilityMiddleware` adds transient feedback after an actual
+recoverable FINISH rejection: preserve its native error, actual failed call's
+reference/type fields, and bounded host-registered complete current-run
+deliverable references. Ask the model to fix the control request or underlying
+source/content work; never select an answer, fabricate a reference, promote
+status, or bypass FinishHandler's real file/schema/source checks. Keep source
+recovery and ordinary action budgets unchanged. No prior FINISH rejection means
+no feedback. Tests: `test_sp_finish_control_feedback.py` exercises real rejected
+and corrected FinishHandler calls, including a subsequently invalid artifact.

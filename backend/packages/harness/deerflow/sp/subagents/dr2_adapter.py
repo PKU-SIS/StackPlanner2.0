@@ -992,19 +992,27 @@ def _requires_inline_file_audit_payload(task: SPSubagentTask | None) -> bool:
     return isinstance(required, Mapping) and required.get("audit_agent") == "researcher" and required.get("document_ids") == [] and isinstance(required.get("files"), list) and bool(required["files"])
 
 
-def _has_original_public_audit_payload(raw_result: Any, ai_messages: Any, task: SPSubagentTask) -> bool:
-    if _is_public_schema_delivery(raw_result, ai_messages, task):
-        return True
+def _original_public_audit_payload_gaps(raw_result: Any, ai_messages: Any, task: SPSubagentTask) -> list[str]:
+    from deerflow.sp.output_contract import output_contract_gaps
+
     if not _is_actual_final_response(raw_result, ai_messages):
-        return False
+        return ["The public audit payload is absent from the actual final assistant response, or that response still contains unexecuted tool intent."]
+    contract = _public_schema_delivery_contract(task)
+    gaps = output_contract_gaps({"sp_task_contract": contract}, raw_result)
+    if not gaps:
+        return []
     # Preserve the existing explicit artifact envelope transport, but validate
     # only a value actually present in this final response. Do not recover a
     # conclusion from prose, clean a nested wrapper, or trust model metadata.
     try:
         payload = json.loads(raw_result)
-    except (ValueError, TypeError):
-        return False
-    return isinstance(payload, dict) and _has_schema_artifact_content(payload.get("artifact_content"), task)
+    except (ValueError, TypeError, RecursionError):
+        return gaps
+    if isinstance(payload, dict) and "artifact_content" in payload:
+        content = payload["artifact_content"]
+        text = content if isinstance(content, str) or content is None else json.dumps(content, ensure_ascii=False)
+        return output_contract_gaps({"sp_task_contract": contract}, text)
+    return gaps
 
 
 def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = None) -> SPSubagentResult:
@@ -1121,11 +1129,12 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
                 artifact_metadata["completion_status"] = "partial"
             if _NO_RESPONSE_GAP not in artifact_metadata["evidence_gaps"]:
                 artifact_metadata["evidence_gaps"].append(_NO_RESPONSE_GAP)
-        if _requires_inline_file_audit_payload(task) and not _has_original_public_audit_payload(raw_result, ai_messages, task):
-            if artifact_metadata["completion_status"] == "complete":
-                artifact_metadata["completion_status"] = "partial"
-            if _MISSING_PUBLIC_AUDIT_PAYLOAD_GAP not in artifact_metadata["evidence_gaps"]:
-                artifact_metadata["evidence_gaps"].append(_MISSING_PUBLIC_AUDIT_PAYLOAD_GAP)
+        if _requires_inline_file_audit_payload(task):
+            public_payload_gaps = _original_public_audit_payload_gaps(raw_result, ai_messages, task)
+            if public_payload_gaps:
+                if artifact_metadata["completion_status"] == "complete":
+                    artifact_metadata["completion_status"] = "partial"
+                artifact_metadata["evidence_gaps"] = list(dict.fromkeys([*artifact_metadata["evidence_gaps"], _MISSING_PUBLIC_AUDIT_PAYLOAD_GAP, *public_payload_gaps]))
         if _coder_requires_execution_evidence(task):
             data_processing = is_data_processing_coder(task.metadata)
             verification = _execution_verification(ai_messages, reject_masked_commands=data_processing, allow_negative_findings=data_processing)

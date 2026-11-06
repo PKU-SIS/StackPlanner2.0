@@ -73,7 +73,7 @@ def public_format_repair_update(state: Mapping[str, Any], contract: Mapping[str,
             update={"id": latest.id or str(uuid.uuid4()), "additional_kwargs": {**extra, "stackplanner_generated": True, "stackplanner": {"status": "incomplete", "target_agent": "central", "guard": "public_output_contract"}}}
         )
         return {"messages": [guarded], "sp_recovery_exhausted": {"target_agent": "central", "attempts": attempts, "limit": _MAX_REPAIRS, "evidence_gaps": gaps}}
-    info = {"attempt": attempts + 1, "scope": scope, "gaps": gaps, "schema": contract["output_schema"], "mode": contract.get("output_parse_mode", "json")}
+    info = {"attempt": attempts + 1, "scope": scope, "gaps": gaps, "schema": contract["output_schema"], "mode": contract.get("output_parse_mode", "json"), "central": central}
     guarded = latest.model_copy(update={"id": latest.id or str(uuid.uuid4()), "additional_kwargs": {**extra, _FEEDBACK: info}})
     return {"messages": [guarded], "jump_to": "model"}
 
@@ -86,6 +86,15 @@ def augment_public_format_request(request):
     info = latest.additional_kwargs.get(_FEEDBACK) if isinstance(latest, AIMessage) else None
     if not isinstance(info, Mapping):
         return request
+    json_delivery = info["mode"] == "json" and not info.get("central")
+    json_instruction = (
+        "During this JSON correction, write_file/str_replace are temporarily unbound. Return the complete public JSON value directly; native artifact persistence handles that actual value. "
+        "Do not emit <tool_call> text, a write_file argument object, or a JSON string containing the entire answer. Those are not executed file writes or public delivery. "
+        "Use unescaped quotation marks for JSON structural delimiters and escape original quotation marks inside JSON string values exactly once. "
+        "Keep complete verbatim evidence and every distinct supported finding. Do not copy the same malformed serialization or replace the audit with a receipt. "
+        if json_delivery
+        else ""
+    )
     note = HumanMessage(
         name=_FEEDBACK,
         additional_kwargs={"hide_from_ui": True},
@@ -96,25 +105,40 @@ def augment_public_format_request(request):
             "Use the original source and actual draft already in this conversation. Do not invent findings, change the answer to a default, omit supported findings, or return an empty array to conceal unfinished work. "
             "Return the complete raw public JSON/text value, without Markdown fences, separate JSON documents, an SP envelope, promises, or a file receipt. "
             "The native host persists the real complete value when a file is required. A claim that a file was written is not file-tool evidence. "
-            "If the substantive audit is actually incomplete, return an honest partial/blocked SP envelope with concrete gaps instead.\n"
+            + json_instruction
+            + "If the substantive audit is actually incomplete, return an honest partial/blocked SP envelope with concrete gaps instead.\n"
             f"Parse mode: {info['mode']}. Public output_schema: {json.dumps(info['schema'], ensure_ascii=False)}\n"
             "Actual format errors: " + "; ".join(info["gaps"]) + "\n</public-format-correction>"
         ),
     )
-    return request.override(messages=[*request.messages, note])
+    changes = {"messages": [*request.messages, note]}
+    if json_delivery and hasattr(request, "tools"):
+        changes["tools"] = [tool for tool in request.tools if getattr(tool, "name", None) not in {"write_file", "str_replace"}]
+    return request.override(**changes)
 
 
 class PublicArtifactFormatRepairMiddleware(AgentMiddleware):
-    """Keep artifact schema corrections inside the original auditor instance."""
+    """Keep public schema corrections inside the host-bound auditor instance."""
 
-    def __init__(self, contract: Mapping[str, Any], *, action_id: str | None = None):
+    def __init__(self, contract: Mapping[str, Any], *, action_id: str | None = None, auditor_role: str | None = None):
         self.contract = contract
         self.action_id = action_id
+        self.auditor_role = auditor_role
 
     @hook_config(can_jump_to=["model"])
     def after_model(self, state, runtime):
         if self.contract.get("delivery_mode") != "artifact":
-            return None
+            required = self.contract.get("source_requirements")
+            if (
+                self.contract.get("delivery_mode") != "inline"
+                or self.auditor_role != "researcher"
+                or not isinstance(required, Mapping)
+                or required.get("audit_agent") != "researcher"
+                or required.get("document_ids") != []
+                or not isinstance(required.get("files"), list)
+                or not required["files"]
+            ):
+                return None
         return public_format_repair_update(state, self.contract, scope=self.action_id)
 
     @hook_config(can_jump_to=["model"])

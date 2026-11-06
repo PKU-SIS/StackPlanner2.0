@@ -63,7 +63,12 @@ def collect_source_access(messages: list | None) -> dict:
             end = args.get("end_line")
             if not isinstance(start, int) or start < 1 or (end is not None and (not isinstance(end, int) or end < start)):
                 continue
-            observed_end = start + len(body.splitlines()) - 1
+            # Native ranged reads use "\n".join(source.splitlines()[slice]).
+            # splitlines() again loses an actually returned final empty line,
+            # including the valid empty body of a one-line blank range.
+            # Unbounded reads retain original EOF/newline semantics instead.
+            ranged = args.get("start_line") is not None or end is not None
+            observed_end = start + len(body.split("\n") if ranged else body.splitlines()) - 1
             if end is not None:
                 observed_end = min(end, observed_end)
             if observed_end >= start:

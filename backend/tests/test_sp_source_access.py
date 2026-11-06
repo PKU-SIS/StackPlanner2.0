@@ -50,6 +50,41 @@ def test_full_inline_document_and_real_rule_read_satisfy_access_without_nonempty
     assert source_access_gaps(_state(merge_source_access(access, page))) == []
 
 
+@pytest.mark.parametrize("start,end", [(1, 2), (2, 2), (2, None), (None, 2)])
+def test_native_ranged_read_preserves_observed_terminal_empty_lines(monkeypatch, start, end):
+    from types import SimpleNamespace
+
+    from deerflow.sandbox.tools import read_file_tool
+
+    original = "First original line\n\n"
+    monkeypatch.setattr("deerflow.sandbox.tools.read_current_file_content", lambda *_: original)
+    monkeypatch.setattr("deerflow.sandbox.tools.resolve_runtime_user_id", lambda *_: None)
+    body = read_file_tool.func(SimpleNamespace(), "Read complete original range", "/mnt/user-data/uploads/rule.txt", start, end)
+    access = collect_source_access(_messages("read_file", {"path": "/mnt/user-data/uploads/rule.txt", "start_line": start, "end_line": end}, body))
+    assert access["reads"]["/mnt/user-data/uploads/rule.txt"] == [[start or 1, 2]]
+
+
+def test_actual_native_bisected_source_reads_have_no_false_gap_at_empty_boundary(monkeypatch):
+    from types import SimpleNamespace
+
+    from deerflow.sandbox.tools import read_file_tool
+
+    original = "First source line\n\nSecond source section\nFinal source line"
+    monkeypatch.setattr("deerflow.sandbox.tools.read_current_file_content", lambda *_: original)
+    monkeypatch.setattr("deerflow.sandbox.tools.resolve_runtime_user_id", lambda *_: None)
+    access = {}
+    for start, end in [(1, 2), (3, 4)]:
+        body = read_file_tool.func(SimpleNamespace(), "Read source section", "/mnt/user-data/uploads/rule.txt", start, end)
+        access = merge_source_access(access, collect_source_access(_messages("read_file", {"path": "/mnt/user-data/uploads/rule.txt", "start_line": start, "end_line": end}, body)))
+    assert source_access_gaps({"sp_task_contract": {"source_requirements": {"files": [{"path": "/mnt/user-data/uploads/rule.txt", "total_lines": 4}]}}, "sp_source_access": access}) == []
+
+
+def test_unbounded_terminal_newline_does_not_create_an_extra_observed_line():
+    access = collect_source_access(_messages("read_file", {"path": "/mnt/user-data/uploads/rule.txt"}, "Original line\n"))
+    assert access["reads"]["/mnt/user-data/uploads/rule.txt"] == [[1, 1]]
+    assert source_access_gaps(_state(access))
+
+
 def test_externalized_document_requires_actual_content_lines_and_range_reads():
     source = {"mode": "document", "document_id": "doc", "page": 1, "page_size": 100, "total": 1, "returned": 1, "chunk_ids": ["c"], "document_bytes": 10}
     access = collect_source_access(_messages("ragflow_retrieve", {"document_id": "doc"}, "preview only", {"native_source_coverage": {**source, "externalized_path": "/mnt/user-data/outputs/source.txt", "content_lines": [5]}}))

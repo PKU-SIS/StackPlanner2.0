@@ -38,7 +38,7 @@ from deerflow.sp.subagents import (
     SPSubagentStatus,
     SPSubagentTask,
 )
-from deerflow.sp.subagents.dr2_adapter import is_data_processing_coder
+from deerflow.sp.subagents.dr2_adapter import _requires_inline_file_audit_payload, is_data_processing_coder
 
 logger = logging.getLogger(__name__)
 
@@ -518,7 +518,7 @@ class DR2SPExecutorProvider:
                 source_prefetch_contract=public_contract if prefetch_for_auditor else None,
                 source_prefetch_access=state.get("sp_source_access") if prefetch_for_auditor else None,
                 source_prefetch_auditor_role=task.subagent_type if prefetch_for_auditor else None,
-                public_output_contract=public_contract if schema_instruction is not None and public_contract.get("delivery_mode") == "artifact" else None,
+                public_output_contract=public_contract if schema_instruction is not None and (public_contract.get("delivery_mode") == "artifact" or _requires_inline_file_audit_payload(task)) else None,
             )
 
         def observe_raw_result(raw_result: Any) -> None:

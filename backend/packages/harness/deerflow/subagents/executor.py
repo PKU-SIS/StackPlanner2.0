@@ -508,8 +508,8 @@ class SubagentExecutor:
             source_prefetch_access: Host-observed prior source reads for this run.
             source_prefetch_auditor_role: Host-bound designated public auditor,
                 used to scope current-input file audit completion guidance.
-            public_output_contract: Public artifact schema eligible for bounded
-                format feedback inside this same native auditor instance.
+            public_output_contract: Public artifact or host-bound inline file
+                audit schema eligible for bounded same-instance format feedback.
         """
         self.config = config
         self.app_config = app_config
@@ -636,7 +636,7 @@ class SubagentExecutor:
 
             # Reverse after_model order: native cost/safety guards must run
             # before a format-correction jump can re-enter the model.
-            middlewares.insert(0, PublicArtifactFormatRepairMiddleware(self.public_output_contract, action_id=self.reporter_action_id))
+            middlewares.insert(0, PublicArtifactFormatRepairMiddleware(self.public_output_contract, action_id=self.reporter_action_id, auditor_role=self.source_prefetch_auditor_role))
         if self.source_prefetch_settings is not None:
             from deerflow.sp.source_prefetch import SourcePrefetchVisibilityMiddleware
 
