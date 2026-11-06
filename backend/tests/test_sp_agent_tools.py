@@ -105,6 +105,34 @@ def test_missing_public_sources_route_to_contract_auditor_before_perception_reco
     assert "do not repeat perception" in note.content
 
 
+@pytest.mark.parametrize("format_contract", [{}, {"output_parse_mode": "text", "output_schema": {"type": "string"}}, {"output_parse_mode": "json", "output_schema": {"type": "array"}}])
+def test_completed_public_text_audit_explains_unbound_finish_and_requires_direct_final(format_contract):
+    stack = TaskMemoryStack()
+    stack.append_delegate("Audit all operations", run_id="run", metadata={"target_agent": "researcher"})
+    stack.append_observe("Public audit completed", actor="researcher", run_id="run", metadata={"completion_status": "complete", "evidence_gaps": []})
+    state = {
+        "sp_loop_run_id": "run",
+        "sp_non_interactive": True,
+        "sp_task_memory": stack.to_dict(),
+        "sp_task_contract": {**format_contract, "source_requirements": {"audit_agent": "researcher", "files": []}},
+        "messages": [HumanMessage(content="Audit the operations and conclude in the requested text format.")],
+    }
+    request = _ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=state["messages"])
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
+    assert filtered.tools == []
+    assert filtered.messages[-1].name == "sp_text_delivery_protocol"
+    assert "sp_finish is not bound" in filtered.messages[-1].content
+    assert "ordinary final assistant content" in filtered.messages[-1].content
+    assert "control JSON" in filtered.messages[-1].content
+
+
+def test_public_source_coverage_without_a_completed_audit_still_requires_auditor():
+    state = {"sp_loop_run_id": "run", "sp_non_interactive": True, "sp_task_contract": {"source_requirements": {"audit_agent": "researcher", "files": []}}, "messages": [HumanMessage(content="Audit all operations.")]}
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(_ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=state["messages"]))
+    assert [tool.name for tool in filtered.tools] == ["sp_delegate"]
+    assert filtered.messages[-1].name == "sp_public_source_audit_required"
+
+
 def test_action_budget_sets_independent_central_action_limit():
     middleware = SPActionBudgetMiddleware(max_actions=7)
 

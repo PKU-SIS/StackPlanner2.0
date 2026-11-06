@@ -407,6 +407,39 @@ def test_clause_source_contract_requires_full_document_and_preserves_audit_role(
         assert output_contract_gaps({"sp_task_contract": contract}, text)
 
 
+def test_public_nba_template_requires_complete_uploaded_rules_without_private_routing():
+    from dcc_harness.data import InputFile, PublicTask
+    from dcc_harness.preprocessing.output_contracts import public_output_contract
+
+    template = (ROOT / "configs/dcc/prompts/rulearena-nba/task.md").read_text()
+    prompt = template.replace("${rules}", "Read dcc-rule-0.txt").replace(
+        "${document_text}", "A public transaction scenario."
+    )
+    contract = public_output_contract(
+        PublicTask(
+            "dcc_inline",
+            prompt,
+            files=(InputFile("dcc-rule-0.txt", "first\nsecond\n"),),
+        )
+    )
+    assert contract["source_requirements"] == {
+        "audit_agent": "researcher",
+        "files": [{"path": "/mnt/user-data/uploads/dcc-rule-0.txt", "total_lines": 2}],
+        "document_ids": [],
+    }
+    assert "output_schema" not in contract
+    assert (
+        public_output_contract(
+            PublicTask(
+                "dcc_inline",
+                "An unrelated question.",
+                metadata={"dataset": "rulearena_nba"},
+            )
+        )
+        == {}
+    )
+
+
 def test_v3_public_input_builder_stages_neutral_files_without_private_identifiers(
     native_bundle,
 ):

@@ -1,4 +1,4 @@
-"""Recognize published FinAuditing formats from public instructions only."""
+"""Recognize published source/output contracts from public instructions only."""
 
 from __future__ import annotations
 
@@ -46,6 +46,27 @@ def _published_formats() -> tuple[tuple[str, dict], ...]:
     )
 
 
+@lru_cache(maxsize=1)
+def _published_nba_parts() -> tuple[str, str, str]:
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "configs/dcc/prompts/rulearena-nba/task.md"
+    )
+    before_rules, remainder = path.read_text().strip().split("${rules}", 1)
+    between, after_scenario = remainder.split("${document_text}", 1)
+    return before_rules, between, after_scenario
+
+
+def _has_public_nba_instructions(body: str) -> bool:
+    remaining = body
+    for part in _published_nba_parts():
+        position = remaining.find(part)
+        if position < 0:
+            return False
+        remaining = remaining[position + len(part) :]
+    return True
+
+
 def public_output_contract(task: PublicTask) -> dict:
     if task.benchmark == "clause":
         return {
@@ -89,9 +110,12 @@ def public_output_contract(task: PublicTask) -> dict:
     # Return independent state, never expose a mutable shared template.
     import copy
 
-    if not matches:
+    nba = any(_has_public_nba_instructions(body) for body in bodies)
+    if matches and nba:
+        raise ValueError("conflicting published public output contracts")
+    if not matches and not nba:
         return {}
-    contract = copy.deepcopy(matches[0])
+    contract = copy.deepcopy(matches[0]) if matches else {}
     context = next(
         (
             json.loads(item.text)
@@ -111,7 +135,8 @@ def public_output_contract(task: PublicTask) -> dict:
         ],
         "document_ids": context.get("retrieval", {}).get("document_ids", []),
     }
-    contract["output_file_extension"] = (
-        ".json" if contract["output_parse_mode"] == "json" else ".txt"
-    )
+    if matches:
+        contract["output_file_extension"] = (
+            ".json" if contract["output_parse_mode"] == "json" else ".txt"
+        )
     return contract

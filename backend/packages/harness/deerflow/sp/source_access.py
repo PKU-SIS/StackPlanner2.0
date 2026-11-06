@@ -96,6 +96,37 @@ def _covers(ranges: list, start: int, end: int) -> bool:
     return end < start
 
 
+def public_audit_completion_gaps(state: Mapping[str, Any]) -> list[str]:
+    """Require the designated auditor's latest actual current-run completion.
+
+    Keep this separate from source_access_gaps: a delegate's source checks run
+    before its observation is appended to native task memory.
+    """
+    contract = state.get("sp_task_contract") or {}
+    required = contract.get("source_requirements") if isinstance(contract, Mapping) else None
+    target = required.get("audit_agent") if isinstance(required, Mapping) else None
+    if not isinstance(target, str) or not target.strip():
+        return []
+    from deerflow.sp.memory import TaskMemoryStack
+
+    run_id = str(state.get("sp_loop_run_id") or "").strip()
+    stack = TaskMemoryStack.from_dict(state.get("sp_task_memory"))
+    for entry in reversed(stack.entries):
+        if not run_id or str(entry.run_id or "") != run_id:
+            continue
+        if entry.action == "delegate" and entry.metadata.get("target_agent") == target:
+            break
+        if entry.action not in {"observe", "error"} or entry.actor != target:
+            continue
+        metadata = entry.metadata
+        if entry.action != "observe" or metadata.get("completion_status") != "complete":
+            return [f"Required public {target} audit has no complete native status."]
+        if metadata.get("stop_reason") or metadata.get("subagent_stop_reason") or metadata.get("evidence_gaps"):
+            return [f"Required public {target} audit has unresolved native gaps or a stop reason."]
+        return []
+    return [f"Required public {target} audit has no current-run completed native observation."]
+
+
 def source_access_gaps(state: Mapping[str, Any]) -> list[str]:
     contract = state.get("sp_task_contract") or {}
     required = contract.get("source_requirements") if isinstance(contract, Mapping) else None

@@ -519,8 +519,18 @@ model-authored completion metadata cannot supply this proof. Truncated reads,
 zero-match queries and previews remain incomplete. Missing reads trigger bounded
 recovery before any final answer, including a format-valid `[]` or raw label.
 CLAUSE retains its Reporter/clause audit policy and requires the complete public
-document; FinAuditing retains Researcher for filing evidence. These checks do
+document; FinAuditing retains Researcher for filing evidence. The unchanged
+published NBA task template also requires Researcher to read the complete uploaded
+rules. Delivery requires the designated auditor's latest current-run native
+observation to be complete, without evidence gaps or any early-stop reason.
+These checks do
 not infer findings, require nonempty predictions or replace semantic auditing.
+
+When no finalizable artifact exists, Central receives the actual binding protocol:
+`sp_finish` is unavailable and completed conversational audits return ordinary
+final assistant content in the requested public shape. After a clean public
+audit and complete source coverage, Central's control tools are removed for
+that final response. File-producing requests retain native artifact finalization.
 
 `ragflow_retrieve` additionally accepts an optional sample-scoped `document_id`.
 With `page_size=100` it enumerates original indexed chunks without semantic

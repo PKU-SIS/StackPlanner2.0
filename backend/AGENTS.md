@@ -1208,3 +1208,14 @@ checks to skip completed sources, and resume exact missing file ranges and old
 native externalized page content lines. Prefer the most progressed genuine page
 snapshot; do not re-fetch it under a new path and restart the prefix. New reads
 still need the model-visibility observer before entering the source proof ledger.
+
+`public_audit_completion_gaps` separately validates the designated auditor's
+latest current-run native observation: require complete, no evidence gaps and no
+stop reason; a newer delegation/error invalidates an older success. Do not fold
+this into `source_access_gaps`, which also runs before observations are appended.
+Apply both gates to accepted benchmark deliveries and bounded source recovery.
+Recognize NBA source obligations from its unchanged published public template,
+never private dataset metadata, and preserve its original text output format.
+When FINISH is unbound, dynamically explain ordinary final assistant delivery;
+strip Central controls only for clean completed public audits without artifact
+obligations. Preserve native file finalization and duplicate-role checkpoints.

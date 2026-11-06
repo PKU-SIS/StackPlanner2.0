@@ -43,7 +43,10 @@ def extract_delivery(
     state: dict, *, thread_id: str, run_id: str, native_returned: bool = False
 ) -> tuple[str, dict | None]:
     if state.get("sp_recovery_exhausted"):
-        raise DeliveryError("recovery_exhausted", "native recovery budget exhausted with unresolved acceptance gaps")
+        raise DeliveryError(
+            "recovery_exhausted",
+            "native recovery budget exhausted with unresolved acceptance gaps",
+        )
     if state.get("sp_pending_human_interaction"):
         raise DeliveryError("ask_human", "native SP requests human input")
     if (
@@ -158,12 +161,15 @@ def extract_delivery(
 
 def _check_public_output_contract(state: dict, text: str) -> None:
     from deerflow.sp.output_contract import output_contract_gaps
-    from deerflow.sp.source_access import source_access_gaps
+    from deerflow.sp.source_access import (
+        public_audit_completion_gaps,
+        source_access_gaps,
+    )
 
     gaps = output_contract_gaps(state, text)
     if gaps:
         raise DeliveryError("final_parse_error", "; ".join(gaps))
-    gaps = source_access_gaps(state)
+    gaps = [*source_access_gaps(state), *public_audit_completion_gaps(state)]
     if gaps:
         raise DeliveryError("unfinished", "; ".join(gaps))
 

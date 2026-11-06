@@ -42,7 +42,7 @@ from deerflow.sp.hitl import record_human_feedback
 from deerflow.sp.memory import StackMemoryEntry, TaskMemoryStack
 from deerflow.sp.output_contract import output_contract_gaps
 from deerflow.sp.recovery import recovery_limit
-from deerflow.sp.source_access import source_access_gaps
+from deerflow.sp.source_access import public_audit_completion_gaps, source_access_gaps
 from deerflow.sp.subagents import SPSubagentExecutorProtocol
 from deerflow.sp.subagents.dr2_adapter import is_data_processing_coder, observation_requires_code_recovery
 from deerflow.subagents.status_contract import (
@@ -580,7 +580,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
 
     @classmethod
     def _has_finalizable_artifact(cls, state: Mapping[str, Any]) -> bool:
-        if source_access_gaps(state):
+        if source_access_gaps(state) or public_audit_completion_gaps(state):
             return False
         candidates = cls._artifact_candidates(state)
         requires_fresh_artifact = cls._requires_fresh_revision_artifact(state)
@@ -993,7 +993,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
 
     @classmethod
     def _public_source_audit_request(cls, request: ModelRequest, state: Mapping[str, Any]) -> ModelRequest | None:
-        gaps = source_access_gaps(state)
+        gaps = [*source_access_gaps(state), *public_audit_completion_gaps(state)]
         sources = (state.get("sp_task_contract") or {}).get("source_requirements", {})
         target = sources.get("audit_agent") if isinstance(sources, Mapping) else None
         if not gaps or target not in {"researcher", "reporter"}:
@@ -1012,7 +1012,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             name="sp_public_source_audit_required",
             content=(
                 "<sp-public-source-audit-required>\n"
-                "Required public evidence has not yet been read completely. The public contract already names its audit role; "
+                "The required public source audit has not yet completed. The public contract already names its audit role; "
                 "do not repeat perception or route this evidence read to an unrelated coder. "
                 f'Call sp_delegate exactly once with target_agent="{target}", stage="{stage}", metadata={json.dumps(metadata, ensure_ascii=False)}. '
                 "Ask that auditor to use its allowed native tools to read all source_requirements.files and all scoped source_requirements.document_ids, "
@@ -1310,9 +1310,31 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         if has_finalizable_artifact:
             return request
         active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) != "sp_finish"]
-        if len(active_tools) == len(request.tools):
-            return request
-        return request.override(tools=active_tools)
+        sources = (state.get("sp_task_contract") or {}).get("source_requirements", {})
+        audit_complete = bool(isinstance(sources, Mapping) and sources.get("audit_agent") and not requires_artifact and not source_access_gaps(state) and not public_audit_completion_gaps(state))
+        if audit_complete:
+            active_tools = [candidate for candidate in active_tools if getattr(candidate, "name", None) not in SP_CONTROL_TOOL_NAMES]
+        note = HumanMessage(
+            name="sp_text_delivery_protocol",
+            content=(
+                "<sp-text-delivery-protocol>\n"
+                "sp_finish is not bound because no finalizable user-deliverable artifact exists. "
+                "For a completed conversational audit, deliver the answer as ordinary final assistant content in the exact requested public output shape. "
+                "Do not emit FINISH/sp_finish calls, control JSON, pseudo tools, or an outer action envelope. "
+                + (
+                    "The designated auditor has completed its current-run native audit and all required sources were read. Return the final answer now using that completed audit; no further control action is needed. "
+                    if audit_complete
+                    else (
+                        "If required work or source coverage remains incomplete, use the currently bound controls to complete it and do not claim success. "
+                        "Required file/artifact delivery still needs a real complete artifact before FINISH becomes available. "
+                    )
+                )
+                + "\n</sp-text-delivery-protocol>"
+            ),
+            additional_kwargs={"hide_from_ui": True},
+        )
+        messages = [message for message in request.messages if getattr(message, "name", None) != note.name]
+        return request.override(tools=active_tools, messages=[*messages, note])
 
     @staticmethod
     def _guarded_message_kwargs(
@@ -1528,7 +1550,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         text = message_to_text(latest)
         if not text.strip():
             return None
-        evidence_gaps = source_access_gaps(state)
+        evidence_gaps = [*source_access_gaps(state), *public_audit_completion_gaps(state)]
         gaps = [*output_contract_gaps(state, text), *evidence_gaps]
         if not gaps:
             return None

@@ -2,7 +2,32 @@
 
 import json
 
-from deerflow.sp.source_access import collect_source_access, merge_source_access, source_access_gaps
+import pytest
+
+from deerflow.sp.memory import StackMemoryEntry, TaskMemoryStack
+from deerflow.sp.source_access import collect_source_access, merge_source_access, public_audit_completion_gaps, source_access_gaps
+
+
+@pytest.mark.parametrize("damage", [None, "missing", "stale", "status", "gaps", "stop", "new_delegate", "new_error"])
+def test_public_audit_requires_latest_current_run_native_completion(damage):
+    stack = TaskMemoryStack()
+    metadata = {"completion_status": "complete", "evidence_gaps": []}
+    if damage == "status":
+        metadata["completion_status"] = "partial"
+    elif damage == "gaps":
+        metadata["evidence_gaps"] = ["Some operations remain unaudited."]
+    elif damage == "stop":
+        metadata["subagent_stop_reason"] = "token_capped"
+    if damage != "missing":
+        stack.append_observe("Audit result", actor="researcher", run_id="old" if damage == "stale" else "run", metadata=metadata)
+    if damage == "new_delegate":
+        stack.append_delegate("Audit again", run_id="run", metadata={"target_agent": "researcher"})
+    elif damage == "new_error":
+        stack.append(StackMemoryEntry(action="error", actor="researcher", content="Native failure", run_id="run"))
+    state = {"sp_loop_run_id": "run", "sp_task_memory": stack.to_dict(), "sp_task_contract": {"source_requirements": {"audit_agent": "researcher"}}}
+    assert bool(public_audit_completion_gaps(state)) == (damage is not None)
+    assert source_access_gaps(state) == []
+    assert public_audit_completion_gaps({}) == []
 
 
 def _state(access=None):

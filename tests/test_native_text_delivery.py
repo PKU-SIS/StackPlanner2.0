@@ -10,7 +10,18 @@ from dcc_harness.evaluation.benchmarks import DeliveryError, extract_delivery
 
 def test_native_recovery_exhaustion_is_never_an_empty_prediction():
     with pytest.raises(DeliveryError) as exc:
-        extract_delivery({"sp_recovery_exhausted": {"target_agent": "reporter", "attempts": 6, "limit": 6}}, thread_id="t", run_id="r", native_returned=True)
+        extract_delivery(
+            {
+                "sp_recovery_exhausted": {
+                    "target_agent": "reporter",
+                    "attempts": 6,
+                    "limit": 6,
+                }
+            },
+            thread_id="t",
+            run_id="r",
+            native_returned=True,
+        )
     assert exc.value.status == "recovery_exhausted"
 
 
@@ -50,6 +61,52 @@ def test_collects_normal_native_text_without_finish_or_summary_fallback():
     assert extract(direct_state()) == ("CombinationErr", None)
     with pytest.raises(DeliveryError):
         extract(direct_state(), returned=False)
+
+
+@pytest.mark.parametrize(
+    "status,stop_reason,passes",
+    [
+        ("complete", None, True),
+        ("partial", None, False),
+        ("blocked", None, False),
+        ("complete", "turn_capped", False),
+    ],
+)
+def test_public_audit_text_requires_current_native_complete_status(
+    status, stop_reason, passes
+):
+    from deerflow.sp.memory import TaskMemoryStack
+
+    stack = TaskMemoryStack()
+    stack.append_delegate(
+        "Audit source", run_id="run-1", metadata={"target_agent": "researcher"}
+    )
+    stack.append_observe(
+        "Audit status",
+        actor="researcher",
+        run_id="run-1",
+        metadata={
+            "completion_status": status,
+            "stop_reason": stop_reason,
+            "evidence_gaps": [],
+        },
+    )
+    state = direct_state(
+        sp_task_memory=stack.to_dict(),
+        sp_task_contract={
+            "source_requirements": {
+                "audit_agent": "researcher",
+                "files": [],
+                "document_ids": [],
+            }
+        },
+    )
+    if passes:
+        assert extract(state) == ("CombinationErr", None)
+    else:
+        with pytest.raises(DeliveryError) as exc:
+            extract(state)
+        assert exc.value.status == "unfinished"
 
 
 @pytest.mark.parametrize(
