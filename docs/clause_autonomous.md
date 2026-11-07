@@ -60,3 +60,5 @@ The typed final receipt requires an actual findings array for every status. Part
 In CLAUSE file mode, a sandbox rejection of an oversized Bash command targeting an output JSON file can switch the specialist to the structured final receipt. This requires a final-answer assignment and verified complete source coverage in that delegation. Central still selects the final registered artifact.
 
 The autonomous CLAUSE file plugin keeps the upstream public array schema and artifact delivery mode. It omits the fixed Reporter assignment in the upstream source requirements, so Central chooses the review roles. Other benchmark contracts keep their original routing.
+
+A rejected terminal claim returns the native delivery gaps to Central with a bounded retry. The file plugin does not synthesize a Reporter call for public-format repair.

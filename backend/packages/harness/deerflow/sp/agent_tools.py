@@ -835,6 +835,12 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         requested = requested if isinstance(requested, list) else []
         return list(dict.fromkeys([*(name.strip() for name in requested if isinstance(name, str) and name.strip()), *defaults]))
 
+    @staticmethod
+    def _central_delivery_recovery():
+        from deerflow.sp.actions.run_policy import active_run_policy
+
+        return getattr(active_run_policy.get(), "recover_delivery_with_central", None)
+
     @classmethod
     def _artifact_recovery_instruction(cls, state: Mapping[str, Any]) -> str:
         partial_observation = cls._latest_partial_report_observation(state)
@@ -1071,6 +1077,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 if call is not None:
                     last_args = {key: call["args"][key] for key in ("final_artifact_ref", "required_artifact_type", "allow_without_artifact") if key in call.get("args", {})}
                     break
+        recovery_path = "resolve that underlying work" if cls._central_delivery_recovery() else "resolve that underlying work through its original specialist"
         note = HumanMessage(
             name="sp_rejected_finish_control",
             additional_kwargs={"hide_from_ui": True},
@@ -1078,7 +1085,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 "<rejected-finish-control>\n"
                 "The actual native FINISH call was rejected. Read its error and correct the control call or the underlying work; do not repeat the same rejected request or replace file delivery with ordinary prose. "
                 "For a reference/type mismatch, select an exact registered artifact_id or virtual_path and its compatible artifact type from the current-run references below. "
-                "If the error concerns missing evidence, invalid content, a partial/stale artifact or another unmet requirement, resolve that underlying work through its original specialist before retrying FINISH. "
+                f"If the error concerns missing evidence, invalid content, a partial/stale artifact or another unmet requirement, {recovery_path} before retrying FINISH. "
                 "Do not invent a reference, claim a file write, set an acceptance bypass, or treat a registered reference as proof that all native checks passed. "
                 f"Actual native rejection: {str(previous.get('error') or 'Inspect the failed sp_finish ToolMessage for the concrete error.')[:1200]}\n"
                 f"Actual rejected call fields: {json.dumps(last_args, ensure_ascii=False)}\n"
@@ -1359,6 +1366,10 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 )
             return request.override(tools=active_tools, messages=messages)
         artifact_recovery = incomplete_current_report is not None or ((finish_rejected or delegate_incomplete) and not has_finalizable_artifact and (requires_artifact or code_recovery))
+        if artifact_recovery and self._central_delivery_recovery():
+            # Keep Central's planners and specialist choices. The native FINISH
+            # handler still validates the selected file, status and public schema.
+            return request if has_finalizable_artifact else request.override(tools=[tool for tool in request.tools if getattr(tool, "name", None) != "sp_finish"])
         if artifact_recovery:
             active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) == "sp_delegate"]
             messages = list(request.messages)
@@ -1515,6 +1526,9 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 "sp_recovery_exhausted": {"target_agent": target_agent, "attempts": attempts, "limit": recovery_limit, "evidence_gaps": gaps[:5]},
             }
 
+        if recover := cls._central_delivery_recovery():
+            return recover(state, latest, gaps or [gap_text])
+
         code_contract = target_agent == "coder" and observation_requires_code_recovery(observation.metadata)
         verification_only = code_contract and str(observation.stage or "") == "verification" and not _verification_found_behavior_failure(observation)
         stage = {
@@ -1635,6 +1649,8 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             # A completed inline audit needs a format correction in its
             # current Central context, not a fresh file/report workflow.
             return public_format_repair_update(state, contract, central=True)
+        if recover := cls._central_delivery_recovery():
+            return recover(state, latest, gaps)
         sources = (state.get("sp_task_contract") or {}).get("source_requirements", {})
         target = sources.get("audit_agent", "researcher") if evidence_gaps else "reporter"
         attempts = cls._delegate_attempt_count(state, target)

@@ -80,3 +80,28 @@ def test_central_timeout_cli_defaults_and_opt_in():
         ["--central-timeout", "300", "--central-retry-timeout", "180"]
     )
     assert args.central_timeout == 300 and args.central_retry_timeout == 180
+
+
+def test_schema_failure_and_artifact_retry_leave_role_to_central():
+    from langchain_core.messages import AIMessage, HumanMessage
+    from deerflow.sp.actions.run_policy import active_run_policy
+    from deerflow.sp.agent_tools import SPFinishAvailabilityMiddleware
+    from dcc_harness.datasets.clause_delivery import FileDeliveryPolicy
+
+    latest = AIMessage(content="A draft, not a JSON file.", id="bad")
+    state = {"sp_loop_run_id": "test-run", "messages": [HumanMessage(content="Review the file."), latest],
+             "sp_task_contract": {"delivery_mode":"artifact", "output_schema":{"type":"array"}}}
+    original = SPFinishAvailabilityMiddleware._output_contract_update(state)
+    assert original["messages"][0].tool_calls[0]["args"]["target_agent"] == "reporter"
+    policy = FileDeliveryPolicy()
+    token = active_run_policy.set(policy)
+    try:
+        update = SPFinishAvailabilityMiddleware._output_contract_update(state)
+        assert update["jump_to"] == "model" and not update["messages"][0].tool_calls
+        assert "reporter" not in update["messages"][-1].content.lower()
+        state["sp_recovery_limits"] = {"delegate": 1}
+        state["messages"] = [*update["messages"], AIMessage(content="Still incomplete.", id="next")]
+        stopped = SPFinishAvailabilityMiddleware._output_contract_update(state)
+        assert stopped["sp_recovery_exhausted"]["target_agent"] == "central"
+    finally:
+        active_run_policy.reset(token)

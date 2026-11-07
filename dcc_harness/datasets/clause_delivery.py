@@ -70,6 +70,34 @@ class FileDeliveryPolicy:
         self._validated_files: set[str] = set()
         self._final_answers: set[str] = set()
 
+    @staticmethod
+    def recover_delivery_with_central(state, latest, gaps):
+        """Return a rejected terminal claim and its native errors to the decision maker."""
+        from langchain_core.messages import AIMessage, HumanMessage
+        from deerflow.sp.recovery import recovery_limit
+
+        run = state.get("sp_loop_run_id") or ""
+        key = "clause_delivery_recovery_run"
+        attempts = sum(
+            isinstance(message, AIMessage) and message.additional_kwargs.get(key) == run
+            for message in state.get("messages", [])
+        )
+        limit = recovery_limit(state, "delegate")
+        marked = latest.model_copy(update={"additional_kwargs": {
+            **latest.additional_kwargs, key: run, "stackplanner_generated": True,
+            "stackplanner": {"status": "incomplete", "target_agent": "central"},
+        }})
+        if attempts >= limit:
+            return {"messages": [marked], "sp_recovery_exhausted": {
+                "target_agent": "central", "attempts": attempts, "limit": limit, "evidence_gaps": gaps,
+            }}
+        notice = HumanMessage(
+            name="clause_delivery_recovery",
+            content="The current file delivery is incomplete. Decide how to resolve the observed gaps: " + "; ".join(str(gap)[:500] for gap in gaps[:5]),
+            additional_kwargs={"hide_from_ui": True},
+        )
+        return {"messages": [marked, notice], "jump_to": "model"}
+
     def before_delegate(self, action, context):
         if action.target_agent == "coder":
             action.metadata.update(
