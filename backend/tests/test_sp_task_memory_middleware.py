@@ -72,6 +72,13 @@ def test_before_agent_leaves_empty_state_untouched():
     assert result is None
 
 
+def test_recovery_limits_are_host_owned_and_reset_on_new_factory():
+    runtime = Runtime(context={"thread_id": "thread-1", "run_id": "run-1"})
+    state = {"sp_recovery_limits": {"reporter": 1000}}
+    update = TaskMemoryMiddleware(recovery_limits={"reporter": 6, "delegate": 8, "capped_delegate": 4}).before_agent(state, runtime)
+    assert update["sp_recovery_limits"] == {"reporter": 6, "delegate": 8, "capped_delegate": 4}
+
+
 def test_interaction_policy_is_caller_owned_and_reset_for_each_run():
     runtime = Runtime(context={"thread_id": "thread-1", "run_id": "run-1"})
     state = {"messages": [HumanMessage(content="Analyze the evidence.")], "sp_non_interactive": False}

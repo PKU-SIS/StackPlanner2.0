@@ -141,6 +141,16 @@ machine-wide HTTP proxy.
 
 ## DCC input preprocessing
 
+The opt-in `document_mode: files` stages byte-identical UTF-8/XML evidence as
+neutral per-thread files through `native:make_file_plugin` (`dcc_files`). It
+uses existing native file tools and the same official evaluator hooks, with no
+RAGFlow tool, index, credentials or requests. `dcc_preprocess.py export-files`
+creates a separate transport variant of a ready bundle, preserving sample/gold
+bytes and host group IDs; source RAGFlow bundles/configs stay immutable. Keep
+evidence hashes and sample-local file inventories checked before staging. XML
+fragments stay untouched; filenames are .txt wrappers. Tests are in
+`tests/test_dcc_file_search.py`; see `docs/DCC_FINAUDITING_FILES.md`.
+
 `dcc_harness/preprocessing/` is the independent data ingestion layer, with
 `Sample`/`Asset` contracts, trusted `module:function` loader/processor extensions,
 content-addressed public assets, separate private labels, a resumable RAGFlow
@@ -157,6 +167,16 @@ its base. Index schema v2 rejects the old shared-dataset ledger. The adapter doe
 not modify the native agent loop. Keep private gold/source metadata and
 credentials out of uploads, prompts, and RAGFlow documents. Never broaden a
 sample's document IDs on an empty retrieval result.
+The retrieval tool resolves the user through `resolve_runtime_user_id(runtime)`
+before crossing its worker-thread boundary. Keep the authenticated runtime user
+authoritative when an ambient ContextVar is missing or belongs to another task;
+the thread's existing document scope remains unchanged.
+Serialize retrieval JSON with line breaks between fields and chunks so native
+line-range reads can page externalized results. Preserve every returned value;
+this transport formatting must not narrow or broaden the sample scope.
+The native tool description exposes the existing page/page_size limits and
+total/chunks semantics. Keep paging within the same sample scope, and do not
+describe a partial retrieval as proof that source evidence does not exist.
 Builders consume only PublicTask and use native stage_files/build_inputs.
 Rendered files carry a public retrieval context and rules with neutral names;
 record IDs, split and source paths stay in host-side manifests. After upgrading
@@ -192,6 +212,14 @@ tables, or split complexity levels into train/validation/test. The raw evaluator
 is provenance only: read prompt constants with AST and never execute it.
 Release construction is injectable via `release_builder`; the NBA baseline checks
 source/input/label parity and uses the shared archive/download implementation.
+Recognize the NBA public source contract after the same `string.Template`
+substitution used by prompt composition, including literal monetary-dollar
+escaping. Test the rendered template, never a placeholder-only replacement that
+leaves `$$` in the public prefix. Do not edit frozen task inputs to match it.
+NBA's public text schema enforces only its published final Answer/Illegal
+Operation/Problematic Team ending. Use that explicit schema to activate the
+native completed-audit final transport, without selecting a Boolean answer or
+relaxing source/native completion checks.
 See `docs/DCC_RULEARENA_NBA.md` and `tests/test_dcc_rulearena.py`.
 `preprocessing.rulearena-nba.audit-v1.json` is an opt-in execution-prompt variant;
 it preserves the original scenarios/rules/labels/template, adds no domain facts,
@@ -281,6 +309,14 @@ and its matching implicit THINK state; never collect an intermediate state,
 specialist/tool message, hidden reasoning, truncated output, native incomplete
 guard or action-capped response. Reuse native artifact-request/report gates:
 file deliveries still require accepted FINISH and existing integrity checks.
+Unrecovered Qwen `<tool_call>` markup, chat protocol tokens and bare SP call JSON are protocol failures, never native text deliveries. Central attempts one bounded corrective retry through the normal model policy; text envelopes are never executed as tools.
+Native text extraction and `benchmark_runner.failure_status` share the same
+classifier and recognize only the exact middleware `error_type`
+names `SPCentralEmptyResponse` (`empty_response`), `SPCentralInvalidToolCall` and
+`SPCentralToolProtocolError` (`protocol_error`) as policy failures. The native LLM
+error middleware stores `type(exc).__name__`; do not infer policy failure from
+fallback prose or broaden this allowlist to provider, transport, timeout or unknown
+errors, which remain `infrastructure_error`.
 Legacy manifests retain FINISH-only semantics and cannot be silently resumed
 under the new contract. Do not rewrite historical predictions in place.
 Benchmark Settings default to `non_interactive=true`. The native factory removes

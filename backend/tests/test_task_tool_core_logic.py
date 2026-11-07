@@ -309,6 +309,8 @@ def test_task_tool_threads_runtime_app_config_to_subagent_dependencies(monkeypat
     app_config = object()
     config = _make_subagent_config(name="bash")
     runtime = _make_runtime(app_config=app_config)
+    abort_event = object()
+    runtime.context["__run_abort_event"] = abort_event
     events = []
     captured = {}
 
@@ -318,7 +320,7 @@ def test_task_tool_threads_runtime_app_config_to_subagent_dependencies(monkeypat
 
         def execute_async(self, prompt, task_id=None):
             captured["prompt"] = prompt
-            return task_id or "generated-task-id"
+            return f"{task_id}-internal"
 
     def fake_get_available_subagent_names(*, app_config):
         captured["names_app_config"] = app_config
@@ -363,9 +365,11 @@ def test_task_tool_threads_runtime_app_config_to_subagent_dependencies(monkeypat
     assert captured["names_app_config"] is app_config
     assert captured["config_lookup"] == ("bash", app_config)
     assert captured["bash_gate_app_config"] is app_config
+    assert captured["executor_kwargs"]["parent_abort_event"] is abort_event
     assert captured["tools_kwargs"]["app_config"] is app_config
     assert captured["executor_kwargs"]["app_config"] is app_config
     assert captured["executor_kwargs"]["tools"] == ["tool-a"]
+    assert events and all(event["task_id"] == "tc-explicit-config" for event in events)
 
 
 def test_task_tool_emits_running_and_completed_events(monkeypatch):
@@ -1216,16 +1220,17 @@ def test_cancellation_wait_uses_subagent_polling_budget(monkeypatch):
         lambda task_id: cleanup_calls.append(task_id),
     )
 
+    runtime = _make_runtime()
     with pytest.raises(asyncio.CancelledError):
         _run_task_tool(
-            runtime=_make_runtime(),
+            runtime=runtime,
             description="执行任务",
             prompt="cancel task",
             subagent_type="general-purpose",
             tool_call_id="tc-cancel-budget",
         )
 
-    assert report_calls == [(_make_runtime(), terminal_result)]
+    assert report_calls == [(runtime, terminal_result)]
     assert cleanup_calls == ["tc-cancel-budget"]
 
 
@@ -1587,6 +1592,17 @@ def test_subagent_usage_cache_is_skipped_when_config_file_is_missing(monkeypatch
     assert task_tool_module._token_usage_cache_enabled(None) is False
 
 
+def test_subagent_usage_cache_isolated_when_provider_call_ids_repeat():
+    first = {"thread_id": "thread-a", "run_id": "run-a"}
+    second = {"thread_id": "thread-b", "run_id": "run-b"}
+    one = {"input_tokens": 10, "output_tokens": 2, "total_tokens": 12}
+    two = {"input_tokens": 100, "output_tokens": 20, "total_tokens": 120}
+    task_tool_module._cache_subagent_usage("repeated-id", one, context=first)
+    task_tool_module._cache_subagent_usage("repeated-id", two, context=second)
+    assert task_tool_module.pop_cached_subagent_usage("repeated-id", context=first) == one
+    assert task_tool_module.pop_cached_subagent_usage("repeated-id", context=second) == two
+
+
 def test_subagent_usage_cache_is_skipped_when_token_usage_is_disabled(monkeypatch):
     config = _make_subagent_config()
     app_config = SimpleNamespace(token_usage=SimpleNamespace(enabled=False))
@@ -1625,7 +1641,7 @@ def test_subagent_usage_cache_is_cleared_when_polling_raises(monkeypatch):
     app_config = SimpleNamespace(token_usage=SimpleNamespace(enabled=True))
     runtime = _make_runtime(app_config=app_config)
 
-    task_tool_module._subagent_usage_cache["tc-error"] = {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}
+    task_tool_module._subagent_usage_cache[task_tool_module._usage_cache_key("tc-error", runtime.context)] = {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}
     monkeypatch.setattr(task_tool_module, "SubagentStatus", FakeSubagentStatus)
     monkeypatch.setattr(task_tool_module, "get_available_subagent_names", lambda *, app_config: ["general-purpose"])
     monkeypatch.setattr(task_tool_module, "get_subagent_config", lambda _, *, app_config: config)
@@ -1647,4 +1663,4 @@ def test_subagent_usage_cache_is_cleared_when_polling_raises(monkeypatch):
             tool_call_id="tc-error",
         )
 
-    assert task_tool_module.pop_cached_subagent_usage("tc-error") is None
+    assert task_tool_module.pop_cached_subagent_usage("tc-error", context=runtime.context) is None

@@ -14,6 +14,7 @@ from .pipeline import (
     digest,
     document_inventory,
     document_mode,
+    file_document_inventory,
     inline_text,
     verified_samples,
 )
@@ -49,6 +50,19 @@ def _ready_index(bundle: Path) -> dict:
     return state
 
 
+def _validate_files(context: dict, bundle: Path, *, sample_id: str | None = None) -> None:
+    manifest, samples = verified_samples(bundle)
+    if document_mode(manifest) != "files" or "retrieval" in context or (bundle / "index.json").exists():
+        raise ValueError("file evidence requires a file bundle without a retrieval index")
+    if not any(
+        (sample_id is None or sample["id"] == sample_id)
+        and context["documents"] == file_document_inventory(sample)
+        and [r["sha256"] for r in context["rules"]] == [r["sha256"] for r in sample["rules"]]
+        for sample in samples
+    ):
+        raise ValueError("file evidence context differs from the prepared documents")
+
+
 def context_for_task(task, bundle: Path) -> dict:
     """Host-side CLI lookup; private Task identifiers never enter a builder."""
     row = task if isinstance(task, dict) else task.to_dict()
@@ -64,6 +78,9 @@ def context_for_task(task, bundle: Path) -> dict:
         raise ValueError("public context uses the old input contract; render tasks again")
     if context.get("document_mode") == "inline":
         _validate_inline(context, row.get("document", ""), row["prompt"], Path(bundle), sample_id=row["id"])
+        return context
+    if context.get("document_mode") == "files":
+        _validate_files(context, Path(bundle), sample_id=row["id"])
         return context
     state = _ready_index(bundle)
     expected = {**state.get("scopes", {}).get(row["id"], {}), "base_url": state["base_url"]}
@@ -84,10 +101,19 @@ def prepare_inputs(task: PublicTask, thread_id: str) -> dict:
     if context.get("schema_version") != 2:
         raise ValueError("public context uses the old input contract; render tasks again")
     inline = context.get("document_mode") == "inline"
+    evidence_names = []
     if inline:
         if task.benchmark != "dcc_inline":
             raise ValueError("inline evidence requires the dcc_inline plugin")
         _validate_inline(context, task.document, task.prompt, Path(os.environ["DCC_BUNDLE"]).resolve())
+    elif context.get("document_mode") == "files":
+        if task.benchmark != "dcc_files" or task.document:
+            raise ValueError("file evidence requires the dcc_files plugin without inline text")
+        _validate_files(context, Path(os.environ["DCC_BUNDLE"]).resolve())
+        for doc in context["documents"]:
+            evidence_names.append(doc["file"])
+            if doc["file"] not in files or digest(files[doc["file"]].encode("utf-8")) != doc["sha256"]:
+                raise ValueError("evidence document content changed after preparation")
     else:
         if task.document:
             raise ValueError("RAGFlow inputs must not include inline document text")
@@ -95,7 +121,7 @@ def prepare_inputs(task: PublicTask, thread_id: str) -> dict:
         matches = [scope for scope in state["scopes"].values() if {**scope, "base_url": state["base_url"]} == context["retrieval"]]
         if len(matches) != 1:
             raise ValueError("sample knowledge-base scope changed; render tasks again before execution")
-    names = [rule["file"] for rule in context["rules"]]
+    names = [rule["file"] for rule in context["rules"]] + evidence_names
     if len(set(names)) != len(names) or set(files) != {*names, "dcc-context.json"}:
         raise ValueError("DCC public file inventory differs from the rule/context contract")
     for rule in context["rules"]:
@@ -113,6 +139,19 @@ def make_inline_plugin():
         prepare_task=lambda task: task.prompt,
         prepare_inputs=prepare_inputs,
         skills_path=Path(__file__).resolve().parents[2] / "configs/dcc/skills-inline",
+        **_evaluation_hooks(),
+    )
+
+
+def make_file_plugin():
+    """Expose sample-local raw evidence through existing native file tools."""
+    from dcc_harness.datasets.benchmark_plugins import BenchmarkPlugin
+
+    return BenchmarkPlugin(
+        name="dcc_files",
+        prepare_task=lambda task: task.prompt,
+        prepare_inputs=prepare_inputs,
+        skills_path=Path(__file__).resolve().parents[2] / "configs/dcc/skills-files",
         **_evaluation_hooks(),
     )
 

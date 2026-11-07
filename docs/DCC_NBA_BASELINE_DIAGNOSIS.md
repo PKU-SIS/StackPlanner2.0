@@ -70,7 +70,7 @@ python scripts/dcc_preprocess.py render \
 输出结构不完整及分析前后矛盾，下一步需分别验证工具预算／调用策略和定位推理，
 保持真实未完成状态，不通过修改评分或放宽成功判定掩盖。
 
-服务器记录位于 `/home/qiuzh/work/dcc_runs/20261101/nba-audit-fix-v1/`：
+运行产物保存在实验目录 `20261101/nba-audit-fix-v1/` 下：
 `pilot-validation.json` 为逐题对照，`inference-valid-inputs/` 和
 `evaluation-valid-inputs/` 为实际推理及评测。最初一次启动因子集任务文件的相对附件路径
 未解析而结束，没有发出模型请求；修正为绝对附件路径后在上述独立目录执行，保留了启动日志。

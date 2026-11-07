@@ -27,8 +27,9 @@ from deerflow.sp.agent_tools import (
 )
 from deerflow.sp.central import CENTRAL_AGENT_ACTION_PROMPT
 from deerflow.sp.central.runtime_context import SPCentralRuntimeContext, build_sp_central_runtime_context
-from deerflow.sp.central_resilience import SPCentralResilienceMiddleware
+from deerflow.sp.central_resilience import DEFAULT_CENTRAL_RETRY_TIMEOUT_SECONDS, DEFAULT_CENTRAL_TIMEOUT_SECONDS, SPCentralResilienceMiddleware
 from deerflow.sp.memory.entry import utc_now_iso
+from deerflow.sp.recovery import runtime_recovery_limits
 from deerflow.sp.subagents import (
     A2A_PROGRESS_MESSAGE,
     DR2SubagentExecutorAdapter,
@@ -37,7 +38,7 @@ from deerflow.sp.subagents import (
     SPSubagentStatus,
     SPSubagentTask,
 )
-from deerflow.sp.subagents.dr2_adapter import is_data_processing_coder
+from deerflow.sp.subagents.dr2_adapter import _requires_inline_file_audit_payload, is_data_processing_coder
 
 logger = logging.getLogger(__name__)
 
@@ -326,7 +327,7 @@ def _apply_sp_stage_tool_policy(subagent_config: Any, task: SPSubagentTask):
         return subagent_config
     stage = str(task.metadata.get("stage") or "").strip().lower()
     read_only_stage = stage in {"perception", "planning", "research"}
-    if task.metadata.get("requires_implementation") is not False and not read_only_stage:
+    if not read_only_stage:
         return subagent_config
     configured = subagent_config.tools
     if configured is None:
@@ -368,6 +369,9 @@ class DR2SPExecutorProvider:
 
     def __call__(self, state: Mapping[str, Any], runtime: Runtime) -> SPSubagentExecutorProtocol:
         context = _mapping(getattr(runtime, "context", None))
+        from deerflow.runtime.tool_budget import resolve_run_tool_budget
+
+        run_tool_budget = resolve_run_tool_budget(context)
         metadata = _mapping(self.runnable_config.get("metadata"))
         writer = getattr(runtime, "stream_writer", None)
         journal = context.get("__run_journal")
@@ -389,6 +393,10 @@ class DR2SPExecutorProvider:
                 timeout_override = 0
             if timeout_override > 0:
                 subagent_config = replace(subagent_config, timeout_seconds=timeout_override)
+            task.validate_protocol()
+            config_caps = {name: min(getattr(subagent_config, name), task.budgets[name]) for name in ("max_turns", "timeout_seconds") if name in task.budgets}
+            if config_caps:
+                subagent_config = replace(subagent_config, **config_caps)
             raw_thinking = context.get("sp_subagent_thinking_enabled", configurable.get("sp_subagent_thinking_enabled"))
             subagent_thinking_enabled: bool | None = None
             if raw_thinking is not None:
@@ -417,9 +425,7 @@ class DR2SPExecutorProvider:
                 "sp_protect_test_files",
                 configurable.get("sp_protect_test_files"),
             )
-            protect_test_files = (
-                raw_protect_tests.strip().lower() in {"1", "true", "yes", "on"} if isinstance(raw_protect_tests, str) else bool(raw_protect_tests)
-            )
+            protect_test_files = raw_protect_tests.strip().lower() in {"1", "true", "yes", "on"} if isinstance(raw_protect_tests, str) else bool(raw_protect_tests)
             _infer_task_skill_selection(
                 task,
                 available_skill_names=self.available_skill_names,
@@ -443,6 +449,15 @@ class DR2SPExecutorProvider:
                 available_tools=available_tools,
             )
             subagent_config = _apply_sp_stage_tool_policy(subagent_config, task)
+            from deerflow.sp.subagents.dr2_adapter import public_schema_delivery_instruction
+
+            schema_instruction = public_schema_delivery_instruction(task)
+            if schema_instruction is not None:
+                # The public success value is the final transport. Retain the
+                # specialist's execution policy but replace the conflicting
+                # generic outer-envelope system contract.
+                system_prompt = re.sub(r"<output_contract>.*?</output_contract>", "", subagent_config.system_prompt or "", flags=re.DOTALL).strip()
+                subagent_config = replace(subagent_config, system_prompt=system_prompt + "\n\n" + schema_instruction)
             thread_id = str(context.get("thread_id") or task.thread_id or "") or None
             run_id = str(context.get("run_id") or task.run_id or "") or None
             stream_task_id = _task_stream_id(task)
@@ -462,6 +477,13 @@ class DR2SPExecutorProvider:
                             "occurred_at": utc_now_iso(),
                         }
                     )
+
+            from deerflow.sp.source_prefetch import SourcePrefetchSettings
+
+            source_prefetch_settings = SourcePrefetchSettings.from_config({**configurable, **{key: context[key] for key in context if key.startswith("sp_source_prefetch_")}})
+            public_contract = task.context_refs.get("task_contract")
+            source_requirements = public_contract.get("source_requirements") if isinstance(public_contract, Mapping) else None
+            prefetch_for_auditor = isinstance(source_requirements, Mapping) and source_requirements.get("audit_agent") == task.subagent_type
 
             return SubagentExecutor(
                 config=subagent_config,
@@ -489,6 +511,14 @@ class DR2SPExecutorProvider:
                 thinking_enabled=subagent_thinking_enabled,
                 max_tokens_per_step=subagent_max_tokens if subagent_max_tokens > 0 else None,
                 protect_test_files=protect_test_files,
+                budgets=dict(task.budgets),
+                run_tool_budget=run_tool_budget,
+                reporter_action_id=task.action_id if task.subagent_type == "reporter" else None,
+                source_prefetch_settings=source_prefetch_settings if prefetch_for_auditor else None,
+                source_prefetch_contract=public_contract if prefetch_for_auditor else None,
+                source_prefetch_access=state.get("sp_source_access") if prefetch_for_auditor else None,
+                source_prefetch_auditor_role=task.subagent_type if prefetch_for_auditor else None,
+                public_output_contract=public_contract if schema_instruction is not None and (public_contract.get("delivery_mode") == "artifact" or _requires_inline_file_audit_payload(task)) else None,
             )
 
         def observe_raw_result(raw_result: Any) -> None:
@@ -662,7 +692,8 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
         max_central_actions = int(runtime.get("sp_max_actions") or DEFAULT_SP_ACTION_LIMIT)
     except (TypeError, ValueError):
         max_central_actions = DEFAULT_SP_ACTION_LIMIT
-    max_central_actions = max(2, min(max_central_actions, DEFAULT_SP_ACTION_LIMIT))
+    max_central_actions = max(2, min(max_central_actions, 256))
+    recovery_limits = runtime_recovery_limits(runtime)
     metadata = dict(config.get("metadata") or {})
     metadata.update(
         {
@@ -674,6 +705,8 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
             "sp_agent_name": central_context.agent_name or "default",
             "available_skills": sorted(central_context.available_skill_names) if central_context.available_skill_names is not None else None,
             "non_interactive": non_interactive,
+            "sp_max_actions": max_central_actions,
+            "sp_recovery_limits": recovery_limits,
         }
     )
     sp_config = dict(config)
@@ -728,8 +761,9 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
         sp_config,
         app_config=resolved_app_config,
         extra_tools=[tool for tool in build_sp_control_tools() if not non_interactive or tool.name != "sp_ask_human"],
+        outer_middlewares=[SPFinishAvailabilityMiddleware()],
         extra_middlewares=[
-            TaskMemoryMiddleware(context_builder=PromptContextBuilder(), inject_context=True, non_interactive=non_interactive),
+            TaskMemoryMiddleware(context_builder=PromptContextBuilder(), inject_context=True, non_interactive=non_interactive, recovery_limits=recovery_limits),
             # SP keeps long-term memory out of CentralAgent's prompt, but it
             # must still persist stable user context after a completed run.
             # This explicit write-only middleware reuses DeerFlow's scoped,
@@ -740,13 +774,12 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
                 memory_config=getattr(resolved_app_config, "memory", None),
             ),
             SPCentralResilienceMiddleware(
-                initial_timeout_seconds=float(runtime.get("sp_central_timeout_seconds") or 90),
-                retry_timeout_seconds=float(runtime.get("sp_central_retry_timeout_seconds") or 60),
+                initial_timeout_seconds=float(runtime.get("sp_central_timeout_seconds") or DEFAULT_CENTRAL_TIMEOUT_SECONDS),
+                retry_timeout_seconds=float(runtime.get("sp_central_retry_timeout_seconds") or DEFAULT_CENTRAL_RETRY_TIMEOUT_SECONDS),
                 retry_max_tokens=int(runtime.get("sp_central_retry_max_tokens") or 2048),
             ),
             SPTerminalActionMiddleware(),
             SPAcknowledgementMiddleware(),
-            SPFinishAvailabilityMiddleware(),
             SPActionBudgetMiddleware(max_actions=max_central_actions),
             SPControlActionMiddleware(executor_provider=executor_provider),
             SPThinkLabelMiddleware(),

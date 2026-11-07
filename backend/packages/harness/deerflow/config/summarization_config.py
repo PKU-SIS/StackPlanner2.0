@@ -1,8 +1,9 @@
 """Configuration for conversation summarization."""
 
+import math
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 ContextSizeType = Literal["fraction", "tokens", "messages"]
 DEFAULT_SKILL_FILE_READ_TOOL_NAMES: tuple[str, ...] = ("read_file", "read", "view", "cat")
@@ -13,6 +14,20 @@ class ContextSize(BaseModel):
 
     type: ContextSizeType = Field(description="Type of context size specification")
     value: int | float = Field(description="Value for the context size specification")
+
+    @model_validator(mode="after")
+    def validate_size(self):
+        value = self.value
+        if isinstance(value, bool) or not math.isfinite(value):
+            raise ValueError("Context thresholds must be finite numbers")
+        if self.type == "fraction":
+            if not 0 < value <= 1:
+                raise ValueError("Context fraction must be in (0, 1]")
+        elif value <= 0 or int(value) != value:
+            raise ValueError("Context token/message counts must be positive integers")
+        else:
+            self.value = int(value)
+        return self
 
     def to_tuple(self) -> tuple[ContextSizeType, int | float]:
         """Convert to tuple format expected by SummarizationMiddleware."""
@@ -38,16 +53,20 @@ class SummarizationConfig(BaseModel):
         "{'type': 'fraction', 'value': 0.8} triggers at 80% of model's max input tokens",
     )
     keep: ContextSize = Field(
-        default_factory=lambda: ContextSize(type="messages", value=20),
+        default_factory=lambda: ContextSize(type="tokens", value=16000),
         description="Context retention policy after summarization. Specifies how much history to preserve. "
         "Examples: {'type': 'messages', 'value': 20} keeps 20 messages, "
         "{'type': 'tokens', 'value': 3000} keeps 3000 tokens, "
         "{'type': 'fraction', 'value': 0.3} keeps 30% of model's max input tokens",
     )
     trim_tokens_to_summarize: int | None = Field(
-        default=4000,
+        default=32768,
+        ge=1,
         description="Maximum tokens to keep when preparing messages for summarization. Pass null to skip trimming.",
     )
+    output_token_reserve: int = Field(default=8192, ge=0, description="Input-window space reserved for the main model's next output.")
+    context_safety_margin: int = Field(default=2048, ge=0, description="Additional token headroom for tool schemas and provider formatting.")
+
     summary_prompt: str | None = Field(
         default=None,
         description="Custom prompt template for generating summaries. If not provided, uses the default LangChain prompt.",

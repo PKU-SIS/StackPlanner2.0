@@ -161,3 +161,64 @@ def test_env_override_malformed_falls_back_to_default(monkeypatch: pytest.Monkey
     payload = "a" * (100 * 1024)
     result = _call_write_file(content=payload)
     assert result.startswith("Error: write_file content")
+
+
+@pytest.mark.parametrize("addition", ["]", '[{"text":"same"}]'])
+def test_reporter_cannot_append_invalid_json_to_its_complete_json_file(addition):
+    result, sandbox = _reporter_append(existing='[{"text":"same"}]', content=addition)
+    assert result.startswith("Error: write_file refused an append")
+    assert "already contains a complete JSON document" in result
+    assert "read_file" in result and "not modified" in result
+    sandbox.write_file.assert_not_called()
+
+
+def test_reporter_json_append_guard_preserves_actual_local_file_bytes(tmp_path, monkeypatch):
+    from test_read_file_tool_binary import _local_runtime
+
+    from deerflow.sandbox.local.local_sandbox import LocalSandbox
+
+    runtime = _local_runtime(tmp_path)
+    runtime.context["__sp_reporter_action_id"] = "spact_call_abcdefgh"
+    report = tmp_path / "outputs/report-spact_call_abcdefgh.json"
+    original = b'[{"text":"same","explanation":"verified"}]\n'
+    report.write_bytes(original)
+    monkeypatch.setattr(tools_module, "ensure_sandbox_initialized", lambda runtime: LocalSandbox("t1"))
+    monkeypatch.setattr(tools_module, "ensure_thread_directories_exist", lambda runtime: None)
+    result = write_file_tool.func(runtime, "Append the report again", "/mnt/user-data/outputs/report-spact_call_abcdefgh.json", original.decode(), True)
+    assert result.startswith("Error: write_file refused an append")
+    assert report.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "existing,content,path,action_id,append",
+    [
+        ("[", '{"text":"same"}]', "/mnt/user-data/outputs/report-spact_call_abcdefgh.json", "spact_call_abcdefgh", True),
+        ('[{"text":"same"}]', "\n  ", "/mnt/user-data/outputs/report-abcdefgh.json", "spact_call_abcdefgh", True),
+        ('{"text":"same"}\n', '{"text":"next"}\n', "/mnt/user-data/outputs/report-spact_call_abcdefgh.jsonl", "spact_call_abcdefgh", True),
+        ("[]", "]", "/mnt/user-data/outputs/report-spact_call_oldaction.json", "spact_call_abcdefgh", True),
+        ("[]", "]", "/mnt/user-data/outputs/report-spact_call_abcdefgh.json", None, True),
+        ("[]", "[", "/mnt/user-data/outputs/report-spact_call_abcdefgh.json", "spact_call_abcdefgh", False),
+        ("[]", "]", "/mnt/user-data/workspace/report-spact_call_abcdefgh.json", "spact_call_abcdefgh", True),
+        ("1", "2", "/mnt/user-data/outputs/report-spact_call_abcdefgh.json", "spact_call_abcdefgh", True),
+    ],
+)
+def test_reporter_json_append_guard_preserves_other_write_modes(existing, content, path, action_id, append):
+    result, sandbox = _reporter_append(existing=existing, content=content, path=path, action_id=action_id, append=append)
+    assert result == "OK"
+    sandbox.write_file.assert_called_once_with(path, content, append)
+
+
+def _reporter_append(*, existing, content, path="/mnt/user-data/outputs/report-spact_call_abcdefgh.json", action_id="spact_call_abcdefgh", append=True):
+    fn = getattr(write_file_tool, "func", write_file_tool)
+    runtime = MagicMock()
+    runtime.context = {"__sp_reporter_action_id": action_id} if action_id else {}
+    sandbox = MagicMock()
+    sandbox.read_file.return_value = existing
+    with (
+        patch.object(tools_module, "ensure_sandbox_initialized", return_value=sandbox),
+        patch.object(tools_module, "ensure_thread_directories_exist"),
+        patch.object(tools_module, "is_local_sandbox", return_value=False),
+        patch.object(tools_module, "get_file_operation_lock"),
+    ):
+        result = fn(runtime=runtime, description="update current report", path=path, content=content, append=append)
+    return result, sandbox

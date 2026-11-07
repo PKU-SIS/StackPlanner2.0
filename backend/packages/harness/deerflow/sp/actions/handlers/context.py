@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping
 from typing import Any
@@ -12,7 +13,7 @@ from deerflow.utils.messages import message_to_text
 
 MAX_HANDLER_MEMORY_ENTRIES = 24
 MAX_HANDLER_PINNED_ENTRIES = 12
-MAX_HANDLER_USER_INPUT_CHARS = 2400
+MAX_HANDLER_HISTORICAL_INPUT_CHARS = 2400
 MAX_HANDLER_ARTIFACT_HISTORY = 12
 MAX_HANDLER_ENTRY_CONTENT_CHARS = 900
 MAX_HANDLER_FAILURE_NOTE_CHARS = 240
@@ -28,11 +29,7 @@ def allows_human_interaction(state: Mapping[str, Any]) -> bool:
         return False
     for message in reversed(state.get("messages") or []):
         data = message if isinstance(message, Mapping) else vars(message)
-        if (
-            (data.get("type") or data.get("role")) not in {"human", "user"}
-            or data.get("name") == "sp_task_memory_context"
-            or (data.get("additional_kwargs") or {}).get("hide_from_ui") is True
-        ):
+        if (data.get("type") or data.get("role")) not in {"human", "user"} or data.get("name") == "sp_task_memory_context" or (data.get("additional_kwargs") or {}).get("hide_from_ui") is True:
             continue
         text = message_to_text(message)
         return not re.search(
@@ -117,6 +114,7 @@ def _bounded_artifact_refs(value: Any, *, current_run_id: str | None) -> dict[st
 
 
 def _visible_user_inputs(state: Mapping[str, Any]) -> list[str]:
+    """Keep the complete visible task; only historical references are bounded."""
     messages = state.get("messages")
     if not isinstance(messages, list):
         return []
@@ -132,21 +130,17 @@ def _visible_user_inputs(state: Mapping[str, Any]) -> list[str]:
             additional_kwargs = message.get("additional_kwargs")
         if isinstance(additional_kwargs, Mapping) and additional_kwargs.get("hide_from_ui") is True:
             continue
-        text = " ".join(message_to_text(message).split())
+        text = message_to_text(message).strip()
         if text:
-            values.append(text[:MAX_HANDLER_USER_INPUT_CHARS])
+            values.append(text)
     return values
 
 
 def _mandatory_requirements(context: HandlerContext) -> dict[str, Any] | None:
     """Preserve authoritative human constraints outside compact task memory."""
-    eligible = [
-        entry
-        for entry in context.stack.entries
-        if entry.action == "feedback"
-        and entry.status in {"active", "pinned"}
-        and (not context.run_id or entry.run_id in {None, context.run_id} or entry.status == "pinned")
-    ][-MAX_HANDLER_REQUIREMENT_ENTRIES:]
+    eligible = [entry for entry in context.stack.entries if entry.action == "feedback" and entry.status in {"active", "pinned"} and (not context.run_id or entry.run_id in {None, context.run_id} or entry.status == "pinned")][
+        -MAX_HANDLER_REQUIREMENT_ENTRIES:
+    ]
     if not eligible:
         return None
 
@@ -191,7 +185,7 @@ def _bounded_task_contract(value: Any) -> dict[str, Any] | None:
         "authoritative": bool(value.get("authoritative", True)),
         "immutable": bool(value.get("immutable", True)),
     }
-    for key in ("mode", "instance_id", "source_edit_only"):
+    for key in ("mode", "instance_id", "source_edit_only", "output_file_extension", "delivery_mode"):
         if key in value:
             contract[key] = value[key]
     for key in ("original_issue", "acceptance_policy"):
@@ -202,11 +196,18 @@ def _bounded_task_contract(value: Any) -> dict[str, Any] | None:
         raw = value.get(key)
         if isinstance(raw, list):
             contract[key] = [str(item)[:500] for item in raw[:50] if str(item).strip()]
+    schema = value.get("output_schema")
+    if isinstance(schema, dict) and len(json.dumps(schema, ensure_ascii=False)) <= MAX_HANDLER_TASK_CONTRACT_CHARS:
+        contract["output_schema"] = schema
+        contract["output_parse_mode"] = value.get("output_parse_mode", "json")
+    sources = value.get("source_requirements")
+    if isinstance(sources, dict) and len(json.dumps(sources, ensure_ascii=False)) <= MAX_HANDLER_TASK_CONTRACT_CHARS:
+        contract["source_requirements"] = sources
     return contract
 
 
 def build_handler_context_refs(context: HandlerContext) -> dict[str, Any]:
-    """Build the precise, bounded context passed to DR2 subagents."""
+    """Pass the complete current task and bounded history to DR2 subagents."""
     refs: dict[str, Any] = {"task_memory": _bounded_task_memory(context)}
     task_contract = _bounded_task_contract(context.state.get("sp_task_contract"))
     if task_contract is not None:
@@ -230,9 +231,10 @@ def build_handler_context_refs(context: HandlerContext) -> dict[str, Any]:
     if user_inputs:
         # The latest visible user message is the authoritative task for this
         # run. The first message in a long-lived thread is historical context,
-        # not the delegated task's "original query".
+        # not the delegated task's "original query". Never truncate the current
+        # task: its scenario and exact output contract may be at the end.
         refs["original_query"] = user_inputs[-1]
         refs["latest_user_input"] = user_inputs[-1]
         if len(user_inputs) > 1:
-            refs["thread_first_user_input"] = user_inputs[0]
+            refs["thread_first_user_input"] = " ".join(user_inputs[0].split())[:MAX_HANDLER_HISTORICAL_INPUT_CHARS]
     return refs

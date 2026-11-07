@@ -1,1023 +1,406 @@
-# StackPlanner 2.0 (SP2.0)
+# 🚀 StackPlanner 2.0
 
-[![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](./backend/pyproject.toml)
-[![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white)](./Makefile)
-[![Runtime](https://img.shields.io/badge/runtime-DeerFlow%202.0-5B5BD6)](https://github.com/bytedance/deer-flow)
+[![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-blue.svg)](./backend/pyproject.toml)
+[![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-green.svg)](./frontend/package.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-StackPlanner 2.0 is a long-horizon agent harness that combines a planning-first
-CentralAgent with DeerFlow 2.0's production runtime. The CentralAgent reasons in
-an action space, maintains bounded task memory, delegates tool and Skill use to
-scoped sub-agents, verifies artifacts, and can reflect, backtrack, replan,
-summarize, or ask for human help before finishing.
+> 基于 DeerFlow 2.0 构建的多智能体规划系统，通过中枢决策、记忆栈和专项子智能体，完成需要持续规划、执行与验证的复杂任务。
 
-SP2.0 是基于 DeerFlow 2.0 Runtime 构建的长时任务智能体框架。它保留
-StackPlanner 的中枢规划、反思回退和记忆栈设计，同时复用 DeerFlow 的
-Gateway、ThreadState、Checkpoint、Artifact、Sandbox、Subagent 与 Web UI。
+## 📑 目录
 
-Coder delegations distinguish data processing from software changes through
-`metadata.coder_task_kind`: data tasks require observable execution and data
-checks, while software changes retain source-edit and regression-test acceptance.
-Chinese report checks apply to explanatory text, preserving original source
-tables, code, identifiers, and URLs.
+- [项目概述](#项目概述)
+- [架构设计](#架构设计)
+- [快速开始](#快速开始)
+- [核心组件](#核心组件)
+- [配置说明](#配置说明)
+- [使用示例](#使用示例)
+- [开发指南](#开发指南)
+- [Docker 部署](#docker-部署)
+- [监控与调试](#监控与调试)
+- [许可证与致谢](#许可证与致谢)
 
-> [!IMPORTANT]
-> This repository is a research and engineering fork built on DeerFlow 2.0. It
-> does not include deployment credentials, private experiment traces, or hosted
-> model keys. Configure providers locally through `.env` and `config.yaml`.
+## 项目概述
 
-DCC document screening inputs can be prepared independently of the agent runtime:
-[`scripts/dcc_preprocess.py`](scripts/dcc_preprocess.py) provides pluggable loaders,
-preprocessing, resumable RAGFlow indexing with a dedicated knowledge base per
-sample, layered prompt files, and a native SP input/tool plugin. FinAuditing and
-generic JSONL loaders are included. See
-[DCC implementation overview](docs/DCC_PREPROCESSING_SUMMARY.md) and the
-[DCC preprocessing setup and extension guide](docs/DCC_PREPROCESSING.md).
-The DCC adapter uses the v3 PublicTask and native file-staging contract; rerun
-task rendering after upgrading, while keeping the existing per-sample indexes.
-FinAuditing's example configuration enables separate FinRE, FinMR, and FinSM
-prompt fragments that inject each subtask's requirements and final output format.
-The FinAuditing baseline uses the original task instructions verbatim. Versioned
-data packages are distributed through this repository's GitHub Releases; use
-`dcc_preprocess.py download` to install originals, normalized inputs and existing
-shared RAGFlow mappings on another server without rebuilding the knowledge bases.
-See the [cross-server quick start](docs/DCC_PREPROCESSING.md#跨服务器使用-release-数据包).
-RuleArena NBA Transaction is also available as a versioned Release. Its short
-scenario stays in the prompt through the generic `document_mode: inline` path;
-the complete original CBA rules are staged as a file, with no RAGFlow service or
-key required. See the [NBA data and SP input guide](docs/DCC_RULEARENA_NBA.md).
-Both DCC input plugins now expose official offline evaluators. FinAuditing uses
-the official Starter Kit parsers/metrics; NBA preserves official answer matching
-and model-extracted rule Precision/Recall. Dataset evaluators and judge services
-are configured independently through `--options`; the team DeepSeek deployment
-is recorded explicitly as a custom judge. See [DCC evaluation](docs/DCC_EVALUATION.md).
-NBA rule extraction uses bounded retries on the saved delivery and records failures.
-An optional NBA [train/test partition](docs/DCC_RULEARENA_NBA.md#内部训练测试划分可选)
-provides 173 training and 43 test samples in independent bundles; the original
-216-task baseline remains unchanged.
-FinAuditing also has an optional [document-disjoint partition](docs/DCC_FINAUDITING_SPLIT.md)
-with 882 training and 220 test samples. Shared evidence documents, including
-cross-subtask reuse, stay together; existing sample-scoped RAGFlow indexes are reused.
-The team DeepSeek examples explicitly disable provider thinking for evaluation;
-this setting is recorded independently from SP inference configuration.
-An optional [NBA audit execution profile](docs/DCC_NBA_BASELINE_DIAGNOSIS.md)
-addresses intermediate-file delivery and data-check recovery while preserving the original baseline and scorer.
+StackPlanner 2.0 延续了 [StackPlanner 1.0](https://github.com/PKU-SIS/Stack-Planner) 的中枢规划与 MemoryStack 设计，将任务处理组织为一个持续迭代的过程：**分析目标、委派执行、观察结果、修正计划，直到形成可交付的结果。**
 
-## Why SP2.0
+中枢智能体（Central Agent）负责决定下一步做什么，子智能体负责检索资料、处理数据、执行代码或撰写报告。执行过程中产生的关键结论与反馈进入记忆栈，完整材料和生成文件则保存为产物（Artifact），供后续步骤引用和用户下载。
 
-SP2.0 separates **decision making** from **tool execution**:
+2.0 基于 DeerFlow 2.0 的运行时实现，复用其会话、检查点、沙箱、工具、技能和 Web 界面，让规划过程与实际执行、结果交付连接起来。
 
-- The CentralAgent selects actions and evaluates progress, but does not directly
-  search the web, run shell commands, or manipulate files.
-- Researcher, Coder, Reporter, Outline, Perception, and Memory Recaller
-  specialists receive bounded contexts and role-specific tools.
-- Central-to-specialist delegation uses an additive internal A2A envelope for
-  task context, tool boundaries, acceptance criteria, observable results, and
-  artifact references. Progress and terminal events share one task ID for
-  tracing; ordinary tools remain available only to scoped specialists, and
-  provider-private chain-of-thought is not part of the protocol.
-- The Central control plane also has a bounded model-call recovery layer: a
-  stalled first perception/planning request gets one lower-budget retry and,
-  once per run, a synthetic `sp_think` checkpoint. This is separate from the
-  outer graph watchdog and does not change the Central/tool boundary.
-- Short-term task memory stores high-value control information; large research,
-  reports, code, charts, and generated files live as versioned Artifacts.
-- Human feedback is pinned at critical priority and survives ordinary context
-  compaction.
-- Partial or blocked sub-agent results cannot silently pass as completed work.
+### 主要特性
+
+- 🤖 **中枢规划与任务委派**：根据任务需求选择子智能体，组织有依赖关系的步骤，并行执行相互独立的工作。
+- 📚 **记忆栈管理**：记录决策、观察结果和修正信息，压缩历史上下文，保留重要的人类反馈。
+- 🔄 **反思与重新规划**：根据失败原因调整策略、回退工作状态，或向用户集中澄清关键问题。
+- 🛠️ **工具与技能扩展**：子智能体可以使用搜索、网页获取、文件操作、代码执行、Skills 和 MCP 工具。
+- 📄 **产物交付与验证**：保存报告、代码和数据文件，结合执行证据检查完成情况，向用户说明尚未解决的问题。
+- 🔍 **执行过程可观察**：在 Web 界面查看子任务进展、工具结果、生成文件，以及运行耗时和用量。
+
+### 从 1.0 到 2.0
+
+| 方面 | 2.0 的实现 |
+| --- | --- |
+| 中枢决策 | 通过明确的动作接口组织思考、委派、反思、总结与完成 |
+| 记忆管理 | 以 `TaskMemoryStack` 保存任务记忆，结合产物引用和会话检查点维护状态 |
+| 子任务执行 | 通过统一的子智能体执行器管理工具权限、执行预算、取消和进度回传 |
+| 运行与交互 | 接入 DeerFlow 2.0 Gateway 和 Web 工作区，支持会话持久化与人工交互 |
+| 结果验收 | 区分软件修改、数据处理与检查任务，并依据对应的执行证据验收 |
+
+## 架构设计
+
+系统由任务理解、中枢决策、专项执行和结果交付四个部分组成。中枢根据当前任务与记忆决定下一步动作；子智能体完成委派后，将观察结果和产物交回中枢，进入下一轮决策。
 
 ```mermaid
 flowchart TD
-    U[User request] --> G[Gateway / ThreadState / Checkpointer]
-    G --> C[CentralAgent]
-    C --> A{SP action}
-    A -->|DELEGATE| S[Scoped specialist]
-    A -->|REFLECT / BACKTRACK / REPLAN| C
-    A -->|SUMMARIZE| M[TaskMemoryStack]
-    A -->|ASK_HUMAN| H[Interrupt and resume]
-    S --> T[Tools / Skills / Sandbox]
-    T --> R[Observation + Artifact + Run events]
-    R --> C
-    A -->|FINISH with artifact gate| F[Final response]
+    U[用户请求与输入文件] --> C[中枢智能体 Central Agent]
+    C <--> M[任务记忆栈 TaskMemoryStack]
+    C --> D{选择动作}
+    D -->|任务委派| S[感知 / 规划 / 研究 / 代码 / 报告子智能体]
+    S --> T[工具 / Skills / MCP / 沙箱]
+    T --> O[执行结果与产物 Artifact]
+    O --> C
+    D -->|反思、回退、重新规划| C
+    D -->|澄清与人工反馈| H[用户交互]
+    H --> C
+    D -->|验收并完成| F[最终回复与可下载文件]
 ```
 
-## Core Capabilities
+任务流程会随需求调整：简单问题可以直接回答；需要外部证据时委派检索；复杂任务可以先明确需求、形成提纲，再安排研究或实现，最后整理和验证结果。
 
-### Action-oriented CentralAgent
+会话状态、检查点、运行事件和文件访问由底层运行时提供支持。中枢通过控制动作组织任务，具体的搜索、代码执行和文件操作交给具有相应权限的子智能体。
 
-The planner combines continuous reasoning with explicit control actions:
-`THINK`, `DELEGATE`, `RECALL_MEMORY`, `REFLECT`, `BACKTRACK`, `REPLAN`,
-`SUMMARIZE`, `ASK_HUMAN`, and `FINISH`. Schemas, idempotency keys, run-local
-guards, and completion gates provide deterministic safety without reducing every
-task to a rigid workflow.
+## 快速开始
 
-### Three-layer memory
+### 环境要求
 
-| Layer      | Purpose                                                            | Implementation                                  |
-| ---------- | ------------------------------------------------------------------ | ----------------------------------------------- |
-| Short-term | Current decisions, observations, corrections, and feedback         | `TaskMemoryStack` + bounded prompt context      |
-| Mid-term   | Subtask state, reports, code, files, versions, and recovery points | Artifact lineage + ThreadState + Checkpointer   |
-| Long-term  | Cross-thread preferences and reusable experience                   | DeerFlow Memory + explicit recall + SOUL/Skills |
+| 环境 | 要求 |
+| --- | --- |
+| Python | 3.12 或更新版本，使用 `uv` 管理依赖 |
+| Web 界面 | Node.js 22+、pnpm |
+| 本地完整启动 | GNU Make、nginx，以及上述开发环境 |
+| Docker 部署 | Docker 与 Docker Compose |
+| 模型服务 | 至少一个已配置的模型；执行工具任务时需要支持工具调用 |
 
-The summarizer compresses selected short-term stack entries rather than the
-long-term memory store. Corrections can invalidate stale conclusions, and pinned
-human feedback is protected from ordinary prune/condense operations.
-
-### Delegation and recovery
-
-- Independent specialist tasks may run concurrently with deterministic state
-  merging and live progress/token reporting.
-- Tool and Skill calls remain visible in the subtask timeline.
-- Search has per-turn, parallel, duplicate, and repeated-failure budgets.
-- Uploaded files are preferred over redundant network retrieval.
-- Incomplete specialists receive bounded corrective attempts; unresolved gaps
-  are surfaced instead of looping until the graph recursion limit.
-
-### Evidence-grounded reports
-
-Substantial reports can use an adaptive
-Perception → Outline → Research/Implementation → Reporter flow. Reporter is a
-synthesis-only specialist: it consumes materialized evidence, preserves sources
-and pinned feedback, exposes missing evidence, and creates complete versioned
-Markdown revisions. `FINISH` requires the exact current report Artifact rather
-than a research note or an unregistered filesystem path.
-
-### Artifacts, sandbox, and multimodal delivery
-
-Generated code, websites, charts, images, video, reports, and multi-file bundles
-are retained as run Artifacts with preview/download metadata. Coder specialists
-can use scoped execution tools, while host bash remains disabled by default for
-untrusted local runs. PDF/image perception and generated media depend on the
-configured model/provider capabilities.
-
-The optional `/workspace/debug` page also reports the observable stop reason and
-last stage/action for interrupted or stalled runs. It does not expose provider-
-private hidden chain-of-thought.
-
-### Qwen and vLLM support
-
-The custom vLLM adapter supports Qwen reasoning controls and recovers Qwen
-`<tool_call>` blocks when a vLLM deployment does not expose them through the
-standard OpenAI tool-call field. Deterministic tests cover streaming and
-non-streaming action parsing.
-
-## Repository Layout
-
-| Path                                           | Contents                                                                           |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `backend/packages/harness/deerflow/sp/`        | CentralAgent, action router, handlers, memory stack, context builder, and runtime  |
-| `backend/packages/harness/deerflow/subagents/` | Specialist execution, limits, progress, and result normalization                   |
-| `backend/app/gateway/`                         | Authentication, threads, runs, uploads, artifacts, and LangGraph-compatible routes |
-| `frontend/`                                    | Next.js workspace, task timeline, artifacts, memory, and human interaction UI      |
-| `skills/public/stackplanner-*`                 | Long-task and report synthesis workflows                                           |
-| `backend/tests/` and `frontend/tests/`         | Runtime, memory, artifact, UI, and regression coverage                             |
-
-## Project Status and Boundaries
-
-- The primary report deliverable is Markdown; PDF/Word/PPT require a separate
-  conversion or generation stage.
-- Reporter cannot independently browse or execute code. Upstream specialists
-  must materialize the required evidence and calculations.
-- Long evidence bodies are bounded and may be marked as truncated.
-- Long-term memory promotion is deliberately conservative; deployments should
-  review their persistence and privacy policy before enabling automatic writes.
-- Model behavior remains probabilistic even when artifact and action invariants
-  are enforced in code.
-
-The rest of this README documents setup and the inherited DeerFlow runtime
-features used by SP2.0.
-
-## One-Line Agent Setup
-
-If you use Claude Code, Codex, Cursor, Windsurf, or another coding agent, you can hand it the setup instructions in one sentence:
-
-```text
-Help me clone StackPlanner2 if needed, then bootstrap it for local development by following the Quick Start section in this README.
-```
-
-That prompt is intended for coding agents. It tells the agent to clone the repo if needed, choose Docker when available, and stop with the exact next command plus any missing config the user still needs to provide.
-
-## Quick Start
-
-### Configuration
-
-1. **Clone the StackPlanner2 repository**
-
-   ```bash
-   git clone https://github.com/PKU-SIS/StackPlanner2.git
-   cd StackPlanner2
-   ```
-
-2. **Run the setup wizard**
-
-   From the project root directory (`StackPlanner2/`), run:
-
-   ```bash
-   make setup
-   ```
-
-   This launches an interactive wizard that guides you through choosing an LLM provider, optional web search, and execution/safety preferences such as sandbox mode, bash access, and file-write tools. It generates a minimal `config.yaml` and writes your keys to `.env`. Takes about 2 minutes.
-
-   The wizard also lets you configure an optional web search provider, or skip it for now.
-
-   Run `make doctor` at any time to verify your setup and get actionable fix hints.
-   If you are opening a GitHub issue about a local setup or runtime problem, run
-   `make support-bundle`. The command prints reporter next steps, writes a
-   `*-issue-summary.md` file to paste into the issue, a `*-issue-draft.md` file
-   for AI-assisted issue filing, and an optional evidence zip under
-   `.deer-flow/support-bundles/`. If an AI assistant files the issue, start from
-   the draft and replace every REQUIRED placeholder instead of inventing missing
-   facts. Attach the zip only if a maintainer asks for it, or if the summary
-   alone is not enough. Maintainers and AI triage tools can start with
-   `triage.json`; the bundle includes redacted diagnostics and file manifests
-   only, and does not include `.env`, raw conversation messages, or user file
-   contents.
-
-   > **Advanced / manual configuration**: If you prefer to edit `config.yaml` directly, run `make config` instead to copy the full template. See `config.example.yaml` for the complete reference including CLI-backed providers (Codex CLI, Claude Code OAuth), OpenRouter, Responses API, and more.
-
-   <details>
-   <summary>Manual model configuration examples</summary>
-
-   ```yaml
-   models:
-     - name: gpt-4o
-       display_name: GPT-4o
-       use: langchain_openai:ChatOpenAI
-       model: gpt-4o
-       api_key: $OPENAI_API_KEY
-
-     - name: openrouter-gemini-2.5-flash
-       display_name: Gemini 2.5 Flash (OpenRouter)
-       use: langchain_openai:ChatOpenAI
-       model: google/gemini-2.5-flash-preview
-       api_key: $OPENROUTER_API_KEY
-       base_url: https://openrouter.ai/api/v1
-
-     - name: gpt-5-responses
-       display_name: GPT-5 (Responses API)
-       use: langchain_openai:ChatOpenAI
-       model: gpt-5
-       api_key: $OPENAI_API_KEY
-       use_responses_api: true
-       output_version: responses/v1
-
-     - name: qwen3-32b-vllm
-       display_name: Qwen3 32B (vLLM)
-       use: deerflow.models.vllm_provider:VllmChatModel
-       model: Qwen/Qwen3-32B
-       api_key: $VLLM_API_KEY
-       base_url: http://localhost:8000/v1
-       supports_thinking: true
-       when_thinking_enabled:
-         extra_body:
-           chat_template_kwargs:
-             enable_thinking: true
-   ```
-
-   OpenRouter and similar OpenAI-compatible gateways should be configured with `langchain_openai:ChatOpenAI` plus `base_url`. If you prefer a provider-specific environment variable name, point `api_key` at that variable explicitly (for example `api_key: $OPENROUTER_API_KEY`).
-
-   To route OpenAI models through `/v1/responses`, keep using `langchain_openai:ChatOpenAI` and set `use_responses_api: true` with `output_version: responses/v1`.
-
-   For vLLM 0.19.0, use `deerflow.models.vllm_provider:VllmChatModel`. For Qwen-style reasoning models, DeerFlow toggles reasoning with `extra_body.chat_template_kwargs.enable_thinking` and preserves vLLM's non-standard `reasoning` field across multi-turn tool-call conversations. Legacy `thinking` configs are normalized automatically for backward compatibility. Reasoning models may also require the server to be started with `--reasoning-parser ...`. If your local vLLM deployment accepts any non-empty API key, you can still set `VLLM_API_KEY` to a placeholder value.
-
-   CLI-backed provider examples:
-
-   ```yaml
-   models:
-     - name: gpt-5.4
-       display_name: GPT-5.4 (Codex CLI)
-       use: deerflow.models.openai_codex_provider:CodexChatModel
-       model: gpt-5.4
-       supports_thinking: true
-       supports_reasoning_effort: true
-
-     - name: claude-sonnet-4.6
-       display_name: Claude Sonnet 4.6 (Claude Code OAuth)
-       use: deerflow.models.claude_provider:ClaudeChatModel
-       model: claude-sonnet-4-6
-       max_tokens: 4096
-       supports_thinking: true
-   ```
-
-   - Codex CLI reads `~/.codex/auth.json`
-   - Claude Code accepts `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_CREDENTIALS_PATH`, or `~/.claude/.credentials.json`
-   - ACP agent entries are separate from model providers — if you configure `acp_agents.codex`, point it at a Codex ACP adapter such as `npx -y @zed-industries/codex-acp`
-   - On macOS, export Claude Code auth explicitly if needed:
-
-   ```bash
-   eval "$(python3 scripts/export_claude_code_oauth.py --print-export)"
-   ```
-
-   API keys can also be set manually in `.env` (recommended) or exported in your shell:
-
-   ```bash
-   OPENAI_API_KEY=your-openai-api-key
-   TAVILY_API_KEY=your-tavily-api-key
-   ```
-
-   </details>
-
-### Running the Application
-
-#### Deployment Sizing
-
-Use the table below as a practical starting point when choosing how to run DeerFlow:
-
-| Deployment target                        | Starting point                    | Recommended        | Notes                                                                                                      |
-| ---------------------------------------- | --------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------- |
-| Local evaluation / `make dev`            | 4 vCPU, 8 GB RAM, 20 GB free SSD  | 8 vCPU, 16 GB RAM  | Good for one developer or one light session with hosted model APIs. `2 vCPU / 4 GB` is usually not enough. |
-| Docker development / `make docker-start` | 4 vCPU, 8 GB RAM, 25 GB free SSD  | 8 vCPU, 16 GB RAM  | Image builds, bind mounts, and sandbox containers need more headroom than pure local dev.                  |
-| Long-running server / `make up`          | 8 vCPU, 16 GB RAM, 40 GB free SSD | 16 vCPU, 32 GB RAM | Preferred for shared use, multi-agent runs, report generation, or heavier sandbox workloads.               |
-
-- These numbers cover DeerFlow itself. If you also host a local LLM, size that service separately.
-- Linux plus Docker is the recommended deployment target for a persistent server. macOS and Windows are best treated as development or evaluation environments.
-- If CPU or memory usage stays pinned, reduce concurrent runs first, then move to the next sizing tier.
-
-#### Option 1: Docker (Recommended)
-
-**Development** (hot-reload, source mounts):
+### 1. 获取项目
 
 ```bash
-make docker-init    # Pull sandbox image (only once or when image updates)
-make docker-start   # Start services (auto-detects sandbox mode from config.yaml)
+git clone https://github.com/PKU-SIS/StackPlanner2.0.git
+cd StackPlanner2.0
 ```
 
-`make docker-start` starts `provisioner` only when `config.yaml` uses provisioner mode (`sandbox.use: deerflow.community.aio_sandbox:AioSandboxProvider` with `provisioner_url`).
+### 2. 配置模型与执行环境
 
-Docker builds use the upstream `uv` registry by default. If you need faster mirrors in restricted networks, export `UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple` and `NPM_REGISTRY=https://registry.npmmirror.com` before running `make docker-init` or `make docker-start`.
-
-Backend processes automatically pick up `config.yaml` changes on the next config access, so model metadata updates do not require a manual restart during development.
-
-> [!TIP]
-> On Linux, if Docker-based commands fail with `permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock`, add your user to the `docker` group and re-login before retrying. See [CONTRIBUTING.md](CONTRIBUTING.md#linux-docker-daemon-permission-denied) for the full fix.
-
-**Production** (builds images locally, mounts runtime config and data):
+在项目根目录运行配置向导：
 
 ```bash
-make up     # Build images and start all production services
-make down   # Stop and remove containers
+make setup
 ```
 
-Access: http://localhost:2026
+向导会引导配置模型服务、API 密钥、可选的搜索服务，以及沙箱与执行权限，生成本地 `config.yaml` 和 `.env`。
 
-For persistent deployments, configure `database.backend` as `sqlite` or
-`postgres`. The selected backend is shared by the LangGraph checkpointer,
-LangGraph Store, and DeerFlow application data. The deprecated `checkpointer`
-section, when present, overrides the first two for backward compatibility.
-
-The unified nginx endpoint is same-origin by default and does not emit browser CORS headers. If you run a split-origin or port-forwarded browser client, set `GATEWAY_CORS_ORIGINS` to comma-separated exact origins such as `http://localhost:3000`; the Gateway then applies the CORS allowlist and matching CSRF origin checks.
-
-> [!IMPORTANT]
-> The Gateway still owns active run tasks in process, so production defaults to a single Gateway worker (`GATEWAY_WORKERS=1`). The Redis stream bridge (`stream_bridge.type: redis`) shares SSE delivery and `Last-Event-ID` replay across workers, with a rolling retained-buffer TTL (`stream_ttl_seconds`) as a cleanup safety net. It does not make run cancellation, request de-duplication, or IM channel state fully cross-worker by itself; use single-worker Gateway or explicit sticky routing/ownership before raising `GATEWAY_WORKERS`.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed Docker development guide.
-
-#### Option 2: Local Development
-
-If you prefer running services locally:
-
-Prerequisite: complete the "Configuration" steps above first (`make setup`). `make dev` requires a valid `config.yaml` in the project root. Set `DEER_FLOW_PROJECT_ROOT` to define that root explicitly, or `DEER_FLOW_CONFIG_PATH` to point at a specific config file. Runtime state defaults to `.deer-flow` under the project root and can be moved with `DEER_FLOW_HOME`; skills default to `skills/` under the project root and can be moved with `DEER_FLOW_SKILLS_PATH`. Run `make doctor` to verify your setup before starting.
-On Windows, run the local development flow from Git Bash. Native `cmd.exe` and PowerShell shells are not supported for the bash-based service scripts, and WSL is not guaranteed because some scripts rely on Git for Windows utilities such as `cygpath`.
-
-1. **Check prerequisites**:
-
-   ```bash
-   make check  # Verifies Node.js 22+, pnpm, uv, nginx
-   ```
-
-2. **Install dependencies**:
-
-   ```bash
-   make install  # Install backend + frontend dependencies + pre-commit hooks
-   ```
-
-3. **(Optional) Pre-pull sandbox image**:
-
-   ```bash
-   # Recommended if using Docker/Container-based sandbox
-   make setup-sandbox
-   ```
-
-4. **(Optional) Load sample memory data for local review**:
-
-   ```bash
-   python scripts/load_memory_sample.py
-   ```
-
-   This copies the sample fixture into the default local runtime memory file so reviewers can immediately test `Settings > Memory`.
-   See [backend/docs/MEMORY_SETTINGS_REVIEW.md](backend/docs/MEMORY_SETTINGS_REVIEW.md) for the shortest review flow.
-
-5. **Start services**:
-
-   ```bash
-   make dev
-   ```
-
-6. **Access**: http://localhost:2026
-
-#### Startup Modes
-
-DeerFlow runs the agent runtime inside the Gateway API. Development mode enables hot-reload; production mode uses a pre-built frontend.
-
-|          | **Local Foreground**                         | **Local Daemon**                                             | **Docker Dev**                                      | **Docker Prod**                     |
-| -------- | -------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------- | ----------------------------------- |
-| **Dev**  | `./scripts/serve.sh --dev`<br/>`make dev`    | `./scripts/serve.sh --dev --daemon`<br/>`make dev-daemon`    | `./scripts/docker.sh start`<br/>`make docker-start` | —                                   |
-| **Prod** | `./scripts/serve.sh --prod`<br/>`make start` | `./scripts/serve.sh --prod --daemon`<br/>`make start-daemon` | —                                                   | `./scripts/deploy.sh`<br/>`make up` |
-
-| Action      | Local                                       | Docker Dev                                        | Docker Prod                                |
-| ----------- | ------------------------------------------- | ------------------------------------------------- | ------------------------------------------ |
-| **Stop**    | `./scripts/serve.sh --stop`<br/>`make stop` | `./scripts/docker.sh stop`<br/>`make docker-stop` | `./scripts/deploy.sh down`<br/>`make down` |
-| **Restart** | `./scripts/serve.sh --restart [flags]`      | `./scripts/docker.sh restart`                     | —                                          |
-
-Gateway owns `/api/langgraph/*` and translates those public LangGraph-compatible paths to its native `/api/*` routers behind nginx.
-
-#### Docker Production Deployment
-
-`deploy.sh` supports building and starting separately:
+如果希望手动编辑完整配置，可改用：
 
 ```bash
-# One-step (build + start)
-deploy.sh
-
-# Two-step (build once, start later)
-deploy.sh build              # build all images
-deploy.sh start              # start pre-built images
-
-# Stop
-deploy.sh down
+make config
 ```
 
-### Advanced
+随后编辑根目录的 `config.yaml` 与 `.env`。完整配置项见 [config.example.yaml](./config.example.yaml)。
 
-#### Sandbox Mode
+### 3. 安装依赖并启动
 
-DeerFlow supports multiple sandbox execution modes:
+```bash
+# 检查本地启动所需的依赖
+make check
 
-- **Local Execution** (runs sandbox code directly on the host machine)
-- **Docker Execution** (runs sandbox code in isolated Docker containers)
-- **Docker Execution with Kubernetes** (runs sandbox code in Kubernetes pods via provisioner service)
+# 安装后端、前端依赖及开发钩子
+make install
 
-For Docker development, service startup follows `config.yaml` sandbox mode. In Local/Docker modes, `provisioner` is not started.
+# 检查配置
+make doctor
 
-See the [Sandbox Configuration Guide](backend/docs/CONFIGURATION.md#sandbox) to configure your preferred mode.
+# 启动本地开发环境
+make dev
+```
 
-#### MCP Server
+启动后访问 **http://localhost:2026**。Web 主工作区默认使用 StackPlanner 编排；通过 API 调用时，使用 `assistant_id="stackplanner"` 选择该运行路径。
 
-DeerFlow supports configurable MCP servers and skills to extend its capabilities.
-For HTTP/SSE MCP servers, OAuth token flows are supported (`client_credentials`, `refresh_token`).
-For stdio MCP servers, per-tool call timeouts can be configured with `tool_call_timeout`.
-See the [MCP Server Guide](backend/docs/MCP_SERVER.md) for detailed instructions.
+停止本地服务：
 
-#### IM Channels
+```bash
+make stop
+```
 
-DeerFlow supports receiving tasks from messaging apps. Channels auto-start when configured — no public IP required for any of them.
+模型、搜索和代码执行能力取决于本地配置。默认本地沙箱关闭宿主机 Bash 执行；需要运行代码或处理数据时，应在配置阶段选择合适的沙箱并启用所需工具。Docker 启动方式见[下文](#docker-部署)。
 
-DeerFlow can also expose user-owned IM channel connections in the workspace UI. When `channel_connections` is enabled, logged-in users can bind Telegram, Slack, Discord, Feishu/Lark, DingTalk, WeChat, or WeCom from the sidebar / Settings > Channels. It reuses the existing outbound `channels.*` transports, so no public IP or provider callback URL is required. Incoming IM messages then run under the connected DeerFlow user account. See [IM Channel Connections](backend/docs/IM_CHANNEL_CONNECTIONS.md) for setup and security notes.
+## 核心组件
 
-| Channel       | Transport                    | Difficulty |
-| ------------- | ---------------------------- | ---------- |
-| Telegram      | Bot API (long-polling)       | Easy       |
-| Slack         | Socket Mode                  | Moderate   |
-| Feishu / Lark | WebSocket                    | Moderate   |
-| WeChat        | Tencent iLink (long-polling) | Moderate   |
-| WeCom         | WebSocket                    | Moderate   |
-| DingTalk      | Stream Push (WebSocket)      | Moderate   |
+### 中枢智能体（Central Agent）
 
-**Configuration in `config.yaml`:**
+中枢负责理解目标、选择执行策略、管理任务记忆，并判断当前结果是否满足要求。它使用以下控制动作组织任务：
+
+| 动作 | 职责 |
+| --- | --- |
+| `THINK` | 分析当前状态，决定下一步工作 |
+| `DELEGATE` | 将具体任务委派给专项子智能体 |
+| `RECALL_MEMORY` | 检索与当前任务相关的长期记忆 |
+| `REFLECT` / `REVISE` | 检查已有结论并修正任务记忆 |
+| `BACKTRACK` / `REPLAN` | 回退工作状态或调整后续计划 |
+| `SUMMARIZE` | 压缩任务记忆，保留后续决策需要的信息 |
+| `ASK_HUMAN` | 暂停执行，向用户澄清或请求反馈 |
+| `FINISH` | 检查交付条件并完成任务 |
+
+中枢会结合子任务的 `complete`、`partial`、`blocked` 状态决定是否继续执行。回退动作调整记忆、阶段或产物引用；涉及工作文件的实际恢复，需要后续执行操作完成。
+
+### 子智能体系统
+
+子智能体接收具体任务、必要上下文、验收要求与执行预算，在各自权限范围内工作，并回传结果。
+
+| 子智能体 | 职责 | 适用场景 |
+| --- | --- | --- |
+| Perception | 理解输入与任务边界 | 文档理解、需求整理、任务澄清 |
+| Outline | 构建提纲与任务依赖 | 复杂任务拆解、研究路线、报告结构 |
+| Researcher | 收集与核对证据 | 事实查询、资料检索、来源比对 |
+| Coder | 计算、数据处理与软件实现 | 数据筛选、算法计算、代码修改、运行验证 |
+| Reporter | 基于已有材料整理交付内容 | 报告撰写、结果综合、版本修订 |
+| Memory Recaller | 按需检索长期记忆 | 用户偏好、已有经验与历史信息回忆 |
+
+Reporter 使用上游已经收集、计算并传递的材料进行写作；需要补充检索或运行代码时，由中枢安排相应执行角色。
+
+数据处理与软件修改有各自的验收要求。例如，筛选 CSV 需要核对筛选条件与输出文件；修复软件需要检查源码改动及修改后的验证结果。系统据此决定是否需要继续执行或补充证据。
+
+### 任务记忆栈（TaskMemoryStack）
+
+记忆栈为中枢保存当前任务的重要信息，包括决策、委派、观察结果、反思、总结和人工反馈。完整资料与较大的文件正文通过产物引用传递，避免持续堆积在规划上下文中。
+
+| 层次 | 保存的信息 |
+| --- | --- |
+| 短期任务记忆 | 当前任务的关键决策、结果、修正和反馈 |
+| 工作状态与产物 | 子任务状态、文件、版本引用与会话检查点 |
+| 长期记忆 | 跨会话的用户偏好和可复用经验，通过独立机制写入与召回 |
+
+任务记忆支持选定条目的总结与修正，重要的人类反馈会受到保护。长期记忆是否启用、如何持久化，由部署配置决定。
+
+### 产物与结果验收
+
+报告、代码、表格和其他生成文件可以作为产物保存，并在工作区查看或下载。交付检查关注实际产物和可观察的执行证据：
+
+- 文件任务需要对应的产物引用及交付信息。
+- 软件验证需要在最新源码修改完成后执行；同批并行发出的测试不足以证明修改已经通过验证。
+- 仅收集测试、查看版本或帮助信息，不作为测试通过的证据。
+- 中文报告检查叙述正文，保留原始数据名称、网址、代码和引用。
+- 未完成的工作保留已有结果，并说明缺口与可继续执行的步骤。
+
+## 配置说明
+
+运行配置位于项目根目录，通常由 `make setup` 或 `make config` 创建。
+
+| 文件 | 用途 |
+| --- | --- |
+| `config.yaml` | 模型、工具、沙箱、子智能体、记忆与持久化配置 |
+| `.env` | 配置中引用的 API 密钥和环境变量 |
+| `extensions_config.json` | MCP 服务与扩展配置，按需创建 |
+| `skills/` | 可供智能体使用的公共与自定义技能 |
+
+### 模型与工具
+
+以下是模型配置片段，需合并到完整的 `config.yaml` 中，并替换为实际模型名称：
 
 ```yaml
-channels:
-  # LangGraph-compatible Gateway API base URL (default: http://localhost:8001/api)
-  langgraph_url: http://localhost:8001/api
-  # Gateway API URL (default: http://localhost:8001)
-  gateway_url: http://localhost:8001
-
-  # Optional: global session defaults for all mobile channels
-  session:
-    assistant_id: lead_agent # or a custom agent name; custom agents are routed via lead_agent + agent_name
-    config:
-      recursion_limit: 100
-    context:
-      thinking_enabled: true
-      is_plan_mode: false
-      subagent_enabled: false
-
-  feishu:
-    enabled: true
-    app_id: $FEISHU_APP_ID
-    app_secret: $FEISHU_APP_SECRET
-    # domain: https://open.feishu.cn       # China (default)
-    # domain: https://open.larksuite.com   # International
-
-  wecom:
-    enabled: true
-    bot_id: $WECOM_BOT_ID
-    bot_secret: $WECOM_BOT_SECRET
-
-  slack:
-    enabled: true
-    bot_token: $SLACK_BOT_TOKEN # xoxb-...
-    app_token: $SLACK_APP_TOKEN # xapp-... (Socket Mode)
-    allowed_users: [] # empty = allow all
-
-  telegram:
-    enabled: true
-    bot_token: $TELEGRAM_BOT_TOKEN
-    allowed_users: [] # empty = allow all
-
-  wechat:
-    enabled: false
-    bot_token: $WECHAT_BOT_TOKEN
-    ilink_bot_id: $WECHAT_ILINK_BOT_ID
-    qrcode_login_enabled: true # optional: allow first-time QR bootstrap when bot_token is absent
-    allowed_users: [] # empty = allow all
-    polling_timeout: 35
-    state_dir: ./.deer-flow/wechat/state
-    max_inbound_image_bytes: 20971520
-    max_outbound_image_bytes: 20971520
-    max_inbound_file_bytes: 52428800
-    max_outbound_file_bytes: 52428800
-
-    # Optional: per-channel / per-user session settings
-    session:
-      assistant_id: mobile-agent # custom agent names are also supported here
-      context:
-        thinking_enabled: false
-      users:
-        "123456789":
-          assistant_id: vip-agent
-          config:
-            recursion_limit: 150
-          context:
-            thinking_enabled: true
-            subagent_enabled: true
-
-  dingtalk:
-    enabled: true
-    client_id: $DINGTALK_CLIENT_ID # Client ID of your DingTalk application
-    client_secret: $DINGTALK_CLIENT_SECRET # Client Secret of your DingTalk application
-    allowed_users: [] # empty = allow all
-    card_template_id: "" # Optional: AI Card template ID for streaming typewriter effect
+models:
+  - name: main-model
+    use: langchain_openai:ChatOpenAI
+    model: your-model-name
+    api_key: $OPENAI_API_KEY
+    # 使用兼容服务时，填写其 API 地址
+    # base_url: https://your-model-service.example/v1
+    max_tokens: 8192
+    # 按模型服务的真实上下文容量填写
+    context_window: 128000
 ```
 
-Notes:
+在 `.env` 中设置对应的 `OPENAI_API_KEY`。其他模型提供方、本地 Qwen/vLLM、搜索和网页获取工具的配置示例，见 [config.example.yaml](./config.example.yaml)；MCP 配置格式见 [extensions_config.example.json](./extensions_config.example.json)。
 
-- `assistant_id: lead_agent` calls the default LangGraph assistant directly.
-- If `assistant_id` is set to a custom agent name, DeerFlow still routes through `lead_agent` and injects that value as `agent_name`, so the custom agent's SOUL/config takes effect for IM channels.
-- IM channel workers call Gateway's LangGraph-compatible API internally and automatically attach process-local internal auth plus the CSRF cookie/header pair required for thread and run creation.
+### 执行预算与上下文
 
-Set the corresponding API keys in your `.env` file:
+默认配置将工具次数、图步数、超时和累计 token 用量分别管理。它们都是执行上限；任务达到其中一个约束时，可能在用完工具额度前结束。
 
-```bash
-# Telegram
-TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrSTUvwxYZ
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| 子智能体工具调用 | 50 次 | 单次委派的工具调用上限 |
+| 子智能体搜索 | 8 次 | 实际网页搜索调用上限，另有去重与失败控制 |
+| 整轮工具调用 | 200 次 | 中枢、所有子智能体及失败重试共享 |
+| 默认并行委派 | 3 个 | 可配置为 1–4 个；通用后台调度器有 3 个工作线程 |
+| 中枢控制动作 | 20 次 | 独立于工具总次数的规划预算 |
+| 子智能体 / 主入口图步数 | 480 / 512 | 包含中间件等执行节点；不等于工具调用次数 |
+| 子任务 / 宿主机 Bash 超时 | 1800 秒 / 120 秒 | 分别限制整个子任务和单条前台命令 |
+| 子智能体累计 token | 200 万 | 默认启用，达到 70% 时提示收尾 |
+| 对话压缩触发 / 保留历史 | 约 64k / 16k token | 按实际模型容量、输出预留与安全余量收敛 |
 
-# Slack
-SLACK_BOT_TOKEN=xoxb-...
-SLACK_APP_TOKEN=xapp-...
+整轮工具上限由 `max_tool_calls_per_run` 配置。子智能体的超时、图步数与 token 预算可通过 `subagents` 配置，模型上下文容量通过 `models[].context_window` 声明。调大配置中的窗口数值不会改变模型服务的真实容量。
 
-# Feishu / Lark
-FEISHU_APP_ID=cli_xxxx
-FEISHU_APP_SECRET=your_app_secret
+启用 `summarization.enabled` 后，Central 和 specialist 都会依据各自模型的上下文窗口压缩历史，并预留下一次输出空间。子智能体保留原始系统契约，通过独立摘要通道继续使用历史证据；压缩失败时保留原历史。Central 遇到未解析的工具调用标记或裸 SP 调用 JSON 时，会携带协议纠正提示做一次有界重试；不会执行隐藏工具或制造产物。离线评测拒绝未被解析的 Qwen 工具调用标记和聊天协议标记，避免把控制消息计为最终答案。
 
-# WeChat iLink
-WECHAT_BOT_TOKEN=your_ilink_bot_token
-WECHAT_ILINK_BOT_ID=your_ilink_bot_id
+`VllmChatModel` 对已绑定工具、没有有效调用、但返回明显损坏工具封装的响应，使用原模型和原工具 schema 最多重问一次；普通 JSON 和正常工具调用不会触发。两次请求的 token 用量合并计入预算和日志。再次失败会记录结构化诊断，子智能体结果保持 partial，不执行损坏文本，也不替代原有文件归属、JSON 或交付检查。
 
-# WeCom
-WECOM_BOT_ID=your_bot_id
-WECOM_BOT_SECRET=your_bot_secret
+Reporter 向当前 action 所属的 `outputs/*.json` 追加内容时，如果现有文件是完整合法 JSON、追加后将变成非法 JSON，`write_file` 会拒绝该次追加并保留原字节，提示读回或明确修订。未闭合文档的分块构造、空白追加、JSONL、覆盖写入和 `str_replace` 保持原有行为；此保护不把文件语法正确视为任务已经完成。
 
-# DingTalk
-DINGTALK_CLIENT_ID=your_client_id
-DINGTALK_CLIENT_SECRET=your_client_secret
-```
+`write_file` 也支持可选的 `json_content` 对象或数组，与字符串 `content` 二选一，仅用于 `.json` 且 `append=false`。工具按 UTF-8 JSON 序列化原始值，复用同一写入、大小限制和交付检查。CLAUSE 公共 Skill 优先一次写入完整 finding 数组，较大内容仍可采用原有字符串分块方式；题目、字段、完整文档检查和 finding 数量要求保持不变。
 
-**Telegram Setup**
+## 使用示例
 
-1. Chat with [@BotFather](https://t.me/BotFather), send `/newbot`, and copy the HTTP API token.
-2. Set `TELEGRAM_BOT_TOKEN` in `.env` and enable the channel in `config.yaml`.
+启动 Web 工作区后，可以直接输入以下任务。涉及外部数据、代码执行或额外文件格式时，需要配置相应工具、沙箱或转换能力。
 
-**Slack Setup**
+### 资料研究与报告
 
-1. Create a Slack App at [api.slack.com/apps](https://api.slack.com/apps) → Create New App → From scratch.
-2. Under **OAuth & Permissions**, add Bot Token Scopes: `app_mentions:read`, `chat:write`, `im:history`, `im:read`, `im:write`, `files:write`.
-3. Enable **Socket Mode** → generate an App-Level Token (`xapp-…`) with `connections:write` scope.
-4. Under **Event Subscriptions**, subscribe to bot events: `app_mention`, `message.im`.
-5. Set `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` in `.env` and enable the channel in `config.yaml`.
+> 调研近三年开源大模型推理框架的发展，比较各自的适用场景和部署约束。请标注来源，并生成一份中文 Markdown 报告。
 
-**Feishu / Lark Setup**
+中枢可以根据问题安排需求理解、提纲与资料研究，再由 Reporter 综合证据，形成可下载报告。
 
-1. Create an app on [Feishu Open Platform](https://open.feishu.cn/) → enable **Bot** capability.
-2. Add permissions: `im:message`, `im:message.p2p_msg:readonly`, `im:resource`.
-3. Under **Events**, subscribe to `im.message.receive_v1` and select **Long Connection** mode.
-4. Copy the App ID and App Secret. Set `FEISHU_APP_ID` and `FEISHU_APP_SECRET` in `.env` and enable the channel in `config.yaml`.
+### 数据筛选与导出
 
-**WeChat Setup**
+> 筛选上传的销售数据，保留销售额大于 10000 且状态为“已完成”的记录，按地区汇总，并导出 CSV，说明筛选前后的记录数。
 
-1. Enable the `wechat` channel in `config.yaml`.
-2. Either set `WECHAT_BOT_TOKEN` in `.env`, or set `qrcode_login_enabled: true` for first-time QR bootstrap.
-3. When `bot_token` is absent and QR bootstrap is enabled, watch backend logs for the QR content returned by iLink and complete the binding flow.
-4. After the QR flow succeeds, DeerFlow persists the acquired token under `state_dir` for later restarts.
-5. For Docker Compose deployments, keep `state_dir` on a persistent volume so the `get_updates_buf` cursor and saved auth state survive restarts.
+Coder 负责执行筛选与计算，输出数据文件，并核对结果是否满足指定条件。
 
-**WeCom Setup**
+### 软件修改与验证
 
-1. Create a bot on the WeCom AI Bot platform and obtain the `bot_id` and `bot_secret`.
-2. Enable `channels.wecom` in `config.yaml` and fill in `bot_id` / `bot_secret`.
-3. Set `WECOM_BOT_ID` and `WECOM_BOT_SECRET` in `.env`.
-4. Make sure backend dependencies include `wecom-aibot-python-sdk`. The channel uses a WebSocket long connection and does not require a public callback URL.
-5. The current integration supports inbound text, image, and file messages. Final images/files generated by the agent are also sent back to the WeCom conversation.
+> 检查这个项目的分页接口，修复边界条件错误，补充必要测试，并给出修改说明和测试结果。
 
-**DingTalk Setup**
+中枢委派代码检查、实现和验证，依据实际源码改动及后续执行结果判断完成情况。
 
-1. Create a DingTalk application in the [DingTalk Developer Console](https://open.dingtalk.com/) and enable **Robot** capability.
-2. Set the message receiving mode to **Stream Mode** in the robot configuration page.
-3. Copy the `Client ID` and `Client Secret`, set `DINGTALK_CLIENT_ID` and `DINGTALK_CLIENT_SECRET` in `.env`, and enable the channel in `config.yaml`.
-4. _(Optional)_ To enable streaming AI Card replies (typewriter effect), create an **AI Card** template on the [DingTalk Card Platform](https://open.dingtalk.com/document/dingstart/typewriter-effect-streaming-ai-card), then set `card_template_id` in `config.yaml` to the template ID. You also need to apply for the `Card.Streaming.Write` and `Card.Instance.Write` permissions.
+### 多轮反馈与修订
 
-When DeerFlow runs in Docker Compose, IM channels execute inside the `gateway` container. In that case, do not point `channels.langgraph_url` or `channels.gateway_url` at `localhost`; use container service names such as `http://gateway:8001/api` and `http://gateway:8001`, or set `DEER_FLOW_CHANNELS_LANGGRAPH_URL` and `DEER_FLOW_CHANNELS_GATEWAY_URL`.
+> 保留上一版报告的结构，补充本地部署的限制条件；结论按我刚才提出的三个评价标准重写，并生成新版本。
 
-**Commands**
+用户反馈进入任务上下文，后续子任务结合当前产物和修订要求继续工作。委派会完整传递当前用户问题，保留末尾的输出格式要求；历史消息与任务记忆仍按各自预算压缩。
 
-Once a channel is connected, you can interact with DeerFlow directly from the chat:
+同一路径的并行文件工具调用按先读后写校验串行执行；异步等待文件锁不会占满文件操作所需的工作线程，取消等待也不会留下后台锁竞争。
+按行分段阅读同一文档时，不同区间分别计数，避免把连续阅读误判为重复调用；相同区间的重复调用及工具总量限制继续生效。
 
-| Command   | Description              |
-| --------- | ------------------------ |
-| `/new`    | Start a new conversation |
-| `/status` | Show current thread info |
-| `/models` | List available models    |
-| `/memory` | View memory              |
-| `/help`   | Show help                |
+## 开发指南
 
-> Messages without a command prefix are treated as regular chat — DeerFlow creates a thread and responds conversationally.
-
-#### Request Trace Correlation
-
-Gateway request trace correlation is disabled by default so existing HTTP responses and log formats stay unchanged. To enable it, set:
-
-```yaml
-logging:
-  enhance:
-    enabled: true
-    format: text
-```
-
-When enabled, every Gateway HTTP response includes `X-Trace-Id`, logs include `trace_id`, and Langfuse traces created by that request include `metadata.deerflow_trace_id` with the same value.
-
-#### LangSmith Tracing
-
-DeerFlow has built-in [LangSmith](https://smith.langchain.com) integration for observability. When enabled, all LLM calls, agent runs, and tool executions are traced and visible in the LangSmith dashboard.
-
-Add the following to your `.env` file:
-
-```bash
-LANGSMITH_TRACING=true
-LANGSMITH_ENDPOINT=https://api.smith.langchain.com
-LANGSMITH_API_KEY=lsv2_pt_xxxxxxxxxxxxxxxx
-LANGSMITH_PROJECT=xxx
-```
-
-#### Langfuse Tracing
-
-DeerFlow also supports [Langfuse](https://langfuse.com) observability for LangChain-compatible runs.
-
-Add the following to your `.env` file:
-
-```bash
-LANGFUSE_TRACING=true
-LANGFUSE_PUBLIC_KEY=pk-lf-xxxxxxxxxxxxxxxx
-LANGFUSE_SECRET_KEY=sk-lf-xxxxxxxxxxxxxxxx
-LANGFUSE_BASE_URL=https://cloud.langfuse.com
-```
-
-If you are using a self-hosted Langfuse instance, set `LANGFUSE_BASE_URL` to your deployment URL.
-
-**Trace correlation fields.** Every agent run is annotated with Langfuse's reserved trace attributes so the Sessions and Users pages light up automatically:
-
-- `session_id` = LangGraph `thread_id` — groups every trace of the same conversation
-- `user_id` = effective user from `get_effective_user_id()` (falls back to `default` in no-auth mode)
-- `trace_name` = assistant id (defaults to `lead-agent`)
-- `tags` = `[env:<DEER_FLOW_ENV>, model:<model_name>]` (omitted when not set)
-- `metadata.deerflow_trace_id` = DeerFlow request correlation id, matching `X-Trace-Id` when request trace correlation is enabled
-
-These are injected into `RunnableConfig.metadata` at the graph invocation root for both the gateway path (`runtime/runs/worker.py::run_agent`) and the embedded path (`client.py::DeerFlowClient.stream`), so any LangChain-compatible callback can read them. Set `DEER_FLOW_ENV` (or `ENVIRONMENT`) to tag traces by deployment environment.
-
-#### Using Both Providers
-
-If both LangSmith and Langfuse are enabled, DeerFlow attaches both tracing callbacks and reports the same model activity to both systems.
-
-If a provider is explicitly enabled but missing required credentials, or if its callback fails to initialize, DeerFlow fails fast when tracing is initialized during model creation and the error message names the provider that caused the failure.
-
-For Docker deployments, tracing is disabled by default. Set `LANGSMITH_TRACING=true` and `LANGSMITH_API_KEY` in your `.env` to enable it.
-
-## From Deep Research to Super Agent Harness
-
-DeerFlow started as a Deep Research framework — and the community ran with it. Since launch, developers have pushed it far beyond research: building data pipelines, generating slide decks, spinning up dashboards, automating content workflows. Things we never anticipated.
-
-That told us something important: DeerFlow wasn't just a research tool. It was a **harness** — a runtime that gives agents the infrastructure to actually get work done.
-
-So we rebuilt it from scratch.
-
-DeerFlow 2.0 is no longer a framework you wire together. It's a super agent harness — batteries included, fully extensible. Built on LangGraph and LangChain, it ships with everything an agent needs out of the box: a filesystem, memory, skills, sandbox-aware execution, and the ability to plan and spawn sub-agents for complex, multi-step tasks.
-
-Use it as-is. Or tear it apart and make it yours.
-
-## Core Features
-
-### Skills & Tools
-
-Skills are what make DeerFlow do _almost anything_.
-
-A standard Agent Skill is a structured capability module — a Markdown file that defines a workflow, best practices, and references to supporting resources. DeerFlow ships with built-in skills for research, report generation, slide creation, web pages, image and video generation, and more. But the real power is extensibility: add your own skills, replace the built-in ones, or combine them into compound workflows.
-
-Skills are loaded progressively — only when the task needs them, not all at once. This keeps the context window lean and makes DeerFlow work well even with token-sensitive models.
-
-Users can explicitly activate an enabled skill for a single turn by starting the request with `/skill-name`, for example `/data-analysis analyze uploads/foo.csv`. DeerFlow loads that skill's `SKILL.md` as hidden current-turn context while leaving the base prompt limited to skill metadata. Slash activation respects disabled skills, custom-agent skill whitelists, and existing channel commands such as `/new` and `/help`.
-
-When you install `.skill` archives through the Gateway, DeerFlow accepts standard optional frontmatter metadata such as `version`, `author`, and `compatibility` instead of rejecting otherwise valid external skills.
-
-Skill installs and agent-managed skill edits run through **SkillScan**, a native deterministic safety scanner before the LLM-based skill scanner. Phase 1 runs offline with no Semgrep/OpenGrep dependency, blocks high-confidence `CRITICAL` findings such as private keys or shell execution, and passes warning findings to the LLM scanner for contextual review. Set `skill_scan.enabled: false` in `config.yaml` to disable only the deterministic analyzers; safe archive extraction and the LLM scanner still run.
-
-Tools follow the same philosophy. DeerFlow comes with a core toolset — web search, web fetch, rendered web capture, file operations, bash execution — and supports custom tools via MCP servers and Python functions. Swap anything. Add anything.
-
-Gateway-generated follow-up suggestions now normalize both plain-string model output and block/list-style rich content before parsing the JSON array response, so provider-specific content wrappers do not silently drop suggestions.
-
-The Web UI composer can polish draft input before sending. The rewrite runs as a short Gateway LLM request using the `input_polish` model configuration, keeps slash skill prefixes such as `/data-analysis`, and only replaces the local draft after the user clicks the polish button; it does not create a thread run or persist a message.
-
-Interrupted first-turn runs still persist a fallback conversation title, so stopping a streaming response does not leave the thread as "Untitled" after refresh.
-
-In the Web UI, completed assistant turns can be branched into a new main conversation. The new thread starts from that turn's checkpoint. Because workspace files are not checkpointed, the branch only receives a best-effort copy of the current workspace when you branch from the latest turn; branching from an older turn keeps just the restored message history so the branch never inherits files that were created in a later part of the conversation.
-
-```
-# Paths inside the sandbox container
-/mnt/skills/public
-├── research/SKILL.md
-├── report-generation/SKILL.md
-├── slide-creation/SKILL.md
-├── web-page/SKILL.md
-└── image-generation/SKILL.md
-
-/mnt/skills/custom
-└── your-custom-skill/SKILL.md      ← yours
-```
-
-#### Claude Code Integration
-
-The `claude-to-deerflow` skill lets you interact with a running DeerFlow instance directly from [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Send research tasks, check status, manage threads — all without leaving the terminal.
-
-**Install the skill**:
-
-```bash
-npx skills add https://github.com/bytedance/deer-flow --skill claude-to-deerflow
-```
-
-Then make sure DeerFlow is running (default at `http://localhost:2026`) and use the `/claude-to-deerflow` command in Claude Code.
-
-**What you can do**:
-
-- Send messages to DeerFlow and get streaming responses
-- Choose execution modes: flash (fast), standard, pro (planning), ultra (sub-agents)
-- Check DeerFlow health, list models/skills/agents
-- Manage threads and conversation history
-- Upload files for analysis
-
-**Environment variables** (optional, for custom endpoints):
-
-```bash
-DEERFLOW_URL=http://localhost:2026            # Unified proxy base URL
-DEERFLOW_GATEWAY_URL=http://localhost:2026    # Gateway API
-DEERFLOW_LANGGRAPH_URL=http://localhost:2026/api/langgraph  # LangGraph API
-```
-
-See [`skills/public/claude-to-deerflow/SKILL.md`](skills/public/claude-to-deerflow/SKILL.md) for the full API reference.
-
-### Session Goals
-
-Use `/goal <completion condition>` to attach one active completion condition to the current thread. The goal is thread-scoped state, not a skill activation, so it stays active across turns until DeerFlow determines it has been satisfied or you clear it.
-
-Supported commands:
+### 代码结构
 
 ```text
-/goal finish the implementation and make all tests pass
-/goal              # show the active goal
-/goal clear        # clear it
+StackPlanner2.0/
+├── backend/
+│   ├── packages/harness/deerflow/
+│   │   ├── sp/                  # 中枢动作、处理器、记忆栈与编排入口
+│   │   ├── subagents/           # 子智能体定义与执行器
+│   │   ├── agents/middlewares/  # 上下文、用量、预算与执行控制
+│   │   ├── sandbox/            # 沙箱接口与文件、命令工具
+│   │   └── runtime/            # 运行生命周期、检查点与事件流
+│   ├── app/gateway/            # HTTP API、会话、认证与产物访问
+│   └── tests/                  # 后端与回归测试
+├── frontend/                   # Web 工作区
+├── skills/                     # 公共与自定义技能
+├── scripts/                    # 配置、启动、部署与诊断脚本
+├── config.example.yaml         # 配置模板
+└── Makefile                    # 项目操作入口
 ```
 
-After each Gateway-backed run, DeerFlow evaluates the visible conversation against the active goal with a non-thinking evaluator model. The evaluator must return a typed blocker (`missing_evidence`, `needs_user_input`, `run_failed`, `external_wait`, or `goal_not_met_yet`) plus visible evidence. DeerFlow only injects a hidden continuation when the latest assistant turn is durably checkpointed, the blocker is `goal_not_met_yet`, the thread did not change during evaluation, and the no-progress breaker has not fired. The safety cap defaults to 8 hidden continuations, and repeated identical non-progress evaluations stop after 2 attempts. `/goal clear` and any user-authored new input win over queued continuations. When the goal is satisfied, DeerFlow clears it automatically and publishes the updated thread state.
+`sp/` 是 StackPlanner 编排逻辑的主要入口；包名中保留的 `deerflow` 对应底层运行时。扩展中枢动作、专项角色或工具边界时，需要同步更新相应 Schema、角色映射和测试。
 
-The Web UI shows the active goal above the composer. The same command is available from the TUI and supported IM channels. In the Web UI and supported IM channels, setting `/goal <completion condition>` also starts a run with the condition as the task; status and clear commands only manage goal state.
+### 记忆栈示例
 
-### Manual Context Compaction
-
-Use `/compact` in the Web UI composer to summarize older context for the current thread. DeerFlow keeps the full chat visible, but future model calls use the compacted summary plus recent messages. The command is ignored when there is not enough history to compact, and it is blocked while the thread has a run in flight.
-
-### Sub-Agents
-
-Complex tasks rarely fit in a single pass. DeerFlow decomposes them.
-
-The lead agent can spawn sub-agents on the fly — each with its own scoped context, tools, and termination conditions. Sub-agents run in parallel when possible, report back structured results, and the lead agent synthesizes everything into a coherent output. The subtask card streams and persists their step timeline; while a sub-agent runs `web_search` or `image_search`, the collapsed status and expanded timeline show the current query using the same safe query-only wording as a top-level tool call. When token usage tracking is enabled, completed sub-agent usage is attributed back to the dispatching step.
-
-This is how DeerFlow handles tasks that take minutes to hours: a research task might fan out into a dozen sub-agents, each exploring a different angle, then converge into a single report — or a website — or a slide deck with generated visuals. One harness, many hands.
-
-SP2.0's StackPlanner mode keeps the CentralAgent at the orchestration layer: it chooses actions, maintains a short-term task-memory stack, and delegates ordinary tool or skill execution to scoped sub-agents. It selects an adaptive direct, bounded-execution, or deliberate workflow instead of forcing every request through a fixed pipeline. Deliberate work can normalize a task brief, ask one consolidated clarification, create a dependency-aware outline, execute and verify specialist stages, and request human review. Independent delegations can run concurrently with deterministic state merging and live token/progress reporting; the planner must inspect sibling results before finishing. Search execution reuses identical results and has bounded parallel, per-turn, and repeated-failure budgets, while uploaded files are preferred over redundant network retrieval. Non-report specialist recovery is capped at three attempts per role and run; an exhausted recovery returns the unresolved gap instead of continuing until the graph recursion limit. When a requested downloadable artifact is still partial or blocked, a plain-text success claim is converted into a bounded recovery delegation; after the cap it is replaced with an honest incomplete result, so natural-language termination cannot bypass artifact verification. Final deliverables are not limited to reports: generated code, websites, charts, images, video, and multi-file bundles are retained as downloadable run artifacts.
-
-StackPlanner passes authoritative pinned feedback to every specialist outside the clipped task-memory view. It also materializes bounded task-brief bodies for Outline, outline bodies for Researcher, and outline/research/perception/data/prior-report bodies for Reporter, so stage handoffs use the source content rather than only a path or summary. Reports use an evidence-grounded Markdown workflow with source preservation, tables, supplied-image reuse, explicit limitations, version lineage, and pinned human-feedback inheritance; long reports may be written directly as unique downloadable Markdown files. Code specialists default to scoped local read/write/replace/execute tools; network tools require an explicit Central delegation. The action router corrects a mistaken Researcher delegation for self-contained exact arithmetic or exhaustive assignment/combinatorial work to Coder, while external-source requests remain with Researcher. Coder writes source separately from test execution so stdout cannot overwrite the deliverable, and combinatorial enumeration uses canonical backtracking rather than factorial full permutations. When an expected output is supplied, the coder must encode it as an assertion or exact comparison that exits non-zero on failure; merely printing an example is not verification. Common interpreter labels such as `python`, `python3`, and `node` are normalized to the sandbox `bash` execution tool instead of being treated as unavailable tools. When a coding task asks for execution, tests, or verification, a `complete` claim is accepted only when the subagent trace contains a successful execution result after the latest source edit. `sp_finish` validates both the exact selected artifact and its requested family (`report` or `generated_file`) before ending a file-producing task; a completed current-run artifact is immediately routed to that terminal action. Bounded previews of structured result files (`.txt`, `.json`, `.csv`, and similar) ground the FINISH instruction, terminal memory entry, and visible response, preventing a stale CentralAgent conclusion from contradicting the generated result.
-
-For local Qwen/vLLM deployments, `VllmChatModel` also recovers Qwen `<tool_call>` blocks returned as ordinary reasoning/content when the vLLM server has no compatible automatic tool parser. The live StackPlanner policy check can be rerun from `backend/` with `uv run python scripts/evaluate_sp_qwen_actions.py --async-mode`; add `--thinking --scenario current_information_routes_to_research` for a focused reasoning-mode check.
-
-### Execution Debug Trace
-
-The Web UI includes an **Execution trace** page at `/workspace/debug`. Debug mode is opt-in and applies to newly submitted queries. For each run, the page shows the user request, CentralAgent model calls and explicit SP action reasons, the task-memory context actually injected into CentralAgent, sub-agent and tool steps, middleware events, failures/retries, elapsed time, and token attribution. Running traces refresh automatically and can be filtered or exported as JSON.
-
-The Gateway aggregates this view through `GET /api/threads/{thread_id}/runs/{run_id}/debug-trace`. Historical runs remain available at a baseline level. New debug runs preserve original sub-agent/action timestamps even when events are batch-written, so per-stage timing is not inferred from flush time. Credential-shaped fields are redacted and large details are bounded before reaching the browser. The trace is an execution audit: it includes observable model output and explicit decision records, but does not expose provider-private hidden chain-of-thought.
-
-### Sandbox & File System
-
-DeerFlow doesn't just _talk_ about doing things. It has its own computer.
-
-Each task gets its own execution environment with a full filesystem view — skills, workspace, uploads, outputs. The agent reads, writes, and edits files. It can view images and, when configured safely, execute shell commands.
-
-After each run, DeerFlow records a workspace change summary for the run-owned `workspace` and `outputs` directories. The Web UI shows a compact "files changed" badge on the assistant turn; opening it reveals created, modified, and deleted files with text diffs when safe to display. Uploads are excluded because they are user inputs, not agent-generated changes. Large, binary, or sensitive-looking files are shown as metadata only.
-
-Artifact responses include suitable content types for inline image, video, PDF, web, and text previews, while download responses use the generated file's basename. Demo-mode artifact paths are confined to the selected thread directory.
-
-With `AioSandboxProvider`, shell execution runs inside isolated containers. With `LocalSandboxProvider`, file tools still map to per-thread directories on the host, but host `bash` is disabled by default because it is not a secure isolation boundary. Re-enable host bash only for fully trusted local workflows. Host bash commands have a wall-clock timeout, and long-lived processes should be started in the background with output redirected to a workspace log.
-
-This is the difference between a chatbot with tool access and an agent with an actual execution environment.
-
-```
-# Paths inside the sandbox container
-/mnt/user-data/
-├── uploads/          ← your files
-├── workspace/        ← agents' working directory
-└── outputs/          ← final deliverables
-```
-
-### Context Engineering
-
-**Isolated Sub-Agent Context**: Each sub-agent runs in its own isolated context. This means that the sub-agent will not be able to see the context of the main agent or other sub-agents. This is important to ensure that the sub-agent is able to focus on the task at hand and not be distracted by the context of the main agent or other sub-agents.
-
-**Summarization**: Within a session, DeerFlow manages context aggressively — summarizing completed sub-tasks, offloading intermediate results to the filesystem, compressing what's no longer immediately relevant. This lets it stay sharp across long, multi-step tasks without blowing the context window.
-
-**Strict Tool-Call Recovery**: When a provider or middleware interrupts a tool-call loop, DeerFlow now strips provider-level raw tool-call metadata on forced-stop assistant messages and injects placeholder tool results for dangling calls before the next model invocation. This keeps OpenAI-compatible reasoning models that strictly validate `tool_call_id` sequences from failing with malformed history errors.
-
-### Long-Term Memory
-
-Most agents forget everything the moment a conversation ends. DeerFlow remembers.
-
-Across sessions, DeerFlow builds a persistent memory of your profile, preferences, and accumulated knowledge. The more you use it, the better it knows you — your writing style, your technical stack, your recurring workflows. Memory is stored locally and stays under your control.
-
-Memory updates now skip duplicate fact entries at apply time, so repeated preferences and context do not accumulate endlessly across sessions.
-
-## Recommended Models
-
-DeerFlow is model-agnostic — it works with any LLM that implements the OpenAI-compatible API. That said, it performs best with models that support:
-
-- **Long context windows** (100k+ tokens) for deep research and multi-step tasks
-- **Reasoning capabilities** for adaptive planning and complex decomposition
-- **Multimodal inputs** for image understanding and video comprehension
-- **Strong tool-use** for reliable function calling and structured outputs
-
-## Embedded Python Client
-
-DeerFlow can be used as an embedded Python library without running the full HTTP services. The `DeerFlowClient` provides direct in-process access to all agent and Gateway capabilities, returning the same response schemas as the HTTP Gateway API. The HTTP Gateway also exposes `DELETE /api/threads/{thread_id}` to remove DeerFlow-managed local thread data after the LangGraph thread itself has been deleted:
+在后端环境中，可以通过公开的记忆接口记录一次委派与观察：
 
 ```python
-from deerflow.client import DeerFlowClient
+from deerflow.sp.memory import TaskMemoryStack
 
-client = DeerFlowClient()
+memory = TaskMemoryStack()
+memory.append_delegate(
+    "按条件筛选销售数据",
+    metadata={"target_agent": "coder", "task_kind": "data_processing"},
+)
+memory.append_observe(
+    "筛选与汇总完成，结果已导出",
+    actor="coder",
+    metadata={"completion_status": "complete"},
+)
 
-# Chat
-response = client.chat("Analyze this paper for me", thread_id="my-thread")
-
-# Streaming (LangGraph SSE protocol: values, messages-tuple, end)
-for event in client.stream("hello"):
-    if event.type == "messages-tuple" and event.data.get("type") == "ai":
-        print(event.data["content"])
-
-# Configuration & management — returns Gateway-aligned dicts
-models = client.list_models()        # {"models": [...]}
-skills = client.list_skills()        # {"skills": [...]}
-client.update_skill("web-search", enabled=True)
-client.upload_files("thread-1", ["./report.pdf"])  # {"success": True, "files": [...]}
-client.set_goal("thread-1", "finish the implementation and make all tests pass")
-client.get_goal("thread-1")       # {"goal": {...}} or {"goal": None}
-client.clear_goal("thread-1")
+print(memory.to_dict())
 ```
 
-All dict-returning methods are validated against Gateway Pydantic response models in CI (`TestGatewayConformance`), ensuring the embedded client stays in sync with the HTTP API schemas. See `backend/packages/harness/deerflow/client.py` for full API documentation.
-
-## Scheduled Tasks
-
-DeerFlow now includes a first-class scheduled-task MVP in the workspace.
-
-Current MVP capabilities:
-
-- Manage tasks at `/workspace/scheduled-tasks`
-- Choose whether each scheduled task reuses a thread or creates a fresh thread per run
-- Support `once` and `cron` schedules
-- Run background scheduled executions as non-interactive DeerFlow runs (`ask_clarification` is not exposed there)
-- Use `skip` overlap behavior for due cron executions that collide with an active run on the same reused thread
-- Pause, resume, trigger, inspect history, and delete tasks
-- Execute scheduled work through the normal DeerFlow run lifecycle
-
-Current MVP limits:
-
-- No conversation-created `schedule_task` tool yet
-- No text-only notification jobs
-- No channel or GitHub dispatch targets
-- No `interval` schedule type in this first cut
-
-Enable background polling with `config.yaml -> scheduler.enabled`. Manual trigger uses the same scheduled-task resource and execution path.
-
-## Terminal Workbench (TUI)
-
-`deerflow` is a terminal-native workbench for people who live in the shell. It runs **embedded** over `DeerFlowClient` — no Gateway, frontend, nginx, or Docker required — while honoring the same `config.yaml`, checkpointer, skills, memory, MCP, and sandbox settings as the rest of DeerFlow.
-
-![DeerFlow TUI](docs/tui/tui-preview.svg)
+### 开发检查
 
 ```bash
-uv pip install 'deerflow-harness[tui]'        # optional 'textual' dependency
+# 后端：在 backend/ 下执行
+cd backend
+make test
+make lint
 
-deerflow                                      # launch the terminal UI (TTY required)
-deerflow --continue                           # resume the most recent thread
-deerflow --resume THREAD                      # resume a thread by id
-deerflow --print "summarize this repo"        # headless one-shot answer to stdout
-deerflow --json  "hello"                       # headless newline-delimited StreamEvents
+# 前端：在 frontend/ 下执行
+cd ../frontend
+pnpm check
+pnpm test
 ```
 
-A keyboard-driven chat surface with a streaming transcript (Markdown-rendered answers), compact tool-activity cards, a `/` slash-command palette, `/goal` goal management, `/model` and `/threads` pickers, input history, and `Esc` / `Ctrl+C` interrupt. Sessions opened in the TUI also appear in the Web UI sidebar — it writes the shared thread store under the local default user, so terminal and web stay in sync **without running the Gateway**.
+新增功能或修复问题时，应补充对应测试，并同步更新文档。测试覆盖运行时、动作路由、记忆、产物、工具预算和并发取消等路径；真实模型与搜索服务的联调需要在配置完成后单独验证。
 
-See [backend/docs/TUI.md](backend/docs/TUI.md) for the full guide.
+## Docker 部署
 
-## Documentation
+完成根目录配置后，可使用以下方式启动。
 
-- [Contributing Guide](CONTRIBUTING.md) - Development environment setup and workflow
-- [Configuration Guide](backend/docs/CONFIGURATION.md) - Setup and configuration instructions
-- [Architecture Overview](backend/CLAUDE.md) - Technical architecture details
-- [Backend Architecture](backend/README.md) - Backend architecture and API reference
+### 开发环境
 
-## ⚠️ Security Notice
+```bash
+make docker-init
+make docker-start
 
-### Improper Deployment May Introduce Security Risks
+# 查看日志
+make docker-logs
 
-DeerFlow has key high-privilege capabilities including **system command execution, resource operations, and business logic invocation**, and is designed by default to be **deployed in a local trusted environment (accessible only via the 127.0.0.1 loopback interface)**. If you deploy the agent in untrusted environments — such as LAN networks, public cloud servers, or other multi-endpoint accessible environments — without strict security measures, it may introduce security risks, including:
+# 停止服务
+make docker-stop
+```
 
-- **Unauthorized illegal invocation**: Agent functionality could be discovered by unauthorized third parties or malicious internet scanners, triggering bulk unauthorized requests that execute high-risk operations such as system commands and file read/write, potentially causing serious security consequences.
-- **Compliance and legal risks**: If the agent is illegally invoked to conduct cyberattacks, data theft, or other illegal activities, it may result in legal liability and compliance risks.
+### 持续运行环境
 
-### Security Recommendations
+```bash
+# 构建镜像并启动服务
+make up
 
-**Note: We strongly recommend deploying DeerFlow in a local trusted network environment.** If you need cross-device or cross-network deployment, you must implement strict security measures, such as:
+# 停止并移除容器
+make down
+```
 
-- **IP allowlist**: Use `iptables`, or deploy hardware firewalls / switches with Access Control Lists (ACL), to **configure IP allowlist rules** and deny access from all other IP addresses.
-- **Authentication gateway**: Configure a reverse proxy (e.g., nginx) and **enable strong pre-authentication**, blocking any unauthenticated access.
-- **Network isolation**: Where possible, place the agent and trusted devices in the **same dedicated VLAN**, isolated from other network devices.
-- **Stay updated**: Continue to follow DeerFlow's security feature updates.
+统一访问地址为 **http://localhost:2026**。需要保留会话、检查点和应用数据时，在 `config.yaml` 中选择 SQLite 或 PostgreSQL，并配置相应的数据持久化。
 
-## Contributing
+Gateway 默认使用单个 worker。Redis 事件流负责跨进程的消息传输与回放，取消和任务归属等运行状态仍需对应的部署策略；扩容前应结合实际负载验证。更多部署细节见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, workflow, and guidelines.
+## 监控与调试
 
-Regression coverage includes Docker sandbox mode detection and provisioner kubeconfig-path handling tests in `backend/tests/`.
-Backend blocking-IO diagnostics are available from the repository root with
-`make detect-blocking-io`: it statically scans backend business code for
-blocking IO that may run on the backend event loop, prints a concise summary,
-and writes complete JSON findings to `.deer-flow/blocking-io-findings.json`.
-The JSON includes compact review records with `priority`, `location`,
-`blocking_call`, `event_loop_exposure`, `reason`, and `code`.
-Gateway artifact serving now forces active web content types (`text/html`, `application/xhtml+xml`, `image/svg+xml`) to download as attachments instead of inline rendering, reducing XSS risk for generated artifacts.
+- **任务进度**：在工作区查看子任务、工具调用、执行结果与产物。
+- **执行追踪**：在 `/workspace/debug` 为新运行启用调试，查看任务上下文、中枢动作、停止原因、耗时和用量。
+- **配置诊断**：运行 `make doctor` 检查配置与依赖。
+- **问题排查**：运行 `make support-bundle` 生成经过脱敏的诊断材料，用于复现和反馈问题。
 
-## License
+执行追踪展示可观察的决策和执行信息。模型服务的私有内部推理不属于该调试接口的交付内容。
 
-This project is open source and available under the [MIT License](./LICENSE).
+详细参考：[后端架构](./backend/docs/ARCHITECTURE.md) · [API](./backend/docs/API.md) · [配置说明](./backend/docs/CONFIGURATION.md) · [上下文压缩](./backend/docs/summarization.md) · [贡献指南](./CONTRIBUTING.md)
 
-## Acknowledgments
+## 许可证与致谢
 
-DeerFlow is built upon the incredible work of the open-source community. We are deeply grateful to all the projects and contributors whose efforts have made DeerFlow possible. Truly, we stand on the shoulders of giants.
+本项目采用 [MIT 许可证](./LICENSE)，保留上游项目的版权与许可声明。
 
-We would like to extend our sincere appreciation to the following projects for their invaluable contributions:
+StackPlanner 2.0 建立在以下项目的工作基础之上：
 
-- **[LangChain](https://github.com/langchain-ai/langchain)**: Their exceptional framework powers our LLM interactions and chains, enabling seamless integration and functionality.
-- **[LangGraph](https://github.com/langchain-ai/langgraph)**: Their innovative approach to multi-agent orchestration has been instrumental in enabling DeerFlow's sophisticated workflows.
+- [StackPlanner 1.0](https://github.com/PKU-SIS/Stack-Planner)：中枢规划、多智能体委派与记忆栈设计。
+- [DeerFlow](https://github.com/bytedance/deer-flow)：会话运行时、Gateway、沙箱、工具与 Web 工作区。
+- [LangGraph](https://github.com/langchain-ai/langgraph) 与 [LangChain](https://github.com/langchain-ai/langchain)：状态图执行与模型、工具集成。
 
-These projects exemplify the transformative power of open-source collaboration, and we are proud to build upon their foundations.
+欢迎通过 [Issue](https://github.com/PKU-SIS/StackPlanner2.0/issues) 和 [Pull Request](https://github.com/PKU-SIS/StackPlanner2.0/pulls) 反馈问题、分享使用经验和参与开发。
 
-### Key Contributors
-
-A heartfelt thank you goes out to the core authors of `DeerFlow`, whose vision, passion, and dedication have brought this project to life:
-
-- **[Daniel Walnut](https://github.com/hetaoBackend/)**
-- **[Henry Li](https://github.com/magiccube/)**
-
-Your unwavering commitment and expertise have been the driving force behind DeerFlow's success. We are honored to have you at the helm of this journey.
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.com/#bytedance/deer-flow&Date)
 
 ### Benchmark plugins: separate inference and evaluation
+
+FinAuditing 可选择[原生文件检索模式](docs/DCC_FINAUDITING_FILES.md)：完整 XML 按题隔离上传，
+由 SP 文件工具检索，复用官方评测器。原 RAGFlow 配置和知识库保留，两种访问方式独立使用。
+RAGFlow 检索按原生运行时的用户和线程读取已准备的题目范围；后台线程缺少用户 ContextVar 时仍使用运行时身份。
+
+NBA 与 FinAuditing 实验中的[SP harness 共性问题](docs/DCC_SP_HARNESS_FINDINGS.md)汇总了已做处理、
+仍需 SP 主线解决的问题，以及数据集自身的限制。
 
 DCC v3 supports native SP2 benchmark inference and independent offline evaluation.
 Run `scripts/infer_sp_benchmarks.py` to collect final deliveries, then
@@ -1026,7 +409,36 @@ only public tasks and staged UTF-8 files; labels and private metadata stay with
 the evaluator. Plugins own their scoring and aggregation, including CUAD AUPR.
 Collection accepts native text answers after normal graph return as well as
 validated FINISH deliveries, while preserving incomplete-output and artifact gates.
+Reporter checks the complete contents of declared JSON deliverables before FINISH;
+invalid JSON stays partial and follows the bounded revision flow with parser
+diagnostics. Revisions preserve the requested format and keep the original file.
+Reporter can use `str_replace` for a small correction after reading the file
+created by its current action. An explicit revision scope may request
+`read_file`, `grep`, `write_file`, and `str_replace`; earlier reports retain
+their ownership protection and corrected JSON still passes the full parser.
+Explicit JSON output requirements also validate inline fallbacks, including
+content that would otherwise be saved with a Markdown extension.
+Data-processing recovery retains previously requested retrieval tools and checks
+their availability and role permissions again on every retry.
+Explicit data-processing Coder delegations retain their execution role even when
+the task starts with document inspection or ends in a report. Retrieval JSON is
+formatted across fields and chunks so externalized results can be paged with
+native `read_file` line ranges; its values and sample scope remain unchanged.
+Reporter recovery preserves the original validated tools and Skills within the
+same unresolved run. Its three-attempt limit also applies when no report file
+was produced, and the execution boundary prevents additional delegations while
+retaining the incomplete result and its remaining gaps.
+The retrieval tool describes its 1-indexed pages, 1-100 chunk page size, and
+`total` count. Evidence coverage may need later pages; an incomplete retrieval
+does not establish that a fact is absent from the source document.
+Numeric research stays with the selected Researcher when its explicit tool
+scope includes retrieval. Role repair also preserves an explicit data-processing
+Coder contract instead of treating an API audit as retrieval alone.
 The manifest records the delivery contract and results identify the delivery source.
+Both native delivery extraction and saved-state classification keep known
+Central empty responses and invalid control calls as policy failures
+(`empty_response` or `protocol_error`); provider and unknown errors retain
+`infrastructure_error` even when native middleware converts them into messages.
 Benchmark runs are non-interactive by default: human-question tools are disabled,
 and unresolved evidence or verification gaps remain explicit failures.
 The former combined evaluation command is now evaluation-only; v2 run directories
@@ -1062,6 +474,210 @@ independent seven-metric scoring. Collaborators can install the same-repository
 CLAUSE Release to reuse the complete dataset and existing knowledge-base mapping
 without rebuilding the vector index. RAG access requires separately authorized
 service credentials. See [CLAUSE shared data, RAGFlow setup and evaluation](docs/clause_ragflow.md).
+
+Native RAGFlow retrieval exposes chunk filenames as `document_name`, accepting
+`document_name`, `docnm_kwd`, then `document_keyword` in that priority order.
+It preserves XML/content bytes, document IDs, sample scope and pagination so
+instance-document evidence retains its filename provenance across API versions.
+
+DCC 基准配置 `configs/stackplanner_benchmarks.yaml` 显式设置子智能体图步数上限为 480；中枢动作上限和每题超时通过基准运行器参数设置。
+StackPlanner execution budgets can be raised explicitly through trusted
+`configurable` runtime settings: `sp_max_actions` (default 20, range 2–256),
+`sp_report_recovery_max_attempts` (3), `sp_delegate_recovery_max_attempts` (3),
+and `sp_capped_delegate_recovery_max_attempts` (2). Recovery limits are 1–32;
+capped specialist retries cannot exceed ordinary retries. For example, a long
+non-interactive audit may use 40 actions and recovery limits 6/6/4. These are
+independent of specialist graph depth, output tokens, and loop detection. The
+schema and Reporter dispatch share the effective limits; increasing them never
+accepts a partial artifact. Exhaustion retains the gaps and is recorded as
+`sp_recovery_exhausted` / `recovery_exhausted`, rather than a completed empty
+prediction. Effective limits are included in graph metadata.
+
+Native public output contracts use `sp_task_contract.output_schema` (local JSON
+Schema) and `output_parse_mode` (`json` or `text`). FinAuditing input construction
+recognizes the exact published public FinRE/FinMR/FinSM instruction templates;
+it does not receive private metadata or gold. FinRE requires a raw published
+label, FinMR the two required string-valued fields (including legal `0`), and
+FinSM a JSON string array (including a genuine empty result). Plain-text,
+Reporter files and FINISH all validate the same shape. An invalid attempted
+answer starts bounded native recovery; incomplete evidence stays blocking even
+when a candidate is `[]`. No format repair manufactures an answer or changes
+an official scorer.
+
+Externalized `ragflow_retrieve` results keep their complete original JSON
+bytes. The preview spends the configured head+tail character budget on source
+content excerpts spread across chunks, rather than document metadata. It shows
+actual content line numbers for native `read_file`, matching/returned/excerpted
+counts and explicit unread source markers. Excerpts do not establish complete
+retrieval or an evidence audit. Larger preview budgets can show more chunks;
+complete evidence remains available in the saved file.
+
+Evidence-required native tasks carry public `source_requirements`: exact source
+file paths/line counts and, for FinAuditing RAG, the sample's public document IDs.
+Actual successful tool results establish read ranges and document-page coverage;
+model-authored completion metadata cannot supply this proof. Truncated reads,
+zero-match queries and previews remain incomplete. Missing reads trigger bounded
+recovery before any final answer, including a format-valid `[]` or raw label.
+CLAUSE retains its Reporter/clause audit policy and requires the complete public
+document; FinAuditing retains Researcher for filing evidence. The unchanged
+published NBA task template also requires Researcher to read the complete uploaded
+rules. Delivery requires the designated auditor's latest current-run native
+observation to be complete, without evidence gaps or any early-stop reason.
+NBA template recognition uses the prompt composer's normal monetary-dollar
+escaping and preserves the published salary assumptions.
+Its public text contract retains the original `Answer: False.` / `Answer: True.
+Illegal Operation: X. Problematic Team: Y.` ending, enabling the same complete
+audit delivery path as other public schemas. Research notes that leave the
+requested transaction analysis undone remain partial.
+These checks do
+not infer findings, require nonempty predictions or replace semantic auditing.
+
+When no finalizable artifact exists, Central receives the actual binding protocol:
+`sp_finish` is unavailable and completed conversational audits return ordinary
+final assistant content in the requested public shape. After a clean public
+audit and complete source coverage, Central's control tools are removed for
+that final response. File-producing requests retain native artifact finalization.
+The host public contract records `delivery_mode`: FinAuditing/NBA use `inline`,
+CLAUSE uses `artifact`. Conditional transport guidance cannot turn an inline
+answer into a file request. Incidental specialist artifacts remain context for
+the inline final answer.
+
+`ragflow_retrieve` additionally accepts an optional sample-scoped `document_id`.
+With `page_size=100` it enumerates original indexed chunks without semantic
+filtering; page until all chunks are received. The first per-thread/page snapshot
+is cached outside the sandbox mount and retains source update time. Complete
+inline results count as read; externalized results count only after actual native
+reads cover their content lines. Larger documents can be read in bounded ranges.
+Paging/different documents have distinct loop-detection identities; the same
+request still reaches the usual cap. Native textual JSON fallback artifacts use
+the published `.json` extension.
+# Small public JSON deliveries
+
+When a Reporter or contract-designated auditor returns a complete answer matching the explicit public output
+schema, the native harness preserves that original response as an artifact even
+below the generic large-result threshold. This includes short FinAuditing values
+and CLAUSE arrays. Structured envelope artifacts remain JSON when saved; the
+observed-source requirements still apply to empty and nonempty answers alike.
+
+Public source prefetch is opt-in. The trusted run configuration may set
+`sp_source_prefetch_enabled`, `sp_source_prefetch_tokenizer` (an existing local
+Transformers tokenizer directory), `sp_source_prefetch_context_tokens`, and
+`sp_source_prefetch_response_tokens`. Only the public contract's audit agent
+prefetches its declared uploaded files and scoped document IDs. The host executes
+the policy-filtered native tools through their ordinary tool interceptors and
+records explicitly marked calls/results. It counts the actual tokenizer chat
+template, exposed tool schemas and generation prefix, reserving the configured
+reply budget plus 2,048 tokens. Oversized results use native lossless
+externalization and real line reads; unread previews never satisfy source gates.
+The private tokenizer path stays outside model/graph state. Native summarization
+still manages subsequent model/tool history, so configure its response reserve
+to match the run. Prefetch also stays below the native summarizer's actual
+trigger. Host execution alone does not establish a read: an innermost model-call
+observer confirms that complete original tool pairs survive all input wrappers.
+Summarized or clipped originals never count as model-visible source evidence.
+A single oversized source line remains incomplete until it can be read within
+the model's real context.
+When a file-only audit is retried after historical source coverage is complete,
+native prefetch reads the original files again for the new auditor's actual
+model input. Historical source proof alone does not provide that input. Mixed
+RAG tasks retain missing-range/page continuation. File-only recovery also carries
+the previous real draft reference and native gaps to the new delegation.
+
+For schema-constrained deliveries, a model-declared output filename must be
+actually readable before it can take precedence over generated inline content.
+If the claimed file does not exist, the native fallback validates and saves the
+original inline answer under its current-action filename. A receipt without
+either a real file or an actual valid inline answer remains incomplete.
+An actual paired successful native write also establishes current-action path
+ownership, even when its filename omits the action ID; the host still reads and
+validates the real file. Model-authored write claims cannot establish ownership.
+Schema-valid structured empty arrays remain usable output when no summary is
+present. Missing output is never converted to an empty answer. Public schema
+audits use their explicit value contract and native evidence/status gates;
+generic prose-report heuristics do not reject original source quotations or
+require tool-example placeholder IDs in the answer.
+
+For explicit public output schemas, successful Reporter/auditor finals use the
+raw public JSON/text value directly. The harness replaces its generic outer
+envelope instruction for those roles, validates the unchanged value and saves it
+natively. Actual blockers still use partial/blocked envelopes with concrete gaps;
+source-access and native execution checks remain mandatory.
+Malformed artifact values receive up to two format corrections in the same
+auditor instance, retaining its original source and draft. Completed inline
+audits receive the same bounded feedback in Central instead of entering a file
+Reporter workflow. The model supplies the corrected value; the host never joins
+JSON objects, extracts an answer, or substitutes an empty/default response.
+Exhausted correction remains incomplete. Actual blockers, provider truncation
+and native guard stops retain their existing failure behavior.
+When a current-run Reporter artifact array is token-capped, its next recovery
+asks the model to rebuild one complete array from original sources, consolidate
+repeated descriptions, and preserve every distinct supported issue and required
+complete verbatim quotation. The host leaves draft bytes and acceptance checks
+unchanged; inline deliveries and runtime budgets keep their existing behavior.
+For a file-only inline Researcher audit, repeated read_file/grep tools are
+temporarily unbound only when every required original file is still fully
+present in that model request as exact native prefetch tool pairs, and the
+complete request passes its token budget. The auditor then completes the
+original analysis and public answer from those sources. Summarized, clipped,
+missing or stale evidence retains read tools; external-document and artifact
+deliveries retain their existing behavior. Source coverage alone never proves
+the audit complete or supplies an answer.
+That inline file-only auditor must also deliver an actual final payload matching
+the public schema. A completion claim or source summary without that payload
+stays partial and recovers the original audit, even after every source was read.
+The host neither extracts a conclusion from prose nor fills a missing answer.
+File-only inline auditors also receive up to two same-instance corrections for
+an invalid public final, with the actual schema error. Text-mode feedback asks
+for the raw required text without added JSON serialization quotes, while retaining
+literal quotes, line breaks and other content required by the task/schema. JSON
+mode still requires a valid JSON value, including quotes for a JSON string. The
+model makes the correction; the host never strips quotes or selects a label.
+JSON artifact corrections
+temporarily retain read tools and unbind file editing tools so the model returns
+one complete raw value instead of a nested write-call string. The normal native
+artifact path persists that actual value; all source, stop and acceptance gates
+still apply. Ranged source-read accounting preserves returned boundary blank
+lines, including a one-line empty range, without counting an extra EOF newline.
+A rejected FINISH receives its actual native error and current registered
+artifact references on the next model request, so the model can correct its
+control call or return to the underlying unfinished work. This feedback leaves
+the artifact bytes and native FINISH checks unchanged.
+Optional source prefetch reserves result room against both the exact tokenizer
+and the native summarizer threshold. When that room is unavailable, the normal
+auditor and its source tools continue. An executed result that cannot fit even
+as an unread marker remains unobserved in the tool audit; only its pending host
+request is removed from model input. Existing drafts and prior source context
+stay intact, and native source coverage still requires actual visible reads.
+During Reporter recovery, a current-run partial/blocked artifact with a real
+`token_capped` stop is an unverified, noncanonical draft. Its capped body is
+not automatically inlined as the revision baseline; the transient preview
+retains its status, reference, and native read path. Original artifact bytes
+remain unchanged and readable. The Reporter rebuilds from original public
+sources and may read the prior draft to verify distinct supported findings.
+This guidance follows the unfinished artifact's lineage across later errors or
+loop stops and ends at a newly completed report. Native public JSON validation
+also marks a rejected partial/blocked Reporter draft noncanonical in its next
+transient preview, using the actual validation errors. The model reconstructs
+single-layer JSON from original sources and verified findings instead of copying
+broken escaping or merged fields. Unexecuted textual tool calls, including ones
+inside an output envelope, remain partial and cannot become report artifacts;
+raw model records are retained. Valid partial revisions and complete report
+baselines retain their existing behavior. Sources, schemas, budgets and final
+acceptance checks remain unchanged.
+When required public sources remain unread, Central's next tool binding directs
+the read to the contract-designated auditor with its ordinary scoped tools;
+unrelated perception/coder retries do not consume the audit before it begins.
+RAG document enumeration puts a transport-only pagination header before the
+original chunks: actual total/returned chunk counts, page count, next page, and
+end/out-of-range facts. Empty pages beyond that range do not imply missing
+indexed pages. Existing source coverage and substantive audit checks remain
+independent. Recovery carries the previous native auditor's actual gaps and
+result reference to Central and the next scoped RAG auditor, which must verify
+those claims against the returned pagination and complete the original audit.
+Later delegations resume the host's actual same-run source ledger: skip covered
+files/documents, read only missing file ranges, and continue unread content lines
+in already externalized native RAG pages. Existing evidence paths remain the
+source of truth, so repeated prefetch cannot spend its budget on the same prefix.
 
 In CLAUSE file mode, Central chooses the scope, roles and number of delegations. The final writer can deliver a complete review in one assignment. A Coder assigned the review and JSON delivery can use the native file writer directly. CLAUSE requests verbatim numbered quotations and substantive internal discrepancies. See [CLAUSE file review and JSON export](docs/clause_autonomous.md).
 

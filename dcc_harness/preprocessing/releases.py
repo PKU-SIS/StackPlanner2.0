@@ -24,7 +24,7 @@ from .pipeline import (
     render,
     verified_samples,
 )
-from .prompts import DEFAULT_INLINE_LAYERS, DEFAULT_LAYERS
+from .prompts import DEFAULT_FILE_LAYERS, DEFAULT_INLINE_LAYERS, DEFAULT_LAYERS
 from .ragflow import index_identity, validate_sample_scopes
 
 
@@ -38,10 +38,11 @@ def validate_ready_bundle(bundle: Path) -> tuple[dict, list[dict]]:
     tasks = read_jsonl(bundle / "public/tasks.jsonl")
     if [row["id"] for row in gold] != ids or [row["id"] for row in tasks] != ids or len(set(ids)) != manifest["samples"]:
         raise ValueError("sample, label, and rendered task inventories differ")
-    inline = document_mode(manifest) == "inline"
-    if inline:
+    mode = document_mode(manifest)
+    inline = mode == "inline"
+    if mode != "ragflow":
         if (bundle / "index.json").exists():
-            raise ValueError("inline release must not carry a RAGFlow index")
+            raise ValueError(f"{mode} release must not carry a RAGFlow index")
     else:
         state = json.loads((bundle / "index.json").read_text())
         if not state.get("ready") or state.get("public_sha256") != manifest["public_sha256"]:
@@ -65,6 +66,25 @@ def validate_ready_bundle(bundle: Path) -> tuple[dict, list[dict]]:
                 or public_context["documents"] != document_inventory(sample)
             ):
                 raise ValueError("inline task differs from its complete evidence scenario")
+        elif mode == "files":
+            from .pipeline import file_document_inventory
+
+            inventory = file_document_inventory(sample)
+            if (
+                task["benchmark"] != "dcc_files"
+                or task.get("document")
+                or public_context.get("document_mode") != "files"
+                or "retrieval" in public_context
+                or public_context["documents"] != inventory
+            ):
+                raise ValueError("file task differs from its original evidence documents")
+            references = {f["name"]: f["path"] for f in task["files"]}
+            expected_names = {d["file"] for d in inventory} | {r["file"] for r in public_context["rules"]} | {"dcc-context.json"}
+            if len(references) != len(task["files"]) or set(references) != expected_names:
+                raise ValueError("file task contains foreign or missing input files")
+            for asset, doc in zip(sample["documents"], inventory, strict=True):
+                if references[doc["file"]] != Path(asset["path"]).relative_to("public").as_posix():
+                    raise ValueError("file task document reference differs from its source asset")
         else:
             scope = state["scopes"][sample["id"]]
             ledger = state["datasets"][sample["id"]]
@@ -96,7 +116,7 @@ def copy_bundle(bundle: Path, target: Path) -> dict:
 
 def freeze_prompts(root: Path, config: dict) -> tuple[dict, dict]:
     prompts = deepcopy(config.get("prompts", {}))
-    prompts.setdefault("layers", list(DEFAULT_INLINE_LAYERS if document_mode(config) == "inline" else DEFAULT_LAYERS))
+    prompts.setdefault("layers", list({"inline": DEFAULT_INLINE_LAYERS, "ragflow": DEFAULT_LAYERS, "files": DEFAULT_FILE_LAYERS}[document_mode(config)]))
     groups = [prompts["layers"], *prompts.get("datasets", {}).values(), *prompts.get("samples", {}).values()]
     for group in groups:
         for index, layer in enumerate(group):

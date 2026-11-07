@@ -315,6 +315,21 @@ def merge_sp_counter(existing: int | None, new: int | None) -> int | None:
     return max(int(existing), int(new))
 
 
+def sp_action_count(state: Mapping[str, Any], run_id: str | None = None) -> int:
+    state_run = state.get("sp_loop_run_id")
+    if run_id and state_run and str(state_run) != str(run_id):
+        return 0
+    count = int(state.get("sp_loop_iteration") or 0)
+    ledger = state.get("sp_idempotency_ledger")
+    if not isinstance(ledger, Mapping):
+        return count
+    current_run = run_id or state_run
+    iterations = [int(item.get("loop_iteration") or 0) for item in ledger.values() if isinstance(item, Mapping) and item.get("run_id") == current_run and item.get("action_id")]
+    if iterations:
+        count = max(count, min(iterations) + len(iterations) - 1)
+    return count
+
+
 def merge_sp_report_version(existing: str | None, new: str | None) -> str | None:
     """Keep the highest report version across sibling artifact writers."""
     if new is None:
@@ -532,6 +547,12 @@ def merge_skill_context(existing: list[SkillEntry] | None, new: list[SkillEntry]
     return merged
 
 
+def merge_sp_source_access(left: dict | None, right: dict | None) -> dict:
+    from deerflow.sp.source_access import merge_source_access
+
+    return merge_source_access(left, right)
+
+
 class ThreadState(AgentState):
     sandbox: SandboxStateField
     thread_data: NotRequired[ThreadDataState | None]
@@ -548,6 +569,9 @@ class ThreadState(AgentState):
     # Caller-owned public acceptance contract; handlers already propagate its allowlist.
     sp_task_contract: Annotated[NotRequired[dict[str, Any] | None], merge_sp_last_value]
     sp_non_interactive: NotRequired[bool]
+    sp_recovery_limits: NotRequired[dict[str, int]]
+    sp_recovery_exhausted: NotRequired[dict[str, Any] | None]
+    sp_source_access: Annotated[NotRequired[dict[str, Any] | None], merge_sp_source_access]
     sp_task_memory: Annotated[SPTaskMemoryState | None, merge_sp_task_memory]
     sp_consumed_tool_observation_ids: ConsumedToolObservationIdsField
     sp_current_stage: Annotated[NotRequired[str | None], merge_sp_last_value]

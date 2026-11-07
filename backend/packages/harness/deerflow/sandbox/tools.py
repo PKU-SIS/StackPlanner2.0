@@ -8,9 +8,10 @@ import posixpath
 import re
 import shlex
 import tokenize
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from langchain.tools import tool
 
@@ -2343,15 +2344,58 @@ def _effective_write_file_max_bytes() -> int:
         return _WRITE_FILE_CONTENT_MAX_BYTES
 
 
+def _reporter_json_append_error(runtime: Runtime, sandbox: Sandbox, *, requested_path: str, resolved_path: str, content: str) -> str | None:
+    """Keep a current-action Reporter's complete JSON intact on a bad append."""
+    context = runtime.context
+    action_id = context.get("__sp_reporter_action_id") if isinstance(context, Mapping) else None
+    normalized_path = posixpath.normpath(requested_path)
+    if not isinstance(action_id, str) or not action_id or not normalized_path.startswith(f"{VIRTUAL_PATH_PREFIX}/outputs/") or not normalized_path.lower().endswith(".json"):
+        return None
+    # Reuse the native acceptance ownership rule; this context is supplied
+    # by the host SP factory, never by tool arguments or artifact metadata.
+    from deerflow.sp.actions.handlers.delegate import _report_created_path_matches_action
+
+    if not _report_created_path_matches_action(normalized_path, action_id):
+        return None
+    try:
+        current = sandbox.read_file(resolved_path)
+    except Exception:
+        # Missing/unreadable files retain the normal write tool behavior.
+        return None
+    if not isinstance(current, str):
+        return None
+    try:
+        json.loads(current)
+    except (ValueError, TypeError):
+        # Incomplete documents may still be constructed in normal chunks.
+        return None
+    try:
+        json.loads(current + content)
+    except (ValueError, TypeError):
+        return (
+            "Error: write_file refused an append that would invalidate this current-action JSON report. "
+            "The file already contains a complete JSON document and was not modified. "
+            "Read it with read_file, then return its result envelope or make an intentional revision with write_file/str_replace."
+        )
+    return None
+
+
 @tool("write_file", parse_docstring=True)
 def write_file_tool(
     runtime: Runtime,
     description: str,
     path: str,
-    content: str,
+    content: str | None = None,
     append: bool = False,
+    json_content: dict[str, Any] | list[Any] | None = None,
 ) -> str:
     """Write text content to a file. By default this overwrites the target file; set append=True to add content to the end without replacing existing content.
+
+    For a complete JSON object or array, prefer json_content and omit content.
+    This serializes the structured value once, preserving quotes, newlines,
+    backslashes and Unicode without hand-encoding a second JSON string.
+    json_content requires a .json path and append=False. For large documents,
+    the existing string content/append chunking path remains available.
 
     READ-BEFORE-WRITE (issue #3857): if the target file already exists (including
     append=True), you must have read its CURRENT version with read_file first.
@@ -2382,9 +2426,22 @@ def write_file_tool(
     Args:
         description: Explain why you are writing to this file in short words. ALWAYS PROVIDE THIS PARAMETER FIRST.
         path: The **absolute** path to the file to write to. ALWAYS PROVIDE THIS PARAMETER SECOND.
-        content: The content to write to the file. ALWAYS PROVIDE THIS PARAMETER THIRD.
+        content: String content to write, mutually exclusive with json_content. Use this for ordinary text or incremental string chunks.
         append: Whether to append content to the end of the file instead of overwriting it. Defaults to False.
+        json_content: A complete structured JSON object or array to serialize into a .json file with append=False. Omit content when using this option.
     """
+    if (content is None) == (json_content is None):
+        return "Error: write_file requires exactly one of content or json_content; the file was not modified."
+    if json_content is not None:
+        if append or not posixpath.normpath(path).lower().endswith(".json"):
+            return "Error: write_file json_content requires a .json path and append=False; the file was not modified. Use string content for incremental writes."
+        if not isinstance(json_content, (dict, list)):
+            return "Error: write_file json_content must be a JSON object or array; the file was not modified."
+        try:
+            content = json.dumps(json_content, ensure_ascii=False, allow_nan=False)
+        except (TypeError, ValueError) as error:
+            return f"Error: write_file json_content could not be serialized as JSON: {error}. The file was not modified."
+    assert content is not None
     if not append:
         syntax_error = _python_workspace_syntax_error(path, content)
         if syntax_error:
@@ -2412,6 +2469,10 @@ def write_file_tool(
                 path = _resolve_and_validate_user_data_path(path, thread_data)
             # Custom mount paths are resolved by LocalSandbox._resolve_path()
         with get_file_operation_lock(sandbox, path):
+            if append:
+                append_error = _reporter_json_append_error(runtime, sandbox, requested_path=requested_path, resolved_path=path, content=content)
+                if append_error:
+                    return append_error
             if not append:
                 try:
                     existing_content = sandbox.read_file(path)
@@ -2465,10 +2526,11 @@ async def _write_file_tool_async(
     runtime: Runtime,
     description: str,
     path: str,
-    content: str,
+    content: str | None = None,
     append: bool = False,
+    json_content: dict[str, Any] | list[Any] | None = None,
 ) -> str:
-    return await _run_sync_tool_after_async_sandbox_init(write_file_tool.func, runtime, description, path, content, append)
+    return await _run_sync_tool_after_async_sandbox_init(write_file_tool.func, runtime, description, path, content, append, json_content)
 
 
 write_file_tool.coroutine = _write_file_tool_async

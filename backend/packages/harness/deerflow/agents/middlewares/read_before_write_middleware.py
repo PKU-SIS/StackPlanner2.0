@@ -79,6 +79,18 @@ def _get_gate_lock(scope: str, norm_path: str) -> threading.Lock:
         return lock
 
 
+async def _acquire_gate_lock_async(lock: threading.Lock) -> None:
+    """Share the sync gate without occupying a worker while waiting.
+
+    The owner needs the default executor for file inspection and tool work.
+    Offloading blocking acquisitions can fill that pool with waiters and stop
+    the owner from releasing the lock. Polling also leaves no background
+    acquisition behind when the waiting coroutine is cancelled.
+    """
+    while not lock.acquire(blocking=False):
+        await asyncio.sleep(0.01)
+
+
 def _normalize_mark_path(path: str) -> str:
     return posixpath.normpath(path)
 
@@ -133,11 +145,8 @@ class ReadBeforeWriteMiddleware(AgentMiddleware):
             path = self._requested_path(request)
             if path is None:
                 return await handler(request)
-            # threading.Lock may be released from a different thread than the
-            # acquiring one, so acquiring in a worker thread and releasing on
-            # the event-loop thread is safe.
             lock = self._lock_for(request, path)
-            await asyncio.to_thread(lock.acquire)
+            await _acquire_gate_lock_async(lock)
             try:
                 blocked = await asyncio.to_thread(self._check_write_gate, request)
                 if blocked is not None:
@@ -150,7 +159,7 @@ class ReadBeforeWriteMiddleware(AgentMiddleware):
             if path is None:
                 return await handler(request)
             lock = self._lock_for(request, path)
-            await asyncio.to_thread(lock.acquire)
+            await _acquire_gate_lock_async(lock)
             try:
                 result = await handler(request)
                 await asyncio.to_thread(self._attach_read_mark, request, result)

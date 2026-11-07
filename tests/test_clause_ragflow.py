@@ -215,10 +215,11 @@ def test_plugin_registers_tool_in_native_app():
 
 def test_example_runtime_passes_bounded_reporter_budget_to_native_registry():
     from pathlib import Path
+    from types import SimpleNamespace
 
     from deerflow.config.app_config import AppConfig
+    from deerflow.subagents.executor import _reserve_subagent_loop_guard_budget
     from deerflow.subagents.registry import get_subagent_config
-    from deerflow.subagents.executor import _subagent_tool_loop_limits
 
     root = Path(__file__).resolve().parents[1]
     app = AppConfig.from_file(
@@ -226,9 +227,11 @@ def test_example_runtime_passes_bounded_reporter_budget_to_native_registry():
     )
     reporter = get_subagent_config("sp-reporter", app_config=app)
     assert reporter.max_turns == 128
-    assert _subagent_tool_loop_limits(reporter.max_turns, agent_name=reporter.name) == (
-        12,
-        20,
-    )
+    guard = SimpleNamespace(tool_freq_hard_limit=50, warn_threshold=3, hard_limit=5)
+    _reserve_subagent_loop_guard_budget([guard], max_turns=reporter.max_turns)
+    assert guard.tool_freq_hard_limit == 51
+    assert not hasattr(guard, "tool_total_hard_limit")
+    assert (guard.warn_threshold, guard.hard_limit) == (3, 5)
+    assert app.max_tool_calls_per_run == 200
     assert app.sandbox.read_file_output_max_chars == 262144
     assert app.models[0].extra_body["chat_template_kwargs"]["enable_thinking"] is False

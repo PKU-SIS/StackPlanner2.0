@@ -12,6 +12,9 @@ from deerflow.sp.actions.events import make_sp_event
 from deerflow.sp.actions.handlers.base import HandlerContext
 from deerflow.sp.actions.run_policy import active_run_policy
 from deerflow.sp.actions.schema import HandlerResult, SPAction
+from deerflow.sp.artifacts import SPArtifactAdapter
+from deerflow.sp.output_contract import output_contract_gaps
+from deerflow.sp.source_access import source_access_gaps
 from deerflow.utils.messages import message_to_text
 
 _REPORT_ARTIFACT_TYPES = frozenset({"report", "report_revision", "final_report"})
@@ -385,6 +388,17 @@ class FinishHandler:
             action,
             final_artifact_ref=final_artifact_ref,
         )
+        validation_text = final_summary
+        selected = _artifact_for_identifier(context, final_artifact_ref)
+        if selected is not None and isinstance(context.state.get("sp_task_contract"), Mapping) and "output_schema" in context.state["sp_task_contract"]:
+            materialized = SPArtifactAdapter().read_text_artifact(selected, state=context.state, thread_id=context.thread_id, max_chars=16 * 1024 * 1024)
+            validation_text = materialized[0] if materialized is not None and not materialized[1] else None
+        gaps = [*output_contract_gaps(context.state, validation_text), *source_access_gaps(context.state)]
+        if gaps:
+            return HandlerResult(
+                next_step="error_recoverable", idempotency_key=action.idempotency_key, error="; ".join(gaps),
+                run_events=[make_sp_event("sp.finish.rejected", action_id=action.action_id, run_id=context.run_id, reason="public_output_contract", evidence_gaps=gaps)],
+            )
         entry = context.stack.append_finish(
             final_summary,
             thread_id=context.thread_id,

@@ -196,3 +196,12 @@ class TestIndependentDimensions:
 
         assert result is not None
         assert "output token" in result["messages"][0].content
+
+
+def test_missing_provider_usage_uses_estimate_and_still_caps():
+    middleware = TokenBudgetMiddleware(TokenBudgetConfig(enabled=True, max_tokens=1000))
+    message = AIMessage(id="unmetered", content="large output " * 1000, tool_calls=[{"id": "next", "name": "bash", "args": {"command": "echo next"}}])
+    result = middleware.after_model({"messages": [message]}, _make_runtime())
+    assert result is not None
+    assert result["messages"][0].tool_calls == []
+    assert "estimated" in str(result["messages"][0].content).lower()

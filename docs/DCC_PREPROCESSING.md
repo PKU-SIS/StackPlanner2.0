@@ -18,6 +18,9 @@ loader(options) -> Sample
 
 ### 短场景直接输入
 
+FinAuditing XML 可另选[原生文件检索](DCC_FINAUDITING_FILES.md)：`document_mode: "files"`，
+逐题提供完整原文，由原生文件工具访问，不需要 RAGFlow。原 RAGFlow 配置和数据包保留。
+
 `document_mode: "inline"` 适用于 NBA 等短场景：prepare 后直接 render，不需要 RAGFlow。
 场景原文完整进入 prompt，规则仍以文件提供；独立插件 `native:make_inline_plugin` 使用
 `dcc_inline` benchmark，不注册检索工具。NBA 数据下载和使用见

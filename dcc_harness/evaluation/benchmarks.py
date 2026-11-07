@@ -19,6 +19,18 @@ from dcc_harness.data import PublicTask, Task
 PROTOCOL = "sp-native-benchmarks-v3"
 DELIVERY_CONTRACT = "native-finish-or-text-v1"
 MAX_DELIVERY_BYTES = 16 * 1024 * 1024
+_CENTRAL_POLICY_FAILURE_STATUSES = {
+    "SPCentralEmptyResponse": "empty_response",
+    "SPCentralInvalidToolCall": "protocol_error",
+    "SPCentralToolProtocolError": "protocol_error",
+}
+
+
+def native_model_error_status(error_type: object) -> str:
+    """Classify exact native policy errors; preserve unknown/provider failures."""
+    if isinstance(error_type, str):
+        return _CENTRAL_POLICY_FAILURE_STATUSES.get(error_type, "infrastructure_error")
+    return "infrastructure_error"
 
 
 class DeliveryError(ValueError):
@@ -30,6 +42,11 @@ class DeliveryError(ValueError):
 def extract_delivery(
     state: dict, *, thread_id: str, run_id: str, native_returned: bool = False
 ) -> tuple[str, dict | None]:
+    if state.get("sp_recovery_exhausted"):
+        raise DeliveryError(
+            "recovery_exhausted",
+            "native recovery budget exhausted with unresolved acceptance gaps",
+        )
     if state.get("sp_pending_human_interaction"):
         raise DeliveryError("ask_human", "native SP requests human input")
     if (
@@ -44,6 +61,7 @@ def extract_delivery(
         text = str(state.get("sp_last_run_summary") or "").strip()
         if not text:
             raise DeliveryError("final_parse_error", "accepted text delivery is empty")
+        _check_public_output_contract(state, text)
         return text, None
     refs = state.get("sp_current_artifact_refs") or {}
     candidates = [
@@ -137,7 +155,23 @@ def extract_delivery(
         selected_ref.update(
             observed_sha256=observed_hash, integrity="native_existing_file_snapshot"
         )
+    _check_public_output_contract(state, text)
     return text, selected_ref
+
+
+def _check_public_output_contract(state: dict, text: str) -> None:
+    from deerflow.sp.output_contract import output_contract_gaps
+    from deerflow.sp.source_access import (
+        public_audit_completion_gaps,
+        source_access_gaps,
+    )
+
+    gaps = output_contract_gaps(state, text)
+    if gaps:
+        raise DeliveryError("final_parse_error", "; ".join(gaps))
+    gaps = [*source_access_gaps(state), *public_audit_completion_gaps(state)]
+    if gaps:
+        raise DeliveryError("unfinished", "; ".join(gaps))
 
 
 def _native_text_delivery(state: dict, *, run_id: str, native_returned: bool) -> str:
@@ -174,7 +208,10 @@ def _native_text_delivery(state: dict, *, run_id: str, native_returned: bool) ->
         )
     extra = latest.additional_kwargs
     if extra.get("error_type"):
-        raise DeliveryError("infrastructure_error", "native model returned an error")
+        raise DeliveryError(
+            native_model_error_status(extra["error_type"]),
+            "native model returned an error",
+        )
     if latest.invalid_tool_calls:
         raise DeliveryError(
             "protocol_error", "native return contains invalid tool calls"
@@ -228,7 +265,9 @@ def _native_text_delivery(state: dict, *, run_id: str, native_returned: bool) ->
             )
         )
     )
-    if "DSML" in text:
+    from deerflow.sp.control_protocol import has_unrecovered_control_syntax
+
+    if has_unrecovered_control_syntax(text):
         raise DeliveryError(
             "protocol_error", "native response contains unrecovered tool syntax"
         )
@@ -240,6 +279,7 @@ def _native_text_delivery(state: dict, *, run_id: str, native_returned: bool) ->
         raise DeliveryError(
             "final_parse_error", "native text delivery is empty, invalid, or oversized"
         )
+    _check_public_output_contract(state, text)
     return text
 
 

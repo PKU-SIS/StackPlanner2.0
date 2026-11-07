@@ -328,7 +328,7 @@ class TestRegistryGetSubagentConfig:
         _reset_subagents_config(timeout_seconds=900)
         config = get_subagent_config("general-purpose")
         assert config.timeout_seconds == 900
-        assert config.max_turns == 150
+        assert config.max_turns == 480
 
     def test_builtin_defaults_have_research_headroom(self):
         """Out-of-box defaults (no config.yaml subagents section) must give
@@ -339,10 +339,10 @@ class TestRegistryGetSubagentConfig:
 
         load_subagents_config_from_dict({})  # no subagents config -> model defaults
         config = get_subagent_config("general-purpose")
-        assert config.max_turns == 150
+        assert config.max_turns == 480
         assert config.timeout_seconds == 1800
         # Pin bash too so the config.example.yaml "bash=60" doc cannot drift.
-        assert get_subagent_config("bash").max_turns == 60
+        assert get_subagent_config("bash").max_turns == 480
 
     def test_global_timeout_override_applied(self):
         from deerflow.subagents.registry import get_subagent_config

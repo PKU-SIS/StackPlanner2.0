@@ -122,6 +122,25 @@ def test_internal_make_lead_agent_uses_explicit_app_config(monkeypatch):
     assert result["model"] is not None
 
 
+def test_outer_model_retry_middleware_follows_native_after_model_guards(monkeypatch):
+    import deerflow.tools as tools_module
+
+    app_config = _make_app_config([_make_model("safe-model", supports_thinking=False)])
+    correction, native_guard = object(), object()
+    monkeypatch.setattr(tools_module, "get_available_tools", lambda **kwargs: [])
+    monkeypatch.setattr(lead_agent_module, "build_middlewares", lambda *args, **kwargs: [native_guard])
+    monkeypatch.setattr(lead_agent_module, "build_tracing_callbacks", lambda: [])
+    monkeypatch.setattr(lead_agent_module, "create_chat_model", lambda **kwargs: object())
+    monkeypatch.setattr(lead_agent_module, "create_agent", lambda **kwargs: kwargs)
+    result = lead_agent_module._make_lead_agent(
+        {"configurable": {"model_name": "safe-model"}},
+        app_config=app_config,
+        outer_middlewares=[correction],
+    )
+    # LangChain after_model hooks run in reverse registration order.
+    assert result["middleware"] == [correction, native_guard]
+
+
 def test_internal_make_lead_agent_can_bind_only_explicit_control_tools(monkeypatch):
     from deerflow.sp.agent_tools import build_sp_control_tools
 
@@ -481,7 +500,7 @@ def test_build_middlewares_passes_explicit_app_config_to_shared_factory(monkeypa
 def test_control_plane_middlewares_keep_conversation_summary_without_skill_or_memory_side_channels(monkeypatch):
     app_config = _make_app_config([_make_model("safe-model", supports_thinking=False)])
     monkeypatch.setattr(lead_agent_module, "build_lead_runtime_middlewares", lambda *, app_config, lazy_init=True: [])
-    monkeypatch.setattr(lead_agent_module, "_create_summarization_middleware", lambda *, app_config=None: None)
+    monkeypatch.setattr(lead_agent_module, "_create_summarization_middleware", lambda *, app_config=None, main_model_name=None, output_token_limit=None: None)
     monkeypatch.setattr(lead_agent_module, "_create_todo_list_middleware", lambda is_plan_mode: None)
 
     middlewares = lead_agent_module.build_middlewares(
@@ -514,7 +533,7 @@ def test_build_middlewares_uses_loop_detection_config(monkeypatch):
 
     monkeypatch.setattr(lead_agent_module, "get_app_config", lambda: app_config)
     monkeypatch.setattr(lead_agent_module, "build_lead_runtime_middlewares", lambda *, app_config, lazy_init=True: [])
-    monkeypatch.setattr(lead_agent_module, "_create_summarization_middleware", lambda *, app_config=None: None)
+    monkeypatch.setattr(lead_agent_module, "_create_summarization_middleware", lambda *, app_config=None, main_model_name=None, output_token_limit=None: None)
     monkeypatch.setattr(lead_agent_module, "_create_todo_list_middleware", lambda is_plan_mode: None)
 
     middlewares = lead_agent_module.build_middlewares(
@@ -540,7 +559,7 @@ def test_build_middlewares_omits_loop_detection_when_disabled(monkeypatch):
 
     monkeypatch.setattr(lead_agent_module, "get_app_config", lambda: app_config)
     monkeypatch.setattr(lead_agent_module, "build_lead_runtime_middlewares", lambda *, app_config, lazy_init=True: [])
-    monkeypatch.setattr(lead_agent_module, "_create_summarization_middleware", lambda *, app_config=None: None)
+    monkeypatch.setattr(lead_agent_module, "_create_summarization_middleware", lambda *, app_config=None, main_model_name=None, output_token_limit=None: None)
     monkeypatch.setattr(lead_agent_module, "_create_todo_list_middleware", lambda is_plan_mode: None)
 
     middlewares = lead_agent_module.build_middlewares(

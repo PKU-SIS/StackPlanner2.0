@@ -26,13 +26,21 @@ from dcc_harness.datasets.benchmark_plugins import (
 from dcc_harness.datasets.benchmarks import Task
 from dcc_harness.model_transport import _loop_local_async_client
 
-from .benchmarks import PROTOCOL, DeliveryError, extract_delivery
+from .benchmarks import (
+    PROTOCOL,
+    DeliveryError,
+    extract_delivery,
+    native_model_error_status,
+)
 
 
 class _LoopLocalTransport:
     """Keep native model behavior while isolating its asynchronous pool."""
 
     def __init__(self, **kwargs):
+        from deerflow.models.factory import _apply_stream_chunk_timeout_default
+
+        _apply_stream_chunk_timeout_default("langchain_openai:ChatOpenAI", kwargs)
         kwargs["http_async_client"] = _loop_local_async_client(
             timeout=kwargs.get("timeout")
         )
@@ -62,15 +70,6 @@ class BenchmarkChatOpenAI(_LoopLocalTransport, ChatOpenAI):
     """OpenAI-compatible evaluation transport for native Central and helpers."""
 
     request_adapter_spec: str | None = None
-
-    def __init__(self, **kwargs):
-        from deerflow.models.factory import _apply_stream_chunk_timeout_default
-
-        # Native factory defaults are keyed by the configured provider path.
-        # Preserve its OpenAI stream budget when using this external subclass.
-        _apply_stream_chunk_timeout_default("langchain_openai:ChatOpenAI", kwargs)
-        super().__init__(**kwargs)
-
 
 class BenchmarkVllmChatModel(_LoopLocalTransport, VllmChatModel):
     """The same loop isolation with native Qwen/vLLM tool-call recovery."""
@@ -205,8 +204,12 @@ def failure_status(state: dict) -> str:
     for message in reversed(json_value(state.get("messages") or [])):
         if message.get("type") != "ai":
             continue
-        if (message.get("additional_kwargs") or {}).get("error_type"):
-            return "infrastructure_error"
+        error_type = (message.get("additional_kwargs") or {}).get("error_type")
+        if error_type:
+            # Native LLMErrorHandlingMiddleware serializes type(exc).__name__.
+            # These exact errors follow a returned, invalid policy generation;
+            # keep unknown/provider/transport errors on the infrastructure path.
+            return native_model_error_status(error_type)
         if message.get("invalid_tool_calls") or (
             "DSML" in str(message.get("content", "")) and not message.get("tool_calls")
         ):

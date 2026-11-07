@@ -76,6 +76,8 @@ class SPSubagentTask:
         if not isinstance(self.budgets, dict):
             raise ValueError("SP A2A task budgets must be an object")
         for name, value in self.budgets.items():
+            if name not in {"max_tool_calls", "max_searches", "max_turns", "timeout_seconds", "max_tokens", "max_input_tokens", "max_output_tokens"}:
+                raise ValueError(f"Unsupported SP A2A budget: {name!r}")
             if not isinstance(name, str) or not name.strip():
                 raise ValueError("SP A2A task budget names must be non-empty strings")
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
@@ -122,6 +124,11 @@ class SPSubagentResult:
     recommended_action: str | None = None
     changed_files: list[str] = field(default_factory=list)
     tests: list[dict[str, Any]] = field(default_factory=list)
+    # Host-derived access only; never deserialized from a model result payload.
+    source_access: dict[str, Any] | None = None
+    # Actual paired successful native writes from this executor/action only.
+    # Never populate from model-authored artifact_metadata or result payloads.
+    created_path_evidence: dict[str, Any] | None = None
 
     def protocol_payload(self, *, task: SPSubagentTask | None = None) -> dict[str, Any]:
         """Return a compact result envelope; never include hidden reasoning."""

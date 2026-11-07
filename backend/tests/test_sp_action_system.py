@@ -18,12 +18,8 @@ def _action(action_type: ActionType | str, **kwargs):
 
 def test_data_processing_delegation_does_not_inherit_software_contract():
     stack = TaskMemoryStack()
-    stack.append_delegate(
-        "Implement an earlier software fix", run_id="run-1", stage="implementation", metadata={"target_agent": "coder", "requires_implementation": True}
-    )
-    executor = FakeSubagentExecutor(
-        SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Data checked.", artifact_metadata={"completion_status": "complete"})
-    )
+    stack.append_delegate("Implement an earlier software fix", run_id="run-1", stage="implementation", metadata={"target_agent": "coder", "requires_implementation": True})
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Data checked.", artifact_metadata={"completion_status": "complete"}))
     action = _action(
         ActionType.DELEGATE,
         target_agent="coder",
@@ -42,14 +38,15 @@ def test_data_processing_delegation_does_not_inherit_software_contract():
     assert observation.metadata["coder_task_kind"] == "data_processing"
 
 
-def test_software_coder_result_cannot_downgrade_its_acceptance_contract(tmp_path):
+@pytest.mark.parametrize("kind_key", ["task_kind", "coder_task_kind"])
+def test_software_coder_result_cannot_downgrade_its_acceptance_contract(tmp_path, kind_key):
     executor = FakeSubagentExecutor(
         SPSubagentResult(
             status=SPSubagentStatus.COMPLETED,
             result="Source fix incomplete.",
             artifact_content="Existing source needs repair.",
             artifact_type="generated_file",
-            artifact_metadata={"completion_status": "partial", "coder_task_kind": "data_processing", "evidence_gaps": ["Source change missing."]},
+            artifact_metadata={"completion_status": "partial", kind_key: "data_processing", "evidence_gaps": ["Source change missing."]},
         )
     )
     result = build_default_action_router(delegate_executor=executor).execute(
@@ -61,8 +58,10 @@ def test_software_coder_result_cannot_downgrade_its_acceptance_contract(tmp_path
 
     assert executor.tasks[0].metadata["requires_implementation"] is True
     assert observation.metadata["coder_task_kind"] == "software_change"
+    assert observation.metadata["task_kind"] == "software_change"
     artifact = result.state_update["sp_current_artifact_refs"]["generated_file"]
     assert artifact["metadata"]["coder_task_kind"] == "software_change"
+    assert artifact["metadata"]["task_kind"] == "software_change"
 
 
 @pytest.mark.parametrize("recovery_metadata", [{"coder_task_kind": "data_processing"}, {}])
@@ -80,12 +79,8 @@ def test_data_processing_recovery_does_not_turn_into_source_implementation(recov
             "evidence_gaps": ["One required record is still missing."],
         },
     )
-    executor = FakeSubagentExecutor(
-        SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Checked missing record.", artifact_metadata={"completion_status": "complete"})
-    )
-    action = _action(
-        ActionType.DELEGATE, target_agent="coder", task="Recheck the missing record without editing source.", stage="verification", metadata=recovery_metadata
-    )
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Checked missing record.", artifact_metadata={"completion_status": "complete"}))
+    action = _action(ActionType.DELEGATE, target_agent="coder", task="Recheck the missing record without editing source.", stage="verification", metadata=recovery_metadata)
 
     build_default_action_router(delegate_executor=executor).execute(action, state={"sp_task_memory": stack.to_dict()}, run_id="run-1")
 
@@ -130,12 +125,7 @@ def test_report_language_still_rejects_english_narrative_with_chinese_data():
         description="Language check",
         context_refs={"original_query": "请根据材料撰写中文分析报告。"},
     )
-    report = (
-        "# Analysis\n\n"
-        + "The evidence supports these conclusions and recommendations. " * 15
-        + "\n\n| 字段 | 值 |\n| --- | --- |\n"
-        + "| 中文 | 中文数据 |\n" * 50
-    )
+    report = "# Analysis\n\n" + "The evidence supports these conclusions and recommendations. " * 15 + "\n\n| 字段 | 值 |\n| --- | --- |\n" + "| 中文 | 中文数据 |\n" * 50
 
     assert _report_language_alignment_gaps(report, task=task)
 
@@ -155,10 +145,7 @@ def test_report_language_preserves_original_citation_labels():
     assert _report_language_alignment_gaps(report, task=task) == []
     english = "# Analysis\n" + "The evidence supports these conclusions and recommendations. " * 20 + "\nhttps://example.org"
     assert _report_language_alignment_gaps(english, task=task)
-    english_in_sources = (
-        "# 分析\n以下为根据来源撰写的分析报告。\n## Sources\n- [Reference](https://example.org) "
-        + "The evidence supports these conclusions and recommendations. " * 20
-    )
+    english_in_sources = "# 分析\n以下为根据来源撰写的分析报告。\n## Sources\n- [Reference](https://example.org) " + "The evidence supports these conclusions and recommendations. " * 20
     assert _report_language_alignment_gaps(english_in_sources, task=task)
     assert _report_language_alignment_gaps("# 分析\n" + "以下为根据来源撰写的分析报告。" * 20 + "\n## Sources\n- https://", task=task) == []
 
@@ -166,9 +153,7 @@ def test_report_language_preserves_original_citation_labels():
 def test_report_reference_check_does_not_treat_url_paths_as_identifiers():
     from deerflow.sp.actions.handlers.delegate import _report_literal_provenance_gaps
 
-    introduced, _ = _report_literal_provenance_gaps(
-        "Date format YYYY-MM-DD. Source https://en.wikipedia.org/wiki/A_Killer_Paradox and https://example.org/AUDIT-1", required_tokens=["YYYY-MM-DD"]
-    )
+    introduced, _ = _report_literal_provenance_gaps("Date format YYYY-MM-DD. Source https://en.wikipedia.org/wiki/A_Killer_Paradox and https://example.org/AUDIT-1", required_tokens=["YYYY-MM-DD"])
     assert introduced == []
 
 
@@ -177,9 +162,7 @@ def test_report_reference_authorization_uses_evidence_not_previous_report(tmp_pa
     from deerflow.sp.artifacts import SPArtifactAdapter
 
     state = {**_thread_state_with_outputs(tmp_path), "messages": [HumanMessage(content="Preserve `POLICY-V3`; do not invent audit IDs.")]}
-    source = SPArtifactAdapter().write_text_artifact(
-        "Source contains `EUR_HAB`; optional field `PC_GDP`.", artifact_type=source_type, state=state, thread_id="thread-1", run_id="run-1"
-    )
+    source = SPArtifactAdapter().write_text_artifact("Source contains `EUR_HAB`; optional field `PC_GDP`.", artifact_type=source_type, state=state, thread_id="thread-1", run_id="run-1")
     state.update(source.state_update)
     executor = FakeSubagentExecutor(
         SPSubagentResult(
@@ -683,6 +666,7 @@ def test_router_normalizes_recovery_to_coder_when_source_implementation_is_missi
         metadata={
             "target_agent": "coder",
             "completion_status": "partial",
+            "requires_implementation": True,
             "evidence_gaps": ["Coder claimed the implementation was complete, but no non-test source file was changed."],
         },
     )
@@ -733,6 +717,7 @@ def test_router_keeps_partial_implemented_patch_with_coder_for_verification():
         metadata={
             "target_agent": "coder",
             "completion_status": "partial",
+            "requires_implementation": True,
             "evidence_gaps": ["Native focused tests are blocked by an incompatible host dependency."],
             "implementation_verification": {"passed": True, "changed_source_paths": ["pkg/core.py"]},
         },
@@ -777,6 +762,7 @@ def test_router_infers_missing_revision_target_from_latest_partial_specialist():
         stage="implementation",
         metadata={
             "completion_status": "partial",
+            "requires_implementation": True,
             "evidence_gaps": ["Native tests are blocked by the host environment."],
             "implementation_verification": {"passed": True},
         },
@@ -817,6 +803,7 @@ def test_router_keeps_partial_verification_with_coder_without_implementation_met
         stage="verification",
         metadata={
             "completion_status": "partial",
+            "requires_implementation": True,
             "evidence_gaps": ["Verification tests remain unavailable."],
         },
     )
@@ -934,9 +921,7 @@ def test_targeted_reflection_is_idempotent_for_an_already_inactive_target():
     assert restored.entries[-1].action == "reflect"
     assert restored.entries[-1].metadata["skipped_inactive_target_ids"] == [wrong.id]
     assert not any(event["event_type"] == "sp.handler.failed" for event in result.run_events)
-    assert any(
-        event["event_type"] == "sp.reflect.targets_already_inactive" and event["payload"]["source_entry_ids"] == [wrong.id] for event in result.run_events
-    )
+    assert any(event["event_type"] == "sp.reflect.targets_already_inactive" and event["payload"]["source_entry_ids"] == [wrong.id] for event in result.run_events)
 
 
 def test_targeted_reflection_cannot_backtrack_pinned_human_memory():
@@ -2187,9 +2172,7 @@ def test_delegate_recovery_counter_is_owned_by_harness_and_resets_only_on_comple
     state = _thread_state_with_outputs(tmp_path)
     for index, status in enumerate(("partial", "partial", "complete", "partial")):
         if index:
-            inspection = router.execute(
-                _action(ActionType.THINK, action_id=f"inspect-{index}", task="Inspect the preceding outcome before continuing"), state=state, run_id="r"
-            )
+            inspection = router.execute(_action(ActionType.THINK, action_id=f"inspect-{index}", task="Inspect the preceding outcome before continuing"), state=state, run_id="r")
             state.update(inspection.state_update)
         executor.result = SPSubagentResult(
             status=SPSubagentStatus.COMPLETED,
@@ -2400,9 +2383,7 @@ def test_perception_acceptance_converts_decision_critical_gaps_to_questions(
             status=SPSubagentStatus.COMPLETED,
             result="Task brief normalized.",
             task_id="perception-missing-inputs",
-            artifact_content=(
-                "Objective: Create a board report.\n\nDecision-Critical Missing Information: reporting period, region metrics, and the source documents."
-            ),
+            artifact_content=("Objective: Create a board report.\n\nDecision-Critical Missing Information: reporting period, region metrics, and the source documents."),
             artifact_type="perception_observation",
             artifact_metadata={
                 "completion_status": "complete",
@@ -2426,9 +2407,7 @@ def test_perception_acceptance_converts_decision_critical_gaps_to_questions(
 
     ref = result.state_update["sp_current_artifact_refs"]["perception_observation"]
     assert ref["metadata"]["task_ready"] is False
-    assert ref["metadata"]["clarification_questions"] == [
-        ("Please provide or confirm the following decision-critical information before I continue: reporting period, region metrics, and the source documents.")
-    ]
+    assert ref["metadata"]["clarification_questions"] == [("Please provide or confirm the following decision-critical information before I continue: reporting period, region metrics, and the source documents.")]
 
 
 def test_perception_acceptance_infers_inputs_for_unsourced_report_request(
@@ -2736,10 +2715,44 @@ def test_self_contained_exact_enumeration_is_rerouted_from_researcher_to_coder(
         "str_replace",
         "bash",
     ]
-    assert any(
-        event["event_type"] == "sp.delegate.target_normalized" and event["payload"]["from_target"] == "researcher" and event["payload"]["to_target"] == "coder"
-        for event in result.run_events
+    assert any(event["event_type"] == "sp.delegate.target_normalized" and event["payload"]["from_target"] == "researcher" and event["payload"]["to_target"] == "coder" for event in result.run_events)
+
+
+def test_retrieval_scope_keeps_numeric_research_with_the_selected_researcher(tmp_path):
+    tools = ["read_file", "grep", "ragflow_retrieve"]
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Evidence inspected", artifact_metadata={"completion_status": "complete"}))
+    result = build_default_action_router(delegate_executor=executor).execute(
+        _action(ActionType.DELEGATE, target_agent="researcher", task="Read the supplied filings and calculate the requested total.", stage="research", metadata={"tool_names": tools}),
+        state=_thread_state_with_outputs(tmp_path),
+        run_id="run-1",
     )
+
+    task = executor.tasks[0]
+    assert task.subagent_type == "researcher"
+    assert task.stage == "research"
+    assert task.metadata["tool_names"] == tools
+    observation = TaskMemoryStack.from_dict(result.state_update["sp_task_memory"]).entries[-1]
+    assert observation.actor == "researcher"
+    assert "execution_verification" not in observation.metadata
+
+
+@pytest.mark.parametrize("kind_key", ["task_kind", "coder_task_kind"])
+def test_router_keeps_explicit_data_processing_coder_for_api_audits(tmp_path, kind_key):
+    tools = ["read_file", "ragflow_retrieve", "bash"]
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Audit incomplete", artifact_metadata={"completion_status": "partial"}))
+    build_default_action_router(delegate_executor=executor).execute(
+        _action(
+            ActionType.DELEGATE, target_agent="coder", task="Query the official API and calculate the requested total.", stage="implementation", metadata={kind_key: "data_processing", "requires_implementation": False, "tool_names": tools}
+        ),
+        state=_thread_state_with_outputs(tmp_path),
+        run_id="run-1",
+    )
+
+    task = executor.tasks[0]
+    assert task.subagent_type == "coder"
+    assert task.stage == "implementation"
+    assert task.metadata["tool_names"] == tools
+    assert task.metadata["task_kind"] == "data_processing"
 
 
 def test_read_only_external_api_retrieval_is_rerouted_from_coder_to_researcher(
@@ -2938,6 +2951,234 @@ def test_external_evidence_enumeration_stays_with_researcher(tmp_path):
     assert executor.tasks[0].subagent_type == "researcher"
 
 
+@pytest.mark.parametrize(
+    "content,complete",
+    [
+        ('[{"text": "unescaped "quote""}]', False),
+        ("[][]", False),
+        ('["' + "x" * 100_000 + '"]', True),
+        ('["' + "x" * 100_000 + '" "tail"]', False),
+        ("[]", True),
+    ],
+)
+def test_reporter_checks_actual_json_file_instead_of_self_report(tmp_path, content, complete):
+    state = _thread_state_with_outputs(tmp_path)
+    outputs = tmp_path / "threads" / "thread-1" / "user-data" / "outputs"
+    outputs.mkdir(parents=True, exist_ok=True)
+    path = outputs / "answer-report-json.json"
+    path.write_text(content, encoding="utf-8")
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="JSON written and checked.",
+            artifact_type="report_revision",
+            artifact_metadata={
+                "completion_status": "complete",
+                "created_paths": ["/mnt/user-data/outputs/answer-report-json.json"],
+                "quality_checks": {"json_array_only": True, "json_artifact_syntax": {"passed": True}},
+            },
+        )
+    )
+    router = build_default_action_router(delegate_executor=executor)
+    outcome = router.execute(
+        _action(ActionType.DELEGATE, action_id="report-json", target_agent="reporter", task="Write the requested JSON answer file.", stage="reporting"),
+        state=state,
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+
+    ref = outcome.state_update["sp_current_artifact_refs"]["report_revision"]
+    check = ref["metadata"]["quality_checks"]["json_artifact_syntax"]
+    assert check["passed"] is complete
+    assert ref["metadata"]["completion_status"] == ("complete" if complete else "partial")
+    assert path.read_text(encoding="utf-8") == content
+    if not complete:
+        assert "JSON" in "; ".join(ref["metadata"]["evidence_gaps"])
+        assert "line" in "; ".join(ref["metadata"]["evidence_gaps"])
+        rejected = router.execute(
+            _action(ActionType.FINISH, task="Done", metadata={"final_artifact_ref": ref["artifact_id"], "required_artifact_type": "report"}),
+            state={**state, **outcome.state_update},
+            thread_id="thread-1",
+            run_id="run-1",
+        )
+        assert rejected.next_step == "error_recoverable"
+
+
+@pytest.mark.parametrize("content,complete", [("[] []", False), ([], True)])
+def test_reporter_json_filename_fallback_is_validated_before_writing(tmp_path, content, complete):
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="JSON answer ready.",
+            artifact_content=content,
+            artifact_type="report_revision",
+            artifact_metadata={"completion_status": "complete", "filename": "answer.json"},
+        )
+    )
+    outcome = build_default_action_router(delegate_executor=executor).execute(
+        _action(ActionType.DELEGATE, action_id="json-fallback", target_agent="reporter", task="Write a JSON answer file.", stage="reporting"),
+        state=_thread_state_with_outputs(tmp_path),
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+    ref = outcome.state_update["sp_current_artifact_refs"]["report_revision"]
+    assert ref["metadata"]["quality_checks"]["json_artifact_syntax"]["passed"] is complete
+    assert ref["metadata"]["completion_status"] == ("complete" if complete else "partial")
+
+
+@pytest.mark.parametrize(
+    "user_request,content,declared_paths,complete",
+    [
+        ("Return only a JSON array.", '[{"text":"missing "escape""}]', [], False),
+        ("Return only a JSON array.", '<tool_call>{"name":"write_file","arguments":{}}</tool_call>', [], False),
+        ("The required deliverable is a UTF-8 .json file containing only the requested JSON array.", "[] []", [], False),
+        ("输出严格的JSON数组。", "[] []", [], False),
+        ("Return the requested answer.", "[] []", ["/mnt/user-data/outputs/answer-old-action.json"], False),
+        ("Return only a JSON array.", "[]", [], True),
+        ("Write a Markdown guide to JSON arrays.", "# Guide\nJSON arrays use brackets.", [], True),
+    ],
+)
+def test_reporter_json_contract_cannot_be_bypassed_by_markdown_fallback(tmp_path, user_request, content, declared_paths, complete):
+    state = {**_thread_state_with_outputs(tmp_path), "messages": [HumanMessage(content=user_request)]}
+    old_file = None
+    if declared_paths:
+        from pathlib import Path
+
+        old_file = Path(state["thread_data"]["outputs_path"]) / "answer-old-action.json"
+        old_file.parent.mkdir(parents=True, exist_ok=True)
+        old_file.write_text("[]\n", encoding="utf-8")
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Answer ready.",
+            artifact_content=content,
+            artifact_type="report_revision",
+            artifact_metadata={"completion_status": "complete", "created_paths": declared_paths},
+        )
+    )
+    outcome = build_default_action_router(delegate_executor=executor).execute(
+        _action(ActionType.DELEGATE, action_id="json-fallback-check", target_agent="reporter", task="Deliver the user's requested answer.", stage="reporting"),
+        state=state,
+        thread_id="thread-1",
+        run_id="run-1",
+    )
+    ref = outcome.state_update["sp_current_artifact_refs"]["report_revision"]
+    assert ref["metadata"]["completion_status"] == ("complete" if complete else "partial")
+    assert ref["virtual_path"].endswith(".md")
+    assert ref["metadata"]["created_paths"] == []
+    if old_file is not None:
+        assert old_file.read_text(encoding="utf-8") == "[]\n"
+    if not complete:
+        check = ref["metadata"]["quality_checks"]["json_artifact_syntax"]
+        assert check["passed"] is False
+        assert "JSON" in "; ".join(check["evidence_gaps"])
+
+
+def test_partial_data_observation_retains_handler_owned_tool_scope(tmp_path):
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="One source still needs retrieval.",
+            artifact_content="Partial extraction",
+            artifact_type="generated_file",
+            artifact_metadata={"completion_status": "partial", "evidence_gaps": ["One source still needs retrieval."], "tool_names": ["web_search"], "skill_names": ["child-invented"]},
+        )
+    )
+    result = build_default_action_router(delegate_executor=executor).execute(
+        _action(ActionType.DELEGATE, target_agent="coder", task="Extract source data.", stage="research", metadata={"task_kind": "data_processing", "tool_names": ["ragflow_retrieve", "read_file", "bash"], "skill_names": ["source-audit"]}),
+        state=_thread_state_with_outputs(tmp_path),
+        run_id="run-1",
+    )
+    observation = TaskMemoryStack.from_dict(result.state_update["sp_task_memory"]).entries[-1]
+    assert observation.metadata["completion_status"] == "partial"
+    assert observation.metadata["tool_names"] == executor.tasks[0].metadata["tool_names"]
+    assert "web_search" not in observation.metadata["tool_names"]
+    assert observation.metadata["skill_names"] == ["source-audit"]
+    assert "child-invented" not in observation.metadata["skill_names"]
+
+
+@pytest.mark.parametrize("previous_run", ["run-1", "older-run"])
+@pytest.mark.parametrize("explicit", [False, True])
+@pytest.mark.parametrize("stage", ["revision", "reporting"])
+def test_reporter_revision_inherits_only_same_run_validated_scope(previous_run, explicit, stage):
+    from deerflow.sp.actions.handlers.base import HandlerContext
+    from deerflow.sp.actions.handlers.delegate import DelegateHandler
+
+    previous_tools = ["read_file", "grep", "write_file", "str_replace"]
+    stack = TaskMemoryStack()
+    stack.append_observe(
+        "Report needs revision",
+        actor="reporter",
+        run_id=previous_run,
+        metadata={"completion_status": "partial", "recovery_attempt": 1, "skill_names": ["source-audit"], "tool_names": previous_tools},
+    )
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Still incomplete", artifact_metadata={"completion_status": "partial"}))
+    metadata = {"skill_names": ["new-audit"], "tool_names": ["read_file"]} if explicit else {"skill_names": [], "tool_names": []}
+    DelegateHandler(executor=executor).handle(
+        _action(ActionType.DELEGATE, target_agent="reporter", task="Revise the original report", stage=stage, metadata=metadata),
+        HandlerContext(state={}, stack=stack, run_id="run-1"),
+    )
+    task = executor.tasks[0]
+    if explicit:
+        assert task.metadata["skill_names"] == ["new-audit"]
+        assert "str_replace" not in task.metadata["tool_names"]
+    elif previous_run == "run-1":
+        assert task.metadata["skill_names"] == ["source-audit"]
+        assert task.metadata["tool_names"] == previous_tools
+    else:
+        assert not task.metadata.get("skill_names")
+        assert "str_replace" not in task.metadata["tool_names"]
+
+
+def test_reporter_recovery_limit_is_enforced_before_executor_without_an_artifact():
+    from deerflow.sp.actions.handlers.base import HandlerContext
+    from deerflow.sp.actions.handlers.delegate import DelegateHandler
+
+    stack = TaskMemoryStack()
+    for attempt in range(1, 4):
+        stack.append_delegate("Write report", run_id="run-1", metadata={"target_agent": "reporter", "recovery_attempt": attempt})
+        stack.append_observe("No report artifact", actor="reporter", run_id="run-1", metadata={"completion_status": "partial", "recovery_attempt": attempt, "evidence_gaps": ["No report artifact"]})
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Must not run"))
+    result = DelegateHandler(executor=executor).handle(
+        _action(ActionType.DELEGATE, target_agent="reporter", task="Try another report", stage="revision"),
+        HandlerContext(state={}, stack=stack, run_id="run-1"),
+    )
+
+    assert executor.tasks == []
+    assert result.next_step == "error_recoverable"
+    assert "recovery limit" in result.error
+    assert stack.entries[-1].metadata["completion_status"] == "partial"
+    assert stack.entries[-1].metadata["evidence_gaps"] == ["No report artifact"]
+
+
+def test_reporter_dispatch_uses_same_explicit_budget_as_schema_gate():
+    from deerflow.sp.actions.handlers.base import HandlerContext
+    from deerflow.sp.actions.handlers.delegate import DelegateHandler
+
+    stack = TaskMemoryStack()
+    for attempt in range(1, 4):
+        stack.append_delegate("Write report", run_id="run-1", metadata={"target_agent": "reporter", "recovery_attempt": attempt})
+        stack.append_observe("No report artifact", actor="reporter", run_id="run-1", metadata={"completion_status": "partial", "recovery_attempt": attempt, "evidence_gaps": ["No report artifact"]})
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Still incomplete", artifact_metadata={"completion_status": "partial", "evidence_gaps": ["No report artifact"]}))
+    DelegateHandler(executor=executor).handle(
+        _action(ActionType.DELEGATE, target_agent="reporter", task="Try another report", stage="revision", metadata={"recovery_attempt": 100}),
+        HandlerContext(state={"sp_recovery_limits": {"reporter": 6}}, stack=stack, run_id="run-1"),
+    )
+    assert len(executor.tasks) == 1
+    assert executor.tasks[0].metadata["recovery_attempt"] == 4
+    assert stack.entries[-1].metadata["completion_status"] == "partial"
+
+
+def test_native_inline_json_materialization_obeys_public_file_extension(tmp_path):
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Report complete", artifact_content="[]", artifact_metadata={"completion_status": "complete", "filename": "draft.md"}))
+    state = {**_thread_state_with_outputs(tmp_path), "sp_task_contract": {"output_file_extension": ".json"}}
+    result = build_default_action_router(delegate_executor=executor).execute(
+        _action(ActionType.DELEGATE, target_agent="reporter", task="Return JSON array", stage="reporting"), state=state, run_id="run-1",
+    )
+    ref = result.state_update["sp_current_artifact_refs"]["report_revision"]
+    assert ref["virtual_path"].endswith(".json")
+
+
 def test_reporter_literal_acceptance_guard_marks_missing_report_partial_and_retries_as_revision(
     tmp_path,
 ):
@@ -2956,7 +3197,7 @@ def test_reporter_literal_acceptance_guard_marks_missing_report_partial_and_retr
                     status=SPSubagentStatus.COMPLETED,
                     result="Draft report written.",
                     task_id="report-partial",
-                    artifact_content="# Report\n\nUses `POLICY-V3`.",
+                    artifact_content="# 审计报告\n\n本报告采用 `POLICY-V3`。",
                     artifact_type="report_revision",
                     artifact_metadata={
                         "completion_status": "complete",
@@ -2967,7 +3208,7 @@ def test_reporter_literal_acceptance_guard_marks_missing_report_partial_and_retr
                     status=SPSubagentStatus.COMPLETED,
                     result="Corrected report written.",
                     task_id="report-complete",
-                    artifact_content=("# Report\n\nUses `POLICY-V3` and preserves `AURORA-AUDIT-1`."),
+                    artifact_content=("# 审计报告\n\n本报告采用 `POLICY-V3` 并保留 `AURORA-AUDIT-1`。"),
                     artifact_type="report_revision",
                     artifact_metadata={
                         "completion_status": "complete",
@@ -3221,7 +3462,7 @@ def test_reporter_acceptance_allows_superseded_id_in_labeled_history(
             status=SPSubagentStatus.COMPLETED,
             result="Report written.",
             task_id="report-historical-reference",
-            artifact_content=("# Report\n\nUses `POLICY-V3`.\n\n| Identifier | Status |\n| --- | --- |\n| `OLD-R7` | Superseded historical action |"),
+            artifact_content=("# 审计报告\n\n本报告采用 `POLICY-V3`。\n\n| Identifier | Status |\n| --- | --- |\n| `OLD-R7` | Superseded historical action |"),
             artifact_type="report_revision",
             artifact_metadata={
                 "completion_status": "complete",
@@ -3302,9 +3543,7 @@ def test_reporter_acceptance_guard_rejects_claims_under_no_data_constraint(
             status=SPSubagentStatus.COMPLETED,
             result="Report written.",
             task_id="report-no-data-fabrication",
-            artifact_content=(
-                "# Report\n\n- The North Region outperformed the other regions.\n- The West Region had the highest churn rate.\n\n## Limitations\nActual values were not provided."
-            ),
+            artifact_content=("# Report\n\n- The North Region outperformed the other regions.\n- The West Region had the highest churn rate.\n\n## Limitations\nActual values were not provided."),
             artifact_type="report_revision",
             artifact_metadata={
                 "completion_status": "complete",
@@ -3422,9 +3661,7 @@ def test_no_data_report_does_not_clear_an_unmet_deliverable_requirement(tmp_path
     )
     state = {**_thread_state_with_outputs(tmp_path), "messages": [HumanMessage(content="No actual values were provided. Create a report with an appendix.")]}
 
-    result = build_default_action_router(delegate_executor=executor).execute(
-        _action(ActionType.DELEGATE, action_id="missing-appendix", target_agent="reporter", task="Write the report", stage="reporting"), state=state, run_id="r"
-    )
+    result = build_default_action_router(delegate_executor=executor).execute(_action(ActionType.DELEGATE, action_id="missing-appendix", target_agent="reporter", task="Write the report", stage="reporting"), state=state, run_id="r")
 
     ref = result.state_update["sp_current_artifact_refs"]["report_revision"]
     assert ref["metadata"]["completion_status"] == "partial"
@@ -3602,9 +3839,7 @@ def test_reporter_requires_explicit_user_supplied_boundary_adjustment(tmp_path):
     )
     state = {
         **_thread_state_with_outputs(tmp_path),
-        "messages": [
-            HumanMessage(content=("<uploaded_files>inventory only</uploaded_files>\n请修订刚才的报告。最小边界改进只是把流失率降低0.1个百分点到5.0%。"))
-        ],
+        "messages": [HumanMessage(content=("<uploaded_files>inventory only</uploaded_files>\n请修订刚才的报告。最小边界改进只是把流失率降低0.1个百分点到5.0%。"))],
         "sp_task_memory": TaskMemoryStack(
             entries=[
                 StackMemoryEntry(
@@ -3865,6 +4100,40 @@ def test_delegate_context_is_bounded_and_preserves_user_goal_and_pinned_feedback
     assert selected[0]["status"] == "pinned"
     assert all("metadata" not in entry for entry in selected)
     assert len(refs["artifact_refs"]["_history"]) == 12
+
+
+def test_delegate_context_preserves_full_current_question_and_bounds_history():
+    historical_question = "Original report request\n" + "historical context " * 200
+    current_question = "Scenario:\n" + "Complete public scenario details. " * 130 + "\n\nRequired output:\nAnswer: True/False\nIllegal Operation: <operation>\nProblematic Team: <team>"
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            result="Complete question received.",
+            task_id="task-complete-question",
+        )
+    )
+
+    build_default_action_router(delegate_executor=executor).execute(
+        _action(
+            ActionType.DELEGATE,
+            action_id="act-complete-question",
+            target_agent="researcher",
+            task="Audit the complete current question and follow its output format.",
+        ),
+        state={
+            "messages": [
+                HumanMessage(content=historical_question),
+                HumanMessage(content=current_question),
+                HumanMessage(content="Internal protocol retry", additional_kwargs={"hide_from_ui": True}),
+            ],
+        },
+    )
+
+    refs = executor.tasks[0].context_refs
+    assert len(current_question) > 4000
+    assert refs["original_query"] == current_question
+    assert refs["latest_user_input"] == current_question
+    assert refs["thread_first_user_input"] == " ".join(historical_question.split())[:2400]
 
 
 def test_delegate_context_bounds_each_memory_entry_body():
@@ -4594,3 +4863,52 @@ def test_central_prompt_exposes_sp_controls_without_forcing_json_actions():
     assert "read-only request to query or fetch an external HTTP/API endpoint" in prompt
     assert "call `web_fetch` on the official API before trying" in prompt
     assert 'required_artifact_type="report"' in prompt
+
+
+@pytest.mark.parametrize("kind_key", ["task_kind", "coder_task_kind"])
+def test_ambiguous_data_retry_keeps_original_contract(kind_key):
+    stack = TaskMemoryStack()
+    stack.append_observe(
+        "Execution incomplete", actor="coder", run_id="run-1", stage="verification", metadata={"target_agent": "coder", kind_key: "data_processing", "completion_status": "partial", "evidence_gaps": ["Execution is missing."]}
+    )
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Retried", artifact_metadata={"completion_status": "partial"}))
+    action = _action(ActionType.DELEGATE, target_agent="coder", task="Complete the remaining operation.", stage="verification")
+    build_default_action_router(delegate_executor=executor).execute(action, state={"sp_task_memory": stack.to_dict()}, run_id="run-1")
+    assert executor.tasks[0].metadata["task_kind"] == "data_processing"
+    assert executor.tasks[0].metadata["requires_implementation"] is False
+    assert not executor.tasks[0].metadata.get("verification_only")
+
+
+def test_software_recovery_cannot_be_relabelled_as_data_by_next_delegation():
+    stack = TaskMemoryStack()
+    stack.append_observe(
+        "Source change missing",
+        actor="coder",
+        run_id="run-1",
+        stage="implementation",
+        metadata={"target_agent": "coder", "task_kind": "software_change", "requires_implementation": True, "completion_status": "partial", "evidence_gaps": ["Source implementation missing."]},
+    )
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Retried", artifact_metadata={"completion_status": "partial"}))
+    action = _action(ActionType.DELEGATE, target_agent="coder", task="Finish the requested source repair.", stage="implementation", metadata={"task_kind": "data_processing", "requires_implementation": False})
+    build_default_action_router(delegate_executor=executor).execute(action, state={"sp_task_memory": stack.to_dict()}, run_id="run-1")
+    assert executor.tasks[0].metadata["task_kind"] == "software_change"
+    assert executor.tasks[0].metadata["requires_implementation"] is True
+
+
+def test_software_recovery_with_existing_patch_keeps_readonly_verification():
+    stack = TaskMemoryStack()
+    stack.append_observe(
+        "Patch exists; checks missing",
+        actor="coder",
+        run_id="run-1",
+        stage="implementation",
+        metadata={"target_agent": "coder", "task_kind": "software_change", "requires_implementation": True, "completion_status": "partial", "evidence_gaps": ["Test verification missing."], "implementation_verification": {"passed": True}},
+    )
+    executor = FakeSubagentExecutor(SPSubagentResult(status=SPSubagentStatus.COMPLETED, result="Checked", artifact_metadata={"completion_status": "partial"}))
+    action = _action(
+        ActionType.DELEGATE, target_agent="coder", task="Run missing checks on the existing source patch.", stage="verification", metadata={"task_kind": "software_change", "requires_implementation": False, "verification_only": True}
+    )
+    build_default_action_router(delegate_executor=executor).execute(action, state={"sp_task_memory": stack.to_dict()}, run_id="run-1")
+    assert executor.tasks[0].metadata["requires_implementation"] is False
+    assert executor.tasks[0].metadata["verification_only"] is True
+    assert executor.tasks[0].metadata["tool_names"] == ["read_file", "bash"]

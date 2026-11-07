@@ -96,7 +96,7 @@ RESEARCHER_CONFIG = SubagentConfig(
     disallowed_tools=["task", "ask_clarification", "present_files", "bash", "write_file", "str_replace"],
     skills=[],
     model="inherit",
-    max_turns=256,
+    max_turns=480,
     internal=True,
 )
 
@@ -108,14 +108,12 @@ CODER_CONFIG = SubagentConfig(
         "coder",
         """
 <role>
-- Respect `metadata.coder_task_kind`. For `data_processing`, extract, filter,
-  calculate, and validate the supplied data using observable tool execution.
-  Check the requested schema, filters, and completeness; preserve source values.
-  Temporary scripts and requested data artifacts are allowed, but a repository
-  source patch, git diff, and software test suite are not acceptance requirements.
-  Report missing or failed data checks honestly. The repository-editing and
-  regression-test instructions below apply to software-change tasks, not data
-  processing. Never use this distinction to avoid a requested software repair.
+- First distinguish data processing from software changes. Respect metadata.task_kind
+  (legacy metadata.coder_task_kind is accepted). When task_kind is
+  data_processing or requires_implementation is false, execute the requested
+  filtering/calculation/export and check its result against acceptance criteria.
+  Do not modify repository source or run software tests merely to satisfy a
+  coding workflow. Repository-edit rules below apply to software changes only.
 - Inspect the existing repository before editing and follow its local conventions.
 - Resolve the actual repository root before the first repository command. The
   shared workspace may contain the repository in a named child directory. Run
@@ -217,7 +215,7 @@ CODER_CONFIG = SubagentConfig(
     disallowed_tools=["task", "ask_clarification", "present_files"],
     skills=[],
     model="inherit",
-    max_turns=100,
+    max_turns=480,
     internal=True,
 )
 
@@ -235,7 +233,18 @@ REPORTER_CONFIG = SubagentConfig(
   artifacts. Read those bodies, not just their summaries. A truncated item must
   be treated as incomplete evidence and disclosed when it affects the answer.
 - `context_refs.report_requirements.human_feedback` is mandatory and outranks
-  older plans. For a revision, use the supplied prior report as the baseline,
+  older plans. A noncanonical partial/blocked Reporter artifact whose transient
+  preview body is omitted because of token_capped or native public JSON format
+  rejection is an unverified draft; this rule
+  overrides the ordinary prior-report baseline. Rebuild from the original public sources,
+  reading the unchanged full prior artifact through native tools only as needed
+  to verify its findings. Preserve every distinct supported finding and original
+  quotation; do not copy repeated entries as independent findings, invent a
+  finding count, or treat a clipped/malformed draft as a complete answer. Rebuild
+  damaged JSON from source strings with single-layer encoding; preserve verified
+  content, not broken escapes or merged fields. Never emit textual tool-call
+  envelopes as a final answer or claim that they executed a file write. The original
+  draft and references remain available. For other revisions, use the supplied prior report as the baseline,
   preserve unaffected sections and valid citations, and return the complete
   revised report rather than a patch or change list. Preserve every explicit
   factual correction, including a stated percentage-point boundary adjustment;
@@ -275,6 +284,11 @@ REPORTER_CONFIG = SubagentConfig(
   created_paths. For a short report without a file requirement, put the complete
   report in artifact_content. Copy the current action_id exactly when practical;
   a filename containing its unique opaque suffix is also accepted.
+- After creating the current action's file, use `read_file` to inspect it and
+  prefer `str_replace` for a localized correction, such as a JSON punctuation
+  error. Edit only the current action's file; never modify a prior report.
+  Re-read the corrected file and return the complete deliverable through the
+  same created_paths contract. A patch alone is not the final report.
 - Never list a created_path unless you successfully called `write_file` for
   that exact path in this delegation. If `write_file` is unavailable or fails,
   return the complete report in artifact_content and leave created_paths empty.
@@ -312,10 +326,10 @@ REPORTER_CONFIG = SubagentConfig(
 """,
     ),
     tools=None,
-    disallowed_tools=["task", "ask_clarification", "present_files", "bash", "str_replace", "web_search", "web_fetch"],
+    disallowed_tools=["task", "ask_clarification", "present_files", "bash", "web_search", "web_fetch"],
     skills=["stackplanner-reporting"],
     model="inherit",
-    max_turns=60,
+    max_turns=480,
     internal=True,
 )
 
@@ -346,7 +360,7 @@ OUTLINE_CONFIG = SubagentConfig(
     disallowed_tools=["task", "ask_clarification", "present_files", "bash", "write_file", "str_replace", "web_search", "web_fetch"],
     skills=[],
     model="inherit",
-    max_turns=30,
+    max_turns=480,
     internal=True,
 )
 
@@ -387,7 +401,7 @@ PERCEPTION_CONFIG = SubagentConfig(
     disallowed_tools=["task", "ask_clarification", "present_files", "bash", "write_file", "str_replace", "web_search", "web_fetch"],
     skills=[],
     model="inherit",
-    max_turns=40,
+    max_turns=480,
     internal=True,
 )
 

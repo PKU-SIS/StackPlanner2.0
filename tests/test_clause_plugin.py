@@ -63,6 +63,9 @@ def test_clause_and_cuad_have_separate_skills_and_input_contracts(
     assert not clause.requires_judge
     assert {t.name for t in clause.tools} == {"clause_check_passages"}
     inputs = build_inputs(clause, sample().public_input(), "thread")
+    contract = inputs["sp_task_contract"]
+    assert contract["delivery_mode"] == "artifact" and contract["output_schema"]["type"] == "array"
+    assert "source_requirements" not in contract
     text = str(inputs)
     assert "PRIVATE" not in text and "cuad_ambiguity" not in text
     assert "document.txt" in text and "explanation" in text

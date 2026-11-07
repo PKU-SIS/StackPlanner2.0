@@ -36,8 +36,12 @@ the same passage. Do not enumerate speculative clause pairs or repeat one issue
 with small wording changes. Keep each explanation concise (normally one to three
 sentences), quoting only the complete relevant source sentences in text. There is
 no fixed expected issue count; do not add findings just to make the array longer.
-Pass the actual JSON text to write_file.content, not a second JSON-encoded string
-containing literal backslash-n sequences outside strings.
+Prefer one write_file call with the complete array in structured json_content,
+append=false and content omitted. Pass actual string values, not JSON-encoded
+strings; the tool escapes quotes, newlines and backslashes. Do not append another
+complete array. For very large payloads, the existing string content path remains
+available for bounded, comma-separated batches inside one array; never concatenate
+complete arrays. Serialization batches do not limit the total finding count.
 No Markdown, wrapper, commentary or internal control fields belong in the file.
 Use [] only for a substantive no-issue finding. Read the saved file back once,
 correct identified errors, then stop tools; do not rewrite unchanged valid bytes.

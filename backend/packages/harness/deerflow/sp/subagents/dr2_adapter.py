@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import re
+import shlex
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from typing import Any, Protocol
 
+from deerflow.sp.public_format_repair import has_unexecuted_public_tool_intent
 from deerflow.sp.subagents.adapter import SPSubagentResult, SPSubagentStatus, SPSubagentTask
 from deerflow.subagents.status_contract import model_response_stop_reason
 
@@ -49,7 +52,9 @@ _CODER_IMPLEMENTATION_ACTION_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _TEST_PATH_PATTERN = re.compile(
-    r"(?:^|/)(?:tests?|testdata)(?:/|$)"
+    r"(?:^|/)(?:tests?|testdata|__tests__|spec)(?:/|$)"
+    r"|\.(?:spec|test)\.[cm]?[jt]sx?$"
+    r"|(?:^|/)[^/]*Test\.(?:java|kt|cs)$"
     r"|(?:^|/)(?:test_[^/]*|[^/]*_test\.[^/]*)$",
     re.IGNORECASE,
 )
@@ -73,6 +78,10 @@ _TEST_COMMAND_PATTERN = re.compile(
 )
 _UNVERIFIED_TEST_GAP = "Coder claimed test verification without a successful test-command result after the latest source change."
 _NO_RESPONSE_GAP = "Subagent returned no usable response or artifact."
+_MISSING_PUBLIC_AUDIT_PAYLOAD_GAP = (
+    "The designated file-only auditor did not deliver an actual final payload matching the public output_schema/output_parse_mode. "
+    "Perform the complete original audit using the actual original sources and return the full raw public final answer; a completion claim, source receipt, coverage map or summary alone is insufficient."
+)
 _MASKED_TEST_EXIT_GAP = "Coder test command masked or discarded the test runner exit status."
 _OBSERVABLE_FALSE_CHECK_PATTERN = re.compile(
     r"(?im)^\s*[^\n:]{0,80}\b(?:PASS(?:ED)?|CHECK|ASSERT(?:ION)?|OK)\s*[:=]\s*(?:false|fail(?:ed)?)\b"
@@ -131,6 +140,40 @@ def _json_safe(value: Any) -> Any:
     return repr(value)
 
 
+def _public_schema_delivery_contract(task: SPSubagentTask | None) -> Mapping[str, Any] | None:
+    if task is None:
+        return None
+    contract = task.context_refs.get("task_contract")
+    if not isinstance(contract, Mapping) or "output_schema" not in contract:
+        return None
+    requirements = contract.get("source_requirements")
+    audit_agent = requirements.get("audit_agent") if isinstance(requirements, Mapping) else None
+    return contract if task.subagent_type in {"reporter", audit_agent} else None
+
+
+def public_schema_delivery_instruction(task: SPSubagentTask) -> str | None:
+    """Use the declared answer value as transport without changing its schema."""
+    contract = _public_schema_delivery_contract(task)
+    if contract is None:
+        return None
+    mode = contract.get("output_parse_mode", "json")
+    shape = "the raw JSON value matching context_refs.task_contract.output_schema, not a JSON string containing that value" if mode == "json" else "the exact raw text value matching context_refs.task_contract.output_schema"
+    return (
+        "<public-schema-final-delivery>\n"
+        "For a successful completed audit, return only " + shape + ". "
+        "Do not wrap the successful final answer in summary/artifact_content/artifact_metadata, Markdown, code fences, or a file receipt. "
+        "This task-specific successful-final transport replaces generic SP envelope and file-receipt instructions. "
+        "Use the available native tools normally to inspect all required public source evidence and perform the requested audit. "
+        "The host validates the original final value, checks actual model-visible source access and execution status, and persists the original value as its native current-action artifact when needed. "
+        "Do not invent a filename, claim that an unwritten file exists, or double-encode original source quotations into an outer JSON string. "
+        "Inside the public JSON value, escape quotation marks and control characters correctly once. "
+        "Never use an empty array, default label, fabricated finding or missing-value marker to conceal an incomplete audit. "
+        "If a mandatory source or requirement remains unresolved, do not produce a schema-shaped success answer: instead return the ordinary SP failure envelope with "
+        'artifact_metadata.completion_status="partial" or "blocked" and the concrete unresolved artifact_metadata.evidence_gaps. '
+        "No private chain-of-thought.\n</public-schema-final-delivery>"
+    )
+
+
 def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
     """Render a structured SP task for a DR2 subagent prompt."""
     task.validate_protocol()
@@ -145,6 +188,19 @@ def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
         "context_refs": task.context_refs,
         "metadata": task.metadata,
     }
+    schema_instruction = public_schema_delivery_instruction(task)
+    output_instructions = (
+        [schema_instruction]
+        if schema_instruction is not None
+        else [
+            "Return the task_result envelope fields implied by protocol.message_type. Do not expose private chain-of-thought; report only observable actions, evidence, tests, files, and blockers.",
+            "Honor the subagent output contract: return compact JSON with summary, artifact_content, artifact_type, and artifact_metadata.",
+            'Set artifact_metadata.completion_status to "complete", "partial", or "blocked", and list unmet requirements in artifact_metadata.evidence_gaps.',
+            "Put non-blocking source or coverage caveats in artifact_metadata.disclosed_limitations, and disclose them in artifact_content. These do not waive unmet requirements in evidence_gaps.",
+            "Use artifact_metadata.filename for a desired text-artifact filename. Use artifact_metadata.created_paths only for absolute /mnt/user-data/outputs/... files that were actually created by a file tool.",
+            "Full reports, outlines, research bodies, and other large text belong in artifact_content, never in summary.",
+        ]
+    )
     return "\n".join(
         [
             "<sp-subagent-task>",
@@ -159,13 +215,8 @@ def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
                 "narrower interpretation from the latest delegated wording; report a gap or request "
                 "recovery when the contract is not satisfied."
             ),
-            "Return the task_result envelope fields implied by protocol.message_type. Do not expose private chain-of-thought; report only observable actions, evidence, tests, files, and blockers.",
-            "Honor the subagent output contract: return compact JSON with summary, artifact_content, artifact_type, and artifact_metadata.",
-            'Set artifact_metadata.completion_status to "complete", "partial", or "blocked", and list unmet requirements in artifact_metadata.evidence_gaps.',
-            "Put non-blocking source or coverage caveats in artifact_metadata.disclosed_limitations, and disclose them in artifact_content. These do not waive unmet requirements in evidence_gaps.",
+            *output_instructions,
             "Do not impose an official-source-only requirement unless the original task contract requires it. Respect explicitly allowed missing-value markers without inventing facts or omitting required rows.",
-            "Use artifact_metadata.filename for a desired text-artifact filename. Use artifact_metadata.created_paths only for absolute /mnt/user-data/outputs/... files that were actually created by a file tool.",
-            "Full reports, outlines, research bodies, and other large text belong in artifact_content, never in summary.",
         ]
     )
 
@@ -282,15 +333,29 @@ def _message_text(value: Any) -> str:
 
 
 def _tool_result_succeeded(value: Any, *, allow_negative_findings: bool = False) -> bool:
-    # A data audit may successfully find a noncompliant row. Runtime errors
-    # and nonzero process status still fail; domain CHECK/FAIL text alone is
-    # not evidence that the checking program malfunctioned.
+    if isinstance(value, Mapping):
+        if value.get("status") == "error":
+            return False
+        value = value.get("content")
     text = _message_text(value).strip()
     lowered = text.lower()
-    if lowered.startswith("error:") or "traceback (most recent call last)" in lowered or "assertionerror" in lowered or "permission denied" in lowered or (not allow_negative_findings and _OBSERVABLE_FALSE_CHECK_PATTERN.search(text)):
+    try:
+        payload = json.loads(text)
+    except (ValueError, TypeError):
+        payload = None
+    if isinstance(payload, Mapping) and (payload.get("error") or payload.get("status") == "error"):
+        return False
+    if (
+        lowered.startswith("error:")
+        or "traceback (most recent call last)" in lowered
+        or "assertionerror" in lowered
+        or "permission denied" in lowered
+        or "timed out" in lowered
+        or (not allow_negative_findings and _OBSERVABLE_FALSE_CHECK_PATTERN.search(text))
+    ):
         return False
     exit_codes = [int(match.group(1)) for pattern in _EXIT_STATUS_PATTERNS for match in pattern.finditer(text)]
-    return not exit_codes or exit_codes[-1] == 0
+    return not exit_codes or all(code == 0 for code in exit_codes)
 
 
 def _coder_reported_behavior_failure(raw_result: Any, ai_messages: Any, *, allow_negative_findings: bool = False) -> bool:
@@ -306,12 +371,20 @@ def _coder_reported_behavior_failure(raw_result: Any, ai_messages: Any, *, allow
     if _BEHAVIOR_FAILURE_REPORT_PATTERN.search(raw_text) and not _ENVIRONMENT_BLOCKER_REPORT_PATTERN.search(raw_text):
         return True
 
-    tool_texts: list[str] = []
-    if isinstance(ai_messages, list):
-        for message in ai_messages:
-            if isinstance(message, Mapping) and message.get("type") == "tool":
-                tool_texts.append(_message_text(message.get("content")))
-    for text in tool_texts:
+    # A later result supersedes only the same check, never an unrelated failure.
+    calls: dict[str, str] = {}
+    latest: dict[str, Mapping[str, Any]] = {}
+    for index, message in enumerate(ai_messages if isinstance(ai_messages, list) else []):
+        if not isinstance(message, Mapping):
+            continue
+        if message.get("type") == "ai":
+            for call in message.get("tool_calls") or []:
+                calls[str(call.get("id"))] = json.dumps([call.get("name"), call.get("args")], sort_keys=True, default=str)
+        elif message.get("type") == "tool":
+            key = calls.get(str(message.get("tool_call_id")), f"unknown-{index}")
+            latest[key] = message
+    for message in latest.values():
+        text = _message_text(message.get("content"))
         if _ENVIRONMENT_BLOCKER_REPORT_PATTERN.search(text) and not _OBSERVABLE_FALSE_CHECK_PATTERN.search(text):
             continue
         if (not allow_negative_findings and _OBSERVABLE_FALSE_CHECK_PATTERN.search(text)) or _BEHAVIOR_FAILURE_REPORT_PATTERN.search(text):
@@ -396,21 +469,28 @@ def _shell_pipeline_surface(command: str) -> str:
 
 def _command_preserves_exit_status(command: str) -> bool:
     """Reject shell wrappers that can turn a failed test into exit code zero."""
-
-    lowered = command.lower()
-    if re.search(r"\|\|\s*(?:true|:)(?:\s|$)", lowered):
+    try:
+        segments, separators = _shell_command_segments(command)
+    except ValueError:
+        return False
+    if any("||" in separator or "&" == separator for separator in separators):
         return False
     # Without pipefail, ``pytest ... | head`` reports the consumer's status,
     # not pytest's. This exact pattern produced false-complete SWE patches.
     if re.search(r"(?<!\|)\|(?!\|)", _shell_pipeline_surface(command)) and not re.search(
         r"\bset\s+(?:-[^;\n]*o\s+pipefail|-o\s+pipefail)\b",
-        lowered,
+        command.lower(),
     ):
         return False
-    # A semicolon always runs the next command and therefore discards the test
-    # status. ``&&`` is safe because the suffix runs only after success.
-    if re.search(r";\s*(?:echo|printf|head|tail|cat)\b", lowered):
+    # Any unconditional suffix can mask the runner status, including a second
+    # test command. Setup before the runner and success-only && suffixes are safe.
+    if re.search(r";\s*(?:echo|printf|head|tail|cat)\b", _shell_pipeline_surface(command), re.I):
         return False
+    checked = False
+    for index, args in enumerate(segments):
+        checked = checked or _is_verification_args(args, command)
+        if checked and index < len(separators) and any(char in separators[index] for char in ";\n") and any(segments[index + 1 :]):
+            return False
     return True
 
 
@@ -483,9 +563,9 @@ def _recover_research_tool_evidence(ai_messages: Any) -> str | None:
     return "\n".join(sections)
 
 
-def is_data_processing_coder(metadata: Mapping[str, Any]) -> bool:
+def is_data_processing_coder(metadata: Mapping[str, Any] | None) -> bool:
     """Distinguish data execution from the default software-change contract."""
-    return metadata.get("coder_task_kind") == "data_processing"
+    return bool(metadata and metadata.get("task_kind", metadata.get("coder_task_kind")) == "data_processing")
 
 
 def _coder_requires_execution_evidence(task: SPSubagentTask | None) -> bool:
@@ -494,38 +574,58 @@ def _coder_requires_execution_evidence(task: SPSubagentTask | None) -> bool:
     if is_data_processing_coder(task.metadata):
         return True
     text = "\n".join(str(value) for value in (task.task, task.description, task.expected_output) if value)
-    return bool(_CODER_EXECUTION_REQUIRED_PATTERN.search(text))
+    stage = str(task.stage or task.metadata.get("stage") or "").lower()
+    data_execution = stage not in {"perception", "planning", "research"} and (
+        task.metadata.get("task_kind") == "data_processing" or re.search(r"筛选|过滤|去重|汇总|计算|排序|统计|\b(?:filter|aggregate|calculate|compute|sort)\b", text, re.I)
+    )
+    return bool(data_execution or _CODER_EXECUTION_REQUIRED_PATTERN.search(text))
 
 
-def coder_task_requires_implementation(task: SPSubagentTask) -> bool:
-    """Return whether a coder delegation must produce a source-file change.
+def coder_task_kind(task: SPSubagentTask) -> str:
+    """Task purpose and orchestration stage are separate execution contracts."""
+    kind = task.metadata.get("task_kind", task.metadata.get("coder_task_kind"))
+    if kind in {"software_change", "data_processing", "inspection"}:
+        return kind
+    text = "\n".join(str(v) for v in (task.task, task.description, task.expected_output) if v)
+    text = re.sub(
+        r"(?:不要|无需|不需要|不必|不得|禁止|不能|勿|不)[^，。；;\n]{0,24}(?:源码|源代码|代码|软件|仓库|程序|脚本)"
+        r"|\b(?:do not|don't|without|no need to)\b[^,.;\n]{0,32}\b(?:source code|code|software|repository|script)\b",
+        "",
+        text,
+        flags=re.I,
+    )
+    software = re.search(r"源码|源代码|代码|软件|程序|脚本|仓库|补丁|\b(?:code|source\s+(?:code|file|change)|software|repository|patch|implementation|bug)\b", text, re.I)
+    data = re.search(r"筛选|过滤|去重|汇总|计算|排序|统计|数据|\b(?:data|csv|xlsx|filter|aggregate|calculate|compute|sort)\b", text, re.I)
+    if data and not software:
+        return "data_processing"
+    if software or _CODER_IMPLEMENTATION_ACTION_PATTERN.search(text):
+        return "software_change"
+    return "inspection"
 
-    Explicit data-processing tasks do not require repository changes.
-    ``perception`` coder tasks are intentionally read-only. Other software coder
-    stage is an implementation/verification task in SP's contract, including a
-    follow-up that only says "locate the implementation" after an earlier
-    failed edit.  The latter is why this is metadata-driven rather than inferred
-    from the latest natural-language task alone.
-    """
-    if task.subagent_type != "coder":
+
+def coder_task_requires_implementation(task: SPSubagentTask | None) -> bool:
+    """A software mutation needs source evidence; verification alone never does."""
+    if task is None or task.subagent_type != "coder":
         return False
     if is_data_processing_coder(task.metadata):
         return False
     explicit = task.metadata.get("requires_implementation")
     if isinstance(explicit, bool):
         return explicit
-    stage = str(task.metadata.get("stage") or "").strip().lower()
-    if stage == "perception":
+    stage = str(task.stage or task.metadata.get("stage") or "").lower()
+    if stage in {"perception", "planning", "research", "verification"}:
         return False
-    # Coder work outside the read-only perception stage is an implementation
-    # contract by default. Relying only on action verbs made recovery turns
-    # such as "investigate" or "verify" look read-only, allowing a test-only
-    # patch to satisfy the model while the requested source fix remained
-    # absent.
-    if stage in {"implementation", "verification", "revision"}:
+    return coder_task_kind(task) == "software_change"
+
+
+def observation_requires_code_recovery(metadata: Mapping[str, Any]) -> bool:
+    """Only an established software contract may force source/test recovery."""
+    if metadata.get("task_kind", metadata.get("coder_task_kind")) in {"data_processing", "inspection"} or metadata.get("requires_implementation") is False and metadata.get("verification_only") is not True:
+        return False
+    if metadata.get("task_kind", metadata.get("coder_task_kind")) == "software_change":
         return True
-    text = "\n".join(str(value) for value in (task.task, task.description, task.expected_output) if value)
-    return bool(_CODER_IMPLEMENTATION_ACTION_PATTERN.search(text))
+    implementation = metadata.get("implementation_verification")
+    return metadata.get("requires_implementation") is True or metadata.get("verification_only") is True or (isinstance(implementation, Mapping) and (implementation.get("required") is True or implementation.get("passed") is True))
 
 
 def _is_test_path(path: str) -> bool:
@@ -533,11 +633,21 @@ def _is_test_path(path: str) -> bool:
     return bool(_TEST_PATH_PATTERN.search(normalized))
 
 
+def _is_source_path(path: str) -> bool:
+    normalized = path.replace("\\", "/").lower()
+    name = normalized.rsplit("/", 1)[-1]
+    configuration = name in {"makefile", "dockerfile", "package.json", "tsconfig.json", "cargo.toml", "pyproject.toml", "pom.xml", "config.yaml", "config.example.yaml", "extensions_config.json", "extensions_config.example.json"} or any(
+        part in {"config", "configs", ".github"} for part in normalized.split("/")[:-1]
+    )
+    return configuration or bool(re.search(r"\.(?:py|pyi|js|jsx|ts|tsx|mjs|cjs|go|rs|java|kt|kts|c|h|cc|cpp|hpp|cs|rb|php|swift|scala|sh|bash|zsh|sql|vue|svelte|html|css|scss)$", normalized))
+
+
 def _implementation_verification(ai_messages: Any) -> dict[str, Any]:
     """Check whether successful file edits include a non-test source path."""
     calls: dict[str, tuple[str, Mapping[str, Any] | None]] = {}
     source_paths: list[str] = []
     test_paths: list[str] = []
+    read_contents: dict[str, str] = {}
     if not isinstance(ai_messages, list):
         ai_messages = []
 
@@ -554,19 +664,34 @@ def _implementation_verification(ai_messages: Any) -> dict[str, Any]:
                 call_id = str(call.get("id") or f"anonymous-{index}-{call_index}")
                 calls[call_id] = (str(call.get("name") or ""), _tool_call_args(call.get("args")))
             continue
-        if message.get("type") != "tool" or not _tool_result_succeeded(message.get("content")):
+        if message.get("type") != "tool" or not _tool_result_succeeded(message):
             continue
         call_id = str(message.get("tool_call_id") or "")
         tool_name, args = calls.get(call_id, (str(message.get("name") or ""), None))
-        if tool_name not in _FILE_WRITE_TOOLS or args is None:
+        if args is None:
             continue
         path = args.get("path")
         if not isinstance(path, str) or not path.strip():
             continue
         path = path.strip()
+        if tool_name == "read_file":
+            if args.get("start_line") is None and args.get("end_line") is None:
+                read_contents[path] = _message_text(message.get("content"))
+            continue
+        if tool_name not in _FILE_WRITE_TOOLS:
+            continue
+        if tool_name == "str_replace":
+            old = args.get("old_str", args.get("old_string"))
+            new = args.get("new_str", args.get("new_string"))
+            if isinstance(old, str) and old == new:
+                continue
+        if tool_name == "write_file":
+            if args.get("append") and not args.get("content") or not args.get("append") and path in read_contents and args.get("content") == read_contents[path]:
+                continue
+        read_contents.pop(path, None)
         if _is_test_path(path):
             test_paths.append(path)
-        else:
+        elif _is_source_path(path):
             source_paths.append(path)
 
     return {
@@ -579,12 +704,102 @@ def _implementation_verification(ai_messages: Any) -> dict[str, Any]:
     }
 
 
+def _shell_command_segments(command: str) -> tuple[list[list[str]], list[str]]:
+    # Here-document bodies are data for the interpreter, not shell commands.
+    # Retain the header and any shell suffix after the closing delimiter.
+    shell_text = re.sub(r"(?m)(<<-?\s*(['\"]?)([A-Za-z_]\w*)\2[^\n]*)\n.*?^\s*\3\s*$", r"\1", command, flags=re.S)
+    # shlex normally consumes the newline with a shell comment, merging the
+    # next command into this one's argv. Strip comments but retain separators.
+    characters: list[str] = []
+    quote = None
+    escaped = False
+    comment = False
+    for char in shell_text:
+        if comment:
+            if char != "\n":
+                continue
+            comment = False
+        if escaped:
+            escaped = False
+        elif char == "\\" and quote != "'":
+            escaped = True
+        elif quote:
+            if char == quote:
+                quote = None
+        elif char in "\"'":
+            quote = char
+        elif char == "#" and (not characters or characters[-1].isspace() or characters[-1] in ";&|"):
+            comment = True
+            continue
+        characters.append(char)
+    lexer = shlex.shlex("".join(characters), posix=True, punctuation_chars=";&|<>\n")
+    lexer.commenters = ""
+    lexer.whitespace = " \t\r"
+    lexer.whitespace_split = True
+    segments: list[list[str]] = [[]]
+    separators: list[str] = []
+    for token in lexer:
+        if token and all(char in ";&|\n" for char in token):
+            separators.append(token.replace("\n", "") or "\n")
+            segments.append([])
+        else:
+            segments[-1].append(token)
+    return segments, separators
+
+
+def _is_verification_args(args: list[str], command: str) -> bool:
+    while args and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", args[0]):
+        args = args[1:]
+    if not args:
+        return False
+    executable = args[0].rsplit("/", 1)[-1]
+    if executable in {"uv", "poetry"} and len(args) > 2 and args[1] == "run":
+        args = args[2:]
+        executable = args[0].rsplit("/", 1)[-1]
+    # Collection, version and help commands do not execute behavioral checks.
+    # Keep this scoped to runners, so a Python assertion mentioning '--help'
+    # as data still counts as execution.
+    runner = executable in {"pytest", "py.test", "tox", "nox", "jest", "vitest", "npm", "pnpm", "yarn", "cargo", "go", "mvn", "gradle", "make"}
+    python_runner = bool(re.fullmatch(r"python(?:\d+(?:\.\d+)?)?", executable) and args[1:2] == ["-m"] and args[2:3] in (["pytest"], ["unittest"]))
+    preflight_flags = {"--collect-only", "--co", "--help", "-h", "--version", "-V", "--listTests", "--list-tests", "--list", "-list", "--dry-run", "--no-run"}
+    if (runner or python_runner) and any(arg.split("=", 1)[0] in preflight_flags for arg in args[1:]):
+        return False
+    if executable in {"pytest", "py.test", "tox", "nox", "jest", "vitest"}:
+        return True
+    if executable in {"npm", "pnpm", "yarn", "cargo", "go", "mvn", "gradle", "make"} and (args[1:2] == ["test"] or args[1:3] == ["run", "test"]):
+        return True
+    if re.fullmatch(r"python(?:\d+(?:\.\d+)?)?", executable):
+        if len(args) > 2 and args[1] == "-m" and args[2] in {"pytest", "unittest", "py_compile", "compileall"}:
+            return True
+        code = args[2] if len(args) > 2 and args[1] == "-c" else None
+        if "<<" in args:
+            lines = command.splitlines()
+            code = "\n".join(lines[1:-1])
+        if code:
+            try:
+                return any(isinstance(node, ast.Assert) for node in ast.walk(ast.parse(code)))
+            except SyntaxError:
+                pass
+    return False
+
+
+def _is_verification_command(command: str) -> bool:
+    """Recognize executable checks, not runner names inside echo/string arguments."""
+    try:
+        segments, _ = _shell_command_segments(command)
+        return any(_is_verification_args(args, command) for args in segments)
+    except ValueError:
+        return False
+
+
 def _test_execution_verification(ai_messages: Any) -> dict[str, Any]:
     """Check for a successful, recognizable test command after source edits."""
     calls: dict[str, tuple[str, Mapping[str, Any] | None]] = {}
+    issued_at: dict[str, int] = {}
     latest_source_write_index: int | None = None
     successful_test_indices: list[int] = []
     masked_test_command_count = 0
+    check_results: dict[str, tuple[int, bool, int]] = {}
     if not isinstance(ai_messages, list):
         ai_messages = []
     for index, message in enumerate(ai_messages):
@@ -599,28 +814,35 @@ def _test_execution_verification(ai_messages: Any) -> dict[str, Any]:
                     continue
                 call_id = str(call.get("id") or f"anonymous-{index}-{call_index}")
                 calls[call_id] = (str(call.get("name") or ""), _tool_call_args(call.get("args")))
+                issued_at[call_id] = index
             continue
         if message.get("type") != "tool":
             continue
         call_id = str(message.get("tool_call_id") or "")
         tool_name, args = calls.get(call_id, (str(message.get("name") or ""), None))
-        if not _tool_result_succeeded(message.get("content")):
+        if tool_name == "bash" and args is not None:
+            command = args.get("command")
+            if isinstance(command, str) and _is_verification_command(command):
+                check_results[command] = (index, _tool_result_succeeded(message) and _command_preserves_exit_status(command), issued_at.get(call_id, -1))
+        if not _tool_result_succeeded(message):
             continue
         if tool_name in _FILE_WRITE_TOOLS:
             path = args.get("path") if args is not None else None
-            if isinstance(path, str) and not _is_test_path(path):
+            if isinstance(path, str) and _is_source_path(path) and not _is_test_path(path):
                 latest_source_write_index = index
         if tool_name == "bash" and args is not None:
             command = args.get("command")
-            if isinstance(command, str) and _TEST_COMMAND_PATTERN.search(command):
+            if isinstance(command, str) and _is_verification_command(command):
                 if not _command_preserves_exit_status(command):
                     masked_test_command_count += 1
                     continue
                 successful_test_indices.append(index)
-    latest_test_index = successful_test_indices[-1] if successful_test_indices else None
+    successful_test_indices = [index for index, passed, _ in check_results.values() if passed]
+    unresolved_failures = [index for index, passed, _ in check_results.values() if not passed]
+    latest_test_index = max(successful_test_indices) if successful_test_indices else None
     return {
         "required": True,
-        "passed": bool(latest_test_index is not None and (latest_source_write_index is None or latest_test_index > latest_source_write_index)),
+        "passed": bool(not unresolved_failures and latest_test_index is not None and (latest_source_write_index is None or any(passed and issued > latest_source_write_index for _, passed, issued in check_results.values()))),
         "successful_test_count": len(successful_test_indices),
         "masked_test_command_count": masked_test_command_count,
         "latest_source_write_index": latest_source_write_index,
@@ -635,9 +857,11 @@ def _execution_verification(
     allow_negative_findings: bool = False,
     task: SPSubagentTask | None = None,
 ) -> dict[str, int | bool | None]:
-    calls: dict[str, tuple[str, int, Mapping[str, Any] | None]] = {}
+    calls: dict[str, tuple[str, Mapping[str, Any] | None]] = {}
+    issued_at: dict[str, int] = {}
     latest_source_write_index: int | None = None
     successful_execution_indices: list[int] = []
+    successful_execution_issued_at: list[int] = []
     if not isinstance(ai_messages, list):
         ai_messages = []
 
@@ -652,7 +876,8 @@ def _execution_verification(
                 if not isinstance(call, Mapping):
                     continue
                 call_id = str(call.get("id") or f"anonymous-{index}-{call_index}")
-                calls[call_id] = (str(call.get("name") or ""), index, _tool_call_args(call.get("args")))
+                calls[call_id] = (str(call.get("name") or ""), _tool_call_args(call.get("args")))
+                issued_at[call_id] = index
             continue
         if message.get("type") != "tool":
             continue
@@ -661,10 +886,12 @@ def _execution_verification(
         call = calls.get(call_id)
         if call is not None:
             tool_name = tool_name or call[0]
-        if not _tool_result_succeeded(message.get("content"), allow_negative_findings=allow_negative_findings):
+        if not _tool_result_succeeded(message, allow_negative_findings=allow_negative_findings):
             continue
         if tool_name in _FILE_WRITE_TOOLS:
-            latest_source_write_index = index
+            args = call[1] if call is not None else None
+            if args is not None and isinstance(args.get("path"), str) and _is_source_path(args["path"]):
+                latest_source_write_index = index
         # Trusted run policies may supply a read-only executable check.
         # Link its real tool response to the original call, and retain the
         # native requirement for a successful check after the latest write.
@@ -672,18 +899,20 @@ def _execution_verification(
             from deerflow.sp.actions.run_policy import active_run_policy
 
             policy = active_run_policy.get()
-            if policy is not None and message.get("status") != "error" and policy.checked_execution(task, tool_name, call[2] or {}, message.get("content")):
+            if policy is not None and message.get("status") != "error" and policy.checked_execution(task, tool_name, call[1] or {}, message.get("content")):
                 successful_execution_indices.append(index)
+                successful_execution_issued_at.append(issued_at.get(call_id, -1))
         if tool_name in _EXECUTION_TOOLS:
             if reject_masked_commands:
-                args = call[2] if call is not None else None
+                args = call[1] if call is not None else None
                 command = args.get("command") if args is not None else None
                 if not isinstance(command, str) or not _command_preserves_exit_status(command):
                     continue
             successful_execution_indices.append(index)
+            successful_execution_issued_at.append(issued_at.get(call_id, -1))
 
     latest_successful_execution_index = successful_execution_indices[-1] if successful_execution_indices else None
-    passed = bool(latest_successful_execution_index is not None and (latest_source_write_index is None or latest_successful_execution_index > latest_source_write_index))
+    passed = bool(latest_successful_execution_index is not None and (latest_source_write_index is None or any(issued > latest_source_write_index for issued in successful_execution_issued_at)))
     return {
         "required": True,
         "passed": passed,
@@ -733,8 +962,75 @@ def _recover_created_paths(raw_result: Any, ai_messages: Any) -> list[str]:
     return list(dict.fromkeys(recovered))
 
 
+def _successful_output_writes(ai_messages: Any) -> list[str]:
+    """Bind only actual paired successful file-tool results to this action."""
+    calls: dict[str, tuple[str, str]] = {}
+    paths: list[str] = []
+    for message in ai_messages if isinstance(ai_messages, list) else []:
+        if not isinstance(message, Mapping):
+            continue
+        if message.get("type", message.get("role")) in {"ai", "assistant"}:
+            for call in message.get("tool_calls") or []:
+                if not isinstance(call, Mapping) or call.get("name") not in _FILE_WRITE_TOOLS or not call.get("id"):
+                    continue
+                args = _tool_call_args(call.get("args"))
+                path = _output_path(args.get("path")) if args is not None else None
+                if path is not None:
+                    calls[call["id"]] = (call["name"], path)
+            continue
+        if message.get("type", message.get("role")) != "tool" or not _tool_result_succeeded(message):
+            continue
+        pair = calls.get(message.get("tool_call_id"))
+        if pair is not None and message.get("name") == pair[0]:
+            paths.append(pair[1])
+    return list(dict.fromkeys(paths))
+
+
+def _has_schema_artifact_content(content: Any, task: SPSubagentTask | None) -> bool:
+    contract = _public_schema_delivery_contract(task)
+    if content is None or contract is None:
+        return False
+    from deerflow.sp.output_contract import output_contract_gaps
+
+    text = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
+    return not output_contract_gaps({"sp_task_contract": contract}, text)
+
+
+def _requires_inline_file_audit_payload(task: SPSubagentTask | None) -> bool:
+    contract = _public_schema_delivery_contract(task)
+    if task is None or task.subagent_type != "researcher" or contract is None or contract.get("delivery_mode") != "inline":
+        return False
+    required = contract.get("source_requirements")
+    return isinstance(required, Mapping) and required.get("audit_agent") == "researcher" and required.get("document_ids") == [] and isinstance(required.get("files"), list) and bool(required["files"])
+
+
+def _original_public_audit_payload_gaps(raw_result: Any, ai_messages: Any, task: SPSubagentTask) -> list[str]:
+    from deerflow.sp.output_contract import output_contract_gaps
+
+    if not _is_actual_final_response(raw_result, ai_messages):
+        return ["The public audit payload is absent from the actual final assistant response, or that response still contains unexecuted tool intent."]
+    contract = _public_schema_delivery_contract(task)
+    gaps = output_contract_gaps({"sp_task_contract": contract}, raw_result)
+    if not gaps:
+        return []
+    # Preserve the existing explicit artifact envelope transport, but validate
+    # only a value actually present in this final response. Do not recover a
+    # conclusion from prose, clean a nested wrapper, or trust model metadata.
+    try:
+        payload = json.loads(raw_result)
+    except (ValueError, TypeError, RecursionError):
+        return gaps
+    if isinstance(payload, dict) and "artifact_content" in payload:
+        content = payload["artifact_content"]
+        text = content if isinstance(content, str) or content is None else json.dumps(content, ensure_ascii=False)
+        return output_contract_gaps({"sp_task_contract": contract}, text)
+    return gaps
+
+
 def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = None) -> SPSubagentResult:
     """Normalize DR2 SubagentResult-like objects into SPSubagentResult."""
+    from deerflow.sp.source_access import collect_source_access
+
     raw_status = getattr(result, "status", None)
     status_value = getattr(raw_status, "value", raw_status)
     try:
@@ -749,6 +1045,8 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
     artifact_type = getattr(result, "artifact_type", None)
     artifact_metadata = getattr(result, "artifact_metadata", None)
     ai_messages = getattr(result, "ai_messages", None)
+    public_contract = _public_schema_delivery_contract(task)
+    textual_tool_intent = public_contract is not None and has_unexecuted_public_tool_intent(raw_result, public_contract)
     stop_reason = stop_reason or model_response_stop_reason(ai_messages if isinstance(ai_messages, list) else [])
     malformed_contract = (
         isinstance(raw_result, str) and (payload is None or not any(key in payload for key in ("summary", "artifact_content", "artifact_metadata"))) and bool(re.search(r'"(?:summary|artifact_content|artifact_metadata)"\s*:', raw_result))
@@ -765,12 +1063,36 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
             artifact_metadata = {}
         if isinstance(payload_metadata, dict):
             artifact_metadata = {**payload_metadata, **artifact_metadata}
+    if public_contract is not None and not is_memory_recaller:
+        textual_tool_intent = textual_tool_intent or has_unexecuted_public_tool_intent(_clean_artifact_content(artifact_content), public_contract)
+    if textual_tool_intent:
+        # Preserve the actual AI/raw record, but never turn an unexecuted call
+        # envelope (including one with an artifact_content field) into a report.
+        artifact_content = None
+        summary = raw_result
 
     normalized_result = _compact_result(summary)
     if is_memory_recaller:
         normalized_result = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) if payload is not None else raw_result
 
-    if artifact_content is None and not recovered_created_paths and isinstance(raw_result, str) and len(raw_result) > DEFAULT_LARGE_RESULT_THRESHOLD and status == SPSubagentStatus.COMPLETED and not is_memory_recaller:
+    # A complete public answer can be much smaller than the generic large-body
+    # threshold (including a legitimate empty array). Preserve only an actual
+    # final audit/delivery response that independently satisfies the public schema;
+    # never extract an answer from a receipt, tool result, or malformed wrapper.
+    if not textual_tool_intent and artifact_content is None and not recovered_created_paths and status == SPSubagentStatus.COMPLETED and not stop_reason and _is_public_schema_delivery(raw_result, ai_messages, task):
+        artifact_content = raw_result
+        artifact_type = artifact_type or _default_artifact_type(task.subagent_type)
+        malformed_contract = False
+
+    if (
+        not textual_tool_intent
+        and artifact_content is None
+        and not recovered_created_paths
+        and isinstance(raw_result, str)
+        and len(raw_result) > DEFAULT_LARGE_RESULT_THRESHOLD
+        and status == SPSubagentStatus.COMPLETED
+        and not is_memory_recaller
+    ):
         artifact_content = raw_result
         artifact_type = artifact_type or _default_artifact_type(task.subagent_type if task is not None else None)
 
@@ -817,9 +1139,19 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         if not isinstance(evidence_gaps, list):
             evidence_gaps = []
         artifact_metadata["evidence_gaps"] = [str(item) for item in evidence_gaps if str(item).strip()][:12]
+        if textual_tool_intent:
+            if artifact_metadata["completion_status"] == "complete":
+                artifact_metadata["completion_status"] = "partial"
+            artifact_metadata["unexecuted_public_tool_intent"] = True
+            artifact_metadata["evidence_gaps"].append("Unexecuted textual tool intent is not a public deliverable or file-write evidence; return the complete raw public value or execute a valid native tool call.")
         if malformed_contract or recovered_preview:
             artifact_metadata["completion_status"] = "partial"
             artifact_metadata["evidence_gaps"].append("Incomplete subagent output contract or recovered evidence preview; produce a complete deliverable before acceptance.")
+        final_ai_message = next((message for message in reversed(ai_messages if isinstance(ai_messages, list) else []) if isinstance(message, Mapping) and message.get("type", message.get("role")) in {"ai", "assistant"}), {})
+        final_ai_kwargs = final_ai_message.get("additional_kwargs")
+        if isinstance(final_ai_kwargs, Mapping) and final_ai_kwargs.get("tool_protocol_recovery_exhausted") is True:
+            artifact_metadata["completion_status"] = "partial"
+            artifact_metadata["evidence_gaps"].append("Final tool call remained malformed after one protocol correction and was not executed; produce a complete deliverable before acceptance.")
         if "disclosed_limitations" in artifact_metadata:
             limitations = artifact_metadata["disclosed_limitations"]
             artifact_metadata["disclosed_limitations"] = list(dict.fromkeys(str(item).strip() for item in limitations if str(item).strip()))[:12] if isinstance(limitations, list) else []
@@ -834,11 +1166,17 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
             artifact_metadata["completion_status"] = "partial"
         if stop_reason and not artifact_metadata["evidence_gaps"]:
             artifact_metadata["evidence_gaps"] = [f"Subagent execution ended early: {stop_reason}"]
-        if not str(normalized_result or "").strip() or str(normalized_result).strip() == "No response generated":
+        if (not str(normalized_result or "").strip() or str(normalized_result).strip() == "No response generated") and not _has_schema_artifact_content(artifact_content, task):
             if artifact_metadata["completion_status"] == "complete":
                 artifact_metadata["completion_status"] = "partial"
             if _NO_RESPONSE_GAP not in artifact_metadata["evidence_gaps"]:
                 artifact_metadata["evidence_gaps"].append(_NO_RESPONSE_GAP)
+        if _requires_inline_file_audit_payload(task):
+            public_payload_gaps = _original_public_audit_payload_gaps(raw_result, ai_messages, task)
+            if public_payload_gaps:
+                if artifact_metadata["completion_status"] == "complete":
+                    artifact_metadata["completion_status"] = "partial"
+                artifact_metadata["evidence_gaps"] = list(dict.fromkeys([*artifact_metadata["evidence_gaps"], _MISSING_PUBLIC_AUDIT_PAYLOAD_GAP, *public_payload_gaps]))
         if _coder_requires_execution_evidence(task):
             data_processing = is_data_processing_coder(task.metadata)
             verification = _execution_verification(ai_messages, reject_masked_commands=data_processing, allow_negative_findings=data_processing, task=task)
@@ -874,7 +1212,7 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
             task is not None
             and task.subagent_type == "coder"
             and not is_data_processing_coder(task.metadata)
-            and task.metadata.get("verification_only") is True
+            and (task.metadata.get("verification_only") is True or coder_task_kind(task) == "software_change")
             and str(task.stage or task.metadata.get("stage") or "").strip().lower() == "verification"
         )
         if coder_task_requires_implementation(task) or code_verification_only:
@@ -926,7 +1264,25 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         recommended_action="retry" if retryable else "accept",
         changed_files=list(dict.fromkeys(changed_files)),
         tests=tests,
+        source_access=collect_source_access(ai_messages if isinstance(ai_messages, list) else []),
+        created_path_evidence={"action_id": task.action_id, "paths": _successful_output_writes(ai_messages)} if task is not None else None,
     )
+
+
+def _is_public_schema_delivery(raw_result: Any, ai_messages: Any, task: SPSubagentTask | None) -> bool:
+    from deerflow.sp.output_contract import output_contract_gaps
+
+    contract = _public_schema_delivery_contract(task)
+    if contract is None or not _is_actual_final_response(raw_result, ai_messages):
+        return False
+    return not output_contract_gaps({"sp_task_contract": contract}, raw_result)
+
+
+def _is_actual_final_response(raw_result: Any, ai_messages: Any) -> bool:
+    if not isinstance(raw_result, str):
+        return False
+    final_ai = next((message for message in reversed(ai_messages if isinstance(ai_messages, list) else []) if isinstance(message, Mapping) and message.get("type", message.get("role")) in {"ai", "assistant"}), None)
+    return final_ai is not None and not final_ai.get("tool_calls") and not final_ai.get("invalid_tool_calls") and _message_text(final_ai.get("content")).strip() == raw_result.strip()
 
 
 def _default_artifact_type(subagent_type: str | None) -> str:
@@ -960,6 +1316,11 @@ def _merge_research_continuations(
 ) -> SPSubagentResult:
     if len(results) == 1:
         return results[0]
+    from deerflow.sp.source_access import merge_source_access
+
+    access = {}
+    for result in results:
+        access = merge_source_access(access, result.source_access)
 
     successful = [result for result in results if result.status == SPSubagentStatus.COMPLETED]
     base = successful[-1] if successful else results[-1]
@@ -1013,6 +1374,7 @@ def _merge_research_continuations(
         recommended_action="retry" if (base.retryable or failed_tail is not None) else "accept",
         changed_files=list(dict.fromkeys(path for result in results for path in result.changed_files)),
         tests=[test for result in results for test in result.tests],
+        source_access=access,
     )
 
 

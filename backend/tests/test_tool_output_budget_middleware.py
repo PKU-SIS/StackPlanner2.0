@@ -8,6 +8,7 @@ sync/async code paths.
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from types import SimpleNamespace
@@ -79,6 +80,48 @@ class TestMessageText:
 
     def test_non_string_non_list(self):
         assert _message_text(42) is None
+
+
+def test_retrieval_preview_covers_content_across_chunks_with_exact_read_lines(tmp_path):
+    from deerflow.agents.middlewares.tool_output_budget_middleware import _budget_content
+
+    content = json.dumps({"total": 8, "page": 1, "chunks": [{"id": str(index), "document_name": "metadata-" * 80, "content": f"<tag>FACT_{index}_START" + "x" * 300 + f"FACT_{index}_END</tag>"} for index in range(8)]}, indent=2)
+    preview = _budget_content(content, tool_name="ragflow_retrieve", tool_call_id="tc", outputs_path=str(tmp_path), config=ToolOutputConfig(externalize_min_chars=500, preview_head_chars=2000, preview_tail_chars=1000))
+    for index in range(8):
+        assert f"FACT_{index}_START" in preview
+        assert f"FACT_{index}_END" in preview
+    assert "8/8" in preview
+    assert "unread" in preview
+    assert "content line" in preview
+    saved = next(tmp_path.rglob("ragflow_retrieve-*.txt"))
+    assert saved.read_bytes() == content.encode()
+    assert len(preview) <= 3000
+
+
+def test_small_retrieval_preview_marks_unshown_chunks_and_matches_line_numbers():
+    content = json.dumps({"total": 300, "page": 2, "chunks": [{"id": str(index), "content": "opening-" + str(index) + "x" * 500 + f"-end-{index}"} for index in range(100)]}, indent=2)
+    preview = _build_preview(content, tool_name="ragflow_retrieve", virtual_path="/mnt/user-data/outputs/source.txt", head_chars=1000, tail_chars=500)
+    assert "of 300 matching" in preview
+    assert "unshown chunks" in preview
+    assert "not a complete evidence audit" in preview
+    assert len(preview) <= 1500
+    import re
+
+    for line in re.findall(r"content line (\d+)", preview):
+        assert '"content":' in content.splitlines()[int(line) - 1]
+
+
+def test_externalized_document_keeps_host_coverage_in_tool_artifact(tmp_path):
+    from deerflow.agents.middlewares.tool_output_budget_middleware import _patch_tool_message
+
+    coverage = {"mode": "document", "document_id": "doc", "total": 1, "chunk_ids": ["c"]}
+    body = json.dumps({"chunks": [{"content": "SOURCE" * 1000}], "source_coverage": coverage}, indent=2)
+    result = _patch_tool_message(_tm(body, name="ragflow_retrieve"), config=ToolOutputConfig(externalize_min_chars=500), outputs_path=str(tmp_path))
+    source = result.artifact["native_source_coverage"]
+    assert source["document_id"] == "doc"
+    assert source["externalized_path"].startswith("/mnt/user-data/outputs/")
+    for line in source["content_lines"]:
+        assert '"content":' in body.splitlines()[line - 1]
 
 
 class TestSnapToLineBoundary:
@@ -860,8 +903,9 @@ class TestMiddlewareChainIntegration:
         # ToolOutputBudgetMiddleware is the first wrap_tool_call handler.
         from deerflow.agents.middlewares.input_sanitization_middleware import InputSanitizationMiddleware
 
-        assert isinstance(middlewares[0], InputSanitizationMiddleware)
-        assert isinstance(middlewares[1], ToolOutputBudgetMiddleware)
+        # Hard call budgets wrap execution, then input sanitization and output limits.
+        input_index = next(i for i, m in enumerate(middlewares) if isinstance(m, InputSanitizationMiddleware))
+        assert isinstance(middlewares[input_index + 1], ToolOutputBudgetMiddleware)
 
     def test_budget_middleware_in_lead_chain(self):
         from deerflow.agents.middlewares.tool_error_handling_middleware import build_lead_runtime_middlewares
@@ -871,8 +915,9 @@ class TestMiddlewareChainIntegration:
 
         from deerflow.agents.middlewares.input_sanitization_middleware import InputSanitizationMiddleware
 
-        assert isinstance(middlewares[0], InputSanitizationMiddleware)
-        assert isinstance(middlewares[1], ToolOutputBudgetMiddleware)
+        # Hard call budgets wrap execution, then input sanitization and output limits.
+        input_index = next(i for i, m in enumerate(middlewares) if isinstance(m, InputSanitizationMiddleware))
+        assert isinstance(middlewares[input_index + 1], ToolOutputBudgetMiddleware)
 
 
 # ===========================================================================

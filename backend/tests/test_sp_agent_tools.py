@@ -84,6 +84,116 @@ class _ModelRequestStub:
         )
 
 
+def test_missing_public_sources_route_to_contract_auditor_before_perception_recovery():
+    stack = TaskMemoryStack()
+    stack.append_delegate("Inspect the task", run_id="run", metadata={"target_agent": "perception"})
+    stack.append_observe("Source not in inline context", actor="perception", run_id="run", metadata={"completion_status": "blocked", "evidence_gaps": ["Need original source"]})
+    state = {
+        "sp_loop_run_id": "run",
+        "sp_non_interactive": True,
+        "sp_task_memory": stack.to_dict(),
+        "sp_task_contract": {"source_requirements": {"audit_agent": "researcher", "files": [{"path": "/mnt/user-data/uploads/rules.txt", "total_lines": 2}], "document_ids": ["scoped-doc"]}},
+        "messages": [HumanMessage(content="Audit public sources.")],
+    }
+    request = _ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=state["messages"])
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
+    assert [tool.name for tool in filtered.tools] == ["sp_delegate"]
+    note = filtered.messages[-1]
+    assert note.name == "sp_public_source_audit_required"
+    assert 'target_agent="researcher"' in note.content
+    assert "ragflow_retrieve" in note.content and "read_file" in note.content
+    assert "do not repeat perception" in note.content
+
+
+@pytest.mark.parametrize("format_contract", [{}, {"output_parse_mode": "text", "output_schema": {"type": "string"}}, {"output_parse_mode": "json", "output_schema": {"type": "array"}}])
+@pytest.mark.parametrize("incidental_artifact", [False, True])
+def test_completed_public_text_audit_explains_unbound_finish_and_requires_direct_final(format_contract, incidental_artifact):
+    stack = TaskMemoryStack()
+    stack.append_delegate("Audit all operations", run_id="run", metadata={"target_agent": "researcher"})
+    stack.append_observe("Public audit completed", actor="researcher", run_id="run", metadata={"completion_status": "complete", "evidence_gaps": []})
+    state = {
+        "sp_loop_run_id": "run",
+        "sp_non_interactive": True,
+        "sp_task_memory": stack.to_dict(),
+        "sp_task_contract": {**format_contract, "source_requirements": {"audit_agent": "researcher", "files": []}},
+        "messages": [HumanMessage(content="Audit the operations and conclude in the requested text format.")],
+    }
+    if incidental_artifact:
+        state["sp_task_contract"]["delivery_mode"] = "inline"
+        state["sp_current_artifact_refs"] = {"generated_file": {"artifact_id": "incidental", "type": "generated_file", "run_id": "run", "virtual_path": "/mnt/user-data/outputs/audit.json", "metadata": {"completion_status": "complete"}}}
+    request = _ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=state["messages"])
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
+    assert filtered.tools == []
+    assert filtered.messages[-1].name == "sp_text_delivery_protocol"
+    assert "sp_finish is not bound" in filtered.messages[-1].content
+    assert "ordinary final assistant content" in filtered.messages[-1].content
+    assert "control JSON" in filtered.messages[-1].content
+
+
+def test_public_source_coverage_without_a_completed_audit_still_requires_auditor():
+    state = {"sp_loop_run_id": "run", "sp_non_interactive": True, "sp_task_contract": {"source_requirements": {"audit_agent": "researcher", "files": []}}, "messages": [HumanMessage(content="Audit all operations.")]}
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(_ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=state["messages"]))
+    assert [tool.name for tool in filtered.tools] == ["sp_delegate"]
+    assert filtered.messages[-1].name == "sp_public_source_audit_required"
+
+
+@pytest.mark.parametrize("document_ids", [[], ["scoped-document"]])
+def test_source_audit_recovery_carries_actual_native_gaps_and_draft_without_hiding_policy_checkpoint(document_ids):
+    stack = TaskMemoryStack()
+    stack.append_delegate("Audit every operation", run_id="run", metadata={"target_agent": "researcher"})
+    stack.append_observe(
+        "An unfinished audit draft exists", actor="researcher", run_id="run", result_ref="spart_actual_draft", metadata={"completion_status": "partial", "evidence_gaps": ["Detailed analysis of all operations is still required."]}
+    )
+    state = {
+        "sp_loop_run_id": "run",
+        "sp_non_interactive": True,
+        "sp_task_memory": stack.to_dict(),
+        "sp_task_contract": {"source_requirements": {"audit_agent": "researcher", "files": [], "document_ids": document_ids}},
+        "messages": [HumanMessage(content="Complete the public audit.")],
+    }
+    request = _ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=state["messages"])
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
+    assert [tool.name for tool in filtered.tools] == ["sp_delegate"]
+    note = filtered.messages[-1]
+    assert "Detailed analysis of all operations is still required." in note.content
+    assert 'input_refs=["spart_actual_draft"]' in note.content
+    assert "materially different recovery method" in note.content
+    assert ("For a file-only audit" in note.content) is (not document_ids)
+    if document_ids:
+        assert "total_pages" in note.content and "out_of_range" in note.content
+        assert "not missing source pages" in note.content
+        assert "not proof that the substantive audit is complete" in note.content
+    state["sp_last_handler_result"] = {"policy_checkpoint": "same_target_requires_intermediate_control_action"}
+    checkpoint = SPFinishAvailabilityMiddleware()._filter_request(request)
+    assert all(tool.name != "sp_delegate" for tool in checkpoint.tools)
+    assert checkpoint.messages[-1].name == "sp_delegate_policy_checkpoint"
+
+
+@pytest.mark.parametrize("mode,requires_file", [("inline", False), ("artifact", True)])
+def test_public_delivery_mode_overrides_conditional_transport_file_guidance(mode, requires_file):
+    guidance = (
+        "This is an unattended benchmark. Complete the task without asking the user questions. "
+        "Delegate the complete original question, all evidence paths, and its exact answer format to an execution or reporting specialist. "
+        "Read the supplied rule files with native read_file before answering. Use grep and line ranges for large evidence. "
+        "Delegate only tool_names that actually include every tool needed by the specialist. Follow the currently bound native tool schemas exactly. "
+        "If no FINISH tool is available, return the completed answer directly as ordinary text in the required task format. "
+        "Never output a JSON object or XML block representing an unavailable tool call. "
+        "For a requested file, first delegate its creation and verification, then select its registered reference; never invent an artifact."
+    )
+    state = {"sp_task_contract": {"delivery_mode": mode}, "messages": [HumanMessage(content=guidance + "\nAudit the original scenario.")]}
+    assert SPFinishAvailabilityMiddleware._requires_artifact_delivery(state) is requires_file
+
+
+def test_schema_report_recovery_requires_raw_value_or_actual_file_instead_of_receipt():
+    stack = TaskMemoryStack()
+    stack.append_observe("No real output was delivered", actor="reporter", run_id="run", metadata={"completion_status": "partial", "evidence_gaps": ["Output was only a receipt."]})
+    state = {"sp_loop_run_id": "run", "sp_task_memory": stack.to_dict(), "sp_task_contract": {"output_schema": {"type": "array"}, "delivery_mode": "artifact"}}
+    instruction = SPFinishAvailabilityMiddleware._artifact_recovery_instruction(state)
+    assert "complete revised raw public JSON/text value" in instruction
+    assert "write_file and read back its exact path" in instruction
+    assert "receipt alone is not delivery" in instruction
+
+
 def test_action_budget_sets_independent_central_action_limit():
     middleware = SPActionBudgetMiddleware(max_actions=7)
 
@@ -602,9 +712,10 @@ def test_partial_implementation_with_source_write_recovers_as_read_only_verifica
     assert "self-chosen examples" in instruction
 
 
-def test_partial_data_processing_recovery_preserves_its_acceptance_contract():
+@pytest.mark.parametrize("requested_tools", [[], ["ragflow_retrieve", "read_file"]])
+def test_partial_data_processing_recovery_preserves_its_acceptance_contract(requested_tools):
     stack = TaskMemoryStack()
-    metadata = {"target_agent": "coder", "coder_task_kind": "data_processing", "requires_implementation": False}
+    metadata = {"target_agent": "coder", "coder_task_kind": "data_processing", "requires_implementation": False, "tool_names": requested_tools}
     stack.append_delegate("Filter the source data", run_id="run-1", stage="verification", metadata=metadata)
     stack.append_observe(
         "One required row is missing.",
@@ -624,13 +735,16 @@ def test_partial_data_processing_recovery_preserves_its_acceptance_contract():
     filtered = middleware._filter_request(request)
 
     instruction = filtered.messages[-1].content
-    assert '"coder_task_kind": "data_processing"' in instruction
+    assert '"task_kind": "data_processing"' in instruction
     assert "source implementation recovery" not in instruction
+    for tool_name in requested_tools:
+        assert f'"{tool_name}"' in instruction
     update = middleware.after_model({**state, "messages": [*state["messages"], AIMessage(content="The data table is complete.")]}, SimpleNamespace(context={"run_id": "run-1"}))
     recovery = update["messages"][0].tool_calls[0]["args"]
-    assert recovery["metadata"]["coder_task_kind"] == "data_processing"
+    assert recovery["metadata"]["task_kind"] == "data_processing"
     assert recovery["metadata"]["requires_implementation"] is False
     assert recovery["metadata"].get("verification_only") is not True
+    assert set(requested_tools) <= set(recovery["metadata"]["tool_names"])
     assert "existing diff" not in recovery["task"]
     assert "edit it with a file tool" not in recovery["task"]
 
@@ -651,6 +765,7 @@ def test_verification_behavior_regression_recovers_to_writable_implementation():
         metadata={
             "target_agent": "coder",
             "completion_status": "partial",
+            "requires_implementation": True,
             "evidence_gaps": ["Existing regression test behavior is incompatible with the patch."],
         },
     )
@@ -891,7 +1006,8 @@ def test_partial_report_delegate_forces_revision_before_finish():
     assert recovery.name == "sp_artifact_recovery_required"
     assert 'input_refs=["report-v1"]' in recovery.content
     assert "Missing REVIEWED-HIGH" in recovery.content
-    assert "return the complete revised Markdown in artifact_content" in recovery.content
+    assert "return the complete revised content in artifact_content" in recovery.content
+    assert "Preserve the user's requested file format" in recovery.content
 
 
 def test_current_run_partial_report_cannot_be_bypassed_by_revise():
@@ -973,6 +1089,50 @@ def test_partial_report_recovery_stops_after_three_reporter_attempts():
     assert "3 reporter attempts" in instruction.content
     assert "must not be delegated again" in instruction.content
     assert "same citation gap remains unresolved" in instruction.content
+
+
+def test_report_recovery_uses_caller_budget_without_accepting_partial():
+    stack = TaskMemoryStack()
+    for index in range(3):
+        stack.append_delegate(f"Reporter attempt {index}", run_id="run-1", metadata={"target_agent": "reporter"})
+    state = {
+        "sp_loop_run_id": "run-1",
+        "sp_recovery_limits": {"reporter": 6},
+        "sp_task_memory": stack.to_dict(),
+        "sp_current_artifact_refs": {
+            "report": {"artifact_id": "draft", "type": "report", "run_id": "run-1", "is_current": True, "metadata": {"completion_status": "partial"}},
+        },
+    }
+    request = _ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=[HumanMessage(content="Finish the report.")])
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
+    assert {tool.name for tool in filtered.tools} == {"sp_delegate"}
+    assert SPFinishAvailabilityMiddleware._report_recovery_budget(state) == ("reporter", 3, 6)
+    assert not SPFinishAvailabilityMiddleware._has_finalizable_artifact(state)
+
+
+def test_capped_delegate_budget_can_be_raised_by_caller():
+    from deerflow.sp.memory import StackMemoryEntry
+
+    observation = StackMemoryEntry(action="observe", actor="researcher", content="Incomplete", metadata={"completion_status": "partial", "stop_reason": "loop_capped"})
+    assert SPFinishAvailabilityMiddleware._delegate_recovery_limit(observation, {"sp_recovery_limits": {"delegate": 8, "capped_delegate": 4}}) == 4
+
+
+def test_exhausted_research_without_file_has_explicit_incomplete_state():
+    stack = TaskMemoryStack()
+    stack.append_delegate("Audit evidence", run_id="run-1", metadata={"target_agent": "researcher"})
+    stack.append_observe("Audit incomplete", actor="researcher", run_id="run-1", metadata={"completion_status": "partial", "evidence_gaps": ["Unread evidence remains"]})
+    update = SPFinishAvailabilityMiddleware().after_model(
+        {
+            "sp_loop_run_id": "run-1",
+            "sp_non_interactive": True,
+            "sp_task_memory": stack.to_dict(),
+            "sp_recovery_limits": {"delegate": 1},
+            "messages": [HumanMessage(content="Audit the supplied sources."), AIMessage(content="Unable to finish.", id="last")],
+        },
+        None,
+    )
+    assert update["sp_recovery_exhausted"] == {"target_agent": "researcher", "attempts": 1, "limit": 1, "evidence_gaps": ["Unread evidence remains"]}
+    assert update["messages"][0].additional_kwargs["stackplanner"]["status"] == "incomplete"
 
 
 def test_partial_coder_recovery_stops_after_three_attempts_even_after_reflection():
@@ -1112,6 +1272,7 @@ def test_plain_success_claim_for_partial_coder_artifact_becomes_recovery_delegat
         result_ref="partial-code-1",
         metadata={
             "completion_status": "partial",
+            "requires_implementation": True,
             "evidence_gaps": ["The '-3--1,2' test still fails."],
             "target_agent": "coder",
         },
@@ -1449,6 +1610,33 @@ def test_action_payload_reroutes_uploaded_document_inspection_to_perception():
     assert payload["metadata"]["requires_implementation"] is False
 
 
+@pytest.mark.parametrize("kind_key", ["task_kind", "coder_task_kind"])
+@pytest.mark.parametrize(
+    "task",
+    [
+        "Read the uploaded financial documents and extract their requested amounts.",
+        "Generate the final board Markdown report from the current authoritative data sources.",
+    ],
+)
+def test_explicit_data_processing_keeps_execution_role_and_requested_tools(kind_key, task):
+    tools = ["read_file", "grep", "ragflow_retrieve", "bash"]
+    payload = _action_payload(
+        "sp_delegate",
+        {
+            "target_agent": "coder",
+            "stage": "implementation",
+            "task": task,
+            "metadata": {kind_key: "data_processing", "requires_implementation": False, "tool_names": tools},
+        },
+        tool_call_id="explicit-data-contract",
+    )
+
+    assert payload["target_agent"] == "coder"
+    assert payload["stage"] == "implementation"
+    assert payload["metadata"]["tool_names"] == tools
+    assert "routing_reason" not in payload["metadata"]
+
+
 @pytest.mark.parametrize(
     "task",
     [
@@ -1519,7 +1707,7 @@ def test_report_recovery_dispatches_by_missing_capability(gap, target):
     assert f'target_agent="{target}"' in instruction
     assert 'input_refs=["report-1"]' in instruction
     if target == "coder":
-        assert '"coder_task_kind": "data_processing"' in instruction
+        assert '"task_kind": "data_processing"' in instruction
 
 
 @pytest.mark.parametrize(
@@ -1545,6 +1733,16 @@ def test_noninteractive_exhausted_report_preserves_incomplete_outcome(question):
     assert message.additional_kwargs["stackplanner"]["status"] == "incomplete"
     assert message.tool_calls == []
     assert request.state["sp_current_artifact_refs"]["report"]["metadata"]["completion_status"] == "partial"
+
+
+def test_reporter_recovery_limit_applies_when_no_artifact_was_created():
+    request = _partial_report_request("Reporter created no artifact", question="Create a report; don't ask questions.", attempts=3)
+    request.state["sp_current_artifact_refs"] = {}
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
+
+    assert filtered.tools == []
+    assert "recovery limit" in filtered.messages[-1].content
+    assert "Reporter created no artifact" in filtered.messages[-1].content
 
 
 def test_report_recovery_returns_to_reporter_with_new_evidence_reference():
@@ -1597,7 +1795,7 @@ def test_report_missing_software_test_preserves_patch_and_software_contract():
     request.state["sp_task_memory"] = stack.to_dict()
     instruction = SPFinishAvailabilityMiddleware()._filter_request(request).messages[-1].content
     assert 'target_agent="coder"' in instruction
-    assert '"coder_task_kind": "software_change"' in instruction
+    assert '"task_kind": "software_change"' in instruction
     assert 'stage="verification"' in instruction
     assert "patch-1" in instruction
 

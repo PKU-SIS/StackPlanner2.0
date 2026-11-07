@@ -84,9 +84,9 @@ def _resolve_model_name(requested_model_name: str | None = None, *, app_config: 
     return default_model_name
 
 
-def _create_summarization_middleware(*, app_config: AppConfig | None = None) -> DeerFlowSummarizationMiddleware | None:
+def _create_summarization_middleware(*, app_config: AppConfig | None = None, main_model_name: str | None = None, output_token_limit: int | None = None) -> DeerFlowSummarizationMiddleware | None:
     """Create and configure the summarization middleware from config."""
-    return create_summarization_middleware(app_config=app_config)
+    return create_summarization_middleware(app_config=app_config, main_model_name=main_model_name, output_token_limit=output_token_limit)
 
 
 def _create_todo_list_middleware(is_plan_mode: bool) -> TodoMiddleware | None:
@@ -292,7 +292,11 @@ def build_middlewares(
     )
 
     # Add summarization middleware if enabled
-    summarization_middleware = _create_summarization_middleware(app_config=resolved_app_config)
+    try:
+        output_token_limit = int(_get_runtime_config(config).get("sp_central_max_tokens") or 0) if control_plane_only else 0
+    except (TypeError, ValueError):
+        output_token_limit = 0
+    summarization_middleware = _create_summarization_middleware(app_config=resolved_app_config, main_model_name=model_name, output_token_limit=max(0, output_token_limit))
     if summarization_middleware is not None:
         middlewares.append(summarization_middleware)
 
@@ -406,6 +410,7 @@ def _make_lead_agent(
     app_config: AppConfig,
     extra_tools: list | None = None,
     extra_middlewares: list[AgentMiddleware] | None = None,
+    outer_middlewares: list[AgentMiddleware] | None = None,
     prompt_prefix: str = "",
     identity_name: str | None = None,
     include_base_tools: bool = True,
@@ -422,6 +427,9 @@ def _make_lead_agent(
     resolved_app_config = app_config
     extra_tools = list(extra_tools or [])
     extra_middlewares = list(extra_middlewares or [])
+    # Outermost middleware runs its after_model hook after native guards.
+    # A model-retry jump must not skip token/loop/safety accounting.
+    outer_middlewares = list(outer_middlewares or [])
 
     # Extract user_id for user-scoped skill loading.
     # LangGraph gateway injects user_id into config["configurable"];
@@ -570,7 +578,8 @@ def _make_lead_agent(
         return create_agent(
             model=create_chat_model(name=model_name, thinking_enabled=thinking_enabled, app_config=resolved_app_config, attach_tracing=False, **central_model_overrides),
             tools=final_tools,
-            middleware=build_middlewares(
+            middleware=outer_middlewares
+            + build_middlewares(
                 middleware_config,
                 model_name=model_name,
                 available_skills=set(_BOOTSTRAP_SKILL_NAMES),
@@ -646,7 +655,8 @@ def _make_lead_agent(
     return create_agent(
         model=create_chat_model(name=model_name, thinking_enabled=thinking_enabled, reasoning_effort=reasoning_effort, app_config=resolved_app_config, attach_tracing=False, **central_model_overrides),
         tools=final_tools,
-        middleware=build_middlewares(
+        middleware=outer_middlewares
+        + build_middlewares(
             middleware_config,
             model_name=model_name,
             agent_name=agent_name,

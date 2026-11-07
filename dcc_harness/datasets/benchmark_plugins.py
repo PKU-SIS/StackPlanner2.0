@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from dcc_harness.evaluation.offline import EvaluationContext
@@ -34,7 +34,7 @@ class BenchmarkPlugin:
     score_task: Callable[..., dict[str, Any]] | None = None
     aggregate: Callable[..., dict[str, Any]] | None = None
     validate_dataset: Callable[[list[Task]], None] | None = None
-    setup_evaluation: Callable[["EvaluationContext"], None] | None = None
+    setup_evaluation: Callable[[EvaluationContext], None] | None = None
     evaluation_version: str = "1"
     evaluation_resources: tuple[Path, ...] = ()
     requires_judge: bool = False
@@ -90,9 +90,11 @@ def build_inputs(
     plugin: BenchmarkPlugin, public: PublicTask, thread_id: str
 ) -> dict[str, Any]:
     """Do not permit a plugin input builder to override native execution state."""
-    from langchain_core.messages import HumanMessage
     from deerflow.config.paths import get_paths
     from deerflow.runtime.user_context import get_effective_user_id
+    from langchain_core.messages import HumanMessage
+
+    from dcc_harness.preprocessing.output_contracts import public_output_contract
 
     prompt = plugin.prepare_task(public)
     if not isinstance(prompt, str) or not prompt.strip():
@@ -134,6 +136,11 @@ def build_inputs(
         raise ValueError(
             "benchmark instructions must be 1..12000 characters; put documents in files"
         )
+    output_contract = public_output_contract(public)
+    if plugin.name == "clause" and plugin.run_policy is not None:
+        # The autonomous file transport owns its source reads and registered answer.
+        # Keep the public JSON schema, without assigning the audit to a fixed role.
+        output_contract.pop("source_requirements", None)
     return {
         "messages": [HumanMessage(content=prompt, id=f"input-{thread_id}")],
         **prepared,
@@ -143,6 +150,7 @@ def build_inputs(
             "authoritative": True,
             "immutable": True,
             "original_issue": prompt,
+            **output_contract,
         },
     }
 
@@ -160,8 +168,8 @@ def _score_task(task: Task, text: str, context=None) -> dict[str, Any]:
 
 
 def _cuad_aggregate(tasks: list[Task], rows: list[dict], context) -> dict:
-    from dcc_harness.metrics import evaluate_cuad
     from dcc_harness.evaluation.offline import macro_average
+    from dcc_harness.metrics import evaluate_cuad
 
     result = evaluate_cuad(
         {t.id: t.gold for t in tasks}, {r["task_id"]: r["answer"] for r in rows}

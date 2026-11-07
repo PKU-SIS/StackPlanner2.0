@@ -149,6 +149,23 @@ class TestHashToolCalls:
 
         assert _hash_tool_calls([forward_call]) != _hash_tool_calls([reversed_call])
 
+    def test_disjoint_read_ranges_have_distinct_hashes(self):
+        calls = [{"name": "read_file", "args": {"path": "/tmp/document.txt", "start_line": start, "end_line": start + 29}} for start in range(1, 151, 30)]
+
+        assert len({_hash_tool_calls([call]) for call in calls}) == 5
+
+    def test_open_ended_read_is_distinct_from_a_single_line(self):
+        to_eof = {"name": "read_file", "args": {"path": "/tmp/document.txt", "start_line": 30}}
+        single_line = {"name": "read_file", "args": {"path": "/tmp/document.txt", "start_line": 30, "end_line": 30}}
+
+        assert _hash_tool_calls([to_eof]) != _hash_tool_calls([single_line])
+
+    def test_implicit_start_matches_explicit_first_line(self):
+        implicit = {"name": "read_file", "args": {"path": "/tmp/document.txt", "end_line": 30}}
+        explicit = {"name": "read_file", "args": {"path": "/tmp/document.txt", "start_line": 1, "end_line": 30}}
+
+        assert _hash_tool_calls([implicit]) == _hash_tool_calls([explicit])
+
     def test_stringified_non_dict_args_do_not_crash(self):
         non_dict_json_call = {"name": "bash", "args": '"echo hello"'}
         plain_string_call = {"name": "bash", "args": "echo hello"}
@@ -191,6 +208,48 @@ class TestHashToolCalls:
 
 
 class TestLoopDetection:
+    def test_ragflow_distinct_pages_and_documents_are_progress(self):
+        middleware = LoopDetectionMiddleware()
+        runtime = _make_runtime()
+        for document in ("one", "two"):
+            for page in range(1, 5):
+                call = {"name": "ragflow_retrieve", "id": f"{document}-{page}", "args": {"question": "audit", "query": "audit", "document_id": document, "page": page, "page_size": 100}}
+                assert middleware._apply(_make_state(tool_calls=[call]), runtime) is None
+        assert middleware.consume_stop_reason("test-run") is None
+
+    def test_identical_ragflow_page_still_reaches_hard_stop(self):
+        middleware = LoopDetectionMiddleware()
+        runtime = _make_runtime()
+        call = {"name": "ragflow_retrieve", "id": "same", "args": {"question": "audit", "query": "audit", "document_id": "one", "page": 1, "page_size": 100}}
+        for _ in range(4):
+            assert middleware._apply(_make_state(tool_calls=[call]), runtime) is None
+        assert middleware._apply(_make_state(tool_calls=[call]), runtime)["messages"][0].tool_calls == []
+        assert middleware.consume_stop_reason("test-run") == "loop_capped"
+
+    def test_scanning_distinct_chunks_does_not_warn_or_stop(self):
+        middleware = LoopDetectionMiddleware()
+        runtime = _make_runtime()
+
+        results = []
+        for start in range(1, 151, 30):
+            call = {"name": "read_file", "id": f"read-{start}", "args": {"path": "/tmp/document.txt", "start_line": start, "end_line": start + 29}}
+            results.append(middleware._apply(_make_state(tool_calls=[call]), runtime))
+        assert all(result is None for result in results)
+        assert not middleware._pending_warnings.get(_pending_key())
+        assert middleware.consume_stop_reason("test-run") is None
+
+    def test_identical_read_range_still_reaches_hard_stop(self):
+        middleware = LoopDetectionMiddleware()
+        runtime = _make_runtime()
+        call = {"name": "read_file", "id": "read-same", "args": {"path": "/tmp/document.txt", "start_line": 30, "end_line": 59}}
+
+        for _ in range(4):
+            assert middleware._apply(_make_state(tool_calls=[call]), runtime) is None
+        result = middleware._apply(_make_state(tool_calls=[call]), runtime)
+
+        assert result["messages"][0].tool_calls == []
+        assert middleware.consume_stop_reason("test-run") == "loop_capped"
+
     def test_no_tool_calls_returns_none(self):
         mw = LoopDetectionMiddleware()
         runtime = _make_runtime()
@@ -538,10 +597,10 @@ class TestLoopDetection:
         runtime_new = _make_runtime("thread-new")
         mw._apply(_make_state(tool_calls=call), runtime_new)
 
-        assert "thread-0" not in mw._history
+        assert ("thread-0", "test-run") not in mw._history
         assert "thread-0" not in mw._tool_freq
         assert "thread-0" not in mw._tool_freq_warned
-        assert "thread-new" in mw._history
+        assert ("thread-new", "test-run") in mw._history
         assert len(mw._history) == 3
 
     def test_warned_hashes_are_pruned_to_sliding_window(self):
@@ -554,9 +613,9 @@ class TestLoopDetection:
             mw._apply(_make_state(tool_calls=call), runtime)
             mw._apply(_make_state(tool_calls=call), runtime)
 
-        assert len(mw._history["test-thread"]) <= 4
-        assert set(mw._warned["test-thread"]).issubset(set(mw._history["test-thread"]))
-        assert len(mw._warned["test-thread"]) <= 4
+        assert len(mw._history[("test-thread", "test-run")]) <= 4
+        assert set(mw._warned[("test-thread", "test-run")]).issubset(set(mw._history[("test-thread", "test-run")]))
+        assert len(mw._warned[("test-thread", "test-run")]) <= 4
 
     def test_pending_warning_keys_are_capped(self):
         """Abnormal same-thread runs cannot grow pending-warning keys forever."""
@@ -608,7 +667,7 @@ class TestLoopDetection:
         call = [_bash_call("ls")]
 
         mw._apply(_make_state(tool_calls=call), runtime)
-        assert "default" in mw._history
+        assert ("default", "default") in mw._history
 
 
 class TestLoopDetectionAgentGraphIntegration:
@@ -1123,7 +1182,7 @@ class TestTotalToolCallDetection:
         runtime = _make_runtime()
 
         for i in range(5):
-            assert mw._apply(_make_state(tool_calls=[self._alternating_call(i)]), runtime) is None
+            mw._apply(_make_state(tool_calls=[self._alternating_call(i)]), runtime)
 
         result = mw._apply(_make_state(tool_calls=[self._alternating_call(5)]), runtime)
         assert result is not None

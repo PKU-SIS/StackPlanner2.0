@@ -153,9 +153,11 @@ def test_build_subagent_runtime_middlewares_threads_app_config_to_llm_middleware
     from deerflow.agents.middlewares.token_budget_middleware import TokenBudgetMiddleware
     from deerflow.agents.middlewares.tool_output_budget_middleware import ToolOutputBudgetMiddleware
 
-    assert len(middlewares) == 15
-    assert isinstance(middlewares[0], FakeMiddleware)  # InputSanitizationMiddleware stub
-    assert isinstance(middlewares[1], ToolOutputBudgetMiddleware)
+    assert len(middlewares) == 17
+    assert type(middlewares[0]).__name__ == "ToolCallBudgetMiddleware"
+    assert type(middlewares[1]).__name__ == "RunToolBudgetMiddleware"
+    assert isinstance(middlewares[2], FakeMiddleware)  # InputSanitizationMiddleware stub
+    assert isinstance(middlewares[3], ToolOutputBudgetMiddleware)
     assert any(isinstance(m, ToolErrorHandlingMiddleware) for m in middlewares)
     # The token-budget backstop is attached by default so the cap engages (#3875).
     assert any(isinstance(m, TokenBudgetMiddleware) for m in middlewares)

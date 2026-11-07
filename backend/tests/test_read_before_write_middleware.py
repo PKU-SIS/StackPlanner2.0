@@ -375,6 +375,124 @@ class TestSamePathSerialization:
 
     PATH = "/mnt/user-data/outputs/report.md"
 
+    @pytest.mark.parametrize("tool_name", ["read_file", "write_file"])
+    def test_contended_gate_keeps_default_executor_available(self, tool_name):
+        import asyncio
+        from concurrent.futures import ThreadPoolExecutor
+
+        class RecordingExecutor(ThreadPoolExecutor):
+            def __init__(self):
+                super().__init__(max_workers=2)
+                self.submitted = []
+
+            def submit(self, *args, **kwargs):
+                future = super().submit(*args, **kwargs)
+                self.submitted.append(future)
+                return future
+
+        mw = _middleware({self.PATH: "v1"})
+        request = _make_request(tool_name, {"description": "d", "path": self.PATH, "content": "v2"}, [_read_marked_message(self.PATH, "v1")])
+        lock = mw._lock_for(request, self.PATH)
+
+        async def run():
+            executor = RecordingExecutor()
+            asyncio.get_running_loop().set_default_executor(executor)
+            owner_started = asyncio.Event()
+            allow_io = asyncio.Event()
+            active = 0
+            maximum_active = 0
+
+            async def handler(_request):
+                nonlocal active, maximum_active
+                active += 1
+                maximum_active = max(maximum_active, active)
+                owner_started.set()
+                try:
+                    await allow_io.wait()
+                    content = await asyncio.to_thread(lambda: "v1")
+                    return ToolMessage(content=content, tool_call_id="call-1", name=tool_name)
+                finally:
+                    active -= 1
+
+            tasks = [asyncio.create_task(mw.awrap_tool_call(request, handler))]
+            try:
+                await asyncio.wait_for(owner_started.wait(), timeout=1)
+                tasks.extend(asyncio.create_task(mw.awrap_tool_call(request, handler)) for _ in range(3))
+                await asyncio.sleep(0.03)
+                allow_io.set()
+                results = await asyncio.wait_for(asyncio.gather(*tasks), timeout=1)
+                assert maximum_active == 1
+                assert all(result.status == "success" for result in results)
+                if tool_name == "read_file":
+                    assert all(result.additional_kwargs["deerflow_read_mark"]["hash"] == _sha("v1") for result in results)
+            finally:
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                # The broken implementation leaves running lock.acquire calls
+                # after cancellation. Drain those only for test cleanup so the
+                # regression fails with a timeout instead of hanging pytest.
+                while any(not future.done() for future in executor.submitted):
+                    if lock.locked():
+                        lock.release()
+                    await asyncio.sleep(0.01)
+                if lock.locked():
+                    lock.release()
+
+        asyncio.run(run())
+
+    @pytest.mark.parametrize("tool_name", ["read_file", "write_file"])
+    def test_cancelling_gate_waiters_leaves_no_background_acquisitions(self, tool_name):
+        import asyncio
+        from concurrent.futures import ThreadPoolExecutor
+
+        class RecordingExecutor(ThreadPoolExecutor):
+            def __init__(self):
+                super().__init__(max_workers=2)
+                self.submitted = []
+
+            def submit(self, *args, **kwargs):
+                future = super().submit(*args, **kwargs)
+                self.submitted.append(future)
+                return future
+
+        mw = _middleware({self.PATH: "v1"})
+        request = _make_request(tool_name, {"description": "d", "path": self.PATH, "content": "v2"})
+        lock = mw._lock_for(request, self.PATH)
+        lock.acquire()
+
+        async def run():
+            executor = RecordingExecutor()
+            asyncio.get_running_loop().set_default_executor(executor)
+
+            async def handler(_request):
+                raise AssertionError("cancelled waiters must not enter the handler")
+
+            tasks = [asyncio.create_task(mw.awrap_tool_call(request, handler)) for _ in range(3)]
+            try:
+                await asyncio.sleep(0.03)
+                for task in tasks:
+                    task.cancel()
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                assert all(isinstance(result, asyncio.CancelledError) for result in results)
+                assert await asyncio.wait_for(asyncio.to_thread(lambda: "executor available"), timeout=1) == "executor available"
+                lock.release()
+                await asyncio.sleep(0.03)
+                assert lock.acquire(blocking=False), "cancelled waiters must not acquire the released lock later"
+                lock.release()
+            finally:
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                while any(not future.done() for future in executor.submitted):
+                    if lock.locked():
+                        lock.release()
+                    await asyncio.sleep(0.01)
+                if lock.locked():
+                    lock.release()
+
+        asyncio.run(run())
+
     def test_parallel_appends_exactly_one_lands(self):
         import asyncio
 

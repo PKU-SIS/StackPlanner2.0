@@ -6,6 +6,7 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from deerflow.agents.thread_state import sp_action_count
 from deerflow.sp.actions.events import make_sp_event
 from deerflow.sp.actions.handlers import (
     AskHumanHandler,
@@ -30,7 +31,7 @@ from deerflow.sp.memory import (
 )
 from deerflow.sp.memory.stack import DEFAULT_SUMMARIZE_MIN_PROGRESS_ENTRIES
 from deerflow.sp.subagents import SPSubagentExecutorProtocol
-from deerflow.sp.subagents.dr2_adapter import is_data_processing_coder
+from deerflow.sp.subagents.dr2_adapter import is_data_processing_coder, observation_requires_code_recovery
 
 DEFAULT_MAX_LOOP_ITERATIONS = 20
 MAX_IDEMPOTENCY_LEDGER_ENTRIES = 100
@@ -63,6 +64,7 @@ _EXTERNAL_EVIDENCE_PATTERN = re.compile(
     r")",
     re.IGNORECASE,
 )
+_EXTERNAL_RETRIEVAL_TOOL_NAMES = frozenset({"ragflow_retrieve", "web_search", "web_fetch"})
 _CODER_SOURCE_GAP_PATTERN = re.compile(
     r"(?:no\s+(?:non[- ]test\s+)?source\s+(?:file\s+)?changed"
     r"|no\s+non[- ]test\s+source\s+file"
@@ -399,6 +401,8 @@ class ActionRouter:
         """Repair clear researcher/coder role inversions at the action boundary."""
         if action.action_type is not ActionType.DELEGATE:
             return
+        if action.target_agent == "coder" and is_data_processing_coder(action.metadata):
+            return
         text = "\n".join(
             value
             for value in (
@@ -420,7 +424,9 @@ class ActionRouter:
             return
         if action.target_agent != "researcher":
             return
-        if _EXTERNAL_EVIDENCE_PATTERN.search(text):
+        requested_tools = action.metadata.get("tool_names")
+        retrieval_selected = isinstance(requested_tools, list) and bool(_EXTERNAL_RETRIEVAL_TOOL_NAMES.intersection(name.strip() for name in requested_tools if isinstance(name, str)))
+        if retrieval_selected or _EXTERNAL_EVIDENCE_PATTERN.search(text):
             return
         exact_combinatorial = bool(_LOCAL_COMBINATORIAL_WORK_PATTERN.search(text) and _EXACT_WORK_PATTERN.search(text))
         if not exact_combinatorial and not _LOCAL_CALCULATION_PATTERN.search(text):
@@ -467,9 +473,15 @@ class ActionRouter:
             return
         if is_data_processing_coder(observation.metadata):
             if action.target_agent == "coder":
-                action.metadata.setdefault("coder_task_kind", "data_processing")
+                action.metadata["task_kind"] = "data_processing"
+                action.metadata["coder_task_kind"] = "data_processing"
             return
 
+        if not observation_requires_code_recovery(observation.metadata):
+            return
+        action.metadata["task_kind"] = "software_change"
+        action.metadata["coder_task_kind"] = "software_change"
+        action.metadata["requires_implementation"] = observation.metadata.get("requires_implementation") is True
         source_recovery = bool(_CODER_SOURCE_GAP_PATTERN.search(gap_text))
         behavior_recovery = bool(_CODER_BEHAVIOR_GAP_PATTERN.search(gap_text))
         implementation_verification = observation.metadata.get("implementation_verification")
@@ -479,8 +491,12 @@ class ActionRouter:
             return
         if action.target_agent == "coder":
             if (source_recovery or behavior_recovery) and action.stage == "implementation":
+                action.metadata["requires_implementation"] = True
+                action.metadata["verification_only"] = False
                 return
             if (implementation_exists or verification_observation) and not (source_recovery or behavior_recovery) and action.stage == "verification":
+                action.metadata["requires_implementation"] = False
+                action.metadata["verification_only"] = True
                 return
 
         declared_target = action.target_agent
@@ -1108,10 +1124,7 @@ class ActionRouter:
 
     @staticmethod
     def _loop_iteration_for_run(state: Mapping[str, Any], run_id: str | None) -> int:
-        state_run_id = state.get("sp_loop_run_id")
-        if run_id and state_run_id and str(state_run_id) != run_id:
-            return 0
-        return int(state.get("sp_loop_iteration") or 0)
+        return sp_action_count(state, run_id)
 
     def _build_state_update(
         self,

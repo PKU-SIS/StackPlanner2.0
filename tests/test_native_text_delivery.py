@@ -8,6 +8,23 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from dcc_harness.evaluation.benchmarks import DeliveryError, extract_delivery
 
 
+def test_native_recovery_exhaustion_is_never_an_empty_prediction():
+    with pytest.raises(DeliveryError) as exc:
+        extract_delivery(
+            {
+                "sp_recovery_exhausted": {
+                    "target_agent": "reporter",
+                    "attempts": 6,
+                    "limit": 6,
+                }
+            },
+            thread_id="t",
+            run_id="r",
+            native_returned=True,
+        )
+    assert exc.value.status == "recovery_exhausted"
+
+
 def direct_state(**overrides):
     return {
         "messages": [
@@ -44,6 +61,52 @@ def test_collects_normal_native_text_without_finish_or_summary_fallback():
     assert extract(direct_state()) == ("CombinationErr", None)
     with pytest.raises(DeliveryError):
         extract(direct_state(), returned=False)
+
+
+@pytest.mark.parametrize(
+    "status,stop_reason,passes",
+    [
+        ("complete", None, True),
+        ("partial", None, False),
+        ("blocked", None, False),
+        ("complete", "turn_capped", False),
+    ],
+)
+def test_public_audit_text_requires_current_native_complete_status(
+    status, stop_reason, passes
+):
+    from deerflow.sp.memory import TaskMemoryStack
+
+    stack = TaskMemoryStack()
+    stack.append_delegate(
+        "Audit source", run_id="run-1", metadata={"target_agent": "researcher"}
+    )
+    stack.append_observe(
+        "Audit status",
+        actor="researcher",
+        run_id="run-1",
+        metadata={
+            "completion_status": status,
+            "stop_reason": stop_reason,
+            "evidence_gaps": [],
+        },
+    )
+    state = direct_state(
+        sp_task_memory=stack.to_dict(),
+        sp_task_contract={
+            "source_requirements": {
+                "audit_agent": "researcher",
+                "files": [],
+                "document_ids": [],
+            }
+        },
+    )
+    if passes:
+        assert extract(state) == ("CombinationErr", None)
+    else:
+        with pytest.raises(DeliveryError) as exc:
+            extract(state)
+        assert exc.value.status == "unfinished"
 
 
 @pytest.mark.parametrize(
@@ -158,6 +221,75 @@ def test_visible_text_blocks_do_not_expose_reasoning():
     assert extract(state) == ("Answer: False.", None)
 
 
+@pytest.mark.parametrize(
+    "error_type,status",
+    [
+        ("SPCentralEmptyResponse", "empty_response"),
+        ("SPCentralInvalidToolCall", "protocol_error"),
+        ("SPCentralToolProtocolError", "protocol_error"),
+        ("APIConnectionError", "infrastructure_error"),
+        ("UnknownError", "infrastructure_error"),
+        ({"unexpected": "shape"}, "infrastructure_error"),
+    ],
+)
+def test_current_native_text_error_preserves_exact_failure_classification(
+    error_type, status
+):
+    from dcc_harness.evaluation.benchmark_runner import failure_status
+
+    state = direct_state()
+    state["messages"][-1].additional_kwargs["error_type"] = error_type
+
+    with pytest.raises(DeliveryError) as error:
+        extract(state)
+
+    assert error.value.status == status
+    assert failure_status(state) == status
+
+
+@pytest.mark.parametrize(
+    "error_name,status",
+    [
+        ("SPCentralEmptyResponse", "empty_response"),
+        ("SPCentralInvalidToolCall", "protocol_error"),
+        ("SPCentralToolProtocolError", "protocol_error"),
+    ],
+)
+def test_native_middleware_policy_fallback_is_not_an_infrastructure_error(
+    error_name, status
+):
+    from types import SimpleNamespace
+
+    from deerflow.agents.middlewares.llm_error_handling_middleware import (
+        LLMErrorHandlingMiddleware,
+    )
+    from deerflow.config.app_config import AppConfig
+    from deerflow.config.sandbox_config import SandboxConfig
+    from deerflow.sp import central_resilience
+
+    from dcc_harness.evaluation.benchmark_runner import failure_status
+
+    middleware = LLMErrorHandlingMiddleware(
+        app_config=AppConfig(sandbox=SandboxConfig(use="test"))
+    )
+    error_class = getattr(central_resilience, error_name)
+
+    async def invalid_model_output(_request):
+        raise error_class("Invalid generated control response")
+
+    message = asyncio.run(
+        middleware.awrap_model_call(SimpleNamespace(), invalid_model_output)
+    )
+
+    assert message.additional_kwargs["error_type"] == error_name
+    assert message.additional_kwargs["deerflow_error_fallback"] is True
+    state = direct_state(messages=[message])
+    with pytest.raises(DeliveryError) as error:
+        extract(state)
+    assert error.value.status == "unfinished"
+    assert failure_status(state) == status
+
+
 def test_timeout_after_a_visible_message_is_not_promoted(tmp_path, monkeypatch):
     import deerflow.sp.runtime as native
 
@@ -245,3 +377,22 @@ def test_real_native_graph_direct_answer_is_collected(tmp_path, monkeypatch):
     state = json.loads((tmp_path / "attempt/state.json").read_text())
     assert state["sp_non_interactive"] is True
     assert not state.get("sp_pending_human_interaction")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '<tool_call>{"name":"sp_finish","arguments":{"run_summary":"False"}}</tool_call>',
+        '<tool_call>{"name":"sp_finish"}',
+        '{"name":"sp_finish","arguments":{"result":"False"}}',
+        '{"name":"sp_delegate","arguments":{"task":"read"}}',
+        "False. <|im_end|>",
+        "<|im_start|>assistant\nFalse",
+    ],
+)
+def test_unrecovered_qwen_protocol_is_not_a_native_text_delivery(text):
+    state = direct_state()
+    state["messages"][-1].content = text
+    with pytest.raises(DeliveryError) as error:
+        extract(state)
+    assert error.value.status == "protocol_error"

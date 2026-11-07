@@ -61,6 +61,24 @@ def test_native_factory_filters_human_tool_and_records_runtime_policy(monkeypatc
     assert captured["config"]["configurable"]["non_interactive"] is non_interactive
 
 
+def test_native_factory_honors_explicit_execution_budgets(monkeypatch, tmp_path):
+    from deerflow.config.app_config import AppConfig
+    from deerflow.sp.agent_tools import SPActionBudgetMiddleware
+    from deerflow.sp.middlewares import TaskMemoryMiddleware
+    from deerflow.sp.runtime import make_sp_agent
+
+    captured = {}
+    monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path / "native"))
+    monkeypatch.setattr("deerflow.agents.lead_agent.agent._make_lead_agent", lambda config, **kwargs: captured.update(kwargs) or SimpleNamespace())
+    app = AppConfig.from_file(str(Path(__file__).resolve().parents[2] / "configs/stackplanner_benchmarks.yaml"))
+    graph = make_sp_agent({"configurable": {"sp_max_actions": 64, "sp_report_recovery_max_attempts": 6, "sp_delegate_recovery_max_attempts": 8, "sp_capped_delegate_recovery_max_attempts": 4}}, app_config=app)
+    budget = next(item for item in captured["extra_middlewares"] if isinstance(item, SPActionBudgetMiddleware))
+    assert budget._max_actions == 64
+    memory = next(item for item in captured["extra_middlewares"] if isinstance(item, TaskMemoryMiddleware))
+    assert memory._recovery_limits == {"reporter": 6, "delegate": 8, "capped_delegate": 4}
+    assert graph.metadata["sp_max_actions"] == 64
+
+
 def test_runtime_context_keeps_long_term_memory_on_demand(monkeypatch):
     profile = SimpleNamespace(
         name="sp-professor",
@@ -288,6 +306,41 @@ def test_delegate_tool_policy_ignores_output_formats_misfiled_as_tool_names():
 
     assert selected is config
     assert selected.tools is None
+
+
+def test_reporter_can_request_localized_revision_tools():
+    from deerflow.subagents.builtins import SP_SPECIALIST_CONFIGS
+
+    config = SP_SPECIALIST_CONFIGS["reporter"]
+    requested = ["read_file", "grep", "write_file", "str_replace"]
+    task = SPSubagentTask(
+        action_id="report-json-repair",
+        subagent_type="reporter",
+        task="Correct a JSON syntax error in this action's report file",
+        description="Localized file revision",
+        metadata={"tool_names": requested},
+    )
+
+    selected = _apply_task_tool_policy(config, task, available_tools=[SimpleNamespace(name=name) for name in requested])
+
+    assert selected.tools == requested
+    assert config.tools is None
+
+
+@pytest.mark.parametrize("name", ["bash", "web_search", "web_fetch", "task", "ask_clarification", "present_files"])
+def test_reporter_revision_scope_retains_role_restrictions(name):
+    from deerflow.subagents.builtins import SP_SPECIALIST_CONFIGS
+
+    task = SPSubagentTask(
+        action_id="report-forbidden-tool",
+        subagent_type="reporter",
+        task="Revise the report",
+        description="Role isolation check",
+        metadata={"tool_names": [name]},
+    )
+
+    with pytest.raises(ValueError, match="forbidden"):
+        _apply_task_tool_policy(SP_SPECIALIST_CONFIGS["reporter"], task, available_tools=[SimpleNamespace(name=name)])
 
 
 def test_delegate_tool_policy_maps_interpreter_aliases_to_bash():
@@ -709,6 +762,68 @@ def test_sp_executor_provider_applies_runtime_subagent_execution_overrides(monke
     assert captured["config"].timeout_seconds == 45
     assert captured["max_tokens_per_step"] == 1024
     assert captured["protect_test_files"] is True
+
+
+@pytest.mark.parametrize("role", ["reporter", "coder"])
+def test_sp_executor_json_protection_scope_comes_from_reporter_action(monkeypatch, role):
+    captured = {}
+    config = SubagentConfig(name=f"sp-{role}", description=role, skills=[], internal=True)
+
+    class FakeExecutor:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def execute(self, prompt):
+            return SimpleNamespace(status="completed", result="done", error=None, stop_reason=None, task_id="child", token_usage_records=[])
+
+    monkeypatch.setattr("deerflow.subagents.get_subagent_config", lambda name, app_config=None: config)
+    monkeypatch.setattr("deerflow.subagents.SubagentExecutor", FakeExecutor)
+    provider = DR2SPExecutorProvider(app_config=SimpleNamespace(), parent_model="test-model", runnable_config={})
+    provider._tools = []
+    executor = provider({}, SimpleNamespace(context={"thread_id": "thread-1", "run_id": "run-1"}, stream_writer=None))
+    executor.execute(SPSubagentTask(action_id="current-action", subagent_type=role, task="Produce the report", description="Need evidence", metadata={"reporter_action_id": "forged-action"}))
+    assert captured["reporter_action_id"] == ("current-action" if role == "reporter" else None)
+
+
+@pytest.mark.parametrize("role,expected", [("reporter", False), ("researcher", True)])
+@pytest.mark.parametrize("delivery_mode", ["inline", "artifact"])
+@pytest.mark.parametrize("file_only", [False, True])
+def test_source_prefetch_settings_are_host_owned_and_only_enable_public_auditor(monkeypatch, role, expected, delivery_mode, file_only):
+    captured = {}
+    config = SubagentConfig(name=f"sp-{role}", description=role, skills=[], internal=True, system_prompt="<role>Audit public evidence</role>\n<output_contract>Return outer artifact_content envelope</output_contract>")
+
+    class FakeExecutor:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def execute(self, prompt):
+            captured["prompt"] = prompt
+            return SimpleNamespace(status="completed", result="done", ai_messages=[], token_usage_records=[])
+
+    monkeypatch.setattr("deerflow.subagents.get_subagent_config", lambda name, app_config=None: config)
+    monkeypatch.setattr("deerflow.subagents.SubagentExecutor", FakeExecutor)
+    provider = DR2SPExecutorProvider(
+        app_config=SimpleNamespace(),
+        parent_model="test",
+        runnable_config={"configurable": {"sp_source_prefetch_enabled": True, "sp_source_prefetch_tokenizer": "private-local-tokenizer", "sp_source_prefetch_context_tokens": 73728, "sp_source_prefetch_response_tokens": 16384}},
+    )
+    provider._tools = []
+    executor = provider({}, SimpleNamespace(context={"thread_id": "thread", "run_id": "run"}, stream_writer=None))
+    contract = {"delivery_mode": delivery_mode, "output_schema": {"type": "array"}, "source_requirements": {"audit_agent": "researcher", "files": []}}
+    if file_only:
+        contract["source_requirements"].update(files=[{"path": "/mnt/user-data/uploads/rules.txt", "total_lines": 1}], document_ids=[])
+    executor.execute(
+        SPSubagentTask(action_id="current-action", subagent_type=role, task="Audit public source", description="Need evidence", context_refs={"task_contract": contract}, metadata={"sp_source_prefetch_tokenizer": "model-forged-path"})
+    )
+    assert (captured["source_prefetch_settings"] is not None) is expected
+    assert captured["source_prefetch_auditor_role"] == (role if expected else None)
+    if expected:
+        assert captured["source_prefetch_settings"].tokenizer == "private-local-tokenizer"
+        assert captured["source_prefetch_contract"] == contract
+    assert "private-local-tokenizer" not in captured["prompt"]
+    assert "<output_contract>" not in captured["config"].system_prompt
+    assert "<public-schema-final-delivery>" in captured["config"].system_prompt
+    assert captured["public_output_contract"] == (contract if delivery_mode == "artifact" or (file_only and expected) else None)
 
 
 def test_sp_executor_provider_normalizes_command_names_in_tool_allowlist(monkeypatch):

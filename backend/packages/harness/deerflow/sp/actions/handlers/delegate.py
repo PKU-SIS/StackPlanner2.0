@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -14,8 +16,12 @@ from deerflow.sp.actions.run_policy import active_run_policy
 from deerflow.sp.actions.schema import HandlerResult, SPAction
 from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.memory import StackMemoryEntry
+from deerflow.sp.output_contract import output_contract_gaps
+from deerflow.sp.public_format_repair import public_json_reconstruction_instruction
+from deerflow.sp.recovery import artifact_array_token_cap_instruction, is_token_capped_report_artifact, recovery_limit, report_public_format_errors, source_audit_recovery_instruction
+from deerflow.sp.source_access import merge_source_access, source_access_gaps
 from deerflow.sp.subagents import SPSubagentExecutorProtocol, SPSubagentResult, SPSubagentTask
-from deerflow.sp.subagents.dr2_adapter import coder_task_requires_implementation, is_data_processing_coder
+from deerflow.sp.subagents.dr2_adapter import coder_task_kind, coder_task_requires_implementation, is_data_processing_coder
 
 OBSERVE_SUMMARY_MAX_CHARS = 700
 LARGE_RESULT_ARTIFACT_THRESHOLD = 1200
@@ -29,6 +35,14 @@ REPORTER_FEEDBACK_MAX_ITEMS = 8
 REPORTER_FEEDBACK_MAX_CHARS = 2400
 REPORTER_REQUIRED_LITERAL_MAX_ITEMS = 64
 REPORTER_UPLOAD_TEXT_MAX_CHARS = 1_000_000
+REPORTER_JSON_MAX_CHARS = 16 * 1024 * 1024
+_JSON_REPORT_CONTRACT_PATTERN = re.compile(
+    r"\b(?:return|output|respond\s+with|answer\s+with)\s+"
+    r"(?:(?:only|strictly|exactly|a|an|the|single|valid|strict|one|as|in|final|answer|must|be|is)\s+)*JSON\b"
+    r"|\b(?:required\s+deliverable|output\s+format|response\s+format|answer\s+format)\b[^\n]{0,100}(?:\.json\b|\bJSON\b)"
+    r"|(?:输出|返回|作答|交付|格式)(?:必须|应当|应|需|为|是|一个|严格|有效|的|仅|只|\s|:|：)*JSON",
+    re.IGNORECASE,
+)
 PERCEPTION_UPLOAD_BODY_MAX_ITEMS = 16
 PERCEPTION_UPLOAD_BODY_MAX_CHARS = 48_000
 PERCEPTION_UPLOAD_BODY_PER_ITEM_MAX_CHARS = 16_000
@@ -348,6 +362,11 @@ def _required_report_literal_tokens(
     context_refs: Mapping[str, Any],
 ) -> list[str]:
     """Extract exact label/ID tokens when the request requires preservation."""
+    contract = context.state.get("sp_task_contract")
+    if isinstance(contract, Mapping) and "output_schema" in contract:
+        # A schema-constrained value is not a prose report. Tool instructions,
+        # example IDs and quoted evidence cannot add inferred answer literals.
+        return []
     latest_query = str(context_refs.get("latest_user_input") or context_refs.get("original_query") or "")
     request_text = "\n".join(
         value
@@ -486,8 +505,31 @@ class DelegateHandler:
                 return HandlerResult(next_step="error_recoverable", idempotency_key=action.idempotency_key, error=problem)
 
         intermediate = policy.intermediate_artifact_type(action) if policy is not None else None
-        if not intermediate and action.target_agent == "reporter":
+        if action.target_agent == "reporter":
+            attempts = context.stack.delegate_recovery_attempt_count("reporter", run_id=context.run_id)
+            limit = recovery_limit(context.state, "reporter")
+            if attempts >= limit:
+                # Schema filtering is advisory to the model. Enforce the
+                # unresolved chain's hard bound at the execution boundary too.
+                return HandlerResult(
+                    next_step="error_recoverable",
+                    state_update={"sp_active_delegate_id": None, "sp_recovery_exhausted": {"target_agent": "reporter", "attempts": attempts, "limit": limit}},
+                    idempotency_key=action.idempotency_key,
+                    error=f"Reporter reached its recovery limit of {limit} unresolved attempts; preserve the partial result and its evidence gaps.",
+                    run_events=[make_sp_event("sp.delegate.recovery_exhausted", action_id=action.action_id, run_id=context.run_id, target_agent="reporter", attempts=attempts, limit=limit)],
+                )
             _prepare_partial_report_retry(action, context.state)
+            previous = next((entry for entry in reversed(context.stack.entries) if entry.action == "observe" and entry.actor == "reporter" and entry.run_id == context.run_id), None)
+            if previous is not None and previous.metadata.get("completion_status") in {"partial", "blocked"}:
+                # The prior task's runtime-validated scope is authoritative;
+                # artifact metadata supplied by the child never grants it.
+                # Every inherited name is validated again by the runtime.
+                # A missing artifact may leave the next stage as reporting.
+                for key in ("tool_names", "skill_names"):
+                    if action.metadata.get(key) in (None, []):
+                        saved = previous.metadata.get(key)
+                        if isinstance(saved, list):
+                            action.metadata[key] = list(saved)
 
         if not intermediate and _is_unrequested_report_revision(action, context.state, run_id=context.run_id):
             entry = context.stack.append(
@@ -546,12 +588,22 @@ class DelegateHandler:
                 )
             )
         if action.target_agent == "coder":
-            task_metadata.setdefault("coder_task_kind", "software_change")
-        data_processing = action.target_agent == "coder" and is_data_processing_coder(task_metadata)
-        if data_processing:
+            task_metadata["task_kind"] = coder_task_kind(
+                SPSubagentTask(
+                    action_id=action.action_id,
+                    subagent_type="coder",
+                    task=str(action.task),
+                    description=action.reason,
+                    expected_output=action.expected_output,
+                    metadata=task_metadata,
+                )
+            )
+        if action.target_agent == "coder":
+            task_metadata["coder_task_kind"] = task_metadata["task_kind"]
+        if action.target_agent == "coder" and is_data_processing_coder(task_metadata):
             task_metadata["requires_implementation"] = False
             task_metadata.pop("verification_only", None)
-            task_metadata.setdefault("tool_names", ["read_file", "bash"])
+            task_metadata.setdefault("tool_names", ["read_file", "write_file", "bash"])
         if action.target_agent == "coder" and action.stage in {
             "perception",
             "planning",
@@ -560,7 +612,7 @@ class DelegateHandler:
             task_metadata["requires_implementation"] = False
         if (
             action.target_agent == "coder"
-            and not data_processing
+            and not is_data_processing_coder(task_metadata)
             and action.stage
             not in {
                 "perception",
@@ -568,26 +620,23 @@ class DelegateHandler:
                 "research",
             }
         ):
-            # Preserve the implementation contract across recovery turns. A
-            # later Central action may only say "locate the implementation";
-            # without this inherited flag that read-only step could be marked
-            # complete and FINISH would become available despite no source edit.
-            verification_only = action.stage == "verification" and action.metadata.get("verification_only") is True and action.metadata.get("requires_implementation") is False
-            prior_requires_implementation = any(entry.action == "delegate" and entry.metadata.get("target_agent") == "coder" and entry.metadata.get("requires_implementation") is True for entry in context.stack.entries)
+            # Preserve this delegation's explicit contract. Source recovery
+            # carries its own flag; unrelated earlier coder work must not
+            # impose source edits or software tests on a data task.
+            verification_only = action.stage == "verification" and action.metadata.get("requires_implementation") is not True and (action.metadata.get("verification_only") is True or task_metadata["task_kind"] == "software_change")
+            if verification_only:
+                task_metadata["verification_only"] = True
             task_metadata["requires_implementation"] = (
                 False
                 if verification_only
-                else bool(
-                    prior_requires_implementation
-                    or coder_task_requires_implementation(
-                        SPSubagentTask(
-                            action_id=action.action_id,
-                            subagent_type="coder",
-                            task=str(action.task),
-                            description=action.reason,
-                            expected_output=action.expected_output,
-                            metadata={"stage": action.stage},
-                        )
+                else coder_task_requires_implementation(
+                    SPSubagentTask(
+                        action_id=action.action_id,
+                        subagent_type="coder",
+                        task=str(action.task),
+                        description=action.reason,
+                        expected_output=action.expected_output,
+                        metadata=task_metadata,
                     )
                 )
             )
@@ -637,6 +686,14 @@ class DelegateHandler:
 
         latest_uploaded_refs = _latest_uploaded_file_refs(context.state)
         input_refs = list(action.input_refs)
+        source_requirements = (context.state.get("sp_task_contract") or {}).get("source_requirements") or {}
+        previous_rag_audit = None
+        if action.target_agent == "researcher" and isinstance(source_requirements, Mapping) and source_requirements.get("audit_agent") == "researcher" and source_requirements.get("document_ids") and context.run_id:
+            previous = next((entry for entry in reversed(context.stack.entries) if entry.actor == "researcher" and entry.action in {"observe", "error"} and entry.run_id == context.run_id), None)
+            if previous is not None and (previous.action == "error" or previous.metadata.get("completion_status") in {"partial", "blocked"}):
+                previous_rag_audit = previous
+                if previous.result_ref:
+                    input_refs = list(dict.fromkeys([*input_refs, previous.result_ref]))
         if action.target_agent in {"perception", "reporter"}:
             input_refs = list(
                 dict.fromkeys(
@@ -657,14 +714,31 @@ class DelegateHandler:
         if isinstance(requested_acceptance, list):
             acceptance_criteria.extend(str(value).strip() for value in requested_acceptance if isinstance(value, str) and value.strip())
         raw_budgets = task_metadata.get("budgets")
-        budgets = {str(name): value for name, value in raw_budgets.items() if isinstance(name, str) and name.strip() and isinstance(value, int) and not isinstance(value, bool) and value > 0} if isinstance(raw_budgets, Mapping) else {}
+        if raw_budgets is not None and not isinstance(raw_budgets, Mapping):
+            raise ValueError("SP action metadata.budgets must be an object")
+        budgets = dict(raw_budgets) if isinstance(raw_budgets, Mapping) else {}
         allowed_tools = task_metadata.get("tool_names")
         allowed_tools = list(dict.fromkeys(str(value).strip() for value in allowed_tools if isinstance(value, str) and value.strip())) if isinstance(allowed_tools, list) else []
 
+        recovery_instruction = artifact_array_token_cap_instruction(context.state, stack=context.stack, run_id=context.run_id) if action.target_agent == "reporter" else ""
+        if previous_rag_audit is not None:
+            recovery_instruction += source_audit_recovery_instruction(previous_rag_audit, has_documents=True)
+        format_drafts = [item for item in (context_refs.get("artifact_bodies") or {}).get("items", []) if item.get("recovery_kind") == "public_format"]
+        if action.target_agent == "reporter" and format_drafts:
+            recovery_instruction += (
+                "\n<public-json-draft-reconstruction>\n"
+                + public_json_reconstruction_instruction()
+                + "Native rejected draft references: "
+                + ", ".join(str(item["artifact_id"]) for item in format_drafts)
+                + ". "
+                + "Actual native format errors: "
+                + "; ".join(gap for item in format_drafts for gap in item["format_errors"])
+                + "\n</public-json-draft-reconstruction>\n"
+            )
         task = SPSubagentTask(
             action_id=action.action_id,
             subagent_type=str(action.target_agent),
-            task=str(action.task),
+            task=str(action.task) + ("\n\n" + recovery_instruction if recovery_instruction else ""),
             description=action.reason,
             input_refs=input_refs,
             expected_output=action.expected_output,
@@ -686,11 +760,24 @@ class DelegateHandler:
         task.validate_protocol()
 
         result = self._executor.execute(task)
+        access = merge_source_access(context.state.get("sp_source_access"), {**(result.source_access or {}), "run_id": context.run_id})
+        context = replace(context, state={**context.state, "sp_source_access": access})
+        if action.target_agent in {"researcher", "reporter"}:
+            gaps = source_access_gaps(context.state)
+            if gaps:
+                result.artifact_metadata["completion_status"] = "partial"
+                result.artifact_metadata["evidence_gaps"] = list(dict.fromkeys([*(result.artifact_metadata.get("evidence_gaps") or []), *gaps]))
+                result.completion_status = "partial"
+                result.retryable = True
+                result.recommended_action = "retry"
         if result.is_success:
             if policy is not None:
                 policy.prepare_result(task, result, context)
-            return self._handle_success(action, context, delegate_entry, result, task=task)
-        return self._handle_failure(action, context, delegate_entry, result)
+            handled = self._handle_success(action, context, delegate_entry, result, task=task)
+        else:
+            handled = self._handle_failure(action, context, delegate_entry, result)
+        handled.state_update["sp_source_access"] = access
+        return handled
 
     def _materialize_stage_artifacts(self, action: SPAction, context: HandlerContext) -> dict[str, Any]:
         candidates = _artifact_candidates_for_role(action, context)
@@ -720,6 +807,30 @@ class DelegateHandler:
                 continue
             content, truncated = materialized
             artifact_id = str(ref.get("artifact_id") or ref.get("virtual_path") or f"artifact-{index + 1}")
+            capped_preview = action.target_agent == "reporter" and is_token_capped_report_artifact(ref, run_id=context.run_id)
+            format_errors = report_public_format_errors(ref, context.state.get("sp_task_contract") or {}, run_id=context.run_id) if action.target_agent == "reporter" else []
+            preview_metadata = {}
+            if capped_preview:
+                status = ref["metadata"]["completion_status"]
+                content = (
+                    f"[Unverified noncanonical Reporter draft: completion_status={status}; stop_reason=token_capped. "
+                    "Its body is omitted only from this transient preview; it is not the revision baseline. "
+                    f"The complete original artifact is unchanged and available through native read_file at {ref.get('virtual_path')}. "
+                    "Rebuild from the original public sources; read this draft as needed to verify prior findings, "
+                    "preserving every distinct supported finding and original quotation.]"
+                )
+                truncated = True
+                preview_metadata = {"content_omitted": True, "canonical": False, "completion_status": status, "stop_reason": "token_capped"}
+            elif format_errors:
+                status = ref["metadata"]["completion_status"]
+                content = (
+                    f"[Noncanonical Reporter draft rejected by native public JSON validation; completion_status={status}. "
+                    "Only this transient body is omitted; do not copy it as the revision baseline. "
+                    f"The unchanged complete draft remains readable through native read_file at {ref.get('virtual_path')}. "
+                    "Reconstruct malformed encoding from original sources, preserving every verified distinct finding and quotation.]"
+                )
+                truncated = True
+                preview_metadata = {"content_omitted": True, "canonical": False, "completion_status": status, "recovery_kind": "public_format", "format_errors": format_errors}
             items.append(
                 {
                     "artifact_id": artifact_id,
@@ -730,6 +841,7 @@ class DelegateHandler:
                     "summary": ref.get("summary"),
                     "content": content,
                     "truncated": truncated,
+                    **preview_metadata,
                 }
             )
             remaining_chars -= len(content)
@@ -872,6 +984,10 @@ class DelegateHandler:
                 }
                 else _text_artifact_filename_hint(result.artifact_metadata)
             )
+            public_contract = context.state.get("sp_task_contract") or {}
+            extension = public_contract.get("output_file_extension")
+            if action.target_agent == "reporter" and extension in {".json", ".txt"}:
+                filename_hint = f"{action.action_id}{extension}"
             previous_artifact_id = _current_artifact_id(
                 context.state.get("sp_current_artifact_refs"),
                 artifact_type,
@@ -953,11 +1069,16 @@ class DelegateHandler:
                 "execution_verification",
                 "verification_only",
                 "requires_implementation",
+                "task_kind",
             )
             if key in result.artifact_metadata
         }
-        if task.metadata.get("coder_task_kind"):
-            acceptance_metadata["coder_task_kind"] = task.metadata["coder_task_kind"]
+        acceptance_metadata.update({key: task.metadata[key] for key in ("requires_implementation", "verification_only", "task_kind", "coder_task_kind") if key in task.metadata})
+        # Keep the handler/runtime task contract, not model-authored artifact
+        # metadata, so bounded recovery can retain explicitly requested tools.
+        for key in ("tool_names", "skill_names"):
+            if isinstance(task.metadata.get(key), list):
+                acceptance_metadata[key] = list(task.metadata[key])
         observe_entry = context.stack.append_observe(
             observe_content,
             actor=str(action.target_agent),
@@ -1278,7 +1399,9 @@ def _report_language_alignment_gaps(
 ) -> list[str]:
     """Reject predominantly English reports when the user requested in Chinese."""
     latest_query = str(task.context_refs.get("latest_user_input") or task.context_refs.get("original_query") or "")
-    if len(_CJK_CHARACTER_PATTERN.findall(latest_query)) < 4 or _EXPLICIT_ENGLISH_REPORT_PATTERN.search(latest_query) or len(output.strip()) < 200:
+    # Negated English requests ("不要用英文") are not permission to switch language.
+    language_request = re.sub(r"(?:不要|不能|禁止|勿|不必|无需).{0,8}(?:英文|英语)|\b(?:do not|don't|never)\b[^。.!?\n]{0,32}\benglish\b", "", latest_query, flags=re.I)
+    if len(_CJK_CHARACTER_PATTERN.findall(latest_query)) < 4 or _EXPLICIT_ENGLISH_REPORT_PATTERN.search(language_request):
         return []
     # Source tables, code, literal identifiers, and citation destinations do not
     # express the report's narrative language and must retain their source values.
@@ -1387,6 +1510,61 @@ def _report_boundary_adjustment_gaps(
     return gaps
 
 
+def _report_json_artifact_checks(
+    result: SPSubagentResult,
+    *,
+    task: SPSubagentTask,
+    declared_paths: list[str],
+    context: HandlerContext,
+    artifact_adapter: SPArtifactAdapter,
+) -> tuple[list[str], list[str]]:
+    """Check actual JSON deliverables, never bounded synthesis previews.
+
+    A specialist's format claims are not validation evidence. Preserve bad
+    files unchanged and return syntax diagnostics to the normal bounded
+    report-revision path; do not repair or choose answer content here.
+    """
+    paths = result.artifact_metadata.get("created_paths") or []
+    public_request = _clean_user_instruction(str(task.context_refs.get("latest_user_input") or task.context_refs.get("original_query") or task.task))
+    # Ownership filtering must not erase the format contract. Discarded paths
+    # are hints only: never read, overwrite or register them on this basis.
+    requires_json = bool(_JSON_REPORT_CONTRACT_PATTERN.search(public_request)) or any(PurePosixPath(path).suffix.lower() == ".json" for path in declared_paths)
+    candidates: list[tuple[str, str | None, bool]] = []
+    for path in paths:
+        if PurePosixPath(path).suffix.lower() != ".json" and not requires_json:
+            continue
+        materialized = artifact_adapter.read_text_artifact(
+            {"virtual_path": path},
+            state=context.state,
+            thread_id=context.thread_id,
+            max_chars=REPORTER_JSON_MAX_CHARS,
+        )
+        candidates.append((path, *(materialized if materialized is not None else (None, False))))
+    filename = _text_artifact_filename_hint(result.artifact_metadata)
+    json_filename = bool(filename and PurePosixPath(filename).suffix.lower() == ".json")
+    if not paths and (requires_json or json_filename) and result.artifact_content is not None:
+        content = result.artifact_content
+        text = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
+        candidates.append((filename or "inline-report", text, len(text) > REPORTER_JSON_MAX_CHARS))
+
+    gaps: list[str] = []
+    for path, text, truncated in candidates:
+        name = PurePosixPath(path).name
+        if text is None:
+            gaps.append(f"JSON artifact {name!r} cannot be read as UTF-8 text; write and read back a valid JSON file.")
+            continue
+        if truncated:
+            gaps.append(f"JSON artifact {name!r} exceeds the complete validation limit; a truncated preview cannot validate a JSON document.")
+            continue
+        try:
+            json.loads(text)
+        except json.JSONDecodeError as exc:
+            gaps.append(f"JSON artifact {name!r} is invalid at line {exc.lineno}, column {exc.colno}: {exc.msg}. Rewrite it as exactly one valid JSON document while preserving the requested content and format.")
+        except RecursionError:
+            gaps.append(f"JSON artifact {name!r} exceeds the JSON parser nesting limit; preserve the requested format with supported nesting.")
+    return [path for path, _, _ in candidates], gaps
+
+
 def _apply_report_acceptance_checks(
     result: SPSubagentResult,
     *,
@@ -1397,9 +1575,67 @@ def _apply_report_acceptance_checks(
     """Reject reports with missing literals or non-portable local links."""
     raw_created_paths = result.artifact_metadata.get("created_paths")
     declared_paths = [str(value) for value in raw_created_paths if isinstance(value, str)] if isinstance(raw_created_paths, list) else []
-    valid_paths = [value for value in declared_paths if _report_created_path_matches_action(value, task.action_id)]
+    evidence = result.created_path_evidence
+    written_paths = evidence.get("paths", []) if isinstance(evidence, Mapping) and evidence.get("action_id") == task.action_id else []
+    valid_paths = [value for value in declared_paths if _report_created_path_matches_action(value, task.action_id) or value in written_paths]
     discarded_paths = [value for value in declared_paths if value not in valid_paths]
+    public_schema = isinstance(context.state.get("sp_task_contract"), Mapping) and "output_schema" in context.state["sp_task_contract"]
+    unreadable_paths = []
+    if public_schema:
+        # A model's current-action filename is still only a claim. A missing
+        # claimed file must not hide the actual generated inline answer, which
+        # the ordinary native fallback can validate and persist unchanged.
+        unreadable_paths = [path for path in valid_paths if artifact_adapter.read_text_artifact({"virtual_path": path}, state=context.state, thread_id=context.thread_id, max_chars=REPORTER_JSON_MAX_CHARS) is None]
+        valid_paths = [path for path in valid_paths if path not in unreadable_paths]
+        discarded_paths.extend(unreadable_paths)
     result.artifact_metadata["created_paths"] = valid_paths
+    json_paths, json_gaps = _report_json_artifact_checks(
+        result,
+        task=task,
+        declared_paths=declared_paths,
+        context=context,
+        artifact_adapter=artifact_adapter,
+    )
+    schema_gaps: list[str] = []
+    if isinstance(context.state.get("sp_task_contract"), Mapping) and "output_schema" in context.state["sp_task_contract"]:
+        if valid_paths:
+            for path in valid_paths:
+                materialized = artifact_adapter.read_text_artifact({"virtual_path": path}, state=context.state, thread_id=context.thread_id, max_chars=REPORTER_JSON_MAX_CHARS)
+                schema_gaps.extend(output_contract_gaps(context.state, materialized[0] if materialized is not None and not materialized[1] else None))
+        else:
+            content = result.artifact_content
+            text = content if isinstance(content, str) or content is None else json.dumps(content, ensure_ascii=False)
+            schema_gaps.extend(output_contract_gaps(context.state, text))
+        json_gaps.extend(schema_gaps)
+
+    if public_schema:
+        # Public audit outputs can quote contradictions verbatim. Generic prose
+        # report heuristics would mistake the quoted defect for a new report
+        # claim, or infer tool-example IDs as required answer text. The actual
+        # public schema, native status/source gates and file evidence own this
+        # contract; preserve any existing incomplete status/gaps unchanged.
+        checks = result.artifact_metadata.get("quality_checks")
+        quality_checks = dict(checks) if isinstance(checks, Mapping) else {}
+        ownership_passed = not discarded_paths or bool(valid_paths) or result.artifact_content is not None
+        quality_checks["public_output_schema"] = {"passed": not schema_gaps, "evidence_gaps": schema_gaps}
+        quality_checks["created_path_ownership"] = {
+            "discarded_paths": discarded_paths,
+            "unreadable_paths": unreadable_paths,
+            "fallback_artifact_content": result.artifact_content is not None,
+            "passed": ownership_passed,
+        }
+        if json_paths:
+            quality_checks["json_artifact_syntax"] = {"files": json_paths, "evidence_gaps": json_gaps, "passed": not json_gaps}
+        result.artifact_metadata["quality_checks"] = quality_checks
+        if json_gaps or not ownership_passed:
+            result.artifact_metadata["completion_status"] = "partial"
+            gaps = result.artifact_metadata.get("evidence_gaps")
+            gaps = list(gaps) if isinstance(gaps, list) else []
+            gaps.extend(gap for gap in json_gaps if gap not in gaps)
+            if not ownership_passed:
+                gaps.append("Declared output paths lack current-action ownership; return the complete raw public value or create and read back the actual output file.")
+            result.artifact_metadata["evidence_gaps"] = gaps
+        return
 
     requirements = task.context_refs.get("report_requirements")
     raw_tokens = requirements.get("required_literal_tokens") if isinstance(requirements, Mapping) else None
@@ -1440,9 +1676,12 @@ def _apply_report_acceptance_checks(
     declared_gaps = [str(gap).strip() for gap in declared_gaps if str(gap).strip()] if isinstance(declared_gaps, list) else []
     checks = result.artifact_metadata.get("quality_checks")
     quality_checks = dict(checks) if isinstance(checks, Mapping) else {}
+    if isinstance(context.state.get("sp_task_contract"), Mapping) and "output_schema" in context.state["sp_task_contract"]:
+        quality_checks["public_output_schema"] = {"passed": not schema_gaps, "evidence_gaps": schema_gaps}
     status = str(result.artifact_metadata.get("completion_status") or "complete").strip().lower()
     accept_disclosed_data_gap = bool(
         no_data_constraint
+        and not source_access_gaps(context.state)
         and status in {"partial", "blocked"}
         and not result.stop_reason
         and output
@@ -1457,15 +1696,24 @@ def _apply_report_acceptance_checks(
         and not introduced_tokens
         and not source_precedence_gaps
         and not boundary_adjustment_gaps
+        and not json_gaps
         and declared_gaps
         and all(_MISSING_INPUT_DISCLOSURE_PATTERN.fullmatch(gap) for gap in declared_gaps)
         and not any(check is False or (isinstance(check, Mapping) and check.get("passed") is False) for check in quality_checks.values())
     )
     quality_checks["created_path_ownership"] = {
         "discarded_paths": discarded_paths,
-        "fallback_artifact_content": bool(result.artifact_content),
-        "passed": not discarded_paths or bool(result.artifact_content),
+        "fallback_artifact_content": result.artifact_content is not None if public_schema else bool(result.artifact_content),
+        "passed": not discarded_paths or (result.artifact_content is not None if public_schema else bool(result.artifact_content)),
     }
+    if public_schema:
+        quality_checks["created_path_ownership"]["unreadable_paths"] = unreadable_paths
+    if json_paths:
+        quality_checks["json_artifact_syntax"] = {
+            "files": json_paths,
+            "evidence_gaps": json_gaps,
+            "passed": not json_gaps,
+        }
     if required:
         quality_checks["required_literal_tokens"] = {
             "required": required,
@@ -1514,7 +1762,7 @@ def _apply_report_acceptance_checks(
         limitations = [str(value).strip() for value in limitations if str(value).strip()] if isinstance(limitations, list) else []
         result.artifact_metadata["disclosed_limitations"] = list(dict.fromkeys([*limitations, *declared_gaps]))[:12]
         result.artifact_metadata["evidence_gaps"] = []
-    if not missing and not unsafe_links and not threshold_gaps and not unsupported_no_data_claims and not language_gaps and not introduced_tokens and not source_precedence_gaps and not boundary_adjustment_gaps:
+    if not missing and not unsafe_links and not threshold_gaps and not unsupported_no_data_claims and not language_gaps and not introduced_tokens and not source_precedence_gaps and not boundary_adjustment_gaps and not json_gaps:
         return
 
     status = str(result.artifact_metadata.get("completion_status") or "complete").strip().lower()
@@ -1549,6 +1797,9 @@ def _apply_report_acceptance_checks(
     for boundary_gap in boundary_adjustment_gaps:
         if boundary_gap not in gaps:
             gaps.append(boundary_gap)
+    for json_gap in json_gaps:
+        if json_gap not in gaps:
+            gaps.append(json_gap)
     result.artifact_metadata["evidence_gaps"] = gaps
 
 
@@ -1815,9 +2066,11 @@ def _delegated_artifact_metadata(
     metadata["delegate_stage"] = action.stage
     metadata["target_agent"] = action.target_agent
     metadata["requires_implementation"] = task.metadata.get("requires_implementation")
-    metadata.pop("coder_task_kind", None)
-    if task.metadata.get("coder_task_kind"):
-        metadata["coder_task_kind"] = task.metadata["coder_task_kind"]
+    for key in ("task_kind", "coder_task_kind", "verification_only"):
+        metadata.pop(key, None)
+    if task.subagent_type == "coder":
+        metadata["task_kind"] = coder_task_kind(task)
+        metadata["coder_task_kind"] = metadata["task_kind"]
     if task.metadata.get("verification_only") is True:
         metadata["verification_only"] = True
     return metadata

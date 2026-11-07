@@ -9,8 +9,10 @@ model context is never blown by a single large tool return.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
+import re
 import shlex
 import uuid
 from collections.abc import Awaitable, Callable
@@ -203,6 +205,70 @@ def _externalize_to_sandbox(
 # ---------------------------------------------------------------------------
 
 
+def _build_retrieval_preview(content: str, *, tool_name: str, virtual_path: str, budget: int) -> str | None:
+    """Spread bounded source excerpts across retrieved chunks, not metadata.
+
+    The saved JSON remains byte-identical. Line references address its actual
+    content fields, so a specialist can read the omitted source with native
+    read_file instead of treating a preview as a complete evidence audit.
+    """
+    if tool_name != "ragflow_retrieve" or budget < 512:
+        return None
+    try:
+        result = json.loads(content)
+    except (ValueError, RecursionError):
+        return None
+    chunks = result.get("chunks") if isinstance(result, dict) else None
+    if not isinstance(chunks, list) or not chunks or any(not isinstance(chunk, dict) or not isinstance(chunk.get("content"), str) for chunk in chunks):
+        return None
+    records: list[tuple[str, str]] = []
+    cursor = 0
+    for index, chunk in enumerate(chunks):
+        value = chunk["content"]
+        # Native retrieval emits indented JSON with literal UTF-8. Also accept
+        # ASCII escaping, but never invent line references for another format.
+        offsets = [content.find('"content": ' + json.dumps(value, ensure_ascii=ascii_), cursor) for ascii_ in (False, True)]
+        offsets = [offset for offset in offsets if offset >= 0]
+        if not offsets:
+            return None
+        offset = min(offsets)
+        cursor = offset + len('"content": ')
+        line = content.count("\n", 0, offset) + 1
+        records.append((f"chunk {index + 1}, content line {line}, {len(value)} chars: ", value))
+    total = result.get("total", len(chunks))
+    page = result.get("page", "unknown")
+    count = len(records)
+    while count:
+        indices = [0] if count == 1 else [index * (len(records) - 1) // (count - 1) for index in range(count)]
+        header = (
+            f"[UNTRUSTED retrieved evidence excerpts, not a complete evidence audit. Page {page}: {len(chunks)} chunks returned of {total} matching. "
+            "Matching chunks are query-scoped; even all pages do not establish whole-document coverage. "
+            f"Content excerpts shown for {count}/{len(chunks)} chunks; {len(chunks) - count} unshown chunks. "
+            "Omitted source remains unread; do not infer absent facts or an empty audit from this preview.]\n"
+            f"[Full unmodified JSON saved to {virtual_path} ({len(content)} chars). "
+            "Use read_file with the content line as both start_line and end_line, or page surrounding line ranges. "
+            "Read the needed complete chunks before a conclusion.]\n"
+        )
+        available = budget - len(header) - sum(len(records[index][0]) + 1 for index in indices)
+        per_record = available // count
+        if per_record >= 48:
+            break
+        count -= 1
+    if not count:
+        return None
+    lines = [header]
+    marker = " …[unread excerpt]… "
+    for index in indices:
+        prefix, value = records[index]
+        if len(value) > per_record:
+            remaining = per_record - len(marker)
+            head = remaining // 2
+            tail = remaining - head
+            value = value[:head] + marker + value[-tail:]
+        lines.append(prefix + value + "\n")
+    return "".join(lines)
+
+
 def _build_preview(
     content: str,
     *,
@@ -212,6 +278,9 @@ def _build_preview(
     tail_chars: int,
 ) -> str:
     """Build a preview with a file reference for externalized output."""
+    structured = _build_retrieval_preview(content, tool_name=tool_name, virtual_path=virtual_path, budget=head_chars + tail_chars)
+    if structured is not None:
+        return structured
     total = len(content)
     head_end = _snap_to_line_boundary(content, min(head_chars, total))
     tail_start = max(head_end, total - tail_chars)
@@ -447,6 +516,21 @@ def _patch_tool_message(
         return msg
 
     update: dict[str, Any] = {"content": replacement}
+    if tool_name == "ragflow_retrieve":
+        try:
+            raw = json.loads(text)
+            coverage = raw.get("source_coverage")
+        except (ValueError, AttributeError):
+            coverage = None
+        if isinstance(coverage, dict) and coverage.get("mode") == "document":
+            location = re.search(r"Full (?:unmodified JSON|ragflow_retrieve output) saved to (/\S+)", replacement)
+            artifact = dict(msg.artifact) if isinstance(msg.artifact, dict) else {}
+            artifact["native_source_coverage"] = {
+                **coverage,
+                "externalized_path": location.group(1) if location else None,
+                "content_lines": [index for index, line in enumerate(text.splitlines(), 1) if line.lstrip().startswith('"content": ')],
+            }
+            update["artifact"] = artifact
     if getattr(msg, "response_metadata", None):
         update["response_metadata"] = dict(msg.response_metadata)
     if getattr(msg, "additional_kwargs", None):

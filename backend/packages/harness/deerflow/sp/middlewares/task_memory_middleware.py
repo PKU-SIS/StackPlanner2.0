@@ -21,6 +21,7 @@ from langgraph.runtime import Runtime
 from deerflow.agents.thread_state import ThreadState
 from deerflow.sp.memory import StackMemoryEntry, TaskMemoryStack
 from deerflow.sp.prompt import PromptContextBuilder
+from deerflow.sp.recovery import normalize_recovery_limits
 from deerflow.utils.messages import message_to_text
 
 SP_TASK_CONTEXT_MESSAGE_NAME = "sp_task_memory_context"
@@ -127,6 +128,7 @@ class TaskMemoryMiddleware(AgentMiddleware[ThreadState]):
         inject_context: bool = True,
         manage_run_boundary: bool = True,
         non_interactive: bool | None = None,
+        recovery_limits: Mapping[str, Any] | None = None,
     ) -> None:
         super().__init__()
         self._context_builder = context_builder or PromptContextBuilder()
@@ -136,6 +138,7 @@ class TaskMemoryMiddleware(AgentMiddleware[ThreadState]):
         self._inject_context = inject_context
         self._manage_run_boundary = manage_run_boundary
         self._non_interactive = non_interactive
+        self._recovery_limits = normalize_recovery_limits(recovery_limits) if recovery_limits is not None else None
 
     @override
     def before_agent(self, state: ThreadState, runtime: Runtime) -> dict[str, Any] | None:
@@ -143,6 +146,9 @@ class TaskMemoryMiddleware(AgentMiddleware[ThreadState]):
         update: dict[str, Any] = {}
         if self._non_interactive is not None:
             update["sp_non_interactive"] = self._non_interactive
+        if self._recovery_limits is not None:
+            update["sp_recovery_limits"] = dict(self._recovery_limits)
+            update["sp_recovery_exhausted"] = None
         # Make the conversation boundary explicit for CentralAgent. This is
         # intentionally state-based, not inferred from task keywords.
         if state.get("messages"):

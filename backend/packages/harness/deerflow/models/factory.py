@@ -36,6 +36,7 @@ def _vllm_disable_chat_template_kwargs(chat_template_kwargs: dict) -> dict:
 _OPENAI_COMPAT_USE_PATHS = (
     "langchain_openai:ChatOpenAI",
     "deerflow.models.patched_openai:PatchedChatOpenAI",
+    "deerflow.models.vllm_provider:VllmChatModel",
 )
 
 
@@ -208,6 +209,7 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
             # display) — must never reach the provider client, which would
             # forward unknown kwargs into the completion request payload.
             "pricing",
+            "context_window",
         },
     )
     # Compute effective when_thinking_enabled by merging in the `thinking` shortcut field.
@@ -250,7 +252,12 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
     # heuristics (stream_usage / stream_chunk_timeout) see the canonical endpoint key.
     _normalize_openai_base_url(model_config.use, model_settings_from_config)
     _enable_stream_usage_by_default(model_config.use, model_settings_from_config)
-    _apply_stream_chunk_timeout_default(model_config.use, model_settings_from_config)
+    from langchain_openai import ChatOpenAI
+
+    # Transport subclasses retain OpenAI constructor options even when their
+    # external import path is not in the built-in provider-name allowlist.
+    timeout_use_path = "langchain_openai:ChatOpenAI" if issubclass(model_class, ChatOpenAI) else model_config.use
+    _apply_stream_chunk_timeout_default(timeout_use_path, model_settings_from_config)
 
     # For Codex Responses API models: map thinking mode to reasoning_effort
     from deerflow.models.openai_codex_provider import CodexChatModel

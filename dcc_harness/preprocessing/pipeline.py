@@ -13,13 +13,13 @@ from pathlib import Path
 
 from . import loaders
 from .models import Asset, Sample
-from .prompts import DEFAULT_INLINE_LAYERS, DEFAULT_LAYERS, compose
+from .prompts import DEFAULT_FILE_LAYERS, DEFAULT_INLINE_LAYERS, DEFAULT_LAYERS, compose
 
 
 def document_mode(config: dict) -> str:
     mode = config.get("document_mode", "ragflow")
-    if mode not in {"ragflow", "inline"}:
-        raise ValueError("document_mode must be 'ragflow' or 'inline'")
+    if mode not in {"ragflow", "inline", "files"}:
+        raise ValueError("document_mode must be 'ragflow', 'inline' or 'files'")
     return mode
 
 
@@ -35,6 +35,11 @@ def inline_text(bundle: Path, documents: list[dict]) -> str:
 
 def document_inventory(item: dict) -> list[dict]:
     return [{"id": f"document-{index}", "title": doc["title"], "sha256": doc["sha256"]} for index, doc in enumerate(item["documents"])]
+
+
+def file_document_inventory(item: dict) -> list[dict]:
+    """Neutral UTF-8 filenames; XML bytes are neither parsed nor rewritten."""
+    return [{**doc, "file": f"dcc-document-{index}.txt"} for index, doc in enumerate(document_inventory(item))]
 
 
 def digest(data: bytes) -> str:
@@ -192,7 +197,7 @@ def render(bundle: Path, config: dict) -> list[dict]:
             raise ValueError("render configuration differs from the completed index configuration")
         validate_sample_scopes(state, [item["id"] for item in samples])
     elif state_path.exists():
-        raise ValueError("inline bundle must not carry a RAGFlow index")
+        raise ValueError(f"{mode} bundle must not carry a RAGFlow index")
     tasks = []
     # Dataset layers append after common defaults unless an explicit layer list
     # replaces them. Sample layers are keyed by a public sample id.
@@ -203,7 +208,7 @@ def render(bundle: Path, config: dict) -> list[dict]:
         text = inline_text(bundle, item["documents"]) if mode == "inline" else ""
         context = {
             "schema_version": 2,
-            "documents": document_inventory(item),
+            "documents": file_document_inventory(item) if mode == "files" else document_inventory(item),
             "rules": [
                 {"file": f"dcc-rule-{index}{Path(rule['path']).suffix}", "title": rule["title"], "sha256": rule["sha256"]}
                 for index, rule in enumerate(item["rules"])
@@ -211,9 +216,18 @@ def render(bundle: Path, config: dict) -> list[dict]:
         }
         if mode == "ragflow":
             context["retrieval"] = {**state["scopes"][item["id"]], "base_url": state["base_url"]}
-        else:
+        elif mode == "inline":
             context.update(document_mode="inline", inline_document_sha256=digest(text.encode("utf-8")))
+        else:
+            context["document_mode"] = "files"
         files = []
+        if mode == "files":
+            for asset, public_doc in zip(item["documents"], context["documents"], strict=True):
+                try:
+                    loaders.inside(bundle, asset["path"]).read_bytes().decode("utf-8")
+                except UnicodeDecodeError:
+                    raise ValueError("file evidence must be UTF-8 text; use an explicit processor for binary input") from None
+                files.append({"name": public_doc["file"], "path": Path(asset["path"]).relative_to("public").as_posix()})
         for rule, public_rule in zip(item["rules"], context["rules"], strict=True):
             try:
                 loaders.inside(bundle, rule["path"]).read_bytes().decode("utf-8")
@@ -235,14 +249,14 @@ def render(bundle: Path, config: dict) -> list[dict]:
             "context_file": "/mnt/user-data/uploads/dcc-context.json",
         }
         layers = [
-            *prompt_config.get("layers", DEFAULT_INLINE_LAYERS if mode == "inline" else DEFAULT_LAYERS),
+            *prompt_config.get("layers", {"inline": DEFAULT_INLINE_LAYERS, "ragflow": DEFAULT_LAYERS, "files": DEFAULT_FILE_LAYERS}[mode]),
             *prompt_config.get("datasets", {}).get(item["dataset"], []),
             *prompt_config.get("samples", {}).get(item["id"], []),
         ]
         prompt = compose(layers, variables)
         task = {
             "id": item["id"],
-            "benchmark": "dcc_inline" if mode == "inline" else "dcc",
+            "benchmark": {"inline": "dcc_inline", "ragflow": "dcc", "files": "dcc_files"}[mode],
             "split": item["split"],
             "prompt": prompt,
             "files": files,
