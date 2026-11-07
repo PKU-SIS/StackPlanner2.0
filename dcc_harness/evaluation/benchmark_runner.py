@@ -41,9 +41,27 @@ class _LoopLocalTransport:
         kwargs.setdefault("http_socket_options", ())
         super().__init__(**kwargs)
 
+    def _get_request_payload(self, input_, *, stop=None, **kwargs):
+        payload = super()._get_request_payload(input_, stop=stop, **kwargs)
+        spec = self.request_adapter_spec
+        if not spec:
+            return payload
+        from importlib import import_module
+
+        module, separator, attribute = spec.partition(":")
+        if not separator or not module or not attribute:
+            raise ValueError("model request adapter must use module:attribute")
+        adapter = getattr(import_module(module), attribute)
+        result = adapter(payload)
+        if not isinstance(result, dict):
+            raise ValueError("model request adapter must return a request object")
+        return result
+
 
 class BenchmarkChatOpenAI(_LoopLocalTransport, ChatOpenAI):
     """OpenAI-compatible evaluation transport for native Central and helpers."""
+
+    request_adapter_spec: str | None = None
 
     def __init__(self, **kwargs):
         from deerflow.models.factory import _apply_stream_chunk_timeout_default
@@ -56,6 +74,8 @@ class BenchmarkChatOpenAI(_LoopLocalTransport, ChatOpenAI):
 
 class BenchmarkVllmChatModel(_LoopLocalTransport, VllmChatModel):
     """The same loop isolation with native Qwen/vLLM tool-call recovery."""
+
+    request_adapter_spec: str | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -74,10 +94,28 @@ class Settings:
     recover_qwen_tool_calls: bool = False
     dataset_plugins: tuple[str, ...] = ()
     non_interactive: bool = True
+    max_concurrent_subagents: int = 1
+    central_timeout: float | None = None
+    central_retry_timeout: float | None = None
 
     def __post_init__(self) -> None:
         from deerflow.sp.agent_tools import DEFAULT_SP_ACTION_LIMIT
 
+        if (
+            isinstance(self.max_concurrent_subagents, bool)
+            or not isinstance(self.max_concurrent_subagents, int)
+            or not 1 <= self.max_concurrent_subagents <= 4
+        ):
+            raise ValueError("max_concurrent_subagents must be an integer in [1, 4]")
+        for field in ("central_timeout", "central_retry_timeout"):
+            value = getattr(self, field)
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0
+            ):
+                raise ValueError(f"{field} must be positive and finite")
         if not 2 <= self.max_iterations <= DEFAULT_SP_ACTION_LIMIT:
             raise ValueError(
                 f"max_actions must be in [2, {DEFAULT_SP_ACTION_LIMIT}], the native SP action range"
@@ -135,6 +173,12 @@ def effective_app(settings: Settings, benchmark: str | None = None):
         "max_retries": 0,
         "streaming": False,
     }
+    if benchmark is not None:
+        plugin = resolve_dataset_plugin(benchmark, settings.dataset_plugins)
+        if settings.recover_qwen_tool_calls and plugin.vllm_provider:
+            values["use"] = plugin.vllm_provider
+        if plugin.model_request_adapter:
+            values["request_adapter_spec"] = plugin.model_request_adapter
     if settings.thinking:
         values["extra_body"] = {"thinking": {"type": settings.thinking}}
     # Revalidate so AppConfig rebuilds its native name -> model indexes; merely
@@ -223,11 +267,18 @@ async def _run_task(
         "configurable": {
             **context,
             "model_name": app.models[0].name,
-            "max_concurrent_subagents": 1,
+            "max_concurrent_subagents": settings.max_concurrent_subagents,
             "sp_max_actions": settings.max_iterations,
         },
         "context": context,
     }
+    for field, native_key in (
+        ("central_timeout", "sp_central_timeout_seconds"),
+        ("central_retry_timeout", "sp_central_retry_timeout_seconds"),
+    ):
+        value = getattr(settings, field)
+        if value is not None:
+            config["configurable"][native_key] = value
     inputs = {}
     phase = "input"
 
@@ -260,7 +311,15 @@ async def _run_task(
     try:
         inputs = build_inputs(plugin, task.public_input(), thread_id)
         phase = "inference"
-        await asyncio.wait_for(execute(), timeout=settings.timeout)
+        from deerflow.sp.actions.run_policy import active_run_policy
+
+        token = active_run_policy.set(
+            plugin.run_policy() if plugin.run_policy else None
+        )
+        try:
+            await asyncio.wait_for(execute(), timeout=settings.timeout)
+        finally:
+            active_run_policy.reset(token)
         result["native_returned"] = True
         phase = "delivery"
         text, artifact = extract_delivery(
@@ -280,6 +339,11 @@ async def _run_task(
         )
         result["delivery_sha256"] = hashlib.sha256(text.encode()).hexdigest()
         result["status"] = "completed"
+        if plugin.validate_delivery:
+            try:
+                plugin.validate_delivery(result)
+            except ValueError as exc:
+                raise DeliveryError("invalid_delivery", str(exc)) from exc
     except DeliveryError as exc:
         result.update(
             status=failure_status(state) if exc.status == "unfinished" else exc.status,

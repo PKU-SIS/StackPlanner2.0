@@ -10,6 +10,7 @@ from langchain_core.messages import HumanMessage
 
 from deerflow.sp.actions.events import make_sp_event
 from deerflow.sp.actions.handlers.base import HandlerContext
+from deerflow.sp.actions.run_policy import active_run_policy
 from deerflow.sp.actions.schema import HandlerResult, SPAction
 from deerflow.utils.messages import message_to_text
 
@@ -373,6 +374,12 @@ class FinishHandler:
             )
 
         final_artifact_ref = required_ref or _selected_artifact_ref(context, action)
+        policy = active_run_policy.get()
+        if policy is not None:
+            try:
+                policy.check_finish(_artifact_for_identifier(context, final_artifact_ref), context)
+            except ValueError as exc:
+                return HandlerResult(next_step="error_recoverable", idempotency_key=action.idempotency_key, error=str(exc))
         final_summary, summary_grounded = _grounded_final_summary(
             context,
             action,

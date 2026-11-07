@@ -10,6 +10,7 @@ from typing import Any
 from deerflow.sp.actions.events import make_sp_event
 from deerflow.sp.actions.handlers.base import HandlerContext
 from deerflow.sp.actions.handlers.context import build_handler_context_refs
+from deerflow.sp.actions.run_policy import active_run_policy
 from deerflow.sp.actions.schema import HandlerResult, SPAction
 from deerflow.sp.artifacts import SPArtifactAdapter
 from deerflow.sp.memory import StackMemoryEntry
@@ -478,10 +479,17 @@ class DelegateHandler:
                 error="DELEGATE requires a SP subagent executor",
             )
 
-        if action.target_agent == "reporter":
+        policy = active_run_policy.get()
+        if policy is not None:
+            problem = policy.before_delegate(action, context)
+            if problem:
+                return HandlerResult(next_step="error_recoverable", idempotency_key=action.idempotency_key, error=problem)
+
+        intermediate = policy.intermediate_artifact_type(action) if policy is not None else None
+        if not intermediate and action.target_agent == "reporter":
             _prepare_partial_report_retry(action, context.state)
 
-        if _is_unrequested_report_revision(action, context.state, run_id=context.run_id):
+        if not intermediate and _is_unrequested_report_revision(action, context.state, run_id=context.run_id):
             entry = context.stack.append(
                 StackMemoryEntry(
                     thread_id=context.thread_id,
@@ -670,10 +678,17 @@ class DelegateHandler:
             acceptance_criteria=list(dict.fromkeys(acceptance_criteria)),
             budgets=budgets,
         )
+        if policy is not None:
+            try:
+                policy.configure_task(task, context)
+            except ValueError as exc:
+                return HandlerResult(next_step="error_recoverable", idempotency_key=action.idempotency_key, error=str(exc))
         task.validate_protocol()
 
         result = self._executor.execute(task)
         if result.is_success:
+            if policy is not None:
+                policy.prepare_result(task, result, context)
             return self._handle_success(action, context, delegate_entry, result, task=task)
         return self._handle_failure(action, context, delegate_entry, result)
 
@@ -744,7 +759,9 @@ class DelegateHandler:
         artifact_content = result.artifact_content
         if action.target_agent == "perception":
             _apply_perception_acceptance_checks(result, task=task)
-        if action.target_agent == "reporter":
+        policy = active_run_policy.get()
+        intermediate = policy.intermediate_artifact_type(action) if policy is not None else None
+        if not intermediate and action.target_agent == "reporter":
             _apply_report_acceptance_checks(
                 result,
                 task=task,
@@ -752,7 +769,7 @@ class DelegateHandler:
                 artifact_adapter=self._artifact_adapter,
             )
         created_paths = result.artifact_metadata.get("created_paths")
-        effective_artifact_type = _effective_artifact_type(
+        effective_artifact_type = intermediate or _effective_artifact_type(
             action,
             result,
             has_created_paths=bool(created_paths),
@@ -904,7 +921,7 @@ class DelegateHandler:
             completion_status = "partial"
         evidence_gaps = result.artifact_metadata.get("evidence_gaps")
         normalized_gaps = [str(item) for item in evidence_gaps if str(item).strip()] if isinstance(evidence_gaps, list) else []
-        if action.target_agent == "reporter" and not registered_paths and artifact_content is None:
+        if not intermediate and action.target_agent == "reporter" and not registered_paths and artifact_content is None:
             completion_status = "partial"
             normalized_gaps = [
                 *normalized_gaps,

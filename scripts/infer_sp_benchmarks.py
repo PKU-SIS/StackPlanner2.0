@@ -174,8 +174,24 @@ def parser() -> argparse.ArgumentParser:
         default=20,
         help="Native SP action budget (legacy flag --max-iterations is an alias)",
     )
+    p.add_argument(
+        "--max-concurrent-subagents",
+        type=int,
+        default=1,
+        help="Native sibling delegation budget (1..4); preserves legacy default 1",
+    )
     p.add_argument("--max-tokens", type=int, default=4096)
     p.add_argument("--timeout", type=float, default=900.0)
+    p.add_argument(
+        "--central-timeout",
+        type=float,
+        help="Native Central model-call timeout in seconds; omitted keeps native default",
+    )
+    p.add_argument(
+        "--central-retry-timeout",
+        type=float,
+        help="Native Central retry timeout in seconds; omitted keeps native default",
+    )
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--temperature", type=float, default=0.0)
     p.add_argument("--top-p", type=float, default=1.0)
@@ -300,8 +316,11 @@ async def main_async(args) -> int:
         model=args.model,
         api_key_env=args.api_key_env,
         max_iterations=args.max_iterations,
+        max_concurrent_subagents=args.max_concurrent_subagents,
         max_tokens=args.max_tokens,
         timeout=args.timeout,
+        central_timeout=args.central_timeout,
+        central_retry_timeout=args.central_retry_timeout,
         seed=args.seed,
         temperature=args.temperature,
         top_p=args.top_p,
@@ -325,6 +344,7 @@ async def main_async(args) -> int:
         app = effective_app(settings, benchmark)
         skills = get_enabled_skills_for_config(app, user_id=f"manifest-{uuid4().hex}")
         dataset_configs[benchmark] = {
+            "model_request_adapter": plugin.model_request_adapter,
             "tools": [
                 {"name": tool.name, "group": tool.group, "use": tool.use}
                 for tool in app.tools
@@ -454,6 +474,9 @@ async def main_async(args) -> int:
 
 
 def main() -> int:
+    from dotenv import load_dotenv
+
+    load_dotenv(ROOT / ".env", override=False)
     p = parser()
     args = p.parse_args()
     try:

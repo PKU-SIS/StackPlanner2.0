@@ -331,3 +331,45 @@ default. See docs/clause_ragflow.md.
 Full CLAUSE sharing uses preprocessing.clause_release and scripts/dcc_clause_release.py. Preserve pinned split IDs/counts; L1/L2 share the same per-sample index. Release manifests bind files, labels and scopes; validate rendered labels against canonical private annotations. Package only whitelisted assets, set index read_only_view, exclude credentials/logs/models, and verify before atomic installation. Service audits query every sample but are not SP quality evaluations. Tests use fake services.
 
 `evaluation.shards.merge_runs` and `scripts/collect_sp_benchmarks.py` collect disjoint native inference runs only when execution fingerprints agree. Verify every input/delivery hash and full inventory; never use this path to combine different code/model/settings or silently select successful retries. Preserve original shard traces and explicit partial coverage. Tests are in `tests/test_inference_shards.py`.
+
+Current CLAUSE file mode uses `clause_delivery.FileDeliveryPolicy` to validate the final JSON while preserving the delegated assignment, roles and tools. Its provider adapter selects only the native Central control channel. See docs/clause_autonomous.md.
+
+Historical staged experimental configuration (for reproducing earlier runs): the old CLAUSE policy separates evidence, verification,
+and final delivery. Central selects the role, partitioning, and extra checks.
+Completion requires a registered action-owned JSON file and the same delivery
+validator at inference, monitoring/export, and evaluation. Keep pinned L1/L2
+prompt resources and private labels out of workflow logic. See docs/clause_autonomous.md.
+
+CLAUSE file-mode reliability uses explicit `BenchmarkPlugin.tool_overrides` and
+`model_request_adapter` hooks. Overrides must uniquely name existing configured
+tools. Request adapters are trusted outer transport code receiving only public
+model context; record their module hashes and identity. CLAUSE source reads
+carry line/coverage metadata and complete-text search is regex-time-bounded.
+Neither CUAD nor CLAUSE RAG inherits these overrides. Use only the documented specialist return conditions; never select a role, salvage an invalid output, or read evaluation labels in these hooks.
+At verification entry the CLAUSE adapter requests the registered evidence map first. Tool-free read-only closeout uses a typed envelope that can report partial or blocked work. Delivery checks unambiguous adjacent source numbering on model-authored quotes, including structured fallback deliveries.
+See `docs/clause_execution_feedback.md`.
+
+Benchmark runner `--central-timeout` / `--central-retry-timeout` forward the
+existing native Central resilience deadlines; omitted values retain native
+defaults and are independent of the whole-sample `--timeout`.
+
+CLAUSE scoped specialists can return their existing evidence on the named native loop warning, when a read-only pass has consumed 14 reads after its prerequisite reads, or when a just-written owned JSON has a successful all-exact quotation check. An incomplete stage must report its gaps. Central chooses whether to revisit a stage or finish using the actual registered artifact ID and type. See `docs/clause_execution_feedback.md`.
+
+CLAUSE file-mode transport enforces only the existing Central control channel:
+all-`sp_*` tool sets default to `tool_choice=required`; specialists remain automatic,
+and no particular action or role is selected. Its delegate tool help documents
+native data-processing metadata so document output is not judged as a code patch.
+
+In CLAUSE file mode, a full source read may include a bounded index of literal numbered mentions and line locations. A native total-tool warning gives a read-only specialist one tool-free return turn. The Qwen fallback accepts a single complete visible function block only for a currently bound Central action with valid arguments. Central chooses the next action.
+
+A token-exhausted, unexecuted CLAUSE answer write can retry once with typed array arguments at the same path and up to three times its original generation budget (24,576 tokens maximum). The native file tool still checks the serialized bytes. The Coder receipt can register an alternate filename only after its own successful native write and matching file contents. A shell call that omits only its display label gets a default label.
+
+When Central assigns a single new top-level JSON filename, the CLAUSE adapter uses that filename in the action’s output instruction. A complete receipt from an exclusive delegation must declare that file before its validated bytes are published to the action-owned registration path. Concurrent or pre-existing shell files cannot prove ownership.
+
+After a verified whole-document read, an explicitly delegated final CLAUSE answer can use the typed specialist receipt on a native total/identical-call stop warning, or once after the specialist returns without a usable body. Partial/blocked statuses and declared files retain their native handling. The response can contain an empty findings array, a complete array, or a gap. The action policy publishes complete valid answers and Central still chooses whether to FINISH.
+
+A validated action-owned CLAUSE JSON is registered as a native generated_file across roles. Intermediate observations keep their role-specific type. A textual tool block alone cannot certify completion of an intermediate assignment.
+
+The typed final receipt requires an actual findings array for every status. Partial or blocked receipts can carry an empty array and explicit gaps. When a fully grounded final writer exhausts its budget serializing a nonempty answer, the single recovery emits native artifact_content directly (up to 12,288 tokens). Claims with a null body do not satisfy this wire schema.
+
+In CLAUSE file mode, a sandbox rejection of an oversized Bash command targeting an output JSON file can switch the specialist to the structured final receipt. This requires a final-answer assignment and verified complete source coverage in that delegation. Central still selects the final registered artifact.

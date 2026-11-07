@@ -190,8 +190,9 @@ def test_summary_only_reports_execution_status_without_inventing_scores():
 
 
 @pytest.mark.parametrize("status", ["completed", "ask_human", "unfinished"])
+@pytest.mark.parametrize("parallel_limit", [1, 3])
 def test_runner_passes_only_public_input_to_native_factory(
-    tmp_path, monkeypatch, status
+    tmp_path, monkeypatch, status, parallel_limit
 ):
     import deerflow.sp.runtime as native
 
@@ -225,6 +226,9 @@ def test_runner_passes_only_public_input_to_native_factory(
         config="configs/stackplanner_benchmarks.yaml",
         base_url="http://local/v1",
         model="local",
+        max_concurrent_subagents=parallel_limit,
+        central_timeout=300,
+        central_retry_timeout=180,
     )
     result = asyncio.run(
         run_task(
@@ -245,6 +249,11 @@ def test_runner_passes_only_public_input_to_native_factory(
     assert (
         captured["config"]["configurable"]["sp_max_actions"] == settings.max_iterations
     )
+    assert (
+        captured["config"]["configurable"]["max_concurrent_subagents"] == parallel_limit
+    )
+    assert captured["config"]["configurable"]["sp_central_timeout_seconds"] == 300
+    assert captured["config"]["configurable"]["sp_central_retry_timeout_seconds"] == 180
     assert captured["config"]["context"]["user_id"] == result["user_id"]
     assert captured["config"]["context"]["non_interactive"] is True
     assert captured["config"]["configurable"]["non_interactive"] is True

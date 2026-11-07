@@ -39,6 +39,12 @@ class BenchmarkPlugin:
     evaluation_resources: tuple[Path, ...] = ()
     requires_judge: bool = False
     supports_exact_proxy: bool = False
+    # Trusted outer transport hook; receives only the model-visible request.
+    model_request_adapter: str | None = None
+    vllm_provider: str | None = None
+    tool_overrides: tuple[ToolConfig, ...] = ()
+    run_policy: Callable | None = None
+    validate_delivery: Callable[[dict], Any] | None = None
 
 
 def _no_inputs(task: PublicTask, thread_id: str) -> dict[str, Any]:
@@ -262,9 +268,17 @@ def configure_dataset_app(app: AppConfig, plugin: BenchmarkPlugin) -> AppConfig:
         if tool.name in names:
             raise ValueError(f"duplicate tool: {tool.name}")
         names.add(tool.name)
+    overrides = {tool.name: tool for tool in plugin.tool_overrides}
+    if len(overrides) != len(plugin.tool_overrides) or set(overrides) - {
+        tool.name for tool in app.tools
+    }:
+        raise ValueError("tool overrides must uniquely name existing native tools")
+    payload["tools"] = [
+        overrides.get(tool.name, tool).model_dump(mode="python") for tool in app.tools
+    ]
     payload["tools"].extend(tool.model_dump(mode="python") for tool in plugin.tools)
     groups = {group["name"] for group in payload["tool_groups"]}
-    for tool in plugin.tools:
+    for tool in (*plugin.tools, *plugin.tool_overrides):
         if tool.group not in groups:
             payload["tool_groups"].append({"name": tool.group})
             groups.add(tool.group)

@@ -158,8 +158,14 @@ class ActionRouter:
                 run_events=[make_sp_event("sp.action.validation_failed", run_id=run_id, error=str(exc))],
             )
 
-        self._normalize_coder_source_recovery_target(action, state, run_id=run_id)
-        self._normalize_delegate_target(action)
+        from deerflow.sp.actions.run_policy import scoped_delegate_stage
+
+        declared_stage = scoped_delegate_stage(action.target_agent, action.metadata) if action.action_type is ActionType.DELEGATE else None
+        if declared_stage is not None:
+            action.stage = declared_stage
+        else:
+            self._normalize_coder_source_recovery_target(action, state, run_id=run_id)
+            self._normalize_delegate_target(action)
         self._normalize_memory_target_ids(action, state)
 
         identifier_guard = self._delegation_identifier_grounding_result(

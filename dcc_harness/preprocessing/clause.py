@@ -206,6 +206,10 @@ def make_plugin():
     return replace(
         clause.create_plugin(),
         name="clause_ragflow",
+        model_request_adapter=None,
+        vllm_provider=None,
+        run_policy=None,
+        tool_overrides=(),
         prepare_task=prepare_task,
         prepare_inputs=prepare_inputs,
         validate_dataset=validate_dataset,

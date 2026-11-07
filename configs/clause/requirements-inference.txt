@@ -1,0 +1,2 @@
+# Bounded complete-text search for CLAUSE file mode.
+regex==2026.9.29

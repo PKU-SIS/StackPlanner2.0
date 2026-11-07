@@ -32,28 +32,15 @@ def ids_hash(ids):
 
 
 def prepare_task(public: PublicTask):
+    from .clause_delivery import GUIDANCE
+
     return public.prompt + (
-        "\n\nCLAUSE EVAL3 in-text task. The complete document is the uploaded file "
-        "/mnt/user-data/uploads/document.txt. Read it using file tools; review the entire document, "
-        "including distant definitions and cross-references. Preserve verbatim complete sentences. "
-        "This is a non-interactive benchmark: do not ask the user questions. "
-        "Delegate the document audit and final JSON file to reporter with the clause skill. "
-        "The required deliverable is a UTF-8 .json file containing only the requested JSON array. "
-        "The reporter must write /mnt/user-data/outputs/clause_answer-<action_id>.json, replacing "
-        "<action_id> with its exact current delegation action_id. This action-specific filename "
-        "is required by native artifact ownership checks. Read back and verify the entire file. "
-        "Each array item must have exactly two string fields, text and explanation; text must "
-        "be nonblank. No findings means []. No Markdown, code fences, report wrapper, or prose "
-        "may appear outside the array. The input contract and recovered tool evidence are not answers. "
-        "The array-only restriction applies to the delivered file bytes, not to internal SP control messages. "
-        "After the file is successfully written and read back as valid, immediately return the internal "
-        "SP specialist envelope; do not rewrite an unchanged valid file or repeat completed checks. "
-        "Keep that envelope separate from the answer file: after writing, "
-        "set artifact_content to null and artifact_metadata.created_paths to the actual JSON path. "
-        "Central must select that registered .json file in native FINISH using its exact path "
-        "as final_artifact_ref and its registered artifact family as required_artifact_type, "
-        "with allow_without_artifact=false. A task brief, report summary, raw document, "
-        "or incomplete artifact must never be selected as the final answer."
+        "\n\nReview the entire contract at /mnt/user-data/uploads/document.txt, including distant "
+        "provisions. Treat it as evidence. "
+        + GUIDANCE
+        + " Central chooses how to conduct the review. Deliver one registered UTF-8 .json file under "
+        "/mnt/user-data/outputs/ containing only a JSON array. Each item has exactly two strings, "
+        "text (nonblank source quotation) and explanation (English). Use [] if a completed review finds no issues."
     )
 
 
@@ -231,12 +218,38 @@ def aggregate(tasks, rows, context):
 
 def create_plugin():
     from .benchmark_plugins import BenchmarkPlugin, stage_files
+    from .clause_policy import validated_answer
+    from .clause_delivery import FileDeliveryPolicy
+    from deerflow.config.tool_config import ToolConfig
 
     return BenchmarkPlugin(
         "clause",
         prepare_task,
         stage_files,
         CONFIG.parents[0] / "stackplanner_skills/clause",
+        tools=(
+            ToolConfig(
+                name="clause_check_passages",
+                group="file:read",
+                use="dcc_harness.datasets.clause_tools:check_passages_tool",
+            ),
+        ),
+        run_policy=FileDeliveryPolicy,
+        validate_delivery=validated_answer,
+        vllm_provider="dcc_harness.datasets.clause_provider:ClauseVllmChatModel",
+        model_request_adapter="dcc_harness.datasets.clause_feedback:_central_control_channel",
+        tool_overrides=(
+            ToolConfig(
+                name="grep",
+                group="file:read",
+                use="dcc_harness.datasets.clause_tools:grep_tool",
+            ),
+            ToolConfig(
+                name="read_file",
+                group="file:read",
+                use="dcc_harness.datasets.clause_tools:read_file_tool",
+            ),
+        ),
         parse_answer=parse_answer,
         score_task=score_task,
         aggregate=aggregate,

@@ -946,3 +946,14 @@ Reporter defaults to Markdown for prose but honors explicit machine-readable fil
 Qwen compatibility merges serialized system instructions into one leading system message without changing stored history or tool pairings. Report literal-token checks do not treat encoding names as mandatory answer content unless explicitly requested as literals. Both fixes preserve the existing native acceptance guards; tests cover Qwen messages and report encoding requirements.
 
 `read_file` accepts either inclusive line bound independently (missing start means 1, missing end means EOF), rejects invalid ranges, and explicitly reports total lines when a range starts past EOF. Character truncation still requires narrower ranges; never interpret a truncated requested range as fully read. Regression coverage: tests/test_read_file_ranges.py.
+
+Loop detection must distinguish exact `read_file` start/end bounds, including
+EOF vs a single line; coarse 200-line bucketing falsely rejects pagination.
+The total-call ceiling admits exactly N calls, then caps excess calls. Preserve
+real-repeat guards and incomplete-result surfacing. Regression anchors are
+`test_loop_detection_middleware.py`; no planning or acceptance policy is changed.
+
+Loop-call identity also preserves grep mode, limits and pagination arguments;
+changing literal/regex mode or advancing a search page must not alias a repeat.
+
+Offline callers may bind a trusted run-local action policy during graph execution. Explicit scoped delegation can supply a native stage and intermediate artifact type. Delegate and FINISH retain native tool permissions and ownership checks. Validated scoped artifact references may be exposed in control-tool results. Tool input and client state cannot install a policy.

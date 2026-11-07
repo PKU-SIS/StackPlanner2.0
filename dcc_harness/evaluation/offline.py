@@ -160,8 +160,19 @@ def plugin_identity(plugin: BenchmarkPlugin, *, phase: str) -> dict:
         )
     )
     modules = {function.__module__ for function in functions if function is not None}
+    if plugin.validate_delivery:
+        modules.add(plugin.validate_delivery.__module__)
     if phase == "inference":
-        modules.update(tool.use.split(":", 1)[0] for tool in plugin.tools)
+        if plugin.run_policy:
+            modules.add(plugin.run_policy.__module__)
+        modules.update(
+            tool.use.split(":", 1)[0]
+            for tool in (*plugin.tools, *plugin.tool_overrides)
+        )
+        if plugin.vllm_provider:
+            modules.add(plugin.vllm_provider.split(":", 1)[0])
+        if plugin.model_request_adapter:
+            modules.add(plugin.model_request_adapter.split(":", 1)[0])
     sources = {}
     for name in sorted(modules):
         source = getattr(importlib.import_module(name), "__file__", None)
@@ -351,8 +362,13 @@ def evaluate_run(
             )
         else:
             try:
-                answer = plugins[task.benchmark].parse_answer(
-                    task.public_input(), prediction["delivery"]
+                plugin = plugins[task.benchmark]
+                answer = (
+                    plugin.validate_delivery(prediction)
+                    if plugin.validate_delivery
+                    else plugin.parse_answer(
+                        task.public_input(), prediction["delivery"]
+                    )
                 )
                 json.dumps(answer, allow_nan=False)
                 result["answer"] = answer

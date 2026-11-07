@@ -633,6 +633,7 @@ def _execution_verification(
     *,
     reject_masked_commands: bool = False,
     allow_negative_findings: bool = False,
+    task: SPSubagentTask | None = None,
 ) -> dict[str, int | bool | None]:
     calls: dict[str, tuple[str, int, Mapping[str, Any] | None]] = {}
     latest_source_write_index: int | None = None
@@ -664,6 +665,15 @@ def _execution_verification(
             continue
         if tool_name in _FILE_WRITE_TOOLS:
             latest_source_write_index = index
+        # Trusted run policies may supply a read-only executable check.
+        # Link its real tool response to the original call, and retain the
+        # native requirement for a successful check after the latest write.
+        if task is not None and call is not None and tool_name not in _EXECUTION_TOOLS:
+            from deerflow.sp.actions.run_policy import active_run_policy
+
+            policy = active_run_policy.get()
+            if policy is not None and message.get("status") != "error" and policy.checked_execution(task, tool_name, call[2] or {}, message.get("content")):
+                successful_execution_indices.append(index)
         if tool_name in _EXECUTION_TOOLS:
             if reject_masked_commands:
                 args = call[2] if call is not None else None
@@ -785,6 +795,14 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         declared_created_paths = [path for value in declared_paths if (path := _output_path(value)) is not None] if isinstance(declared_paths, list) else []
         artifact_metadata["created_paths"] = list(dict.fromkeys([*declared_created_paths, *recovered_created_paths]))
     if not is_memory_recaller:
+        from deerflow.sp.actions.run_policy import active_run_policy
+
+        policy = active_run_policy.get()
+        document_review = getattr(policy, "is_document_review", None)
+        # An audit finding (including a quotation from a broken contract) is
+        # domain evidence. Executions, declared gaps and stage reads have their
+        # own checks below; software-test prose heuristics apply to other tasks.
+        domain_evidence = bool(task is not None and is_data_processing_coder(task.metadata) and document_review and document_review(task))
         raw_completion_status = str(artifact_metadata.get("completion_status") or "").strip().lower()
         if stop_reason and status == SPSubagentStatus.COMPLETED:
             completion_status = "partial"
@@ -805,7 +823,7 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         if "disclosed_limitations" in artifact_metadata:
             limitations = artifact_metadata["disclosed_limitations"]
             artifact_metadata["disclosed_limitations"] = list(dict.fromkeys(str(item).strip() for item in limitations if str(item).strip()))[:12] if isinstance(limitations, list) else []
-        if task is not None and task.subagent_type == "coder" and _coder_reported_behavior_failure(raw_result, ai_messages, allow_negative_findings=is_data_processing_coder(task.metadata)):
+        if task is not None and task.subagent_type == "coder" and not domain_evidence and _coder_reported_behavior_failure(raw_result, ai_messages, allow_negative_findings=is_data_processing_coder(task.metadata)):
             artifact_metadata["completion_status"] = "partial"
             if _BEHAVIOR_FAILURE_GAP not in artifact_metadata["evidence_gaps"]:
                 artifact_metadata["evidence_gaps"].append(_BEHAVIOR_FAILURE_GAP)
@@ -823,7 +841,16 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
                 artifact_metadata["evidence_gaps"].append(_NO_RESPONSE_GAP)
         if _coder_requires_execution_evidence(task):
             data_processing = is_data_processing_coder(task.metadata)
-            verification = _execution_verification(ai_messages, reject_masked_commands=data_processing, allow_negative_findings=data_processing)
+            verification = _execution_verification(ai_messages, reject_masked_commands=data_processing, allow_negative_findings=data_processing, task=task)
+            if not verification["passed"] and not stop_reason and artifact_metadata["completion_status"] == "complete" and not artifact_metadata["evidence_gaps"]:
+                from deerflow.sp.actions.run_policy import active_run_policy
+
+                policy = active_run_policy.get()
+                check = policy.validate_written_file(task, ai_messages, artifact_metadata) if policy is not None else None
+                if check is not None:
+                    verification = {**verification, "passed": True, "postwrite_file_check": check}
+                    if check.get("limitation"):
+                        artifact_metadata.setdefault("disclosed_limitations", []).append(check["limitation"])
             artifact_metadata["execution_verification"] = verification
             if not verification["passed"]:
                 if artifact_metadata["completion_status"] == "complete":
@@ -862,6 +889,14 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
                 if test_verification["masked_test_command_count"] and _MASKED_TEST_EXIT_GAP not in artifact_metadata["evidence_gaps"]:
                     artifact_metadata["evidence_gaps"].append(_MASKED_TEST_EXIT_GAP)
 
+    if task is not None and artifact_metadata.get("completion_status") == "complete":
+        from deerflow.sp.actions.run_policy import active_run_policy
+
+        policy = active_run_policy.get()
+        gap = policy.review_gap(task, ai_messages) if policy is not None else None
+        if gap:
+            artifact_metadata["completion_status"] = "partial"
+            artifact_metadata.setdefault("evidence_gaps", []).append(gap)
     completion_status = artifact_metadata.get("completion_status")
     retryable = status != SPSubagentStatus.COMPLETED or completion_status in {"partial", "blocked"}
     changed_files: list[str] = []

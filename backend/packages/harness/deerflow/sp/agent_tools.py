@@ -1859,19 +1859,25 @@ def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: st
         payload["metadata"] = _normalize_model_mapping(raw_metadata)
         revision_reason = payload.pop("revision_reason", None)
         target_agent, inference_reason = _infer_missing_delegate_target(payload)
-        target_agent, routing_reason = _normalize_delegate_target(payload)
+        from deerflow.sp.actions.run_policy import scoped_delegate_stage
+
         requested_stage = payload.get("stage")
-        canonical_stage = {
-            "perception": "perception",
-            "researcher": "research",
-        }.get(target_agent)
-        if target_agent == "outline":
-            canonical_stage = "revision" if revision_reason or requested_stage == "revision" else "planning"
-        if target_agent == "reporter":
-            canonical_stage = "revision" if revision_reason or requested_stage == "revision" else "reporting"
-        coder_stage_reason = None
-        if target_agent == "coder":
-            canonical_stage, coder_stage_reason = _canonical_coder_stage(payload, requested_stage)
+        canonical_stage = scoped_delegate_stage(target_agent, payload.get("metadata") or {}) if inference_reason is None else None
+        routing_reason = coder_stage_reason = None
+        if canonical_stage is None:
+            target_agent, routing_reason = _normalize_delegate_target(payload)
+            requested_stage = payload.get("stage")
+            canonical_stage = {
+                "perception": "perception",
+                "researcher": "research",
+            }.get(target_agent)
+            if target_agent == "outline":
+                canonical_stage = "revision" if revision_reason or requested_stage == "revision" else "planning"
+            if target_agent == "reporter":
+                canonical_stage = "revision" if revision_reason or requested_stage == "revision" else "reporting"
+            coder_stage_reason = None
+            if target_agent == "coder":
+                canonical_stage, coder_stage_reason = _canonical_coder_stage(payload, requested_stage)
         if canonical_stage is not None:
             payload["stage"] = canonical_stage
         task_inference_reason = _infer_missing_delegate_task(payload)
@@ -2114,6 +2120,20 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
                     stop_reason=stop_reason,
                 )
             )
+            from deerflow.sp.actions.run_policy import active_run_policy
+
+            if active_run_policy.get() is not None and delegate_succeeded:
+                receipts = [
+                    {field: ref.get(field) for field in ("artifact_id", "type", "virtual_path")}
+                    for key, ref in (result.artifact_refs or {}).items()
+                    if key != "_history"
+                    and isinstance(ref, dict)
+                    and ref.get("run_id") == run_id
+                    and (ref.get("metadata") or {}).get("delegate_action_id") == effective_action_id
+                    and (ref.get("metadata") or {}).get("completion_status") == "complete"
+                ]
+                if receipts:
+                    content_payload["registered_artifacts"] = receipts
             artifact_paths = _delegate_artifact_paths(result.state_update)
             if artifact_paths:
                 # Native DeerFlow's `task` tool already has a frontend result

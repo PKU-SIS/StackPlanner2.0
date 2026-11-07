@@ -68,7 +68,7 @@ def test_roundtrip_scope_tools_and_offline_inputs(tmp_path, monkeypatch, variant
     assert fake.uploads == [sample().files[0].text.encode()]
     # Existing file transport still stages its source and has no RAG tool.
     original = resolve_dataset_plugin("clause")
-    assert not original.tools
+    assert {t.name for t in original.tools} == {"clause_check_passages"}
     assert (
         build_inputs(original, sample().public_input(), "file-thread")[
             "uploaded_files"

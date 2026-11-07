@@ -1062,3 +1062,13 @@ independent seven-metric scoring. Collaborators can install the same-repository
 CLAUSE Release to reuse the complete dataset and existing knowledge-base mapping
 without rebuilding the vector index. RAG access requires separately authorized
 service credentials. See [CLAUSE shared data, RAGFlow setup and evaluation](docs/clause_ragflow.md).
+
+In CLAUSE file mode, Central chooses the scope, roles and number of delegations. The final writer can deliver a complete review in one assignment. A Coder assigned the review and JSON delivery can use the native file writer directly. CLAUSE requests verbatim numbered quotations and substantive internal discrepancies. See [CLAUSE file review and JSON export](docs/clause_autonomous.md).
+
+For long-running model calls in benchmark inference, `--central-timeout` and
+`--central-retry-timeout` configure the existing CentralAgent deadlines separately
+from the whole-sample `--timeout`. Omit them to retain native defaults. See
+[CLAUSE execution reliability](docs/clause_execution_feedback.md) for model
+reasoning mode and comparison requirements.
+
+For CLAUSE file-mode source navigation and native Qwen delivery handling, see [the CLAUSE execution guide](docs/clause_autonomous.md).

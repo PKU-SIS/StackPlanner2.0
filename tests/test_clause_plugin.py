@@ -61,7 +61,7 @@ def test_clause_and_cuad_have_separate_skills_and_input_contracts(
     cuad = resolve_dataset_plugin("cuad")
     assert clause.skills_path != cuad.skills_path
     assert not clause.requires_judge
-    assert clause.tools == ()
+    assert {t.name for t in clause.tools} == {"clause_check_passages"}
     inputs = build_inputs(clause, sample().public_input(), "thread")
     text = str(inputs)
     assert "PRIVATE" not in text and "cuad_ambiguity" not in text
@@ -314,6 +314,22 @@ def inference_fixture(root, tasks, deliveries):
                         **task_identity(task),
                         "protocol": PROTOCOL,
                         "status": "completed",
+                        "native_returned": True,
+                        "delivery_source": "finish_artifact",
+                        "run_id": task.id,
+                        "thread_id": "fixture",
+                        "final_artifact": {
+                            "artifact_id": "fixture-answer",
+                            "is_current": True,
+                            "run_id": task.id,
+                            "thread_id": "fixture",
+                            "virtual_path": "/mnt/user-data/outputs/answer.json",
+                            "metadata": {
+                                "registered_existing_file": True,
+                                "completion_status": "complete",
+                            },
+                            "content_hash": hashlib.sha256(text.encode()).hexdigest(),
+                        },
                         "delivery": text,
                         "delivery_sha256": hashlib.sha256(text.encode()).hexdigest(),
                     }
@@ -450,9 +466,33 @@ def test_cuad_clause_shared_inference_and_independent_evaluation(
             assert upload.read_bytes().decode() == expected
             assert clause_task.id not in str(inputs)
             assert "contradiction_exists" not in str(inputs)
+            extra = {}
+            if name == "clause":
+                folder = get_paths().sandbox_outputs_dir(
+                    self.context["thread_id"], user_id=self.context["user_id"]
+                )
+                folder.mkdir(exist_ok=True, parents=True)
+                (folder / "answer.json").write_text(clause_answer)
+                ref = {
+                    "artifact_id": "fixture",
+                    "virtual_path": "/mnt/user-data/outputs/answer.json",
+                    "is_current": True,
+                    "thread_id": self.context["thread_id"],
+                    "run_id": self.context["run_id"],
+                    "metadata": {
+                        "registered_existing_file": True,
+                        "completion_status": "complete",
+                    },
+                }
+                extra = {
+                    "sp_current_artifact_refs": {"generated_file": ref},
+                    "sp_last_final_artifact_ref": "fixture",
+                    "thread_data": {"outputs_path": str(folder)},
+                }
             yield (
                 "values",
                 {
+                    **extra,
                     "sp_current_stage": "finished",
                     "sp_last_handler_result": {"next_step": "finish"},
                     "sp_last_run_summary": clause_answer

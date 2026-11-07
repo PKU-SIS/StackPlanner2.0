@@ -137,7 +137,7 @@ class TestHashToolCalls:
 
         assert _hash_tool_calls([dict_call]) == _hash_tool_calls([string_call])
 
-    def test_reversed_read_file_range_matches_forward_range(self):
+    def test_invalid_reversed_read_file_range_differs_from_forward_range(self):
         forward_call = {
             "name": "read_file",
             "args": {"path": "/tmp/demo.py", "start_line": 10, "end_line": 300},
@@ -147,7 +147,7 @@ class TestHashToolCalls:
             "args": {"path": "/tmp/demo.py", "start_line": 300, "end_line": 10},
         }
 
-        assert _hash_tool_calls([forward_call]) == _hash_tool_calls([reversed_call])
+        assert _hash_tool_calls([forward_call]) != _hash_tool_calls([reversed_call])
 
     def test_stringified_non_dict_args_do_not_crash(self):
         non_dict_json_call = {"name": "bash", "args": '"echo hello"'}
@@ -1122,14 +1122,14 @@ class TestTotalToolCallDetection:
         )
         runtime = _make_runtime()
 
-        for i in range(4):
-            mw._apply(_make_state(tool_calls=[self._alternating_call(i)]), runtime)
+        for i in range(5):
+            assert mw._apply(_make_state(tool_calls=[self._alternating_call(i)]), runtime) is None
 
-        result = mw._apply(_make_state(tool_calls=[self._alternating_call(4)]), runtime)
+        result = mw._apply(_make_state(tool_calls=[self._alternating_call(5)]), runtime)
         assert result is not None
         msg = result["messages"][0]
         assert msg.tool_calls == []
-        assert "Total tool calls reached 5" in msg.content
+        assert "Total tool calls reached 6" in msg.content
         assert mw.consume_stop_reason("test-run") == "loop_capped"
 
     def test_counts_parallel_tool_calls(self):
@@ -1144,10 +1144,11 @@ class TestTotalToolCallDetection:
         first = [self._alternating_call(0), self._alternating_call(1)]
         second = [self._alternating_call(2), self._alternating_call(3)]
         assert mw._apply(_make_state(tool_calls=first), runtime) is None
-        result = mw._apply(_make_state(tool_calls=second), runtime)
+        assert mw._apply(_make_state(tool_calls=second), runtime) is None
+        result = mw._apply(_make_state(tool_calls=[self._alternating_call(4)]), runtime)
 
         assert result is not None
-        assert "Total tool calls reached 4" in result["messages"][0].content
+        assert "Total tool calls reached 5" in result["messages"][0].content
 
     def test_after_agent_clears_only_current_run_total(self):
         mw = LoopDetectionMiddleware(
@@ -1212,3 +1213,37 @@ class TestFromConfig:
         queued = mw._pending_warnings.get(_pending_key(), [])
         assert queued
         assert "LOOP DETECTED" in queued[0]
+
+
+def test_total_budget_admits_exact_boundary_including_parallel_batch():
+    mw = LoopDetectionMiddleware(tool_total_warn=1, tool_total_hard_limit=2)
+    runtime = _make_runtime()
+    calls = [{"name": "ls", "id": "a", "args": {"path": "/mnt/user-data/uploads"}}, {"name": "glob", "id": "b", "args": {"path": "/mnt/user-data/uploads", "pattern": "*.txt"}}]
+    assert mw._apply(_make_state(tool_calls=calls), runtime) is None
+    assert mw.consume_stop_reason("test-run") is None
+    result = mw._apply(_make_state(tool_calls=[_bash_call("third")]), runtime)
+    assert result["messages"][0].tool_calls == []
+    assert mw.consume_stop_reason("test-run") == "loop_capped"
+
+
+def test_distinct_read_ranges_in_one_200_line_region_are_not_a_loop():
+    mw = LoopDetectionMiddleware()
+    runtime = _make_runtime()
+    for start in [1, 21, 41, 61, 81]:
+        call = {"name": "read_file", "id": str(start), "args": {"path": "/document.txt", "start_line": start, "end_line": start + 19}}
+        assert mw._apply(_make_state(tool_calls=[call]), runtime) is None
+    assert mw.consume_stop_reason("test-run") is None
+
+
+def test_whole_file_and_first_line_have_distinct_read_identity():
+    whole = {"name": "read_file", "args": {"path": "/document.txt"}}
+    line = {"name": "read_file", "args": {"path": "/document.txt", "start_line": 1, "end_line": 1}}
+    assert _hash_tool_calls([whole]) != _hash_tool_calls([line])
+
+
+def test_grep_mode_and_pagination_are_part_of_call_identity():
+    base = {"name": "grep", "args": {"path": "/document.txt", "pattern": r"\(term"}}
+    literal = {"name": "grep", "args": {**base["args"], "literal": True}}
+    later = {"name": "grep", "args": {**base["args"], "start_offset": 500}}
+    assert _hash_tool_calls([base]) != _hash_tool_calls([literal])
+    assert _hash_tool_calls([base]) != _hash_tool_calls([later])

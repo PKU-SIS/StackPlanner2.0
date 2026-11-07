@@ -116,22 +116,24 @@ def _stable_tool_key(name: str, args: dict, fallback_key: str | None) -> str:
         start_line = args.get("start_line")
         end_line = args.get("end_line")
 
-        bucket_size = 200
+        # Distinct page ranges are distinct reads. Coarse 200-line buckets
+        # falsely capped normal pagination, especially in short documents.
+        # Preserve EOF (None) and invalid bounds rather than aliasing them to
+        # the first line or a valid reversed range.
         try:
             start_line = int(start_line) if start_line is not None else 1
         except (TypeError, ValueError):
-            start_line = 1
+            pass
         try:
-            end_line = int(end_line) if end_line is not None else start_line
+            end_line = int(end_line) if end_line is not None else None
         except (TypeError, ValueError):
-            end_line = start_line
+            pass
+        return json.dumps([path, start_line, end_line], default=str)
 
-        start_line, end_line = sorted((start_line, end_line))
-        bucket_start = max(start_line, 1)
-        bucket_end = max(end_line, 1)
-        bucket_start = (bucket_start - 1) // bucket_size
-        bucket_end = (bucket_end - 1) // bucket_size
-        return f"{path}:{bucket_start}-{bucket_end}"
+    if name == "grep" and fallback_key is None:
+        # Literal/case modes, limits and pagination alter the search result.
+        # Ignore human-readable intent only; do not alias corrected queries.
+        return json.dumps({k: v for k, v in args.items() if k != "description"}, sort_keys=True, default=str)
 
     # write_file / str_replace are content-sensitive: same path may be updated
     # with different payloads during iteration. Using only salient fields (path)
@@ -434,7 +436,7 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
                 self._tool_total[run_key] += len(tool_calls)
                 total_count = self._tool_total[run_key]
 
-                if self.tool_total_hard_limit is not None and total_count >= self.tool_total_hard_limit:
+                if self.tool_total_hard_limit is not None and total_count > self.tool_total_hard_limit:
                     logger.error(
                         "Total tool-call hard limit reached — forcing stop",
                         extra={
