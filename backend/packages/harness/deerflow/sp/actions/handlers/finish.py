@@ -396,7 +396,9 @@ class FinishHandler:
         gaps = [*output_contract_gaps(context.state, validation_text), *source_access_gaps(context.state)]
         if gaps:
             return HandlerResult(
-                next_step="error_recoverable", idempotency_key=action.idempotency_key, error="; ".join(gaps),
+                next_step="error_recoverable",
+                idempotency_key=action.idempotency_key,
+                error="; ".join(gaps),
                 run_events=[make_sp_event("sp.finish.rejected", action_id=action.action_id, run_id=context.run_id, reason="public_output_contract", evidence_gaps=gaps)],
             )
         entry = context.stack.append_finish(

@@ -1,19 +1,30 @@
-# CLAUSE EVAL3「文本内部」任务：协作者快速开始
+# CLAUSE EVAL3 文本内部审核 · 文件模式快速开始
 
-DCCv2 已增加内置 `clause` benchmark plugin，用 SP2 审核一篇合同内部的
-歧义、不一致、术语错用、缺失和结构问题。CUAD 保留原有任务格式及评分方式；
-两个 benchmark 共用推理入口和离线评分入口，各自定义提示词、技能及评测协议。
-文档中的 “DCC v3” 指结果与插件协议版本，当前 Git 分支名仍为 `DCCv2`。
+本指南使用 DCCv2 内置插件 `clause`。SP2 把一份完整合同放在该样本专属的 `/mnt/user-data/uploads/document.txt`，由 Central 自主安排审核。文件模式无需 RAGFlow 服务或密钥。
 
-这里采用 `intext-yes-whole-document-v1`：从固定上游快照筛选整篇文档，按基础
-合同分组划分，1-shot 示例所属合同组只在 train。它是可重建的实验版本，**不是
-论文官方测试划分**。SP2 以 `sp2-files` 模式读文件，不能把其结果直接称为论文复现。
+## 任务与划分
 
-| 划分 | 文档数 | 缺陷数 |
+任务是查找同一份合同中的歧义、不一致、术语错用、缺失和结构问题。当前使用 `intext-yes-whole-document-v1`，从固定上游数据筛选 5,026 份整篇文档，按基础合同分组，近似按 8∶1∶1 划分。这是本项目用于比较方法的实验划分。引用成绩时应注明划分版本。[数据协议与重建说明](clause_benchmark.md)
+
+| 划分 | 合同数 | 标注缺陷数 |
 |---|---:|---:|
 | train | 4,025 | 14,604 |
 | validation | 501 | 1,779 |
 | test | 500 | 1,809 |
+
+L1 为 0-shot，L2 为 1-shot。两级使用同一批 500 份测试合同和标注，L2 的固定示例来自训练组。推理清单只提供公开输入，标注和逐样本缺陷类别、数量保留给评分程序。Release 同时提供文件与 RAGFlow 两种清单，下面的命令只选择文件清单。
+
+## 相对远程基点 `052aa77` 的变化
+
+| 部分 | 文件模式当前行为 |
+|---|---|
+| 自主委派 | 文件插件保留公共 JSON schema，由 Central 选择角色、委派次数和是否补查。格式恢复将缺口交还 Central。 |
+| 读取与审核 | 子代理可读取带行号的完整或指定范围原文，使用 `grep` 检索，并可用 `clause_check_passages` 核对引文。`text` 保留紧邻的原文条号；含义和效力相同的大小写或称呼差异可忽略。 |
+| 文件登记与 FINISH | 插件核对本次动作的文件归属、内容摘要和 schema，把有效最终文件登记为 `generated_file`。完成原文读取且已有合法文件时，子代理可以只回报完成状态和剩余缺口。原生 FINISH 必须选中本次运行登记的文件。 |
+| 监控与评分 | 推理、导出和离线评测使用相同的文件校验。超时、未完成、错误的产物引用和无效 JSON 均保留失败状态。 |
+| 兼容范围 | 合并保留了远程的原生工具和恢复改动。此处的自主委派与文件回执适用于 `clause` 文件模式；`clause_ragflow` 使用自己的检索工具和 skill。 |
+
+这次更新复用现有 Release。正文、标注、划分、L1/L2 基准提示和 RAGFlow 映射均沿用 `dcc-clause-eval3-v1`。[共享数据包](https://github.com/PKU-SIS/StackPlanner2.0/releases/tag/dcc-clause-eval3-v1)
 
 ## 1. 获取代码和环境
 
@@ -41,127 +52,89 @@ python -m pip check
 `configs/clause/requirements.txt` 中固定的指标库版本；不要通过替换指标版本来
 绕过安装问题。SP2 的模型推理服务与本机 CPU 评分编码器是两个独立组件。
 
-## 2. 下载并整理数据
+## 2. 安装现有 Release
 
-**不需要任何协作者提供合同文件或 66 MB 的运行包。** 仓库提供重建脚本、固定
-划分、提示词和校验配置，完整正文、标注和模型不存入 Git。
-
-```bash
-python -B scripts/dcc_prepare_clause.py --download \
-  --output-dir .benchmark-data/clause \
-  --work-dir .benchmark-data/clause-rebuild-cache
-```
-
-脚本锁定上游 commit `c81c6a5251771cab3d9f3d081f71c388957cf936`，下载约 127 MiB
-原始归档和约 24 MiB NLTK 资源，扫描正文与标注，执行既定筛选/清洗/分组，并逐文件
-校验。准备时建议至少预留约 2 GB 临时空间；完整评分编码器另需约 1.4 GB。
-
-成功后得到：
-
-| 路径 | 用途 |
-|---|---|
-| `.benchmark-data/clause/public/test.jsonl` | 无 GT 的推理任务清单 |
-| `.benchmark-data/clause/private/test.jsonl` | 含 GT 与评分元数据的评测清单 |
-| `.benchmark-data/clause/public/documents/` | 完整 UTF-8 合同正文 |
-| `.benchmark-data/clause/resources/` | NLTK，及下一步准备的编码器 |
-| `.benchmark-data/clause/preparation.json` | 版本、校验、划分与重建来源记录 |
-
-下载缓存会复用；每次仍验证内容，输出目录已存在时拒绝覆盖。成功生成的数据可
-反复用于不同模型实验，无需每次重新下载。默认 L1；L2 使用 `--prompt l2` 和一个
-新输出目录，其中已经包含冻结的训练示例，不需要自行选择 1-shot。
-
-有现成资源时也可使用 `--archive`（旧运行包）、`--ready-dir`（已验证运行目录）
-或 `--source-archive`（原始上游归档）。参数和离线资源复用详见
-[详细协议与数据准备](clause_benchmark.md#三种已有资源入口)。
-
-## 3. 准备评分资源
+在仓库根目录使用有仓库访问权限的 GitHub CLI 下载。安装脚本按已提交的描述文件核验附件摘要，并拒绝覆盖已有目录。已安装同版本的协作者直接设置 `CLAUSE_TEST` 即可。
 
 ```bash
-python -B scripts/dcc_prepare_clause_resources.py \
-  --resource-root .benchmark-data/clause/resources --download-bert
+python scripts/dcc_clause_release.py download \
+  --descriptor configs/dcc/releases/clause-eval3-v1.json \
+  --root .benchmark-data/clause-eval3-v1
+export CLAUSE_TEST="$PWD/.benchmark-data/clause-eval3-v1/test"
 ```
 
-该命令下载并校验固定版本 RoBERTa-large，供 BERTScore 使用。不加 `--download-bert`
-时仅检查已有资源；评分过程本身不会偷偷联网补模型。已经准备好的资源可以复用。
+文件推理清单是 `public/clause-files-l1-tasks.jsonl`、`public/clause-files-l2-tasks.jsonl`，评分使用 `private/` 下同名清单。保留安装目录的结构，以便相对路径找到合同。若要从固定上游归档再现筛选和划分，可使用重建入口。[源数据准备](clause_benchmark.md)
 
-## 4. 配置模型并检查
+## 3. 配置模型
 
-下面的地址、模型名、密钥都是示例，需要换成你自己的服务配置：
+例如在推理服务器本机调用兼容 OpenAI 的 Qwen/vLLM。将 URL 和模型 ID 替换为自己的服务；需要鉴权的服务从本地凭据注入 `DCC_MODEL_API_KEY`。下面从仓库模板生成本地运行配置，使 Reporter、Perception 和 Coder 的子代理图步数上限与此次文件模式运行一致。128 表示 LangGraph 的执行步数上限，单次模型回复、工具和中间件可涉及多个图步。
 
 ```bash
-export DCC_MODEL_BASE_URL='http://127.0.0.1:8000/v1'
-export DCC_MODEL_NAME='YOUR_MODEL_ID'
-export DCC_MODEL_API_KEY='YOUR_API_KEY'
+export DCC_MODEL_BASE_URL='http://127.0.0.1:8075/v1'
+export DCC_MODEL_NAME='qwen3.8-27b'
+export DCC_MODEL_API_KEY='EMPTY'
+export CLAUSE_CONFIG="$PWD/.benchmark-data/clause-qwen-files.yaml"
 
-python -B scripts/infer_sp_benchmarks.py --check-config --benchmark clause
+python - <<'PYCONFIG'
+import os
+from pathlib import Path
+import yaml
+
+config = yaml.safe_load(Path("configs/clause/stackplanner-qwen.example.yaml").read_text())
+for role in ("sp-reporter", "sp-perception", "sp-coder"):
+    config["subagents"]["agents"].setdefault(role, {})["max_turns"] = 128
+Path(os.environ["CLAUSE_CONFIG"]).write_text(yaml.safe_dump(config, sort_keys=False))
+PYCONFIG
+python scripts/infer_sp_benchmarks.py --check-config --benchmark clause --config "$CLAUSE_CONFIG"
 ```
 
-无需鉴权的自托管服务可把 key 设为非空占位值 `EMPTY`。不要把实际密钥写入 Git。
-`--check-config` 只检查配置，不调用模型，不能证明网络连通或模型工具调用能力。
+## 4. 分别推理 L1 和 L2
 
-## 5. 运行 test 推理
-
-以下命令会真正调用配置的模型服务并运行 500 个任务；模型费用、耗时和动作预算
-取决于服务与参数，执行前应完成服务侧配置。
+为每次正式实验选一个新的 `RUN_ROOT`。下面按等级顺序运行，每级读入 500 份合同。子代理并发上限是单份合同内的配置。推理清单中不含 GT。全量推理若有失败，命令会返回 2；保留已有逐条记录和失败状态，正常处理另一级。
 
 ```bash
-python -B scripts/infer_sp_benchmarks.py \
-  --tasks .benchmark-data/clause/public/test.jsonl \
-  --dataset-source clause-intext-yes-whole-document-v1 \
-  --run-dir .benchmark-data/runs/clause-test-l1-run001 \
-  --temperature 0 --top-p 1 --max-tokens 8192 --max-actions 20 --timeout 900
+export RUN_ROOT="$PWD/.benchmark-data/runs/clause-files-001"
+mkdir -p "$RUN_ROOT"
+for level in l1 l2; do
+  python -B scripts/infer_sp_benchmarks.py \
+    --benchmark clause --dataset-source clause-intext-yes-whole-document-v1 \
+    --config "$CLAUSE_CONFIG" --tasks "$CLAUSE_TEST/public/clause-files-${level}-tasks.jsonl" \
+    --run-dir "$RUN_ROOT/$level/inference" --recover-qwen-tool-calls \
+    --temperature 0.2 --top-p 0.95 --seed 42 --max-tokens 8192 \
+    --max-actions 20 --max-concurrent-subagents 3 --timeout 2400 \
+    --central-timeout 180 --central-retry-timeout 180
+done
 ```
 
-完整合同以 `document.txt` 放入原生 uploads，agent 使用文件工具读取。公开输入
-不注入 GT、单篇缺陷类别、数量或来源。模型最终应交付严格 JSON 数组，每项只有
-`text`（逐字引用完整句子）与 `explanation`（英文解释），无发现时为 `[]`。
-
-框架保存原生 FINISH 接受的完整交付，输出 `predictions.jsonl`、推理 manifest、
-报告及轨迹；此阶段不计算 benchmark 分数。不要将运行错误改成空答案。
-
-运行目录必须新建；`--resume` 仅恢复未记录任务，已记录失败不会自动重试。
-如要重新运行某个实验，使用新的目录。
-
-## 6. 对已有推理结果评分
+最终文件是 UTF-8 JSON 数组，每项只有 `text`（含条号的逐字引文）和 `explanation`（英文解释）。审核完成且无发现时可以交付 `[]`。每级的 `inference/predictions.jsonl` 保存成功和失败记录。可用以下命令核对一个等级并导出通过校验的 JSON 文件：
 
 ```bash
-OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 python -B scripts/evaluate_sp_benchmarks.py \
-  --tasks .benchmark-data/clause/private/test.jsonl \
-  --run-dir .benchmark-data/runs/clause-test-l1-run001 \
-  --output-dir .benchmark-data/evaluations/clause-test-l1-eval001 \
-  --benchmark clause --options configs/clause/evaluation.example.json
+python scripts/monitor_clause_run.py "$RUN_ROOT/l1/inference" --export-dir "$RUN_ROOT/l1/answers"
 ```
 
-该步骤不运行 SP2 或 LLM Judge，计算 Miss、Extra、ROUGE-1/2/L、METEOR 和
-BERTScore F1。结果写入评分目录的 `scores.jsonl`（逐文档）和 `report.json`
-（汇总、分母、完成状态、实际资源）。原推理结果不会被改写。
+## 5. 对已有推理结果评分
 
-默认要求完整固定 split 和有效预测。小规模诊断需要配套子集清单，并显式使用
-`--allow-partial`；不能称为完整 test 成绩。显式选择
-`configs/clause/evaluation.lexical.example.json` 可省略 BERTScore 做六项诊断，
-报告会标记 `metrics_complete=false`。换数据目录时相应调整 tasks 路径及 options
-中的 `resource_root`，或复用已有评分资源目录。
+评分使用固定的 NLTK 资源和 RoBERTa-large 编码器，可跨实验复用。现有 Release 提供合同和清单，评分资源单独准备。若已在 `.benchmark-data/clause/resources` 准备完毕，直接运行评分即可。在仅安装了 Release 的新环境中，下面的命令复用仓库的下载和摘要校验逻辑，单独准备评分资源。
 
-## 7. 提交范围与结果解释
+```bash
+mkdir -p .benchmark-data/clause/resources
+cp configs/clause/source_rebuild/templates/resources/nltk_resources_provenance.json .benchmark-data/clause/resources/
+python - <<'PYNLTK'
+from pathlib import Path
+from dcc_harness.datasets.clause_source import prepare_nltk
 
-可以提交：插件/重建代码、冻结模板、prompt、技能、依赖清单、测试和文档。
-不提交：`.benchmark-data/`、`.benchmark-env/`、本机配置、密钥和完整运行轨迹。
-本指南把结果也放入已忽略的 `.benchmark-data/`；需要分享实验报告时单独整理。
+prepare_nltk(Path(".benchmark-data/clause"), Path(".benchmark-data/clause-nltk-cache"))
+PYNLTK
+python scripts/dcc_prepare_clause_resources.py --resource-root .benchmark-data/clause/resources --download-bert
+```
 
-不要格式化或修改冻结模板；其字节由校验值约束。与模板相关的历史上游脚本仅在
-忽略目录中恢复作来源校验，不执行；不要将整个下载缓存或 ready 目录加入 Git。
+```bash
+for level in l1 l2; do
+  OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 python -B scripts/evaluate_sp_benchmarks.py \
+    --benchmark clause --tasks "$CLAUSE_TEST/private/clause-files-${level}-tasks.jsonl" \
+    --run-dir "$RUN_ROOT/$level/inference" --output-dir "$RUN_ROOT/$level/evaluation" \
+    --options configs/clause/evaluation.example.json
+done
+```
 
-当前审核证明了数据重建和推理/评分接口的正确衔接，**尚未给出真实 SP2 在该任务上
-的正式成绩**。公开输入/标签分离属于数据流约束；默认 host bash 环境不是文件系统
-隔离，严格隔离实验应只给推理进程挂载公开数据。
-
-进一步阅读：[详细协议](clause_benchmark.md)、[通用插件接口](dcc_harness.md)、
-[数据来源说明](../configs/clause/NOTICE.md)。
-
-
-## 可选：直接安装共享数据包与 RAG 映射
-
-若维护者已发布 CLAUSE EVAL3 Release，可按 [共享数据和 RAG 模式说明](clause_ragflow.md#完整共享-release) 使用 `scripts/dcc_clause_release.py download` 安装经 SHA-256 校验的完整数据包，代替从上游重新构建。数据包同时提供文件读取和 RAG 两模式的 L1/L2 public/private 清单；文件模式与离线评分不需要 RAGFlow 凭据，RAG 模式需要管理员授权的服务凭据。Git 仓库只保存脚本、协议和 Release 描述文件，不保存正文、标注或实验成绩。
-
-
-Qwen/vLLM 用户可选用 `--config configs/clause/stackplanner-qwen.example.yaml`。该示例采用 Qwen 的 `chat_template_kwargs.enable_thinking=false`，并将文件读取上限设为 262144 字符；模型地址、名称和 Key 仍通过原 CLI 参数/环境变量提供。运行前核对自己的模型上下文容量。调用 `--thinking disabled` 会启用另一个服务协议的参数形状，不应代替这个 Qwen 配置。建议将 `--max-tokens 16384 --max-actions 20 --recover-qwen-tool-calls` 与实际使用的温度、top-p、seed 一起明确记录。
+默认要求完整划分和有效预测。若已有运行含交付失败，可为评分命令加 `--allow-partial`，指定独立的诊断评分目录。报告交付率时用有效交付数除以 500；报告有效样本的 Miss、Extra 时注明可评分合同数。两项均逐合同计算再等权平均，值越低越好。逐样本结果在 `scores.jsonl`，汇总在 `report.json`；同一次评分还计算 ROUGE-1/2/L、METEOR 和 BERTScore F1。推理目录、导出的答案、轨迹、评分结果、模型和密钥均留在本地。

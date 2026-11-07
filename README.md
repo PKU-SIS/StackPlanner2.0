@@ -450,9 +450,7 @@ It audits internal discrepancies in complete contracts; the fixed custom split
 contains 500 test documents and 1,809 annotated defects. CUAD retains its existing
 input and AUPR protocol.
 
-Start with the **[CLAUSE collaborator quickstart](docs/clause_quickstart.md)** for
-environment setup, reproducible data downloads, model configuration, inference,
-and independent seven-metric evaluation. The [protocol reference](docs/clause_benchmark.md)
+The **[CLAUSE file-mode quickstart](docs/clause_quickstart.md)** describes the changes since DCCv2 `052aa77`, the grouped train/validation/test split, and the commands to run and score L1 and L2 with the existing Release. The [protocol reference](docs/clause_benchmark.md)
 explains input isolation, alignment, aggregation, and diagnostic modes.
 
 ```bash
@@ -518,8 +516,7 @@ Actual successful tool results establish read ranges and document-page coverage;
 model-authored completion metadata cannot supply this proof. Truncated reads,
 zero-match queries and previews remain incomplete. Missing reads trigger bounded
 recovery before any final answer, including a format-valid `[]` or raw label.
-CLAUSE retains its Reporter/clause audit policy and requires the complete public
-document; FinAuditing retains Researcher for filing evidence. The unchanged
+The built-in CLAUSE file plugin requires a complete contract review and lets Central choose the specialists. Its file-mode skill and delivery recovery use the public JSON contract. The separate CLAUSE RAGFlow skill retains its Reporter guidance. FinAuditing retains Researcher for filing evidence. The unchanged
 published NBA task template also requires Researcher to read the complete uploaded
 rules. Delivery requires the designated auditor's latest current-run native
 observation to be complete, without evidence gaps or any early-stop reason.
