@@ -105,3 +105,25 @@ def test_schema_failure_and_artifact_retry_leave_role_to_central():
         assert stopped["sp_recovery_exhausted"]["target_agent"] == "central"
     finally:
         active_run_policy.reset(token)
+
+
+def test_written_file_receipt_requires_live_ownership_and_unchanged_bytes(tmp_path):
+    from types import SimpleNamespace as S
+    from dcc_harness.datasets.clause_delivery import FileDeliveryPolicy
+
+    policy = FileDeliveryPolicy()
+    ctx = S(state={"thread_data":{"outputs_path":str(tmp_path)}})
+    dest = "/mnt/user-data/outputs/answer.json"
+    task = S(action_id="a", task="Deliver the final JSON answer.", expected_output="Final JSON array at " + dest)
+    policy.configure_task(task,ctx)
+    path = tmp_path / "answer.json"
+    path.write_text("truncated")
+    assert policy.pending_answer_path("a") is None
+    path.write_text("[]")
+    assert policy.pending_answer_path("unrelated") is None
+    assert policy.pending_answer_path("a") == dest
+    path.write_text('[{"text":"a","explanation":"b"}]')
+    result=S(stop_reason=None, artifact_content=None, artifact_metadata={"completion_status":"complete","created_paths":[dest]})
+    policy.prepare_result(task,result,ctx)
+    assert result.artifact_metadata["completion_status"]=="partial"
+    assert policy.pending_answer_path("a") is None

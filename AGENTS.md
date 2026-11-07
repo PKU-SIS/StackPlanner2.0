@@ -409,3 +409,5 @@ A validated action-owned CLAUSE JSON is registered as a native generated_file ac
 The typed final receipt requires an actual findings array for every status. Partial or blocked receipts can carry an empty array and explicit gaps. When a fully grounded final writer exhausts its budget serializing a nonempty answer, the single recovery emits native artifact_content directly (up to 12,288 tokens). Claims with a null body do not satisfy this wire schema.
 
 In CLAUSE file mode, a sandbox rejection of an oversized Bash command targeting an output JSON file can switch the specialist to the structured final receipt. This requires a final-answer assignment and verified complete source coverage in that delegation. Central still selects the final registered artifact.
+
+The CLAUSE specialist transport can ask for a short status receipt only after verified source coverage and validation of a pending action-owned file. Reject changed bytes, interrupted work and incomplete receipts at registration.

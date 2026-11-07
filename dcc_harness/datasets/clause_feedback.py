@@ -498,7 +498,14 @@ def _final_answer_closeout(payload, messages, names, *, returning=False):
     if not messages or not names or any(name.startswith("sp_") for name in names):
         return None
     last = messages[-1]
-    if not returning:
+    task, history = _stage_request(messages)
+    if not task or (task.get("protocol") or {}).get("sender") != "central":
+        return None
+    from deerflow.sp.actions.run_policy import active_run_policy
+
+    probe = getattr(active_run_policy.get(), "pending_answer_path", None)
+    written = probe(task.get("action_id")) if probe and last.get("role") == "tool" else None
+    if not returning and not written:
         warned = last.get("role") == "user" and last.get("name") == "loop_warning"
         notes = str(last.get("content", "")).split("\n\n") if warned else []
         native_stop = any(
@@ -511,9 +518,6 @@ def _final_answer_closeout(payload, messages, names, *, returning=False):
         )
         if not native_stop and not _blocked_answer_command(messages):
             return None
-    task, history = _stage_request(messages)
-    if not task or (task.get("protocol") or {}).get("sender") != "central":
-        return None
     original = (task.get("task") or "").partition(" " + GUIDANCE)[0]
     if not _requires_answer(
         SimpleNamespace(task=original, expected_output=task.get("expected_output"))
@@ -569,6 +573,21 @@ def _final_answer_closeout(payload, messages, names, *, returning=False):
     response = _intermediate_format()
     response["json_schema"]["name"] = "clause_final_receipt"
     fields = response["json_schema"]["schema"]["properties"]
+    if written:
+        # The existing answer is already validated on disk. The specialist must
+        # still attest completion or explicitly report outstanding review work.
+        schema = response["json_schema"]["schema"]
+        schema["properties"].pop("artifact_content")
+        schema["required"].remove("artifact_content")
+        fields["summary"] = {"type": "string", "description": "Brief review status. The findings are already in the validated file."}
+        metadata = fields["artifact_metadata"]
+        metadata["properties"]["created_paths"] = {
+            "type": "array", "items": {"type": "string", "enum": [written]}, "minItems": 1, "maxItems": 1,
+        }
+        metadata["required"].append("created_paths")
+        result = {k: v for k, v in payload.items() if k not in {"tools", "tool_choice", "parallel_tool_calls"}}
+        result["response_format"] = response
+        return result
     findings = {
         "type": "array",
         "items": {

@@ -67,6 +67,7 @@ class FileDeliveryPolicy:
         self._aliases: dict[str, Path] = {}
         self._ownership = threading.Lock()
         self._verified_writes: dict[str, tuple[Path, str]] = {}
+        self._offered_files: dict[str, tuple[Path, str]] = {}
         self._validated_files: set[str] = set()
         self._final_answers: set[str] = set()
 
@@ -162,6 +163,23 @@ class FileDeliveryPolicy:
             f"in artifact_content and set artifact_metadata.filename to {name}. For intermediate work, "
             "return the findings requested by Central."
         )
+
+    def pending_answer_path(self, action_id):
+        """Return only a currently pending writer's schema-valid, owned file."""
+        with self._ownership:
+            if action_id not in self._pending or action_id not in self._final_answers:
+                return None
+            paths = [self._files[action_id]]
+            if action_id in self._aliases:
+                paths.append(self._aliases[action_id])
+            for path in paths:
+                try:
+                    body = _read(path)
+                except (ValueError, OSError):
+                    continue
+                self._offered_files[action_id] = (path, _digest(body))
+                return PREFIX + path.name
+        return None
 
     def is_document_review(self, task):
         return task.subagent_type == "coder"
@@ -292,6 +310,10 @@ class FileDeliveryPolicy:
                 result.artifact_content = None
             return
         try:
+            offered = self._offered_files.pop(task.action_id, None)
+            if offered and md.get("created_paths") == [PREFIX + offered[0].name]:
+                if offered[0] not in (path, alias) or _digest(_read(offered[0])) != offered[1]:
+                    raise ValueError("The offered action file changed before its completion receipt")
             if written:
                 text = _read(path)
             elif alias is not None and md.get("created_paths") == [PREFIX + alias.name]:

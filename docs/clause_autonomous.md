@@ -62,3 +62,5 @@ In CLAUSE file mode, a sandbox rejection of an oversized Bash command targeting 
 The autonomous CLAUSE file plugin keeps the upstream public array schema and artifact delivery mode. It omits the fixed Reporter assignment in the upstream source requirements, so Central chooses the review roles. Other benchmark contracts keep their original routing.
 
 A rejected terminal claim returns the native delivery gaps to Central with a bounded retry. The file plugin does not synthesize a Reporter call for public-format repair.
+
+After full source coverage, a writer with a schema-valid current-action output may return a short completion, partial or blocked receipt. The existing bytes are rechecked at registration. A timed-out or interrupted writer still cannot deliver a result.

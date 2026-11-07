@@ -320,7 +320,7 @@ def test_truncated_shell_is_a_native_schema_error_and_never_an_executable_comman
     ).is_valid(call["args"])
 
 
-def test_genuine_final_return_uses_receipt_only_after_verified_complete_source():
+def test_genuine_final_return_uses_receipt_only_after_verified_complete_source(tmp_path):
     import json
     from dcc_harness.datasets.clause_feedback import (
         _final_answer_closeout,
@@ -362,6 +362,29 @@ def test_genuine_final_return_uses_receipt_only_after_verified_complete_source()
         "messages": messages,
         "max_completion_tokens": 8192,
     }
+    from types import SimpleNamespace
+    from jsonschema import Draft202012Validator
+    from deerflow.sp.actions.run_policy import active_run_policy
+    from dcc_harness.datasets.clause_delivery import FileDeliveryPolicy
+
+    policy = FileDeliveryPolicy()
+    dest = "/mnt/user-data/outputs/result.json"
+    ctx = SimpleNamespace(state={"thread_data":{"outputs_path":str(tmp_path)}})
+    writer = SimpleNamespace(action_id="a", task="Deliver the final JSON answer.", expected_output="Final JSON array at " + dest)
+    policy.configure_task(writer, ctx)
+    token = active_run_policy.set(policy)
+    try:
+        assert not _final_answer_closeout(q, messages, ["bash"])
+        (tmp_path / "result.json").write_text("[]")
+        assert not _final_answer_closeout(q, messages[:-1], ["bash"])
+        short = _final_answer_closeout(q, messages, ["bash"])
+        schema = short["response_format"]["json_schema"]["schema"]
+        assert "artifact_content" not in schema["properties"]
+        for status in ("complete", "partial", "blocked"):
+            record = {"summary":"Decision", "artifact_metadata":{"completion_status":status,"evidence_gaps":[],"disclosed_limitations":[],"created_paths":[dest]}}
+            Draft202012Validator(schema).validate(record)
+    finally:
+        active_run_policy.reset(token)
     warn = {"role": "user", "name": "loop_warning", "content": _IDENTICAL_WARNING}
     assert _final_answer_closeout(q, messages, ["bash"]) is None
     blocked_write = [
