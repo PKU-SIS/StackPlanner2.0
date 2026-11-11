@@ -685,3 +685,5 @@ from the whole-sample `--timeout`. Omit them to retain native defaults. See
 reasoning mode and comparison requirements.
 
 For CLAUSE file-mode source navigation and native Qwen delivery handling, see [the CLAUSE execution guide](docs/clause_autonomous.md).
+
+DCC 基准配置关闭跨任务长期记忆更新和自动注入；任务内 MemoryStack 仍然可用。

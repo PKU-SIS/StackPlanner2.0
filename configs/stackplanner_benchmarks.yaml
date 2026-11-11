@@ -41,6 +41,9 @@ sandbox:
   allow_host_bash: true
 skills:
   container_path: /mnt/skills
+memory:
+  enabled: false
+  injection_enabled: false
 summarization:
   enabled: true
 

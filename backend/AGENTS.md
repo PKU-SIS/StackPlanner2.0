@@ -1419,3 +1419,5 @@ changing literal/regex mode or advancing a search page must not alias a repeat.
 Offline callers may bind a trusted run-local action policy during graph execution. Explicit scoped delegation can supply a native stage and intermediate artifact type. Delegate and FINISH retain native tool permissions and ownership checks. Validated scoped artifact references may be exposed in control-tool results. Tool input and client state cannot install a policy.
 
 The trusted optional run policy can return a rejected file-delivery decision to Central through recover_delivery_with_central. Its presence preserves Central role selection during artifact recovery. Native artifact identity, completion, schema validation and recovery limits still apply.
+
+The DCC benchmark profile disables long-term memory updates and automatic injection; task-local MemoryStack remains enabled. Explicit recall actions are a separate control path.
