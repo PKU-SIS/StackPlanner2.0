@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Protocol
@@ -18,6 +19,47 @@ class SPSubagentStatus(StrEnum):
     FAILED = "failed"
     CANCELLED = "cancelled"
     TIMED_OUT = "timed_out"
+
+
+@dataclass(frozen=True, slots=True)
+class SPToolExecutionContract:
+    """Trusted application contract for existing tools, never parsed from actions.
+
+    This does not choose a role or stage. It declares that source modification
+    and software tests are not the deliverable, while real tool receipts remain
+    mandatory for a Coder claiming execution.
+    """
+
+    execution_tools: tuple[str, ...]
+    read_only_tools: tuple[str, ...] = ()
+    artifact_write_tools: tuple[str, ...] = ()
+    require_result_protocol: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.execution_tools or any(not isinstance(name, str) or not name.strip() for name in (*self.execution_tools, *self.read_only_tools, *self.artifact_write_tools)):
+            raise ValueError("Existing-tool contracts require nonempty trusted tool names")
+
+
+@dataclass(frozen=True, slots=True)
+class SPReportReferenceContract:
+    """Host-owned literal obligations and explicit reference catalogs."""
+
+    required_literals: tuple[str, ...] = ()
+    catalogs: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    # Host-owned validation format, never parsed from model/action metadata.
+    content_type: str | None = None
+
+    def __post_init__(self):
+        if self.content_type is not None and (not isinstance(self.content_type, str) or self.content_type not in {"text/plain", "text/markdown", "text/html"}):
+            raise ValueError("Report validation content type must be a trusted supported MIME type")
+        if not isinstance(self.required_literals, tuple) or any(not isinstance(t, str) or not t.strip() or len(t) > 512 for t in self.required_literals):
+            raise ValueError("Required literals must be trusted strings")
+        if not isinstance(self.catalogs, tuple) or len(self.catalogs) > 32:
+            raise ValueError("Reference catalogs must be bounded tuples")
+        for pattern, values in self.catalogs:
+            if not isinstance(pattern, str) or len(pattern) > 512 or not isinstance(values, tuple) or len(values) > 20000 or any(not isinstance(v, str) for v in values):
+                raise ValueError("Invalid reference catalog")
+            re.compile(pattern)
 
 
 @dataclass(slots=True)
@@ -44,6 +86,20 @@ class SPSubagentTask:
     allowed_tools: list[str] = field(default_factory=list)
     acceptance_criteria: list[str] = field(default_factory=list)
     budgets: dict[str, Any] = field(default_factory=dict)
+    # Set only by trusted Python application hooks, never by SPAction metadata.
+    tool_execution_contract: SPToolExecutionContract | None = None
+    # Server-captured Central selection, before software-oriented defaults.
+    # None means legacy caller; {} means Central did not request an allowlist.
+    control_tool_request: dict[str, Any] | None = None
+    # Trusted application aliases, never populated from model metadata.
+    artifact_type_aliases: dict[str, str] = field(default_factory=dict)
+    # Trusted application source identity, never populated from model metadata.
+    recovery_scope_key: str | None = None
+    # Optional host-observed source IDs; permission only, never a must-include list.
+    # Excluded from model protocol and never parsed from action/result metadata.
+    source_reference_tokens: tuple[str, ...] = ()
+    # Host-only; absent from the model protocol and action metadata.
+    report_reference_contract: SPReportReferenceContract | None = None
 
     def validate_protocol(self) -> None:
         """Validate the transport contract at the SP/DR2 boundary.
@@ -53,6 +109,12 @@ class SPSubagentTask:
         describes the message sent to a child agent.
         """
 
+        if self.report_reference_contract is not None and not isinstance(self.report_reference_contract, SPReportReferenceContract):
+            raise ValueError("Report reference contract must be a trusted typed contract")
+        if self.recovery_scope_key is not None and (not isinstance(self.recovery_scope_key, str) or not self.recovery_scope_key.strip() or len(self.recovery_scope_key) > 200):
+            raise ValueError("Recovery scope must be a bounded trusted source identity")
+        if not isinstance(self.source_reference_tokens, tuple) or len(self.source_reference_tokens) > 20000 or any(not isinstance(token, str) or not token.strip() or len(token) > 256 for token in self.source_reference_tokens):
+            raise ValueError("Source reference tokens must be a bounded tuple of trusted strings")
         if self.protocol_version != A2A_PROTOCOL_VERSION:
             raise ValueError(f"Unsupported SP A2A protocol version: {self.protocol_version!r}")
         if self.message_type != A2A_DELEGATE_MESSAGE:
@@ -73,6 +135,8 @@ class SPSubagentTask:
         ):
             if not isinstance(values, list) or any(not isinstance(value, str) or not value.strip() for value in values):
                 raise ValueError(f"SP A2A task {field_name} must be a list of non-empty strings")
+        if not isinstance(self.artifact_type_aliases, dict) or any(not isinstance(name, str) or not name.strip() for pair in self.artifact_type_aliases.items() for name in pair):
+            raise ValueError("Artifact type aliases require nonempty string names")
         if not isinstance(self.budgets, dict):
             raise ValueError("SP A2A task budgets must be an object")
         for name, value in self.budgets.items():
@@ -99,6 +163,21 @@ class SPSubagentTask:
             "allowed_tools": list(self.allowed_tools),
             "acceptance_criteria": list(self.acceptance_criteria),
             "budgets": dict(self.budgets),
+            **({"artifact_type_aliases": dict(self.artifact_type_aliases)} if self.artifact_type_aliases else {}),
+            **(
+                {
+                    "tool_execution_contract": {
+                        "kind": "existing_tools",
+                        "source_changes_required": False,
+                        "execution_tools": list(self.tool_execution_contract.execution_tools),
+                        "read_only_tools": list(self.tool_execution_contract.read_only_tools),
+                        "execution_tools_mode": "any_successful_delegated_call",
+                        **({"require_result_protocol": True} if self.tool_execution_contract.require_result_protocol else {}),
+                    }
+                }
+                if self.tool_execution_contract is not None
+                else {}
+            ),
         }
 
 

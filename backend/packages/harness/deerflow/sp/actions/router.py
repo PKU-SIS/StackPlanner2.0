@@ -131,6 +131,12 @@ def _is_one_edit_memory_id(left: str, right: str) -> bool:
     return True
 
 
+def _is_existing_tool_observation(observation) -> bool:
+    """Existing-tool contracts are host-stamped and opt in to non-source work."""
+    contract = observation.metadata.get("tool_execution_contract")
+    return isinstance(contract, Mapping) and contract.get("kind") == "existing_tools" and contract.get("source_changes_required") is False
+
+
 class ActionRouter:
     """Validate, route, and checkpoint SP actions without running business tools."""
 
@@ -450,7 +456,7 @@ class ActionRouter:
             (entry for entry in reversed(stack.entries) if entry.action == "observe" and entry.actor == "coder" and (not run_id or entry.run_id in {None, run_id})),
             None,
         )
-        if observation is None:
+        if observation is None or _is_existing_tool_observation(observation):
             return
         completion_status = str(observation.metadata.get("completion_status") or "").strip().lower()
         gaps = observation.metadata.get("evidence_gaps")
@@ -727,7 +733,7 @@ class ActionRouter:
             (entry for entry in reversed(stack.entries) if entry.action == "observe" and entry.actor == "coder"),
             None,
         )
-        if observation is None:
+        if observation is None or _is_existing_tool_observation(observation):
             return None
         completion_status = str(observation.metadata.get("completion_status") or "").strip().lower()
         if completion_status not in {"partial", "blocked"}:
@@ -1145,6 +1151,7 @@ def build_default_action_router(
     delegate_executor: SPSubagentExecutorProtocol | None = None,
     memory_recall_executor: SPSubagentExecutorProtocol | None = None,
     artifact_adapter: SPArtifactAdapter | None = None,
+    finish_validator: Any = None,
 ) -> ActionRouter:
     handlers: dict[ActionType, BaseActionHandler] = {
         ActionType.THINK: ThinkHandler(),
@@ -1155,7 +1162,7 @@ def build_default_action_router(
         ActionType.SUMMARIZE: SummarizeHandler(),
         ActionType.ASK_HUMAN: AskHumanHandler(),
         ActionType.RECALL_MEMORY: MemoryRecallHandler(executor=memory_recall_executor),
-        ActionType.FINISH: FinishHandler(),
+        ActionType.FINISH: FinishHandler(validator=finish_validator),
     }
     if delegate_executor is not None:
         handlers[ActionType.DELEGATE] = DelegateHandler(executor=delegate_executor, artifact_adapter=artifact_adapter)

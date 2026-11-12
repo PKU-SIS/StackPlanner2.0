@@ -141,6 +141,7 @@ def build_sp_central_runtime_context(
     *,
     agent_name: str | None = None,
     user_id: str | None = None,
+    skill_names: tuple[str, ...] | None = None,
 ) -> SPCentralRuntimeContext:
     """Build bounded SOUL and Skill-routing context for SP.
 
@@ -155,6 +156,10 @@ def build_sp_central_runtime_context(
         user_id=user_id,
         profile=profile,
     )
+    if skill_names is not None:
+        allowed = set(skill_names)
+        skills = [skill for skill in skills if skill.name in allowed]
+        available_skill_names = frozenset(skill.name for skill in skills)
     skill_index = _skill_index(skills)
 
     system_parts = [

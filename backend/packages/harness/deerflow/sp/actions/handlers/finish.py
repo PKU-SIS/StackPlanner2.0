@@ -296,7 +296,19 @@ def _has_final_artifact(context: HandlerContext, action: SPAction) -> bool:
 
 
 class FinishHandler:
+    def __init__(self, *, validator=None):
+        self._validator = validator
+
     def handle(self, action: SPAction, context: HandlerContext) -> HandlerResult:
+        if self._validator is not None:
+            error = self._validator(action, context)
+            if error:
+                return HandlerResult(
+                    next_step="error_recoverable",
+                    idempotency_key=action.idempotency_key,
+                    error=str(error),
+                    run_events=[make_sp_event("sp.finish.rejected", action_id=action.action_id, run_id=context.run_id, reason="trusted_business_acceptance", detail=str(error))],
+                )
         if action.metadata.get(_PARALLEL_NONTERMINAL_SIBLING_KEY):
             return HandlerResult(
                 next_step="error_recoverable",

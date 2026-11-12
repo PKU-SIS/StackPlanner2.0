@@ -113,6 +113,9 @@ def prime_enabled_skills_cache() -> None:
 
 
 def warm_enabled_skills_cache(timeout_seconds: float = _ENABLED_SKILLS_REFRESH_WAIT_TIMEOUT_SECONDS) -> bool:
+    from deerflow.utils.runtime_timeouts import scaled_runtime_timeout
+
+    timeout_seconds = scaled_runtime_timeout(timeout_seconds)
     if _ensure_enabled_skills_cache().wait(timeout=timeout_seconds):
         return True
 

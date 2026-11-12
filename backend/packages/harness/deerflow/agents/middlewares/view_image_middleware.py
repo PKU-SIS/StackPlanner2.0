@@ -32,6 +32,9 @@ class ViewImageMiddleware(AgentMiddleware[ViewImageMiddlewareState]):
 
     state_schema = ViewImageMiddlewareState
 
+    def __init__(self, *, tool_names: tuple[str, ...] = ("view_image",)):
+        self.tool_names = frozenset(tool_names)
+
     def _get_last_assistant_message(self, messages: list) -> AIMessage | None:
         """Get the last assistant message from the message list.
 
@@ -58,7 +61,7 @@ class ViewImageMiddleware(AgentMiddleware[ViewImageMiddlewareState]):
         if not hasattr(message, "tool_calls") or not message.tool_calls:
             return False
 
-        return any(tool_call.get("name") == "view_image" for tool_call in message.tool_calls)
+        return any(tool_call.get("name") in self.tool_names for tool_call in message.tool_calls)
 
     def _all_tools_completed(self, messages: list, assistant_msg: AIMessage) -> bool:
         """Check if all tool calls in the assistant message have been completed.

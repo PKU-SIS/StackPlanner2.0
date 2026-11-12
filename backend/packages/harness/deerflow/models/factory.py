@@ -34,6 +34,7 @@ def _vllm_disable_chat_template_kwargs(chat_template_kwargs: dict) -> dict:
 # OpenAI-compatible model classes whose constructor takes ``base_url`` (not ``api_base``)
 # and to which the OpenAI-specific defaults below apply.
 _OPENAI_COMPAT_USE_PATHS = (
+    "app.experiments.collusion_audit.reporter_stream:StreamingReporterModel",
     "langchain_openai:ChatOpenAI",
     "deerflow.models.patched_openai:PatchedChatOpenAI",
 )

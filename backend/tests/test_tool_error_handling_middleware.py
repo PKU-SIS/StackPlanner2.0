@@ -519,6 +519,50 @@ def test_subagent_runtime_middlewares_skip_view_image_for_text_model(monkeypatch
     assert not any(isinstance(middleware, ViewImageMiddleware) for middleware in middlewares)
 
 
+@pytest.mark.anyio
+@pytest.mark.parametrize("async_mode", [False, True])
+async def test_memory_recaller_coalesces_role_and_date_before_strict_model_without_changing_state(monkeypatch, async_mode):
+    from langchain.agents import create_agent
+    from langchain_core.language_models.chat_models import BaseChatModel
+    from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+    from langchain_core.outputs import ChatGeneration, ChatResult
+
+    from deerflow.agents.middlewares.dynamic_context_middleware import DynamicContextMiddleware
+    from deerflow.agents.middlewares.system_message_coalescing_middleware import SystemMessageCoalescingMiddleware
+
+    config = _make_app_config()
+    _stub_runtime_middleware_imports(monkeypatch)
+    middlewares = build_subagent_runtime_middlewares(app_config=config, model_name="test-model", agent_name="sp-memory-recaller", memory_agent_name="audit")
+    dynamic = next(m for m in middlewares if isinstance(m, DynamicContextMiddleware))
+    coalescing = [m for m in middlewares if isinstance(m, SystemMessageCoalescingMiddleware)]
+    assert len(coalescing) == 1
+    monkeypatch.setattr(dynamic, "_build_full_reminder", lambda: ("<current_date>2026-10-21</current_date>", "user-owned memory; keep at user role"))
+    observed = []
+
+    class StrictModel(BaseChatModel):
+        @property
+        def _llm_type(self):
+            return "strict-system-test"
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            observed.append(messages)
+            if not isinstance(messages[0], SystemMessage) or sum(isinstance(m, SystemMessage) for m in messages) != 1:
+                raise ValueError("System message must be at the beginning.")
+            assert "Read-only memory role" in messages[0].content
+            assert "<current_date>2026-10-21</current_date>" in messages[0].content
+            assert "user-owned memory" not in messages[0].content
+            return ChatResult(generations=[ChatGeneration(message=AIMessage(content="No relevant prior memory."))])
+
+    graph = create_agent(model=StrictModel(), tools=[], middleware=[dynamic, *coalescing], system_prompt=None)
+    initial = {"messages": [SystemMessage(content="Read-only memory role", id="role"), HumanMessage(content="Recall audit preferences", id="user")]}
+    result = await graph.ainvoke(initial) if async_mode else graph.invoke(initial)
+    assert len(observed) == 1
+    # Only the model request is coalesced; original role/date records stay in state.
+    assert sum(isinstance(m, SystemMessage) for m in result["messages"]) == 2
+    assert any(isinstance(m, HumanMessage) and "user-owned memory" in m.content for m in result["messages"])
+    assert initial["messages"][0].content == "Read-only memory role"
+
+
 def test_subagent_runtime_middlewares_attach_deferred_filter_when_setup_has_names(monkeypatch):
     """A subagent built with deferred MCP tools gets DeferredToolFilterMiddleware, positioned before SafetyFinishReasonMiddleware (mirrors the lead ordering)."""
     from langchain_core.tools import tool as as_tool

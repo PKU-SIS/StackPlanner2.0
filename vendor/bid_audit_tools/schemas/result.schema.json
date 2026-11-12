@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Persisted result.json 1.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "rule_id",
+    "run_id",
+    "status",
+    "risk_verdict",
+    "requires_agent_review",
+    "finding_count",
+    "collections"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "rule_id": {
+      "type": "string",
+      "pattern": "^M(0[1-9]|1[0-5])$"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "partial",
+        "insufficient_data",
+        "not_applicable",
+        "error"
+      ]
+    },
+    "risk_verdict": {
+      "type": "null"
+    },
+    "requires_agent_review": {
+      "const": true
+    },
+    "finding_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "metrics": {
+      "type": "object"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "collections": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "count",
+          "file"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "file": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

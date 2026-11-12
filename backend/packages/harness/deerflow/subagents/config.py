@@ -1,5 +1,6 @@
 """Subagent configuration definitions."""
 
+import math
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -42,6 +43,29 @@ class SubagentConfig:
     # registry but are not advertised to, or callable from, the default lead
     # agent's generic task tool.
     internal: bool = False
+
+    # Trusted server-side overrides, absent from model action metadata. None
+    # preserves native model/env defaults. Scheduling and tool choice unchanged.
+    tool_call_limit: int | None = None
+    model_errors_propagate: bool = False
+    model_thinking_enabled: bool | None = None
+    model_max_tokens: int | None = None
+    model_timeout_seconds: float | None = None
+    model_request_deadline_seconds: float | None = None
+
+    def __post_init__(self):
+        if type(self.model_errors_propagate) is not bool:
+            raise ValueError("model_errors_propagate must be a trusted boolean")
+        if self.tool_call_limit is not None and (type(self.tool_call_limit) is not int or not 2 <= self.tool_call_limit <= 256):
+            raise ValueError("tool_call_limit must be a trusted integer in 2..256")
+        if self.model_thinking_enabled is not None and type(self.model_thinking_enabled) is not bool:
+            raise ValueError("model_thinking_enabled must be a trusted boolean or None")
+        if self.model_max_tokens is not None and (type(self.model_max_tokens) is not int or self.model_max_tokens <= 0):
+            raise ValueError("model_max_tokens must be a positive trusted integer")
+        for name in ("model_timeout_seconds", "model_request_deadline_seconds"):
+            value = getattr(self, name)
+            if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0):
+                raise ValueError(name + " must be a finite positive trusted timeout")
 
 
 def _default_model_name(app_config: "AppConfig") -> str:

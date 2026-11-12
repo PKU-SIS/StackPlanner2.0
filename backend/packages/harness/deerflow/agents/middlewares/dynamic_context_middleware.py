@@ -39,6 +39,8 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.runtime import Runtime
 
+from deerflow.utils.runtime_timeouts import scaled_runtime_timeout
+
 if TYPE_CHECKING:
     from deerflow.config.app_config import AppConfig
 
@@ -304,11 +306,11 @@ class DynamicContextMiddleware(AgentMiddleware):
         try:
             return await asyncio.wait_for(
                 asyncio.to_thread(self._inject, state),
-                timeout=_INJECT_TIMEOUT_SECONDS,
+                timeout=scaled_runtime_timeout(_INJECT_TIMEOUT_SECONDS),
             )
         except TimeoutError:
             logger.warning(
                 "DynamicContextMiddleware: injection timed out (%.1fs); skipping memory/date injection for this turn",
-                _INJECT_TIMEOUT_SECONDS,
+                scaled_runtime_timeout(_INJECT_TIMEOUT_SECONDS),
             )
             return None

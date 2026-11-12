@@ -120,6 +120,68 @@ _PURE_REPORT_DELEGATION_PATTERN = re.compile(
     r")",
     re.IGNORECASE | re.DOTALL,
 )
+# Opt-in intent recognition is clause-local: nouns such as shared-draft and
+# instructions to report an offset are not a request to author a document.
+_PRECISE_REPORT_FORWARD = re.compile(
+    r"(?<![\w-])(?P<verb>generate|write|draft|produce|create|revise|rewrite)\b"
+    r"(?:[ \t]+[\w-]+){0,8}[ \t]+(?:report|markdown[ \t]+document)\b"
+    r"(?![ \t]+(?:offset(?:_reached)?|rows_remaining|run_id|counts?)\b)",
+    re.IGNORECASE,
+)
+_PRECISE_REPORT_PASSIVE = re.compile(
+    r"\breport[ \t]+(?:(?:must|should|needs? to|is to)[ \t]+)?be[ \t]+"
+    r"(?:generated|written|drafted|produced|created|revised|rewritten)\b",
+    re.IGNORECASE,
+)
+_PRECISE_REPORT_CHINESE = re.compile(
+    r"(?:生成|撰写|编写|起草|制作|修订|改写|重写|写出|写)"
+    r"[\w \t-]{0,20}(?:报告|复盘|董事会材料|Markdown文档)",
+    re.IGNORECASE,
+)
+_PRECISE_REPORT_CHINESE_REVERSE = re.compile(
+    r"(?:将|把)(?:这份|该|现有)?(?:报告|复盘|董事会材料)(?:重新)?(?:生成|撰写|编写|起草|制作|修订|改写|重写)"
+    r"|(?:报告|复盘|董事会材料)(?:需要|应当|必须|应|需)(?:重新|被)?(?:生成|撰写|编写|起草|制作|修订|改写|重写)"
+)
+_REPORT_INTENT_NEGATION = re.compile(
+    r"(?:\b(?:do[ \t]+not|don't|never|not|no[ \t]+need[ \t]+to)"
+    r"(?:[ \t]+(?:ever|yet|now|directly|actually|immediately|independently))*[ \t]*"
+    r"|(?:无需|不要|不必|不得|禁止|勿|别|不)(?:\s|直接|继续|再|立即|现在|单独|专门|另外)*)$",
+    re.IGNORECASE,
+)
+
+
+def _is_report_request_prefix(prefix: str, *, passive: bool) -> bool:
+    """Accept a writing request, not a capability claim or quoted instruction."""
+    prefix = re.sub(r"^\s*(?:\d+[.)、][ \t]*)?", "", prefix)
+    if not prefix:
+        return True
+    if passive:
+        return bool(re.fullmatch(r"(?:the|a|an)(?:[ \t]+[\w-]+){0,5}[ \t]*", prefix, re.IGNORECASE))
+    return bool(
+        re.fullmatch(r"(?:(?:please|now|then|finally|next|also|you[ \t]+(?:must|should)|your[ \t]+task[ \t]+is[ \t]+to|need[ \t]+to)[ \t]+)+", prefix, re.IGNORECASE)
+        or re.fullmatch(r"(?:请|帮我|现在|接下来|最后|直接|务必|需|需要|应|应当|必须)+", prefix)
+        or re.fullmatch(r"(?:请)?(?:基于|依据|根据)[^。;；\n]*[，,][ \t]*(?:请|最后|现在)?", prefix)
+        or re.fullmatch(r"Use[ \t]+[^.;\n]{1,120}[ \t]+to[ \t]+", prefix, re.IGNORECASE)
+    )
+
+
+def _has_positive_report_intent(text: str) -> bool:
+    for clause in re.split(r"[。！？;；\n]|(?<=[.!?])[ \t]+", text):
+        for pattern in (_PRECISE_REPORT_FORWARD, _PRECISE_REPORT_PASSIVE, _PRECISE_REPORT_CHINESE, _PRECISE_REPORT_CHINESE_REVERSE):
+            for match in pattern.finditer(clause):
+                prefix = clause[: match.start()]
+                if not _is_report_request_prefix(prefix, passive=pattern is _PRECISE_REPORT_PASSIVE):
+                    continue
+                if _REPORT_INTENT_NEGATION.search(prefix):
+                    continue
+                if pattern is _PRECISE_REPORT_PASSIVE and re.search(r"\bno(?:[ \t]+[\w-]+){0,3}[ \t]*$", prefix, re.IGNORECASE):
+                    continue
+                if match.groupdict().get("verb", "").lower() == "draft" and re.search(r"\b(?:shared|common|source|master)[ \t]+$", prefix, re.IGNORECASE):
+                    continue
+                return True
+    return False
+
+
 _CODE_OR_APP_DELIVERABLE_PATTERN = re.compile(
     r"(?:"
     r"代码|源码|程序|脚本|网页|网站|应用|前端|后端|接口|可执行|"
@@ -539,6 +601,17 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
 
     state_schema = AgentState
 
+    def __init__(self, *, scoped_delegate_recovery: bool = False, allow_limited_report: bool = False, count_missing_reports: bool = False):
+        if type(scoped_delegate_recovery) is not bool:
+            raise ValueError("scoped_delegate_recovery must be a trusted boolean")
+        if type(allow_limited_report) is not bool:
+            raise ValueError("allow_limited_report must be a trusted boolean")
+        if type(count_missing_reports) is not bool:
+            raise ValueError("count_missing_reports must be a trusted boolean")
+        self.count_missing_reports = count_missing_reports
+        self.allow_limited_report = allow_limited_report
+        self.scoped_delegate_recovery = scoped_delegate_recovery
+
     @staticmethod
     def _latest_visible_human_message(state: Mapping[str, Any]) -> HumanMessage | None:
         messages = state.get("messages")
@@ -623,13 +696,41 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         target_agent: str,
         *,
         stage: str | None = None,
+        recovery_scope_key: str | None = None,
     ) -> int:
         stack = TaskMemoryStack.from_dict(state.get("sp_task_memory"))
         current_run_id = str(state.get("sp_loop_run_id") or "").strip()
         return sum(
             1
             for entry in stack.entries
-            if entry.action == "delegate" and entry.metadata.get("target_agent") == target_agent and (stage is None or str(entry.stage or "") == stage) and (not current_run_id or str(entry.run_id or "") == current_run_id)
+            if entry.action == "delegate"
+            and entry.metadata.get("target_agent") == target_agent
+            and (stage is None or str(entry.stage or "") == stage)
+            and (not current_run_id or str(entry.run_id or "") == current_run_id)
+            and (recovery_scope_key is None or entry.metadata.get("_sp_recovery_scope_key") == recovery_scope_key)
+        )
+
+    @classmethod
+    def _recovery_attempt_count(cls, state, observation, *, scoped_delegate_recovery=False, failure_chain_fallback=False):
+        scope = observation.metadata.get("_sp_recovery_scope_key") if scoped_delegate_recovery else None
+        if not isinstance(scope, str) or not scope.strip():
+            scope = None
+        if scope is None and failure_chain_fallback:
+            count = 0
+            for entry in reversed(TaskMemoryStack.from_dict(state.get("sp_task_memory")).entries):
+                if str(entry.run_id or "") != str(state.get("sp_loop_run_id") or "") or entry.stage != observation.stage:
+                    continue
+                target = str(observation.metadata.get("target_agent") or observation.actor)
+                if entry.action == "observe" and entry.actor == target and entry.metadata.get("completion_status") == "complete":
+                    break
+                if entry.action == "delegate" and entry.metadata.get("target_agent") == target:
+                    count += 1
+            return count
+        return cls._delegate_attempt_count(
+            state,
+            str(observation.metadata.get("target_agent") or observation.actor),
+            stage=str(observation.stage or "") or None,
+            recovery_scope_key=scope,
         )
 
     @staticmethod
@@ -770,6 +871,19 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         implementation = metadata.get("implementation_verification")
         return isinstance(implementation, Mapping) and implementation.get("passed") is True
 
+    @staticmethod
+    def _existing_tool_recovery_names(observation: StackMemoryEntry | None) -> list[str] | None:
+        """Read server-stamped capabilities without changing recovery control."""
+        if observation is None:
+            return None
+        contract = observation.metadata.get("tool_execution_contract")
+        if not isinstance(contract, Mapping) or contract.get("kind") != "existing_tools" or contract.get("source_changes_required") is not False:
+            return None
+        names = contract.get("read_only_tools") or contract.get("execution_tools")
+        if not isinstance(names, list) or not names or any(not isinstance(name, str) or not name.strip() for name in names):
+            return None
+        return list(dict.fromkeys(names))
+
     @classmethod
     def _artifact_recovery_instruction(cls, state: Mapping[str, Any]) -> str:
         partial_observation = cls._latest_partial_report_observation(state)
@@ -792,6 +906,9 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                     gaps = [partial_observation.failure_note]
             gap_text = "; ".join(gaps) if gaps else "the report quality gate is still incomplete"
             input_ref_text = f'input_refs=["{artifact_id}"], ' if artifact_id else ""
+            format_metadata = recovery_report.get("metadata") if recovery_report is not None else None
+            filename = str(format_metadata.get("filename") or "") if isinstance(format_metadata, Mapping) else ""
+            artifact_format = "JSON object" if (filename or str((recovery_report or {}).get("virtual_path") or "")).lower().endswith(".json") else "Markdown"
             return (
                 "<sp-artifact-recovery-required>\n"
                 "The previous report attempt cannot be finalized because the current report "
@@ -801,7 +918,7 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 "every listed evidence gap. Preserve all unaffected content "
                 "and authoritative literals from the current report. The "
                 "reporter must either successfully call write_file or return "
-                "the complete revised Markdown in artifact_content. Do not "
+                f"the complete revised {artifact_format} in artifact_content. Do not "
                 "call FINISH, summarize, or invent a download URL in this turn.\n"
                 "</sp-artifact-recovery-required>"
             )
@@ -858,6 +975,14 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                     if target == "coder"
                     else ""
                 )
+                existing_tools = cls._existing_tool_recovery_names(latest_observation) if target == "coder" else None
+                if existing_tools is not None:
+                    coder_instruction = (
+                        " This is an existing-tool execution contract, with no source-edit or software-test goal. "
+                        "Use the registered tools to close the actual delegated evidence gaps; do not invent completed checks. "
+                        "Set requires_implementation=false and metadata.tool_names=" + json.dumps(existing_tools) + ". "
+                        "Do not add software tools outside that trusted capability set."
+                    )
                 return (
                     "<sp-artifact-recovery-required>\n"
                     f"The previous {target} result is {completion_status}: "
@@ -1050,11 +1175,16 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         delegate_incomplete = latest_delegate_status in {"partial", "blocked"}
         code_recovery = bool(delegate_incomplete and latest_delegate_observation is not None and str(latest_delegate_observation.metadata.get("target_agent") or latest_delegate_observation.actor or "") == "coder")
         reporter_attempts = self._reporter_attempt_count(state)
-        if incomplete_current_report is not None and reporter_attempts >= SP_REPORT_RECOVERY_MAX_ATTEMPTS:
+        missing_report_failure = self.count_missing_reports and not has_finalizable_artifact and reporter_attempts >= SP_REPORT_RECOVERY_MAX_ATTEMPTS
+        if (incomplete_current_report is not None or missing_report_failure) and reporter_attempts >= SP_REPORT_RECOVERY_MAX_ATTEMPTS:
             active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) == "sp_ask_human"]
             messages = list(request.messages)
             if not any(getattr(message, "name", None) == _SP_REPORT_RECOVERY_EXHAUSTED_MESSAGE_NAME for message in messages):
-                metadata = incomplete_current_report.get("metadata")
+                metadata = (
+                    incomplete_current_report.get("metadata")
+                    if incomplete_current_report
+                    else {"evidence_gaps": ["Reporter failed to create a usable report after the existing bounded attempts; source evidence remains available, no report artifact was invented."]}
+                )
                 raw_gaps = metadata.get("evidence_gaps") if isinstance(metadata, Mapping) else None
                 gaps = [str(value).strip() for value in raw_gaps or [] if str(value).strip()]
                 gap_text = "; ".join(gaps[:5]) or ("the report still fails its acceptance checks")
@@ -1081,12 +1211,19 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             return request.override(tools=active_tools, messages=messages)
         if latest_delegate_observation is not None and latest_delegate_observation.actor != "reporter" and latest_delegate_status in {"partial", "blocked"}:
             target_agent = str(latest_delegate_observation.metadata.get("target_agent") or latest_delegate_observation.actor)
-            delegate_attempts = self._delegate_attempt_count(
+            delegate_attempts = self._recovery_attempt_count(
                 state,
-                target_agent,
-                stage=str(latest_delegate_observation.stage or "") or None,
+                latest_delegate_observation,
+                scoped_delegate_recovery=self.scoped_delegate_recovery,
+                failure_chain_fallback=self.allow_limited_report,
             )
             delegate_recovery_limit = self._delegate_recovery_limit(latest_delegate_observation)
+            if delegate_attempts >= delegate_recovery_limit and self.allow_limited_report:
+                notice = HumanMessage(
+                    content="当前取证任务已达到恢复上限。不要继续同一失败取证；已有原始证据和阶段材料保留。由Central自主判断是否委派Reporter，生成明确披露未核范围和局限的报告，或询问用户、反思及重新规划。不得将未验证结论当作事实，不得宣称未生成的文件已经交付。报告仍须真实写入并经原生FINISH选择。",
+                    name="sp_limited_report_choice",
+                )
+                return request.override(tools=[t for t in request.tools if getattr(t, "name", None) != "sp_finish"], messages=[*request.messages, notice])
             if delegate_attempts >= delegate_recovery_limit:
                 active_tools = [candidate for candidate in request.tools if getattr(candidate, "name", None) not in SP_CONTROL_TOOL_NAMES]
                 messages = list(request.messages)
@@ -1185,6 +1322,9 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         cls,
         state: AgentState,
         runtime: Any,
+        *,
+        scoped_delegate_recovery: bool = False,
+        allow_limited_report: bool = False,
     ) -> dict[str, Any] | None:
         del runtime
         if not isinstance(state, Mapping):
@@ -1213,10 +1353,11 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
 
         if target_agent not in _SP_SPECIALIST_ROLES:
             return None
-        attempts = cls._delegate_attempt_count(
+        attempts = cls._recovery_attempt_count(
             state,
-            target_agent,
-            stage=str(observation.stage or "") or None,
+            observation,
+            scoped_delegate_recovery=scoped_delegate_recovery,
+            failure_chain_fallback=allow_limited_report,
         )
         recovery_limit = cls._delegate_recovery_limit(observation)
         raw_gaps = observation.metadata.get("evidence_gaps")
@@ -1229,6 +1370,8 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         message_id = str(latest.id or _implicit_think_message_id(latest))
         draft_text = message_to_text(latest).strip()
 
+        if attempts >= recovery_limit and allow_limited_report:
+            return None
         if attempts >= recovery_limit:
             if use_chinese:
                 content = f"以下是已保留的未验证草稿，仅供参考，不代表产物已通过验证：\n\n{draft_text}\n\n---\n验证状态：本轮已达到 {attempts} 次恢复上限。未解决问题：{gap_text}。请稍后重试或缩小修复范围。"
@@ -1276,7 +1419,13 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
             "recovery_guard": "unverified_artifact_terminal_claim",
             "recovery_attempt": attempts + 1,
         }
-        if target_agent == "coder":
+        existing_tools = cls._existing_tool_recovery_names(observation) if target_agent == "coder" else None
+        if existing_tools is not None:
+            metadata.update({"requires_implementation": False, "tool_names": existing_tools})
+            if verification_only:
+                metadata["verification_only"] = True
+            task += " This is existing-tool evidence work: use the registered tools to close the stated gaps, preserve actual receipts, and do not edit source or run software tests."
+        elif target_agent == "coder":
             if verification_only:
                 metadata.update(
                     {
@@ -1338,10 +1487,29 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         return {"messages": [guarded]}
 
     def after_model(self, state: AgentState, runtime: Any) -> dict[str, Any] | None:
-        return self._after_model_update(state, runtime)
+        return self._after_model_update(state, runtime, scoped_delegate_recovery=self.scoped_delegate_recovery, allow_limited_report=self.allow_limited_report)
 
     async def aafter_model(self, state: AgentState, runtime: Any) -> dict[str, Any] | None:
-        return self._after_model_update(state, runtime)
+        return self._after_model_update(state, runtime, scoped_delegate_recovery=self.scoped_delegate_recovery, allow_limited_report=self.allow_limited_report)
+
+    def _exhausted_tool_error(self, request):
+        if not self.allow_limited_report or request.tool_call.get("name") != "sp_delegate":
+            return None
+        observation = self._latest_delegate_observation(request.state)
+        if observation is None or observation.actor == "reporter" or observation.metadata.get("completion_status") not in {"partial", "blocked"}:
+            return None
+        attempts = self._recovery_attempt_count(request.state, observation, scoped_delegate_recovery=self.scoped_delegate_recovery, failure_chain_fallback=True)
+        if attempts < self._delegate_recovery_limit(observation) or request.tool_call.get("args", {}).get("target_agent") == "reporter":
+            return None
+        return ToolMessage(content="当前取证恢复次数已耗尽，未执行本次取证委派。Central可自主选择Reporter披露局限生成报告，或询问用户、反思及重新规划。", tool_call_id=request.tool_call["id"], name="sp_delegate", status="error")
+
+    def wrap_tool_call(self, request, handler):
+        rejected = self._exhausted_tool_error(request)
+        return rejected if rejected is not None else handler(request)
+
+    async def awrap_tool_call(self, request, handler):
+        rejected = self._exhausted_tool_error(request)
+        return rejected if rejected is not None else await handler(request)
 
     def wrap_model_call(
         self,
@@ -1564,7 +1732,7 @@ def _delegate_artifact_paths(state_update: Mapping[str, Any]) -> list[str]:
     return list(dict.fromkeys(path for path in paths if isinstance(path, str) and path.startswith("/mnt/user-data/outputs/")))
 
 
-def _normalize_delegate_target(payload: dict[str, Any]) -> tuple[str, str | None]:
+def _normalize_delegate_target(payload: dict[str, Any], *, precise_report_intent: bool = False, registered_tool_names: tuple[str, ...] = (), perception_image_tool_names: tuple[str, ...] = ()) -> tuple[str, str | None]:
     """Repair an unambiguous report/coder role mismatch at the action boundary."""
     target_agent = str(payload.get("target_agent") or "")
     if target_agent != "coder":
@@ -1572,10 +1740,17 @@ def _normalize_delegate_target(payload: dict[str, Any]) -> tuple[str, str | None
     text = "\n".join(str(value) for key in ("task", "expected_output", "reason") if (value := payload.get(key)) not in (None, ""))
     if _CODE_OR_APP_DELIVERABLE_PATTERN.search(text):
         return target_agent, None
-    if _PURE_REPORT_DELEGATION_PATTERN.search(text):
+    report_requested = any(_has_positive_report_intent(str(payload.get(field) or "")) for field in ("task", "expected_output", "reason")) if precise_report_intent else bool(_PURE_REPORT_DELEGATION_PATTERN.search(text))
+    if report_requested:
         payload["target_agent"] = "reporter"
         return "reporter", "pure_report_synthesis"
     if _LOCAL_DOCUMENT_INSPECTION_PATTERN.search(text):
+        requested = (payload.get("metadata") or {}).get("tool_names")
+        perception_tools = {"read_file", "grep", "glob", "ls", *perception_image_tool_names}
+        if registered_tool_names and isinstance(requested, list) and any(isinstance(name, str) and name in registered_tool_names and name not in perception_tools for name in requested):
+            # This is not a pure file-reader contract. Keep the role Central
+            # actually requested rather than deleting its real capabilities.
+            return target_agent, None
         payload["target_agent"] = "perception"
         return "perception", "local_document_inspection"
     return target_agent, None
@@ -1720,7 +1895,7 @@ def _normalize_model_mapping(value: Any) -> dict[str, Any]:
     return {}
 
 
-def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: str) -> dict[str, Any]:
+def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: str, precise_report_intent: bool = False, perception_image_tool_names: tuple[str, ...] = (), registered_tool_names: tuple[str, ...] = ()) -> dict[str, Any]:
     mapping = {
         "sp_think": ActionType.THINK,
         "sp_delegate": ActionType.DELEGATE,
@@ -1752,7 +1927,7 @@ def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: st
         payload["metadata"] = _normalize_model_mapping(raw_metadata)
         revision_reason = payload.pop("revision_reason", None)
         target_agent, inference_reason = _infer_missing_delegate_target(payload)
-        target_agent, routing_reason = _normalize_delegate_target(payload)
+        target_agent, routing_reason = _normalize_delegate_target(payload, precise_report_intent=precise_report_intent, registered_tool_names=registered_tool_names, perception_image_tool_names=perception_image_tool_names)
         requested_stage = payload.get("stage")
         canonical_stage = {
             "perception": "perception",
@@ -1776,7 +1951,7 @@ def _action_payload(tool_name: str, args: Mapping[str, Any], *, tool_call_id: st
             payload["metadata"].pop("verification_only", None)
             requested_tools = payload["metadata"].get("tool_names")
             if isinstance(requested_tools, list):
-                payload["metadata"]["tool_names"] = [name for name in requested_tools if name in {"read_file", "grep", "glob", "ls"}]
+                payload["metadata"]["tool_names"] = [name for name in requested_tools if name in {"read_file", "grep", "glob", "ls", *perception_image_tool_names}]
         if not revision_reason and target_agent in {"reporter", "outline"} and payload.get("stage") == "revision":
             # Models reliably express the revision rationale in `reason` even
             # when they omit the optional dedicated field. Keep the explicit
@@ -1872,9 +2047,17 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
 
     state_schema = AgentState
 
-    def __init__(self, *, executor_provider: SPExecutorProvider | None = None) -> None:
+    def __init__(
+        self, *, executor_provider: SPExecutorProvider | None = None, precise_report_intent: bool = False, finish_validator=None, perception_image_tool_names: tuple[str, ...] = (), registered_tool_names: tuple[str, ...] = ()
+    ) -> None:
         super().__init__()
         self._executor_provider = executor_provider
+        self._precise_report_intent = precise_report_intent
+        self._perception_image_tool_names = perception_image_tool_names
+        if not isinstance(registered_tool_names, tuple) or len(registered_tool_names) > 128 or any(not isinstance(name, str) or not name.strip() for name in registered_tool_names):
+            raise ValueError("Registered tool identity must be a bounded trusted tuple")
+        self._registered_tool_names = registered_tool_names
+        self._finish_validator = finish_validator
         self._summary_run_lock = Lock()
         self._summary_committed_runs: OrderedDict[tuple[str, str, str], None] = OrderedDict()
 
@@ -1903,7 +2086,14 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
         tool_name = str(request.tool_call.get("name") or "")
         tool_call_id = str(request.tool_call.get("id") or "sp-tool")
 
-        payload = _action_payload(tool_name, request.tool_call.get("args") or {}, tool_call_id=tool_call_id)
+        payload = _action_payload(
+            tool_name,
+            request.tool_call.get("args") or {},
+            tool_call_id=tool_call_id,
+            **({"precise_report_intent": True} if self._precise_report_intent else {}),
+            **({"registered_tool_names": self._registered_tool_names} if getattr(self, "_registered_tool_names", ()) else {}),
+            **({"perception_image_tool_names": self._perception_image_tool_names} if getattr(self, "_perception_image_tool_names", ()) else {}),
+        )
         if tool_name == "sp_finish":
             payload["metadata"] = {
                 **dict(payload.get("metadata") or {}),
@@ -1943,7 +2133,7 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
                     SP_SUMMARY_TURN_RESERVED_KEY: True,
                 }
         executor = self._executor_provider(request.state, runtime) if self._executor_provider is not None else None
-        router = build_default_action_router(delegate_executor=executor, memory_recall_executor=executor)
+        router = build_default_action_router(delegate_executor=executor, memory_recall_executor=executor, **({"finish_validator": self._finish_validator} if self._finish_validator is not None else {}))
         result = router.execute(payload, state=effective_state, thread_id=thread_id, run_id=run_id)
         if reserved_summary and result.next_step.startswith("error"):
             with self._summary_run_lock:

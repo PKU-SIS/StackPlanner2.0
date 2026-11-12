@@ -2333,6 +2333,7 @@ def test_coder_delegate_preserves_file_edit_and_execution_tools_when_narrowed(
         "write_file",
         "str_replace",
     ]
+    assert executor.tasks[0].control_tool_request == {"tool_names": ["bash"]}
 
 
 def test_coder_delegate_defaults_to_local_file_and_execution_tools(tmp_path):
@@ -2366,6 +2367,8 @@ def test_coder_delegate_defaults_to_local_file_and_execution_tools(tmp_path):
         "str_replace",
         "bash",
     ]
+
+    assert executor.tasks[0].control_tool_request == {}
 
 
 def test_self_contained_exact_enumeration_is_rerouted_from_researcher_to_coder(
@@ -2958,6 +2961,25 @@ def test_reporter_acceptance_guard_rejects_local_filesystem_links(tmp_path):
     assert portable_links["passed"] is False
     assert portable_links["unsafe_local_links"] == ["](/data/private/thread/uploads/evidence.md)"]
     assert "non-portable local filesystem links" in (observation.failure_note or "")
+
+
+@pytest.mark.parametrize("finding", ["评审得分最高的投标人排名第一", "项目编号不同，最高限价3387300元", "满分25分与详细最高分27分不同"])
+def test_reporter_acceptance_does_not_treat_bound_data_instruction_as_missing_data(tmp_path, finding):
+    executor = FakeSubagentExecutor(
+        SPSubagentResult(
+            status=SPSubagentStatus.COMPLETED,
+            artifact_content={"conclusion": finding, "score": 0.95},
+            artifact_type="report_revision",
+            artifact_metadata={"completion_status": "complete", "filename": "audit.json", "evidence_gaps": []},
+        )
+    )
+    state = {**_thread_state_with_outputs(tmp_path), "messages": [HumanMessage(content="数据集已绑定，无需询问输出格式或数据来源。基于本地检索证据生成JSON报告。")]}
+    result = build_default_action_router(delegate_executor=executor).execute(
+        _action(ActionType.DELEGATE, action_id="bound-json-report", target_agent="reporter", task="生成JSON报告", stage="reporting"), state=state, thread_id="thread-1", run_id="run-1"
+    )
+    ref = result.state_update["sp_current_artifact_refs"]["report_revision"]
+    assert ref["metadata"]["completion_status"] == "complete"
+    assert ref["metadata"]["quality_checks"]["no_data_grounding"]["constraint_detected"] is False
 
 
 def test_reporter_acceptance_guard_rejects_claims_under_no_data_constraint(

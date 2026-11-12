@@ -1,0 +1,7 @@
+# Verified runtime versions; SP uses its existing backend dependency lock.
+pypdf==6.10.0
+pdfplumber==0.11.9
+Pillow==12.3.0
+python-docx==1.2.0
+# Tests: reportlab==4.4.9
+# SP integration: langchain==1.2.15

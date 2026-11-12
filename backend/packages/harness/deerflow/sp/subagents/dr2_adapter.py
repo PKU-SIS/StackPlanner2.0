@@ -402,6 +402,8 @@ def _recover_research_tool_evidence(ai_messages: Any) -> str | None:
 def _coder_requires_execution_evidence(task: SPSubagentTask | None) -> bool:
     if task is None or task.subagent_type != "coder":
         return False
+    if task.tool_execution_contract is not None:
+        return True
     text = "\n".join(str(value) for value in (task.task, task.description, task.expected_output) if value)
     return bool(_CODER_EXECUTION_REQUIRED_PATTERN.search(text))
 
@@ -416,6 +418,8 @@ def coder_task_requires_implementation(task: SPSubagentTask) -> bool:
     from the latest natural-language task alone.
     """
     if task.subagent_type != "coder":
+        return False
+    if task.tool_execution_contract is not None:
         return False
     explicit = task.metadata.get("requires_implementation")
     if isinstance(explicit, bool):
@@ -536,6 +540,10 @@ def _test_execution_verification(ai_messages: Any) -> dict[str, Any]:
 
 def _execution_verification(
     ai_messages: Any,
+    *,
+    execution_tools: frozenset[str] = _EXECUTION_TOOLS,
+    track_source_writes: bool = True,
+    structured_tool_results: bool = False,
 ) -> dict[str, int | bool | None]:
     calls: dict[str, tuple[str, int]] = {}
     latest_source_write_index: int | None = None
@@ -565,9 +573,13 @@ def _execution_verification(
             tool_name = tool_name or call[0]
         if not _tool_result_succeeded(message.get("content")):
             continue
-        if tool_name in _FILE_WRITE_TOOLS:
+        if structured_tool_results:
+            payload = _parse_result_payload(_message_text(message.get("content")))
+            if isinstance(payload, Mapping) and (str(payload.get("status", "")).lower() in {"error", "failed", "cancelled"} or payload.get("error")):
+                continue
+        if track_source_writes and tool_name in _FILE_WRITE_TOOLS:
             latest_source_write_index = index
-        if tool_name in _EXECUTION_TOOLS:
+        if tool_name in execution_tools:
             successful_execution_indices.append(index)
 
     latest_successful_execution_index = successful_execution_indices[-1] if successful_execution_indices else None
@@ -677,6 +689,10 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         declared_paths = artifact_metadata.get("created_paths")
         declared_created_paths = [path for value in declared_paths if (path := _output_path(value)) is not None] if isinstance(declared_paths, list) else []
         artifact_metadata["created_paths"] = list(dict.fromkeys([*declared_created_paths, *recovered_created_paths]))
+    if task is None or task.tool_execution_contract is None:
+        artifact_metadata.pop("tool_execution_contract", None)
+    else:
+        artifact_metadata["tool_execution_contract"] = task.protocol_payload()["tool_execution_contract"]
     if not is_memory_recaller:
         raw_completion_status = str(artifact_metadata.get("completion_status") or "").strip().lower()
         if stop_reason and status == SPSubagentStatus.COMPLETED:
@@ -692,7 +708,7 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         if not isinstance(evidence_gaps, list):
             evidence_gaps = []
         artifact_metadata["evidence_gaps"] = [str(item) for item in evidence_gaps if str(item).strip()][:12]
-        if task is not None and task.subagent_type == "coder" and _coder_reported_behavior_failure(raw_result, ai_messages):
+        if task is not None and task.subagent_type == "coder" and task.tool_execution_contract is None and _coder_reported_behavior_failure(raw_result, ai_messages):
             artifact_metadata["completion_status"] = "partial"
             if _BEHAVIOR_FAILURE_GAP not in artifact_metadata["evidence_gaps"]:
                 artifact_metadata["evidence_gaps"].append(_BEHAVIOR_FAILURE_GAP)
@@ -708,8 +724,26 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
                 artifact_metadata["completion_status"] = "partial"
             if _NO_RESPONSE_GAP not in artifact_metadata["evidence_gaps"]:
                 artifact_metadata["evidence_gaps"].append(_NO_RESPONSE_GAP)
+        if task is not None and task.tool_execution_contract is not None and task.tool_execution_contract.require_result_protocol:
+            protocol_valid = bool(
+                isinstance(payload, dict)
+                and isinstance(payload.get("summary"), str)
+                and payload["summary"].strip()
+                and isinstance(payload.get("artifact_type"), str)
+                and payload["artifact_type"].strip()
+                and isinstance(payload.get("artifact_metadata"), dict)
+                and payload["artifact_metadata"].get("completion_status") in _COMPLETION_STATUSES
+            )
+            artifact_metadata["result_protocol_verification"] = {"required": True, "passed": protocol_valid}
+            if not protocol_valid:
+                artifact_metadata["completion_status"] = "partial"
+                artifact_metadata["evidence_gaps"].append("Missing final structured result protocol; tool receipts or a promise to do work do not prove the requested analysis/artifacts were delivered.")
         if _coder_requires_execution_evidence(task):
-            verification = _execution_verification(ai_messages)
+            contract = task.tool_execution_contract if task is not None else None
+            verification = _execution_verification(
+                ai_messages,
+                **({"execution_tools": frozenset(contract.execution_tools), "track_source_writes": False, "structured_tool_results": True} if contract is not None else {}),
+            )
             artifact_metadata["execution_verification"] = verification
             if not verification["passed"]:
                 if artifact_metadata["completion_status"] == "complete":
@@ -729,7 +763,13 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         # the final source edit. A task that omits the word "test" is still not
         # safely complete from a source diff alone: syntax checks, focused
         # tests, or the repository's equivalent must be observable.
-        code_verification_only = bool(task is not None and task.subagent_type == "coder" and task.metadata.get("verification_only") is True and str(task.stage or task.metadata.get("stage") or "").strip().lower() == "verification")
+        code_verification_only = bool(
+            task is not None
+            and task.tool_execution_contract is None
+            and task.subagent_type == "coder"
+            and task.metadata.get("verification_only") is True
+            and str(task.stage or task.metadata.get("stage") or "").strip().lower() == "verification"
+        )
         if coder_task_requires_implementation(task) or code_verification_only:
             test_verification = _test_execution_verification(ai_messages)
             artifact_metadata["test_verification"] = test_verification
@@ -756,6 +796,9 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
     test_verification = artifact_metadata.get("test_verification")
     tests = [dict(test_verification)] if isinstance(test_verification, Mapping) else []
 
+    if task is not None and isinstance(artifact_type, str) and artifact_type in task.artifact_type_aliases:
+        artifact_metadata["declared_artifact_type"] = artifact_type
+        artifact_type = task.artifact_type_aliases[artifact_type]
     return SPSubagentResult(
         status=status,
         result=normalized_result,

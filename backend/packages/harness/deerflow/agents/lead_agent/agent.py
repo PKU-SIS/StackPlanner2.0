@@ -226,6 +226,7 @@ def build_middlewares(
     user_id: str | None = None,
     inject_long_term_memory: bool = True,
     control_plane_only: bool = False,
+    propagate_model_errors: bool = False,
 ):
     """Build the lead-agent middleware chain based on runtime configuration.
 
@@ -254,7 +255,7 @@ def build_middlewares(
         List of middleware instances.
     """
     resolved_app_config = app_config or get_app_config()
-    middlewares = build_lead_runtime_middlewares(app_config=resolved_app_config, lazy_init=True)
+    middlewares = build_lead_runtime_middlewares(app_config=resolved_app_config, lazy_init=True, **({"propagate_model_errors": True} if propagate_model_errors else {}))
 
     # Always inject current date (and optionally memory) as <system-reminder> into the
     # first HumanMessage to keep the system prompt fully static for prefix-cache reuse.
@@ -412,6 +413,8 @@ def _make_lead_agent(
     include_base_prompt: bool = True,
     inject_long_term_memory: bool = True,
     control_plane_only: bool = False,
+    propagate_model_errors: bool = False,
+    model_overrides: dict | None = None,
 ):
     # Lazy import to avoid circular dependency
     from deerflow.tools import get_available_tools
@@ -433,7 +436,10 @@ def _make_lead_agent(
 
     thinking_enabled = cfg.get("thinking_enabled", True)
     reasoning_effort = cfg.get("reasoning_effort", None)
-    central_model_overrides: dict[str, int] = {}
+    central_model_overrides: dict = dict(model_overrides or {})
+    if model_overrides and not control_plane_only:
+        raise ValueError("Trusted model overrides require a control-plane agent")
+    reasoning_effort = central_model_overrides.pop("reasoning_effort", reasoning_effort)
     if control_plane_only:
         raw_central_max_tokens = cfg.get("sp_central_max_tokens")
         try:
@@ -568,7 +574,7 @@ def _make_lead_agent(
             )
         bootstrap_prompt = "\n\n".join(section for section in (prompt_prefix, bootstrap_prompt) if section)
         return create_agent(
-            model=create_chat_model(name=model_name, thinking_enabled=thinking_enabled, app_config=resolved_app_config, attach_tracing=False, **central_model_overrides),
+            model=create_chat_model(name=model_name, thinking_enabled=thinking_enabled, reasoning_effort=reasoning_effort, app_config=resolved_app_config, attach_tracing=False, **central_model_overrides),
             tools=final_tools,
             middleware=build_middlewares(
                 middleware_config,
@@ -580,6 +586,7 @@ def _make_lead_agent(
                 custom_middlewares=extra_middlewares,
                 inject_long_term_memory=inject_long_term_memory,
                 control_plane_only=control_plane_only,
+                propagate_model_errors=propagate_model_errors,
             ),
             system_prompt=bootstrap_prompt,
             state_schema=ThreadState,
@@ -657,6 +664,7 @@ def _make_lead_agent(
             custom_middlewares=extra_middlewares,
             inject_long_term_memory=inject_long_term_memory,
             control_plane_only=control_plane_only,
+            propagate_model_errors=propagate_model_errors,
         ),
         system_prompt="\n\n".join(section for section in (prompt_prefix, base_prompt) if section),
         state_schema=ThreadState,

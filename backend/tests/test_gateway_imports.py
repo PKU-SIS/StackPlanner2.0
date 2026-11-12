@@ -8,10 +8,12 @@ import sys
 from pathlib import Path
 
 
-def test_gateway_app_imports_first_without_subagent_import_cycle() -> None:
+def test_gateway_app_imports_first_without_subagent_import_cycle(tmp_path) -> None:
     """The replay gateway imports app.gateway.app in a clean process."""
     backend_root = Path(__file__).resolve().parents[1]
-    env = {**os.environ, "PYTHONPATH": str(backend_root)}
+    config = tmp_path / "config.yaml"
+    config.write_text("config_version: 20\nmodels: []\nsandbox:\n  use: deerflow.sandbox.local:LocalSandboxProvider\n")
+    env = {**os.environ, "PYTHONPATH": str(backend_root), "DEER_FLOW_CONFIG_PATH": str(config)}
     result = subprocess.run(
         [sys.executable, "-c", "from app.gateway.app import app"],
         capture_output=True,

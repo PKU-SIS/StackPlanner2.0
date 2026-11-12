@@ -156,6 +156,7 @@ def _build_runtime_middlewares(
     app_config: AppConfig,
     include_uploads: bool,
     include_dangling_tool_call_patch: bool,
+    propagate_model_errors: bool = False,
     lazy_init: bool = True,
 ) -> list[AgentMiddleware]:
     """Build shared base middlewares for agent execution."""
@@ -201,7 +202,7 @@ def _build_runtime_middlewares(
         from deerflow.agents.middlewares.dangling_tool_call_middleware import DanglingToolCallMiddleware
 
         tail.append(DanglingToolCallMiddleware())
-    tail.append(LLMErrorHandlingMiddleware(app_config=app_config))
+    tail.append(LLMErrorHandlingMiddleware(app_config=app_config, **({"propagate_model_errors": True} if propagate_model_errors else {})))
 
     # Guardrail middleware (if configured)
     guardrails_config = app_config.guardrails
@@ -268,12 +269,13 @@ def _build_runtime_middlewares(
     return middlewares
 
 
-def build_lead_runtime_middlewares(*, app_config: AppConfig, lazy_init: bool = True) -> list[AgentMiddleware]:
+def build_lead_runtime_middlewares(*, app_config: AppConfig, lazy_init: bool = True, propagate_model_errors: bool = False) -> list[AgentMiddleware]:
     """Middlewares shared by lead agent runtime before lead-only middlewares."""
     return _build_runtime_middlewares(
         app_config=app_config,
         include_uploads=True,
         include_dangling_tool_call_patch=True,
+        propagate_model_errors=propagate_model_errors,
         lazy_init=lazy_init,
     )
 
@@ -305,8 +307,13 @@ def build_subagent_runtime_middlewares(
     # queues writes, while memory_recaller is deliberately read-only.
     if agent_name == "sp-memory-recaller":
         from deerflow.agents.middlewares.dynamic_context_middleware import DynamicContextMiddleware
+        from deerflow.agents.middlewares.system_message_coalescing_middleware import SystemMessageCoalescingMiddleware
 
         middlewares.append(DynamicContextMiddleware(agent_name=memory_agent_name, app_config=app_config))
+        # Like the lead, recall has both a role prompt and framework date
+        # reminders. Strict Qwen/vLLM templates accept one leading system
+        # message. Reuse the native request-only merger; keep state intact.
+        middlewares.append(SystemMessageCoalescingMiddleware())
 
     if model_name is None and app_config.models:
         model_name = app_config.models[0].name

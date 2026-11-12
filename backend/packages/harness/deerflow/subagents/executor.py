@@ -35,6 +35,7 @@ from deerflow.subagents.token_collector import SubagentTokenCollector
 from deerflow.trace_context import DEERFLOW_TRACE_METADATA_KEY
 from deerflow.tracing import build_tracing_callbacks, inject_langfuse_metadata
 from deerflow.utils.messages import message_content_to_text
+from deerflow.utils.runtime_timeouts import scaled_runtime_timeout
 
 if TYPE_CHECKING:
     # Imported lazily at runtime inside _build_initial_state: importing
@@ -52,13 +53,13 @@ _SUBAGENT_RECOVERED_EVIDENCE_MAX_CHARS = 12_000
 _SUBAGENT_RECOVERED_EVIDENCE_MAX_ITEMS = 6
 
 
-def _subagent_tool_loop_limits(max_turns: int) -> tuple[int, int]:
+def _subagent_tool_loop_limits(max_turns: int, tool_call_limit: int | None = None) -> tuple[int, int]:
     """Return warning/hard tool-call limits that fit the graph-step budget."""
 
     safe_hard_limit = max(
         2,
         min(
-            _SUBAGENT_TOOL_LOOP_HARD_CAP,
+            _SUBAGENT_TOOL_LOOP_HARD_CAP if tool_call_limit is None else tool_call_limit,
             (max(1, int(max_turns)) - _SUBAGENT_LOOP_SHUTDOWN_RESERVED_STEPS) // _SUBAGENT_GRAPH_STEPS_PER_TOOL_LOOP,
         ),
     )
@@ -66,7 +67,7 @@ def _subagent_tool_loop_limits(max_turns: int) -> tuple[int, int]:
     return safe_warn_limit, safe_hard_limit
 
 
-def _reserve_subagent_loop_guard_budget(middlewares: list[Any], *, max_turns: int) -> None:
+def _reserve_subagent_loop_guard_budget(middlewares: list[Any], *, max_turns: int, tool_call_limit: int | None = None) -> None:
     """Ensure loop detection can stop a tool loop before graph recursion wins.
 
     The current subagent middleware graph consumes up to six graph steps for a
@@ -78,14 +79,14 @@ def _reserve_subagent_loop_guard_budget(middlewares: list[Any], *, max_turns: in
     preserving lead-agent policy and explicit per-tool overrides.
     """
 
-    safe_warn_limit, safe_hard_limit = _subagent_tool_loop_limits(max_turns)
+    safe_warn_limit, safe_hard_limit = _subagent_tool_loop_limits(max_turns, tool_call_limit)
     for middleware in middlewares:
         if not hasattr(middleware, "tool_freq_hard_limit") or not hasattr(middleware, "tool_freq_warn"):
             continue
         original_hard_limit = int(middleware.tool_freq_hard_limit)
         original_warn_limit = int(middleware.tool_freq_warn)
-        middleware.tool_freq_hard_limit = min(original_hard_limit, safe_hard_limit)
-        middleware.tool_freq_warn = min(original_warn_limit, safe_warn_limit)
+        middleware.tool_freq_hard_limit = min(original_hard_limit, safe_hard_limit) if tool_call_limit is None else safe_hard_limit
+        middleware.tool_freq_warn = min(original_warn_limit, safe_warn_limit) if tool_call_limit is None else safe_warn_limit
         middleware.tool_total_hard_limit = safe_hard_limit
         middleware.tool_total_warn = safe_warn_limit
         if (middleware.tool_freq_warn, middleware.tool_freq_hard_limit) != (original_warn_limit, original_hard_limit):
@@ -351,7 +352,7 @@ def _shutdown_isolated_subagent_loop() -> None:
         loop.call_soon_threadsafe(loop.stop)
 
     if thread is not None and thread.is_alive() and thread is not threading.current_thread():
-        thread.join(timeout=1)
+        thread.join(timeout=scaled_runtime_timeout(1))
 
     thread_stopped = thread is None or not thread.is_alive()
     loop_stopped = not loop.is_running()
@@ -387,9 +388,9 @@ def _get_isolated_subagent_loop() -> asyncio.AbstractEventLoop:
                 daemon=True,
             )
             thread.start()
-            if not started_event.wait(timeout=5):
+            if not started_event.wait(timeout=scaled_runtime_timeout(5)):
                 loop.call_soon_threadsafe(loop.stop)
-                thread.join(timeout=1)
+                thread.join(timeout=scaled_runtime_timeout(1))
                 loop.close()
                 raise RuntimeError("Timed out starting isolated subagent event loop")
             _isolated_subagent_loop = loop
@@ -474,6 +475,10 @@ class SubagentExecutor:
         thinking_enabled: bool | None = None,
         max_tokens_per_step: int | None = None,
         protect_test_files: bool = False,
+        callbacks: list[Any] | None = None,
+        extra_middlewares: list[Any] | None = None,
+        tool_call_key_fields: dict[str, tuple[str, ...]] | None = None,
+        image_tool_names: tuple[str, ...] | None = None,
     ):
         """Initialize the executor.
 
@@ -564,6 +569,10 @@ class SubagentExecutor:
         self.thinking_enabled = thinking_enabled
         self.max_tokens_per_step = max_tokens_per_step
         self.protect_test_files = bool(protect_test_files)
+        self.callbacks = list(callbacks or [])
+        self.extra_middlewares = list(extra_middlewares or [])
+        self.tool_call_key_fields = dict(tool_call_key_fields or {})
+        self.image_tool_names = image_tool_names
         self._active_platform_skill_secrets: dict[str, str] = {}
 
         self._base_tools = _filter_tools(
@@ -596,6 +605,10 @@ class SubagentExecutor:
         model_kwargs: dict[str, Any] = {}
         if self.max_tokens_per_step is not None:
             model_kwargs["max_tokens"] = self.max_tokens_per_step
+        if getattr(self.config, "model_max_tokens", None) is not None:
+            model_kwargs["max_tokens"] = self.config.model_max_tokens
+        if getattr(self.config, "model_timeout_seconds", None) is not None:
+            model_kwargs["timeout"] = self.config.model_timeout_seconds
         model = create_chat_model(
             name=self.model_name,
             thinking_enabled=self._should_enable_tool_thinking(app_config, tools),
@@ -620,9 +633,39 @@ class SubagentExecutor:
         middlewares = build_subagent_runtime_middlewares(
             **middleware_kwargs,
         )
+        if getattr(self.config, "model_errors_propagate", False):
+            from deerflow.agents.middlewares.llm_error_handling_middleware import LLMErrorHandlingMiddleware
+
+            for guard in middlewares:
+                if isinstance(guard, LLMErrorHandlingMiddleware):
+                    guard.propagate_model_errors = True
+        deadline = getattr(self.config, "model_request_deadline_seconds", None)
+        if deadline is not None:
+            from deerflow.agents.middlewares.llm_error_handling_middleware import LLMErrorHandlingMiddleware
+
+            guards = [guard for guard in middlewares if isinstance(guard, LLMErrorHandlingMiddleware)]
+            if not guards:
+                raise ValueError("Trusted per-subagent request deadline requires the native LLM error middleware")
+            for guard in guards:
+                guard.request_timeout_seconds = float(deadline)
+        if getattr(self, "image_tool_names", None):
+            from deerflow.agents.middlewares.view_image_middleware import ViewImageMiddleware
+
+            for guard in middlewares:
+                if isinstance(guard, ViewImageMiddleware):
+                    guard.tool_names = frozenset(self.image_tool_names)
+        if self.tool_call_key_fields:
+            from deerflow.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
+
+            for guard in middlewares:
+                if isinstance(guard, LoopDetectionMiddleware):
+                    guard.tool_key_fields = dict(self.tool_call_key_fields)
+        if self.extra_middlewares:
+            middlewares = [*middlewares, *self.extra_middlewares]
         _reserve_subagent_loop_guard_budget(
             middlewares,
             max_turns=self.config.max_turns,
+            **({"tool_call_limit": self.config.tool_call_limit} if getattr(self.config, "tool_call_limit", None) is not None else {}),
         )
         # Collect every guard middleware that exposes ``consume_stop_reason``
         # (TokenBudgetMiddleware, LoopDetectionMiddleware) so _aexecute can read
@@ -824,7 +867,7 @@ class SubagentExecutor:
         for skill_msg in skill_messages:
             system_parts.append(skill_msg.content)
         if final_tools:
-            warn_limit, hard_limit = _subagent_tool_loop_limits(self.config.max_turns)
+            warn_limit, hard_limit = _subagent_tool_loop_limits(self.config.max_turns, getattr(self.config, "tool_call_limit", None))
             system_parts.append(
                 "<execution_budget>\n"
                 f"This run has a hard budget of {hard_limit} total tool calls and will warn after {warn_limit}. "
@@ -908,7 +951,7 @@ class SubagentExecutor:
             # Build config with thread_id for sandbox access and recursion limit
             run_config: RunnableConfig = {
                 "recursion_limit": self.config.max_turns,
-                "callbacks": [collector],
+                "callbacks": [collector, *self.callbacks],
                 "tags": [collector_caller],
             }
 

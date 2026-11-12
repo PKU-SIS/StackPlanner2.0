@@ -973,3 +973,11 @@ Your unwavering commitment and expertise have been the driving force behind Deer
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.com/#bytedance/deer-flow&Date)
+
+
+## 围串标审核分支 CollusionAudit
+
+本分支提供 M01–M15 围串标审核、原件准备、持久化 RAGFlow 映射复用及 HTML 报告交付。
+安装、模型与凭据配置、项目准备和全规则运行见 [围串标审核指南](docs/COLLUSION_AUDIT.md)。
+协作者可配置自己的原件目录，并通过共享映射复用胃肠镜项目已完成的 MinerU 解析。
+通用规则、源码、测试和脱敏示例随分支提供。

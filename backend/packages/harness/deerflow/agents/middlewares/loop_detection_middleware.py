@@ -152,7 +152,7 @@ def _stable_tool_key(name: str, args: dict, fallback_key: str | None) -> str:
     return json.dumps(args, sort_keys=True, default=str)
 
 
-def _hash_tool_calls(tool_calls: list[dict]) -> str:
+def _hash_tool_calls(tool_calls: list[dict], *, tool_key_fields: dict[str, tuple[str, ...]] | None = None) -> str:
     """Deterministic hash of a set of tool calls (name + stable key).
 
     This is intended to be order-independent: the same multiset of tool calls
@@ -163,7 +163,8 @@ def _hash_tool_calls(tool_calls: list[dict]) -> str:
     for tc in tool_calls:
         name = tc.get("name", "")
         args, fallback_key = _normalize_tool_call_args(tc.get("args", {}))
-        key = _stable_tool_key(name, args, fallback_key)
+        fields = (tool_key_fields or {}).get(name)
+        key = json.dumps({field: args.get(field) for field in fields}, sort_keys=True, default=str) if fields and fallback_key is None else _stable_tool_key(name, args, fallback_key)
 
         normalized.append(f"{name}:{key}")
 
@@ -235,8 +236,10 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         tool_freq_overrides: dict[str, tuple[int, int]] | None = None,
         tool_total_warn: int | None = None,
         tool_total_hard_limit: int | None = None,
+        tool_key_fields: dict[str, tuple[str, ...]] | None = None,
     ):
         super().__init__()
+        self.tool_key_fields = dict(tool_key_fields or {})
         self.warn_threshold = warn_threshold
         self.hard_limit = hard_limit
         self.window_size = window_size
@@ -400,7 +403,7 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
             return None, False
 
         thread_id = self._get_thread_id(runtime)
-        call_hash = _hash_tool_calls(tool_calls)
+        call_hash = _hash_tool_calls(tool_calls, tool_key_fields=self.tool_key_fields)
 
         with self._lock:
             # Touch / create entry (move to end for LRU)

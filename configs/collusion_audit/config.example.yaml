@@ -1,0 +1,130 @@
+config_version: 20
+log_level: info
+token_usage:
+  enabled: true
+token_budget:
+  enabled: false
+  max_tokens: 200000
+  max_input_tokens: null
+  max_output_tokens: null
+  warn_threshold: 0.8
+  hard_stop_threshold: 1.0
+models:
+- name: qwen3-8-27b
+  display_name: Qwen local OpenAI-compatible endpoint
+  use: deerflow.models.vllm_provider:VllmChatModel
+  model: qwen3.8-27b
+  base_url: $DCC_MODEL_BASE_URL
+  api_key: $DCC_MODEL_API_KEY
+  supports_thinking: true
+  supports_vision: true
+  when_thinking_enabled:
+    extra_body:
+      chat_template_kwargs:
+        enable_thinking: true
+  when_thinking_disabled:
+    extra_body:
+      chat_template_kwargs:
+        enable_thinking: false
+tool_groups:
+- name: web
+- name: file:read
+- name: file:write
+- name: bash
+tools:
+- name: web_search
+  group: web
+  use: deerflow.community.ddg_search.tools:web_search_tool
+  max_results: 5
+- name: web_fetch
+  group: web
+  use: deerflow.community.jina_ai.tools:web_fetch_tool
+  timeout: 10
+- name: image_search
+  group: web
+  use: deerflow.community.image_search.tools:image_search_tool
+  max_results: 5
+- name: ls
+  group: file:read
+  use: deerflow.sandbox.tools:ls_tool
+- name: read_file
+  group: file:read
+  use: deerflow.sandbox.tools:read_file_tool
+- name: glob
+  group: file:read
+  use: deerflow.sandbox.tools:glob_tool
+  max_results: 200
+- name: grep
+  group: file:read
+  use: deerflow.sandbox.tools:grep_tool
+  max_results: 100
+- name: write_file
+  group: file:write
+  use: deerflow.sandbox.tools:write_file_tool
+- name: str_replace
+  group: file:write
+  use: deerflow.sandbox.tools:str_replace_tool
+- name: bash
+  group: bash
+  use: deerflow.sandbox.tools:bash_tool
+tool_output:
+  enabled: true
+  externalize_min_chars: 12000
+  preview_head_chars: 2000
+  preview_tail_chars: 1000
+  fallback_max_chars: 30000
+  fallback_head_chars: 8000
+  fallback_tail_chars: 3000
+  storage_subdir: .tool-results
+  exempt_tools:
+  - read_file
+  - read_file_tool
+sandbox:
+  use: deerflow.sandbox.local:LocalSandboxProvider
+  allow_host_bash: false
+  bash_output_max_chars: 20000
+  read_file_output_max_chars: 50000
+  ls_output_max_chars: 20000
+  bash_command_timeout: 120
+skills:
+  container_path: /mnt/skills
+title:
+  enabled: true
+  max_words: 6
+  max_chars: 60
+  model_name: null
+summarization:
+  enabled: true
+  model_name: null
+  trigger:
+  - type: tokens
+    value: 32000
+  keep:
+    type: messages
+    value: 10
+  trim_tokens_to_summarize: 15564
+  summary_prompt: null
+  skill_file_read_tool_names:
+  - read_file
+  - read
+  - view
+  - cat
+memory:
+  enabled: true
+  storage_path: memory.json
+  debounce_seconds: 30
+  model_name: null
+  max_facts: 100
+  fact_confidence_threshold: 0.7
+  injection_enabled: true
+  max_injection_tokens: 2000
+  token_counting: tiktoken
+  guaranteed_categories:
+  - correction
+  guaranteed_token_budget: 500
+  staleness_review_enabled: true
+  staleness_age_days: 90
+  staleness_min_candidates: 3
+  staleness_max_removals_per_cycle: 10
+  staleness_protected_categories:
+  - correction

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -150,7 +151,10 @@ _REPORT_TEMPLATE_PATTERN = re.compile(
 )
 _NO_DATA_REPORT_CONSTRAINT_PATTERN = re.compile(
     r"(?:"
-    r"(?:没有|未|尚未|无).{0,24}(?:实际|具体|量化)?(?:数值|数据|指标)"
+    r"(?:没有|尚未|还未|未曾|未)[^。；;\n]{0,8}"
+    r"(?:提供|给[你您]|给出|收到|获得|拿到|取得)[^。；;\n]{0,16}(?:数值|数据|指标)"
+    r"|(?:没有|尚无|暂无|缺少|缺乏|无)"
+    r"(?:(?:任何|可用|实际|真实|具体|量化|业务|项目|原始|相关|完整|的)|\s){0,8}(?:数值|数据|指标)"
     r"|(?:实际|具体|量化)?(?:数值|数据|指标).{0,16}(?:未提供|不可用|缺失)"
     r"|\b(?:no|without)\s+(?:actual|specific|quantitative)?\s*"
     r"(?:values?|data|metrics?)\b"
@@ -628,12 +632,20 @@ class DelegateHandler:
             receiver=str(action.target_agent),
             stage=action.stage,
             allowed_tools=allowed_tools,
+            control_tool_request={"tool_names": list(action.metadata["tool_names"]) if isinstance(action.metadata["tool_names"], list) else action.metadata["tool_names"]} if "tool_names" in action.metadata else {},
             acceptance_criteria=list(dict.fromkeys(acceptance_criteria)),
             budgets=budgets,
         )
         task.validate_protocol()
 
         result = self._executor.execute(task)
+        task.validate_protocol()
+        # This reserved identity is host-only. Neither action nor result JSON
+        # can enable scoped recovery or choose its key.
+        for metadata in (delegate_entry.metadata, result.artifact_metadata):
+            metadata.pop("_sp_recovery_scope_key", None)
+            if task.recovery_scope_key is not None:
+                metadata["_sp_recovery_scope_key"] = task.recovery_scope_key
         if result.is_success:
             return self._handle_success(action, context, delegate_entry, result, task=task)
         return self._handle_failure(action, context, delegate_entry, result)
@@ -702,6 +714,14 @@ class DelegateHandler:
         artifact_events: list[dict[str, Any]] = []
         result_ref = result.task_id
         artifact_content = result.artifact_content
+        if isinstance(result.artifact_type, str) and result.artifact_type in task.artifact_type_aliases:
+            result.artifact_metadata["declared_artifact_type"] = result.artifact_type
+            result.artifact_type = task.artifact_type_aliases[result.artifact_type]
+        # This capability comes from the typed server task, never model output.
+        if task.tool_execution_contract is not None:
+            result.artifact_metadata["tool_execution_contract"] = task.protocol_payload()["tool_execution_contract"]
+        else:
+            result.artifact_metadata.pop("tool_execution_contract", None)
         if action.target_agent == "perception":
             _apply_perception_acceptance_checks(result, task=task)
         if action.target_agent == "reporter":
@@ -891,9 +911,11 @@ class DelegateHandler:
         acceptance_metadata = {
             key: result.artifact_metadata[key]
             for key in (
+                "_sp_recovery_scope_key",
                 "implementation_verification",
                 "test_verification",
                 "execution_verification",
+                "tool_execution_contract",
                 "verification_only",
                 "requires_implementation",
             )
@@ -1187,7 +1209,17 @@ def _has_no_data_report_constraint(task: SPSubagentTask) -> bool:
         )
         if value
     )
-    return bool(_NO_DATA_REPORT_CONSTRAINT_PATTERN.search(request_text))
+    # Instructions and hypothetical rules are not assertions that the user
+    # supplied no data (e.g. 无需询问数据来源, or If data were not provided...).
+    for clause in re.split(r"[。；;\n]", request_text):
+        for match in _NO_DATA_REPORT_CONSTRAINT_PATTERN.finditer(clause):
+            prefix = clause[: match.start()]
+            if re.search(r"(?:若|如果|假如|倘若|\bif\b|\bwhen\b)", prefix, re.IGNORECASE):
+                continue
+            if re.search(r"(?:无需|无须|不必|不用|不需要)[^。；;\n]*$", prefix):
+                continue
+            return True
+    return False
 
 
 def _unsupported_no_data_report_claims(
@@ -1202,12 +1234,39 @@ def _unsupported_no_data_report_claims(
     claims: list[str] = []
     for raw_line in output.splitlines():
         line = " ".join(raw_line.strip().lstrip("-*#>| ").split())
-        if not line or not _UNSUPPORTED_NO_DATA_CLAIM_PATTERN.search(line) or _NO_DATA_CLAIM_DISCLAIMER_PATTERN.search(line):
+        trigger = _UNSUPPORTED_NO_DATA_CLAIM_PATTERN.search(line)
+        if not line or trigger is None or _NO_DATA_CLAIM_DISCLAIMER_PATTERN.search(line):
             continue
         if _NO_DATA_RECOMMENDATION_PATTERN.search(line) and not _UNSUPPORTED_NO_DATA_STRONG_COMPARISON_PATTERN.search(line):
             continue
-        claims.append(line[:320])
+        # A single-line JSON report may put the actual trigger far beyond its
+        # score/header. Keep the triggering phrase in the bounded diagnostic.
+        start = max(0, trigger.start() - 100) if len(line) > 320 else 0
+        claims.append(line[start : start + 320])
     return list(dict.fromkeys(claims))[:12]
+
+
+class _HTMLReportLanguageText(HTMLParser):
+    """Read report text for language counting; never modify the stored HTML."""
+
+    ignored_tags = {"head", "style", "script", "template", "noscript", "title"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.ignored_depth = 0
+        self.parts = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self.ignored_tags:
+            self.ignored_depth += 1
+
+    def handle_endtag(self, tag):
+        if tag in self.ignored_tags:
+            self.ignored_depth = max(0, self.ignored_depth - 1)
+
+    def handle_data(self, data):
+        if not self.ignored_depth:
+            self.parts.append(data)
 
 
 def _report_language_alignment_gaps(
@@ -1219,6 +1278,12 @@ def _report_language_alignment_gaps(
     latest_query = str(task.context_refs.get("latest_user_input") or task.context_refs.get("original_query") or "")
     if len(_CJK_CHARACTER_PATTERN.findall(latest_query)) < 4 or _EXPLICIT_ENGLISH_REPORT_PATTERN.search(latest_query) or len(output.strip()) < 200:
         return []
+    contract = task.report_reference_contract
+    if contract is not None and getattr(contract, "content_type", None) == "text/html":
+        parser = _HTMLReportLanguageText()
+        parser.feed(output)
+        parser.close()
+        output = " ".join(parser.parts)
     cjk_count = len(_CJK_CHARACTER_PATTERN.findall(output))
     latin_count = len(_LATIN_CHARACTER_PATTERN.findall(output))
     if cjk_count >= 20 and cjk_count * 3 >= latin_count:
@@ -1230,10 +1295,12 @@ def _report_literal_provenance_gaps(
     output: str,
     *,
     required_tokens: list[str],
+    source_tokens: tuple[str, ...] = (),
 ) -> tuple[list[str], list[str]]:
     """Reject invented reference IDs and current use of superseded IDs."""
-    allowed = set(required_tokens)
-    introduced = [token for token in _REPORT_REFERENCE_TOKEN_PATTERN.findall(output) if token not in allowed] if allowed else []
+    allowed = set(required_tokens) | set(source_tokens)
+    # Preserve legacy gating when there are no literal requirements.
+    introduced = [token for token in _REPORT_REFERENCE_TOKEN_PATTERN.findall(output) if token not in allowed] if required_tokens else []
     precedence_gaps: list[str] = []
     for line in output.splitlines():
         if "|" not in line or not _SUPERSEDED_REFERENCE_PATTERN.search(line):
@@ -1300,7 +1367,8 @@ def _apply_report_acceptance_checks(
     result.artifact_metadata["created_paths"] = valid_paths
 
     requirements = task.context_refs.get("report_requirements")
-    raw_tokens = requirements.get("required_literal_tokens") if isinstance(requirements, Mapping) else None
+    contract = task.report_reference_contract
+    raw_tokens = list(contract.required_literals) if contract is not None else requirements.get("required_literal_tokens") if isinstance(requirements, Mapping) else None
     required = [str(value) for value in raw_tokens if isinstance(value, str) and value.strip()][:REPORTER_REQUIRED_LITERAL_MAX_ITEMS] if isinstance(raw_tokens, list) else []
     raw_adjustments = requirements.get("required_boundary_adjustments") if isinstance(requirements, Mapping) else None
     required_adjustments = [{str(key): str(value) for key, value in item.items() if value not in (None, "")} for item in raw_adjustments if isinstance(item, Mapping)][:12] if isinstance(raw_adjustments, list) else []
@@ -1319,8 +1387,11 @@ def _apply_report_acceptance_checks(
     language_gaps = _report_language_alignment_gaps(output or "", task=task)
     introduced_tokens, source_precedence_gaps = _report_literal_provenance_gaps(
         output or "",
-        required_tokens=required,
+        required_tokens=[] if contract is not None else required,
+        source_tokens=task.source_reference_tokens,
     )
+    if contract is not None:
+        introduced_tokens = list(dict.fromkeys(match.group(0) for pattern, allowed in ((p, set(v)) for p, v in contract.catalogs) for match in re.finditer(pattern, output or "") if match.group(0) not in allowed))[:12]
     boundary_adjustment_gaps = _report_boundary_adjustment_gaps(
         output or "",
         required_adjustments=required_adjustments,
@@ -1384,7 +1455,9 @@ def _apply_report_acceptance_checks(
         "passed": not language_gaps,
     }
     quality_checks["literal_token_provenance"] = {
-        "allowed_tokens": required,
+        "allowed_tokens": required if contract is not None else list(dict.fromkeys([*required, *task.source_reference_tokens])) if task.source_reference_tokens else required,
+        **({"mode": "explicit_reference_catalog", "catalog_sizes": {pattern: len(values) for pattern, values in contract.catalogs}} if contract is not None else {}),
+        **({"source_tokens": list(task.source_reference_tokens)} if task.source_reference_tokens and contract is None else {}),
         "introduced_tokens": introduced_tokens,
         "passed": not introduced_tokens,
     }

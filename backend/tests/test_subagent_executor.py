@@ -55,6 +55,25 @@ def _clear_stale_executor_package_attr() -> None:
         delattr(subagents_pkg, "executor")
 
 
+@pytest.mark.anyio
+async def test_run_local_callbacks_reach_isolated_graph_without_replacing_collector(classes, base_config, mock_agent, msg):
+    executor_class = classes["SubagentExecutor"]
+    callback = MagicMock()
+    captured = {}
+
+    async def stream(*args, **kwargs):
+        captured.update(kwargs.get("config") or (args[1] if len(args) > 1 else {}))
+        yield {"messages": [msg.human("Task"), msg.ai("Done")]}
+
+    mock_agent.astream = stream
+    executor = executor_class(config=base_config, tools=[], callbacks=[callback], thread_id="test-thread")
+    with patch.object(executor, "_create_agent", return_value=mock_agent):
+        result = await executor._aexecute("Task")
+    assert result.status == classes["SubagentStatus"].COMPLETED
+    assert callback in captured["callbacks"]
+    assert len(captured["callbacks"]) >= 2
+
+
 @pytest.fixture(autouse=True)
 def _setup_executor_classes():
     """Set up mocked modules and import real executor classes.
@@ -345,11 +364,13 @@ class TestAgentConstruction:
 
         assert executor._should_enable_tool_thinking(app_config, [NamedTool("bash")]) is False
 
+    @pytest.mark.parametrize("with_extension", [False, True])
     def test_create_agent_threads_explicit_app_config_to_model_and_middlewares(
         self,
         classes,
         base_config,
         monkeypatch: pytest.MonkeyPatch,
+        with_extension,
     ):
         """Explicit app_config must flow into both model and middleware factories."""
         import deerflow.config as config_module
@@ -360,6 +381,7 @@ class TestAgentConstruction:
         app_config = SimpleNamespace(models=[SimpleNamespace(name="default-model")])
         model = object()
         middlewares = [object()]
+        extension_middleware = object()
         agent = object()
         captured: dict[str, dict] = {}
 
@@ -399,6 +421,7 @@ class TestAgentConstruction:
             tools=[],
             app_config=app_config,
             parent_model="parent-model",
+            **({"extra_middlewares": [extension_middleware]} if with_extension else {}),
         )
 
         result = executor._create_agent()
@@ -422,7 +445,11 @@ class TestAgentConstruction:
             "agent_name": "test-agent",
         }
         assert captured["agent"]["model"] is model
-        assert captured["agent"]["middleware"] is middlewares
+        if with_extension:
+            assert captured["agent"]["middleware"] == [*middlewares, extension_middleware]
+            assert middlewares == [captured["agent"]["middleware"][0]]
+        else:
+            assert captured["agent"]["middleware"] is middlewares
         assert captured["agent"]["tools"] == []
         assert captured["agent"]["system_prompt"] is None  # system_prompt is merged into initial state messages
 

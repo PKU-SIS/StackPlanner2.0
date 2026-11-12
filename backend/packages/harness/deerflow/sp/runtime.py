@@ -28,6 +28,7 @@ from deerflow.sp.agent_tools import (
 from deerflow.sp.central import CENTRAL_AGENT_ACTION_PROMPT
 from deerflow.sp.central.runtime_context import SPCentralRuntimeContext, build_sp_central_runtime_context
 from deerflow.sp.central_resilience import SPCentralResilienceMiddleware
+from deerflow.sp.extensions import SPExecutionExtensions
 from deerflow.sp.memory.entry import utc_now_iso
 from deerflow.sp.subagents import (
     A2A_PROGRESS_MESSAGE,
@@ -266,6 +267,20 @@ def _apply_task_skill_policy(
     return replace(subagent_config, skills=requested)
 
 
+def _restore_existing_tool_request(task: SPSubagentTask) -> None:
+    """A trusted tool contract removes software defaults, never Central choices."""
+    if task.tool_execution_contract is None or task.control_tool_request is None:
+        return
+    request = task.control_tool_request
+    if "tool_names" in request:
+        raw = request["tool_names"]
+        task.metadata["tool_names"] = list(raw) if isinstance(raw, list) else raw
+        task.allowed_tools = list(raw) if isinstance(raw, list) else []
+    else:
+        task.metadata.pop("tool_names", None)
+        task.allowed_tools = []
+
+
 def _apply_task_tool_policy(
     subagent_config: Any,
     task: SPSubagentTask,
@@ -326,14 +341,17 @@ def _apply_sp_stage_tool_policy(subagent_config: Any, task: SPSubagentTask):
     if task.metadata.get("requires_implementation") is not False and not read_only_stage:
         return subagent_config
     configured = subagent_config.tools
+    read_only_tools = _CODER_READ_ONLY_STAGE_TOOLS
+    if task.tool_execution_contract is not None:
+        read_only_tools = read_only_tools | frozenset((*task.tool_execution_contract.read_only_tools, *task.tool_execution_contract.artifact_write_tools))
     if configured is None:
         return replace(
             subagent_config,
-            tools=sorted(_CODER_READ_ONLY_STAGE_TOOLS),
+            tools=sorted(read_only_tools),
         )
     return replace(
         subagent_config,
-        tools=[name for name in configured if name in _CODER_READ_ONLY_STAGE_TOOLS],
+        tools=[name for name in configured if name in read_only_tools],
     )
 
 
@@ -347,10 +365,13 @@ class DR2SPExecutorProvider:
     available_skill_names: frozenset[str] | None = None
     memory_agent_name: str | None = None
     user_id: str | None = None
+    extensions: SPExecutionExtensions | None = None
     _tools: list[Any] | None = field(default=None, init=False, repr=False)
     _tools_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def _available_tools(self) -> list[Any]:
+        if self.extensions is not None and self.extensions.tools is not None:
+            return list(self.extensions.tools)
         if self._tools is None:
             with self._tools_lock:
                 if self._tools is None:
@@ -374,6 +395,9 @@ class DR2SPExecutorProvider:
         def executor_factory(task: SPSubagentTask):
             from deerflow.subagents import SubagentExecutor, get_subagent_config
 
+            if self.extensions is not None and self.extensions.prepare_task is not None:
+                self.extensions.prepare_task(task)
+            _restore_existing_tool_request(task)
             registry_name = SP_SUBAGENT_REGISTRY_NAMES.get(task.subagent_type)
             subagent_config = get_subagent_config(registry_name, app_config=self.app_config) if registry_name else None
             if subagent_config is None or not subagent_config.internal:
@@ -430,6 +454,10 @@ class DR2SPExecutorProvider:
                 task,
                 available_skill_names=self.available_skill_names,
             )
+            if self.extensions is not None and self.extensions.configure_subagent is not None:
+                subagent_config = self.extensions.configure_subagent(task, subagent_config)
+            if subagent_config.model_thinking_enabled is not None:
+                subagent_thinking_enabled = subagent_config.model_thinking_enabled
             subagent_config = _apply_task_tool_policy(
                 subagent_config,
                 task,
@@ -482,6 +510,10 @@ class DR2SPExecutorProvider:
                 thinking_enabled=subagent_thinking_enabled,
                 max_tokens_per_step=subagent_max_tokens if subagent_max_tokens > 0 else None,
                 protect_test_files=protect_test_files,
+                **({"callbacks": list(self.extensions.callbacks)} if self.extensions is not None else {}),
+                **({"tool_call_key_fields": dict(self.extensions.tool_call_key_fields)} if self.extensions is not None and self.extensions.tool_call_key_fields else {}),
+                **({"image_tool_names": self.extensions.image_tool_names} if self.extensions is not None and self.extensions.image_tool_names else {}),
+                **({"extra_middlewares": list(self.extensions.subagent_middlewares(task))} if self.extensions is not None and self.extensions.subagent_middlewares is not None else {}),
             )
 
         def observe_raw_result(raw_result: Any) -> None:
@@ -496,6 +528,7 @@ class DR2SPExecutorProvider:
         return _ProgressReportingExecutor(
             adapter=adapter,
             writer=writer,
+            result_observer=self.extensions.observe_result if self.extensions is not None else None,
             task_preparer=lambda task: _infer_task_skill_selection(
                 task,
                 available_skill_names=self.available_skill_names,
@@ -508,6 +541,7 @@ class _ProgressReportingExecutor:
     adapter: DR2SubagentExecutorAdapter
     writer: Any = None
     task_preparer: Any = None
+    result_observer: Any = None
 
     def execute(self, task: SPSubagentTask) -> SPSubagentResult:
         if callable(self.task_preparer):
@@ -551,6 +585,8 @@ class _ProgressReportingExecutor:
                     )
         try:
             result = self.adapter.execute(task)
+            if self.result_observer is not None:
+                self.result_observer(task, result)
         except Exception as exc:
             if callable(self.writer):
                 self.writer(
@@ -617,7 +653,16 @@ def _summarize_sp_usage(records: list[dict[str, Any]] | None) -> dict[str, int] 
     }
 
 
-def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None):
+def _central_action_budget(runtime: Mapping[str, Any], extensions: SPExecutionExtensions | None) -> int:
+    ceiling = extensions.max_actions if extensions is not None and extensions.max_actions is not None else DEFAULT_SP_ACTION_LIMIT
+    try:
+        requested = int(runtime.get("sp_max_actions") or ceiling)
+    except (TypeError, ValueError):
+        requested = ceiling
+    return max(2, min(requested, ceiling))
+
+
+def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None, extensions: SPExecutionExtensions | None = None):
     """Build one SP CentralAgent using DeerFlow's native agent loop.
 
     The CentralAgent is bound only to SP control actions. Ordinary DeerFlow
@@ -636,6 +681,7 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
         resolved_app_config,
         agent_name=agent_name,
         user_id=user_id,
+        **({"skill_names": extensions.skill_names} if extensions is not None and extensions.skill_names is not None else {}),
     )
     model_name = _resolve_model_name(
         config,
@@ -650,11 +696,7 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
         max_parallel_delegates = int(runtime.get("max_concurrent_subagents") or 3)
     except (TypeError, ValueError):
         max_parallel_delegates = 3
-    try:
-        max_central_actions = int(runtime.get("sp_max_actions") or DEFAULT_SP_ACTION_LIMIT)
-    except (TypeError, ValueError):
-        max_central_actions = DEFAULT_SP_ACTION_LIMIT
-    max_central_actions = max(2, min(max_central_actions, DEFAULT_SP_ACTION_LIMIT))
+    max_central_actions = _central_action_budget(runtime, extensions)
     metadata = dict(config.get("metadata") or {})
     metadata.update(
         {
@@ -691,6 +733,7 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
         available_skill_names=central_context.available_skill_names,
         memory_agent_name=central_context.agent_name,
         user_id=user_id,
+        extensions=extensions,
     )
     prompt_sections = [CENTRAL_AGENT_ACTION_PROMPT]
     prompt_sections.append(
@@ -726,17 +769,29 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
                 initial_timeout_seconds=float(runtime.get("sp_central_timeout_seconds") or 90),
                 retry_timeout_seconds=float(runtime.get("sp_central_retry_timeout_seconds") or 60),
                 retry_max_tokens=int(runtime.get("sp_central_retry_max_tokens") or 2048),
+                manage_transport_errors=bool(extensions and extensions.central_recovery_owned),
             ),
             SPTerminalActionMiddleware(),
             SPAcknowledgementMiddleware(),
-            SPFinishAvailabilityMiddleware(),
+            SPFinishAvailabilityMiddleware(
+                **({"scoped_delegate_recovery": True} if extensions is not None and extensions.scoped_delegate_recovery else {}),
+                **({"allow_limited_report": True} if extensions is not None and extensions.allow_limited_report else {}),
+                **({"count_missing_reports": True} if extensions is not None and extensions.count_missing_reports else {}),
+            ),
             SPActionBudgetMiddleware(max_actions=max_central_actions),
-            SPControlActionMiddleware(executor_provider=executor_provider),
+            SPControlActionMiddleware(
+                executor_provider=executor_provider,
+                **({"precise_report_intent": True} if extensions is not None and extensions.precise_report_intent else {}),
+                **({"registered_tool_names": tuple(tool.name for tool in (extensions.tools or ()) if isinstance(getattr(tool, "name", None), str))} if extensions is not None and extensions.preserve_registered_tool_intent else {}),
+                **({"finish_validator": extensions.finish_validator} if extensions is not None and extensions.finish_validator is not None else {}),
+                **({"perception_image_tool_names": extensions.image_tool_names} if extensions is not None and extensions.image_tool_names else {}),
+            ),
             SPThinkLabelMiddleware(),
             SubagentLimitMiddleware(
                 max_concurrent=max_parallel_delegates,
                 tool_names={"sp_delegate"},
             ),
+            *(list(extensions.central_middlewares) if extensions is not None else []),
         ],
         prompt_prefix="\n\n".join(prompt_sections),
         identity_name="StackPlanner 2.0",
@@ -744,6 +799,8 @@ def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None
         include_base_prompt=False,
         inject_long_term_memory=False,
         control_plane_only=True,
+        propagate_model_errors=bool(extensions and extensions.central_recovery_owned),
+        model_overrides=extensions.central_model_overrides if extensions else None,
     )
     graph.metadata = dict(metadata)
     return graph

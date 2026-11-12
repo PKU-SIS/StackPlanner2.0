@@ -485,10 +485,21 @@ Lets a caller pass per-request, short-lived end-user credentials (e.g. an ERP to
 ### vLLM Provider (`packages/harness/deerflow/models/vllm_provider.py`)
 
 - `VllmChatModel` subclasses `langchain_openai:ChatOpenAI` for vLLM 0.19.0 OpenAI-compatible endpoints
+- The native `sp-memory-recaller` middleware chain pairs `DynamicContextMiddleware` with the existing `SystemMessageCoalescingMiddleware`, as the lead agent does. Its role prompt and framework date reminder become one leading SystemMessage only in the model request; persistent messages and user-owned memory retain their original roles. This avoids Qwen's `System message must be at the beginning` error without changing SP scheduling or provider code. Sync/async graph regression coverage lives in `tests/test_tool_error_handling_middleware.py`.
 - Preserves vLLM's non-standard assistant `reasoning` field on full responses, streaming deltas, and follow-up tool-call turns
 - Recovers Qwen chat-template `<tool_call>{...}</tool_call>` blocks from content or reasoning into LangChain tool calls when the server lacks a compatible auto-tool parser. Tool-enabled streaming uses one bounded non-streaming provider request and returns a normal `AIMessageChunk`, while calls without tools keep native streaming.
 - Designed for configs that enable thinking through `extra_body.chat_template_kwargs.enable_thinking` on vLLM 0.19.0 Qwen reasoning models, while accepting the older `thinking` alias
 - `scripts/evaluate_sp_qwen_actions.py --async-mode` runs five live CentralAgent policy scenarios through the same async streaming shape used by Gateway; use `--thinking` and optional repeated `--scenario NAME` filters for focused compatibility checks.
+
+### Trusted SP execution extensions and tender-audit experiment
+
+`make_sp_agent(..., extensions=SPExecutionExtensions(...))` optionally supplies per-graph tools, a task preparation hook, a specialist-config copy hook, and additional callbacks. The hooks are trusted Python arguments, never deserialized from API context. Preparation runs before task rendering; specialist configuration runs before native tool/stage enforcement. `SubagentExecutor(callbacks=...)` appends callbacks to its native usage collector rather than replacing it. Omitting extensions retains the default tool loading, role prompts, skills and scheduler. Optional `subagent_middlewares(task)` supplies trusted per-task middleware instances, appended after the native chain through `SubagentExecutor(extra_middlewares=...)`; the default is absent and no API context can supply it. The audit experiment uses it only on Researcher to project duplicate full sources into a same-request evidence dictionary with exact per-occurrence metadata deltas. Persistent messages, native retries/actions and raw retrieval logs remain unchanged; callbacks observe the projected request, while `model_request_projections.jsonl` records both views. Its copied model config merges `Connection: close` into existing headers, and worker probes verify the actual SDK header without logging other headers. The optional trusted `SPExecutionExtensions.skill_names` narrows both the Central index and its capability metadata, defaulting to the existing profile when absent. Experiment-only delegation projections alias identical request/task fields without changing native task objects, pinned feedback or AIMessage reasoning. Evidence v2 factors common source metadata and sparse per-hit deltas; every source field/body is reconstructible. The CLI timeout multiplier scales config deadlines, native Central/subagent limits, HTTP/RAG/preflight/watchdog/case/worker-grace limits and the SDK stream timer. A default-one generic `DEER_FLOW_RUNTIME_TIMEOUT_MULTIPLIER` scales infrastructure startup/shutdown, Skill cache warm-up and dynamic-context injection waits only in the opt-in process; polling intervals and retry/token budgets stay unchanged. Parent and worker preserve a base stream timer to avoid applying the multiplier twice.
+
+`app/experiments/tender_audit/` owns the opt-in business profile; `scripts/run_tender_audit_sp2.py` is its CLI. It injects complete rules and a shared output contract into Central's request and every delegation, binds `local_search_tool` to one dataset, and overrides the Reporter format/skills on copied configs. Reporter has case-local read tools and returns an object for native JSON serialization. Evidence packets deduplicate by chunk/document/content before budgeting; omitted sources remain available through case-local hashed read paths. The JSON document remains a native `report_revision` Artifact and must be the exact current-run Artifact accepted by FINISH. Policy `json_schema_only_v2` validates JSON/schema/case ID without repairing output or matching evidence to chunks; it explicitly records `evidence_evaluated=false` and `evidence_evaluation=offline_only`. Evidence correctness and GT recall are assessed offline, separately from delivery. SDK retries are disabled only in the experiment config copy (request timeout 120s); native middleware retries, thinking, scheduling and case budgets remain intact. Revalidate the experiment copy with `AppConfig.model_validate` after changing model/tool lists: `model_copy` and assignments do not refresh the private name indexes consumed by the native factory. Test the actual model/client settings, not only `config.models`. HTTP timeouts are not whole-invocation deadlines. The CLI scopes `DEER_FLOW_LLM_REQUEST_TIMEOUT_SECONDS` to its process with `--llm-request-timeout` (default150s,0 disables), validates it is below the progress watchdog, and forwards it explicitly to workers. Preflight and worker snapshots verify actual factory/client settings without extra provider calls. Audit callbacks retain bounded, redacted exception cause chains and distinguish provider callbacks from synthetic run cleanup, including empty-message cancellations. `canonical_content_source_metadata_v1` removes derived token indexes/empty metadata from tool messages and Reporter packets/caches; full bodies, source identifiers, positions and table lineage remain, with every raw response preserved. Native scheduling, retry budgets, prompts and vLLM fallback stay unchanged. A historical Qwen13 batch exposed this mismatch and records its actual SDK retry count separately. Explicit Central `metadata.skill_names` may still select a Skill despite copied default `skills=[]`; the audit format override remains authoritative, and such selections are retained in traces. Every attempt uses a separate process/runtime directory under the SP2 tree; retries preserve earlier costs and files. Model callbacks deduplicate by call ID and redact credentials/private reasoning. Preflight costs are separate from case metrics. See [the experiment guide](../docs/SP2_TENDER_AUDIT_LIGHTWEIGHT.md) and `tests/test_tender_audit_experiment.py`, `tests/test_tender_audit_delivery_v2.py`, `tests/test_sp_execution_extensions.py`.
+
+Native report acceptance detects explicit missing-data assertions rather than phrases such as `无需询问数据来源`, invalid-bid clauses, or conditional `if data were not provided` instructions. Long-report diagnostics retain the actual triggering comparison phrase instead of the JSON header. The recovery hint selects JSON only for artifacts declared with a `.json` filename/path; default Markdown recovery, the three-attempt cap and FINISH checks remain unchanged. Regression coverage includes legitimate no-data rejection and bound-data JSON acceptance in `tests/test_sp_action_system.py`.
+
+The audit preparation hook narrows both `task.allowed_tools` and `metadata.tool_names` before native runtime enforcement: DelegateHandler automatically adds Reporter read/write tools, while this experiment intentionally supplies a read-only Reporter copy. Keeping both A2A representations aligned prevents repeated forbidden-write delegations; the default native role and allowlist enforcement remain unchanged. `test_native_reporter_tool_defaults_are_narrowed_before_runtime_enforcement` covers the real executor-provider boundary with native default tool names.
 
 ### IM Channels System (`app/channels/`)
 
@@ -903,3 +914,295 @@ See `docs/` directory for detailed documentation:
 - [PATH_EXAMPLES.md](docs/PATH_EXAMPLES.md) - Path types and usage
 - [summarization.md](docs/summarization.md) - Context summarization
 - [plan_mode_usage.md](docs/plan_mode_usage.md) - Plan mode with TodoList
+
+
+## Collusion audit isolated application
+
+`app/experiments/collusion_audit/` is an optional, run-scoped adapter. Use the existing SPExecutionExtensions and native graph. Do not force a next subagent, replace the Central policy, or feed any historical project analyses, workbook project experience, validation results or GT into model prompts/tools. Only whitelisted generic M01–M15 fields and original staged project sources are agent-readable. Tools wrap unchanged algorithms in `vendor/bid_audit_tools`; paths are restricted to clean project files and the current rule output. Tests: `tests/test_collusion_audit.py` plus the copied vendor synthetic tests. See `../docs/COLLUSION_AUDIT.md`.
+
+Trusted existing-tool execution: `SPSubagentTask.tool_execution_contract` is a typed, default-None server-side extension. It can be set by prepare_task, never via action metadata. Under this opt-in contract, Coder requires successful registered tool receipts rather than source changes/software tests; error JSON fails. Read-only tool capabilities remain scoped. Actor, stage, Central policy and normal coding-task verification are unchanged. Regression anchor: `tests/test_sp_tool_execution_contract.py`.
+
+For tool-only tasks, `artifact_write_tools` explicitly declares scoped output writers without granting input/source mutations. The collusion writer uses native `path` so existing created-path recovery observes its actual tool receipt. Long Markdown is written once to a real .md; only a short metadata envelope is returned. The driver distinguishes observed FINISH from a selected Markdown artifact.
+
+Collusion existing-tool contracts also restore the server-captured Central tool request before software defaults; action metadata cannot enable the typed contract. Default software tasks retain their original tool injection and verification. See docs/COLLUSION_AUDIT.md.
+
+Trusted existing-tool metadata is server-stamped into native observations and narrows recovery capabilities; it does not alter recovery role/stage/budget. Model-declared contracts are stripped. Execution receipts accept any successful delegated registered tool, while artifact writes alone do not count for the collusion profile.
+
+Run-scoped artifact_type_aliases on typed SPSubagentTask default to empty. The collusion profile canonicalizes its legacy tool_output_report to native research_observation, preserving declared_artifact_type and raw model output; intermediate evidence must not trigger deliverable finalization.
+
+`SPToolExecutionContract.require_result_protocol` defaults to false. The collusion profile enables it: successful read receipts cannot promote an empty, promise-only or non-protocol terminal reply to complete. Normalization only validates summary/type/completion metadata and marks unmet output partial; it does not repair JSON or select a recovery action. Keep default callers unchanged and test with `test_sp_tool_execution_contract.py`.
+
+Collusion delegation carries server-observed audit_calculation_runs. Do not confuse SP execution run_id with vendor audit_run_id. Wrong-ID errors expose only current-scope audit IDs; report requirements remove the current SP ID and include the real calculation ID. No aliasing of tool arguments or historical-run access.
+
+Native local-document routing may convert a Coder action to Perception and strip custom tool names. Do not bypass that routing. The collusion adapter materializes lossless10-row read_file pages and uses native stage Artifact bodies for intermediate classification. Non-memory roles opt into terminal protocol validation; capability metadata must be server-stamped for every contracted role.
+
+SPExecutionExtensions.max_actions is a trusted, default-None resource allowance in2..256. Runtime/API values remain clamped to20 absent that extension. Reuse SPActionBudgetMiddleware without changing action/role selection. Collusion M04 uses64 actions/1024 graph steps because20-row output batches exceed the old20-action envelope; other rules retain20/320. Tests cover client non-escalation, trusted bounds and the unchanged native terminal guard.
+
+`SPExecutionExtensions.precise_report_intent` defaults false and is enabled only by the collusion application. Native SPControlActionMiddleware receives this trusted boolean; API/action metadata cannot enable it. When enabled, only report-intent matching becomes clause-local and polarity-aware; code priority, local-document inspection, missing-role inference, stage normalization, tool scopes and native acceptance/recovery stay unchanged. Tests: `test_sp_precise_report_intent.py`, including actual native executor dispatch. Preserve the other14 audit results; onlyM04 is revalidated.
+
+
+The collusion v15 application optionally supplies `SPExecutionExtensions.finish_validator` and `observe_result` (both default None). The native router owns FINISH rejection/recovery and action budgets; the application only reports missing business coverage. The result observer persists strictly validated source/assessment records from native Artifact metadata. No model/API metadata enables either hook. Application-only subagent middlewares scope duplicate reads and reserve a normal tool-free closing response near the native tool cap; they never repair JSON or choose another role. MinerU knowledge is persistent and one PDF per KB; do not merge document scopes. Core tests: test_sp_business_finish.py. Domain tests: test_collusion_{knowledge,coverage,closing,repeat,ingest,knowledge_integration,table_grid,metrics}.py. Keep original algorithms and all historical model results immutable; only M04 is revalidated initially.
+
+
+Collusion rule-level opt-in: `--rule-level-review` sends the full current code packet, with lossless shared metadata grouping, rather than requiring20-row retrieval and judgement submissions. `full_results.py` validates collection counts/path scopes and roundtrips every original field; it does not summarize facts. No row ledger/FINISH row-coverage hook is installed in this mode. Generic rules, original manifest, persistent per-PDF MinerU tools and native report acceptance remain. Legacy row mode is retained explicitly for regressions; old model results are immutable.
+
+`SPExecutionExtensions.scoped_delegate_recovery: bool = False` is a trusted Python-only opt-in. `SPSubagentTask.recovery_scope_key` is host-only, omitted from model request protocols; DelegateHandler strips forged action/result scope metadata and stamps the typed key into delegate/observation/Artifact metadata. SPFinishAvailabilityMiddleware uses it in both before/after-model recovery paths, with legacy fallback when absent. Stage/run/role filtering, original retry thresholds, reporter recovery and action budgets remain. Collusion derives scopes from actual original/KB/code tool receipts; model wording does not mint arbitrary scope IDs. Tests: `test_sp_scoped_recovery.py`, `test_collusion_full_results.py`, `test_collusion_rule_mode.py`, `test_collusion_large_submission.py`.
+
+Collusion current-project round facts must come only from the staged manifest. Never assume two rounds: single-round M14 still invokes its code tool and reports applicability/gaps without inventing another round. Regression: `test_collusion_project_rounds.py`. The user-authorized Jiuzhoutong project replacement clears old test outputs and the explicitly approved old staged inputs/cache; original datasets, original SP2, source snapshots and remote knowledge remain protected. Current input/result index: `../collusion_audit/README.md`.
+
+
+Trusted `SPSubagentTask.source_reference_tokens` defaults to an empty tuple and is excluded from `protocol_payload`. Only Python host hooks may set it; action/result metadata is ignored. Native report provenance permits these observed IDs separately from required literals; unknown IDs and all other report checks remain. The isolated collusion profile captures fact fields before projection, excludes query/error echoes and model-written drafts, and binds its existing false-required-token projection to the current single-message run using native whitespace/clipping rules. Optional source IDs never become inherited must-include requirements. Tests: `test_sp_source_reference_tokens.py`, `test_collusion_source_reference_tokens.py`.
+
+The copied M11 PDF parser tolerates null/unresolved XObjects, preserves valid font extraction/grouping rules, and records page-specific warnings in font-cache-v2 so cache reuse retains coverage limits. Only `vendor/bid_audit_tools/bid_audit/pdf_rules.py` in this isolated copy changes; the provided source tool directory remains protected. Failed calculations return the original error before full-result packaging and are traced as failures, never as successful receipts. Tests: `test_collusion_font_null_resources.py`. Native actor/stage selection, budgets, timeout multiplier and JSON parsing are unchanged.
+
+`full_results.COMMON_FIELDS` groups stable document provenance only. Keep page and table_bbox verbatim in rows so cross-page records share document metadata. The schema remains grouped_records_v1; record order and JSON types roundtrip exactly. Regression: test_document_metadata_is_shared_across_distinct_page_and_table_positions. Never truncate the full packet to fit a model.
+
+
+### Quality controls for a fresh Qwen run (v18)
+
+The collusion runner accepts `--quality-controls` (default **off**). With
+`--rule-level-review`, it preserves the complete lossless code packet and adds a
+current-run deterministic facts index: actual comparison scope, zero matches,
+font-byte comparison counts, image distance statistics and original quote fields.
+Central and subagents receive the same current facts; historical reports and rule
+experience are never loaded. These facts do not assign risk verdicts.
+
+The trusted host supplies explicit audit-ID catalogues and required rule/run IDs;
+ordinary SHA/font/model terms are no longer inferred as mandatory audit IDs.
+The rule's original evidence grade is checked. `view_image_pair` resolves both
+M06 endpoints from the current calculation, and submission receipts track only
+images actually sent in model requests. Reports declare their truly judged subset,
+which may be incomplete; there is no all-candidate ledger or fixed paging gate.
+Generic rule guidance separates verified exclusions from unverified explanations.
+
+Registered tool identity fields distinguish legal `read_file` character windows.
+The normal repetition threshold and Central's same-role checkpoint remain intact.
+A compact phase-closing hint helps long tool delegations return their own native
+protocol; malformed JSON is still rejected without repair. All hooks are host-only,
+optional and inactive in the original SP2 application. Roles, stages, THINK,
+recovery and FINISH remain selected and accepted by native SP2.
+
+Fresh batches use independent directories; prior reports, raw trajectories, cost
+files and persistent MinerU knowledge are preserved byte for byte. The model,
+thinking, token cap, timeouts and action budgets remain unchanged.
+
+M11报告校验还检查未验证前缀生成机制的确定性断言，以及把当前零字节匹配写成绝对排除文件复用的表述；失败保留原文并由Central原生恢复。完全相同的图像显示字节可绑定多个真实来源，避免图像去重后丢失候选端点。
+
+
+质量模式补充（v18b）：原生图像注入器默认仅识别view_image，可信扩展image_tool_names可显式注册其他返回viewed_images的工具；仅M06启用view_image_pair，默认行为不变。验收必须查看实际模型请求中的图片，不能用PNG生成或工具成功代替。新增原生执行器真实图像注入集成回归。
+
+/knowledge/dXXX/pages/起始页-结束页.md为仅质量模式开放的物理页虚拟文件，仍支持原字符游标和窗口上限。它按冻结chunk原始位置选择完整原文，跨页chunk/无文本页如实标注，不修改MinerU库。实际返回的完整chunk及图像输入回执只表示信息可用，不自动计为模型已判读。M06报告另声明ocr_reviewed_candidates（可空）与candidate_page_count，并与实际输入及候选端点去重页数一致；不要求全候选台账。页面区间推断须在正文披露，不能只藏于metadata。
+
+可信image_tool_names同时用于原生Perception只读工具过滤：仅保留Central已经显式请求的登记图像工具，不添加未请求工具，不保留写文件/执行命令等能力。角色重写和阶段选择原样保留；默认空注册的原生行为完全不变。M06仅在质量模式启用这项兼容，模型或API元数据不能开启。
+
+质量模式的委派收尾计数采用当前完整状态与历次模型请求中工具调用ID的去重并集，避免模型历史窗口裁剪后漏算已执行调用。每次委派独立计数，重复播放同一消息不累加；原16条回执收尾阈值、模型/时间/动作预算及默认关闭行为不变。计数依据与裁剪窗口内条数一并写入事件，原始JSON不修复。
+
+### M01 generic recall v19
+
+The isolated collusion copy routes both registry and runner M01 through
+`vendor/bid_audit_tools/bid_audit/m01_recall.py`. `run_rule(parsed_texts=...)`
+accepts trusted in-memory original-only derived chunks for M01; source hashes
+must match the clean manifest. `m01_corpus.py` excludes generated KB metadata.
+Calculation keys include derived text and position fingerprints as well as
+original bytes/tool code/dependencies. Original PDFs remain authoritative for
+binary/image rules; M02–M15 algorithms are unchanged.
+
+The lexical matcher uses normalized maximal exact anchors, sentence/block
+windows and approximate character seeds. Template exclusions, thresholds,
+source coverage, candidate grouping and both source locators are persisted.
+Overlapping windows are not independent evidence. Multi-page OCR locators never
+claim an exact first page. These are candidate facts, never risk verdicts.
+
+`m01_delivery.py` declares `indexed_large_M01` for complete packets over80k
+characters: every candidate remains in the immutable full result and an
+addressable per-candidate JSON file. Bounded previews and category hints are
+navigation, not full review or proven public-source exclusions. Native Central
+gets paired excerpts/differences/IDs through current-code-fact context, and can
+choose subsequent roles/steps. No row ledger or JSON repair is introduced.
+`project_search` explicitly supports normalized literal or AND-term search;
+M01 also searches verified current MinerU chunks. Logs distinguish modes.
+
+Regression anchors: `test_collusion_m01_recall_v19.py` and
+`test_collusion_m01_adapter_v19.py`. Historical project answers/terms/pages are
+restricted to operator-only posthoc evaluation; do not inject them into runtime
+code, generic tests, skill/prompt, or candidate selection.
+
+M01 v19 follow-up: `compact_facts` and large-result navigation retain complete
+paired candidate passage bodies and primary source quotes for the six highest
+priority candidates, while explicitly declaring the candidate subset. Never
+clip a body to180 characters and then describe it as full evidence. All other
+candidate records remain addressable. `input_channel_coverage` separates raw
+PDF text sparsity from actually compared persisted MinerU chunks/page positions;
+positions do not prove recognition or model review. Deterministic document-pair
+and match-mode totals avoid estimating full distributions from partial indexes.
+Regressions cover body-tail retention, original quote retention and dual-channel
+warnings. Native scheduling, budgets, timeouts and JSON parsing stay unchanged.
+
+### Collusion generic evidence v20
+
+With trusted parsed_texts, vendor runner installs source-hash-checked derived
+original views and routes M02–M13 through enhanced_rules. Standalone callers
+without parsed_texts retain legacy entry behavior. Original PDF bytes and raw
+Context.pages are never replaced. structured_text handles HTML spans and keeps
+layout conflicts explicit. enhanced_tables recovers same-page split columns
+only with unique parameter context, and records same-document ordinal or ordered
+multi-item section inference. Ambiguous/orphan rows remain persisted, never
+become silently completed audit items. Numeric interval facts and identical
+negative labels are distinct from business deviation verdicts.
+
+The shared-passages cache contains only current M01 lexical facts and source
+fingerprints, never model reports. enhanced_text uses arbitrary observed edits,
+not project-specific error terms. Single-side edit artifacts are not joint errors.
+M06 original-image decisions remain native; complete OCR chunks count as input
+only when seen in actual projected model text. M10 marker counts never equal a
+verified number of saves; M11 bad resources retain warnings; M12 raw printable
+non-stream syntax windows and decoded CDC stay separate observation domains.
+
+Large packets persist losslessly with result_navigation/candidates and explicit
+supplementary collection subsets. compact_facts retains selected complete paired
+passages and source quotes. No judgement ledger, role forcing or JSON repair.
+Historical evaluation anchors belong only under operator operations/results.
+Tests: test_collusion_general_v20.py plus existing source/quality/tool suites.
+
+v20 scope follow-up: response_views uses actual response headers and nearby
+status-bearing continuation pages (allowing up to two missing intervening pages),
+not unrelated appendix tables. Technical/business ordinal catalogs are separate.
+Disjoint measurement dimensions stay in alignment_conflicts and are not mined as
+word-level edits. Bid-stated requirement text is not a verified public template
+without an actual tender/public-source match. Scope regressions live in
+`test_collusion_v20_scope_refinements.py`; do not pass operator reference files
+to runtime. First M02 run stays immutable; rerun under a new attempt batch.
+
+Original-geometry follow-up: geometric_tables caches only clean source facts keyed by source SHA, parser version, selected pages and module fingerprint. Relative header x bands survive varying continuation subcolumns; row y is cell intersection, not merged-cell union. enhanced_tables merges same physical readings while preserving raw extraction_variants and numeric conflicts. M03 keeps same-own-requirement pairs as source observations. General navigation supplies exact edit fields and whole-collection counts; source observation indexes never imply semantic review. Null resource maps retain warnings; font cache v4. Regression: test_collusion_geometry_v20.py.
+
+source_access in compact facts separates original read capability, observed original/OCR coverage and pair-comparison membership. DOCX without MinerU stays reachable via document_id; missing OCR positions are not evidence that original text was omitted. Scope regression: test_collusion_geometry_v20.py.
+
+Quality-mode delegation transport deduplicates calculation identity and carries metadata/pointers rather than repeated fact bodies when a canonical live fact index exists. CurrentCodeFactsMiddleware still injects the unmodified complete current fact view; missing live indexes retain original transport bodies. Default/non-quality behavior, full rules, historical reasoning and native role choice are preserved. Regression: test_collusion_context_facts_v20.py.
+
+Source-navigation follow-up: M03 copy observations carry actual normalized tender/public-source support and separate verified/unverified counters. Never infer template provenance from a bidder requirement column. M12 exposes participant-set/resource-type representative raw windows without deleting full findings. Read-only calculation references require producer-known filenames and matching SHA; model drafts, forged extra candidates and changed files are untrusted. Quality mode enables explicitly requested original single-image viewing for all rules, paired viewer remains M06-only; native defaults/roles are unchanged. Regression: test_collusion_source_navigation_v20.py.
+
+Bounded response-pair source views preserve complete q/a/b text and source positions for aligned findings, capped by200records/120000serialized characters for direct delivery; overflow stays explicit and lossless on disk. CurrentCodeFacts suppresses a duplicate navigation body only when an actual current audit ToolMessage contains the identical complete navigation; otherwise it restores the full live fact view. No message mutation, hidden row truncation, JSON repair or role forcing. Regressions: source_navigation_v20 and context_facts_v20.
+
+compact_paired_source_view defaults false and is enabled only on the quality Central fact middleware. It reduces the newly added dense pair-view transport while preserving total counts, selected complete source previews and the full view path. Scoped subagent fact views and the backing index stay complete and immutable. Empty central source-index rows are explicitly transport omission, not data absence. Native scheduler/timeouts/JSON handling are untouched.
+
+OCR boundary follow-up: M06 current-code facts observe the exact fact body forwarded to the model before receipt metadata is assembled, preserving the existing image observer order. Strict JSON decoding accepts only complete host-hash-verified calculation text; invalid text is ignored, never repaired. Real create_agent middleware-chain regression proves the text reaches the model and the receipt. General previews round-robin actual document IDs for bounded context/evidence arrays; full candidate sources stay immutable.
+
+通用表单/模板观察索引保留真实表名、默认项、空白计数、正文未验证状态与源位置；模板保留上下文及匹配位置。仅表单/模板补充集合增加完整位置，其他大集合不重复扩张。结果足够时可按原生阶段协议直接收尾，不要求占位工具调用；是否继续取证仍由原生Central自主决定。
+
+M06质量提示说明12图为保留上限而非推荐批量；在固定8192输出预算下可由Central自主将视觉委派限定一到两对并简短交付，后续是否补查仍自主决定。dHash=0不能冒充像素哈希一致。图片窗口、模型配置、调度和原始集合均未改动。
+
+v20预览按实际finding kind轮转，在各类内保留优先顺序，避免长公共记录占满有限预览。行政许可结构标签只影响导航优先级，不构成模板来源验证或风险排除；完整候选和源正文不删。BudgetClosingMiddleware的report_path默认None；仅围串标质量模式Reporter绑定当前真实报告契约路径。收到write_file成功created回执后请求原生阶段收尾，不再重复写/读同一文件；错误、其他路径、用户文本不触发，不自动验证或标记通过，不修复JSON。Central仍决定是否另行修订及后续角色。
+
+候选索引保留真实punctuation/pattern，summary_statistics从完整findings计算其分布，不要求模型逐条计数。质量模式Perception若input_refs为空，只将委派task中明确出现、当前生产器已登记且SHA一致的计算文件登记为真实input_refs；不新增读取任务或工具，不声明已读，现有Central输入引用和真正澄清均不改。默认关闭，原生Perception验收代码不变。
+
+M08候选索引保留原始短context和实际来源页，literal_context_navigation仅计算原上下文的字面表头/配置/占位标记、文档集合及交叉计数。未知不表示自由正文，字面标记不表示已验证表格/模板，更不表示风险；unpaired_anomalies独立计数。无全候选二次分类交付门槛，Central仍按需决定补查。完整源集合与既有结果保留。
+
+M08检测改用原始可见字符单元：HTML按实际单元格/段落分隔，DOCX按原始段落/单元格分隔，不使用M01纯文本转换插入的分号，不通过删除空白创造连续标点。宽度与空白规范化仅在实际检测后用于分组/模板匹配；原标点与原文quote、真实来源定位保留。真实单元内连续标点及招标本身的同型标点继续保留/按来源匹配。此变更仅M08，原件和其他规则算法不改。
+
+质量模式Perception的真实来源声明也解析委派明确指出的当前audit_run_id和集合名，绑定生产器实际文件并核验SHA；不加入未请求集合、不读历史目录。局部Perception取证补充范围说明，不重做全项目任务归一化；真正缺口仍保留。默认行为和原生验收/调度代码不改，模型与超时参数不改。
+
+CompactControlScopeMiddleware默认关闭，仅围串标质量模式Central启用。仅提示控制动作的task用简短受托范围、真实已有run_id/集合名及输出种类引用已自动附带的完整事实，避免再次抄写长规则/统计表/引文。完整规则、证据正文、历史reasoning和原生工具不删、不重写；子代理不启用该提示，角色和步骤不指定，不改模型参数、超时或JSON处理。
+
+围串标 quality_controls 的 Central 事实投影启用默认关闭的 compact_control_navigation：保留完整规则、真实统计、最多3个完整候选预览及各集合最多2个完整示例、完整来源路径；大索引仅在控制传输中省略。未具备完整持久化路径的正文不裁减；受托审核/报告代理仍接收完整有界证据视图，原件及完整计算包不变。不改变原生角色、步骤、模型预算、时限和JSON处理。
+
+围串标质量模式增加默认关闭的 close_repeated_reads：仅在当前委派至少6个真实工具回执、最近4个回执至少3次以不同call_id返回相同只读already_returned/result_ref且末项仍重复时，进入原生阶段协议收尾。保留全部已有消息和来源，不认定完成、不修复JSON；未完成范围须标partial，后续角色与补查仍由原生Central决定。错误、不同结果、写入及用户文本不触发。
+
+质量模式报告引用目录对超过20000个真实E六位证据ID采用互斥前缀范围分区；每个目录保持原生20000项上限，完整允许集合及对不存在/非规范数字ID的拒绝能力不变。小目录与原先契约完全一致；不扩大原生32目录上限，无法无损表达时显式失败而非截断。只改围串标适配，不修改原生角色/步骤或JSON处理。
+
+围串标质量模式阶段交接保持原生协议及完整规则/源正文，默认提示只交接新增判断、来源路径与局限（artifact_content约800汉字），不要求重抄完整明细表作为规则报告前置。M12代码新增代表分区精确求和与完整性标记，并对全部共享原始80字节非流窗口扫描字面PDF键/XMP标记、保留全部匹配源观察；计数不是独立证据、字面键不是已验证元数据归属或风险，零值不代表整份PDF没有元数据。原生角色/步骤/预算/时限及JSON处理均不变。
+
+默认关闭的子代理容量接口：SubagentConfig的model_max_tokens/model_timeout_seconds/model_request_deadline_seconds均默认为None，仅信任服务端配置钩子，不从模型action metadata读取。围串标质量模式可显式传--reporter-max-tokens及--reporter-request-timeout，只给Reporter覆盖输出上限、HTTP超时及本角色模型请求截止；当前验证拟用16384/480秒，thinking保持开启，Central及取证复核模型8192/240秒和原生300秒截止不变，调度策略与JSON处理不变。未启用参数的所有原生调用保持默认行为。
+
+Existing-tool recovery: the host-stamped `tool_execution_contract` (`kind=existing_tools`, `source_changes_required=false`) excludes an observation from source-patch recovery normalization and its blocking policy. This capability is absent by default; action/result metadata cannot create it. Central still selects roles/stages, and ordinary code-patch recovery is unchanged. Regression: `test_sp_existing_tool_recovery_v24.py`.
+
+Collusion price-source extraction is isolated in `vendor/bid_audit_tools/bid_audit/price_sources.py`. It preserves literal cap scope, actual multirow headers, source roles, and unverified contract/performance context. No risk verdict or scope label proves current offered configuration. `configuration_contexts` uses the existing complete-result navigation. Missing OCR positions derive from source coverage; agent unread pages remain unread. M12 stage summaries reference complete source files without requiring a retyped full classification ledger.
+
+`--evidence-role-capacity` is a default-off collusion CLI flag that shares explicitly provided Reporter capacity with Coder and Researcher only. Host options, not task metadata, enable it. Effective configs separately record this expansion; Central, Perception and memory defaults remain unchanged. Tests: `test_collusion_evidence_budget_v26.py`.
+
+Price navigation preserves document/field/scope diversity; literal numeric per-unit cap observations and tender baseline tables receive preview prominence, not risk significance. Complete persisted collections stay unchanged. Regression: `test_collusion_price_navigation_v27.py`.
+
+Collusion resource options `--central-retry-timeout` and `--central-retry-max-tokens` forward existing native runtime knobs; defaultNone preserves native defaults and no scheduler code changes. Quality+rule mode uses `bounded_records.read_bounded` over unchanged20-row backend pages; it returns complete records within60000chars, with truthful cursors and max200requested records. Legacy transport is unchanged. `supplemental_prices.py` preserves source price observations, exact currency/unit arithmetic, duplicate origins, conflicting copies and ambiguous parallel requirement/response tables. M15 provisional amount vectors are not automatically verified unit prices or a risk verdict; fact scope includes actual supplementary bid sources.
+
+### Collusion opt-in reader HTML
+
+`CollusionProfile.report_format` defaults to `markdown`; trusted CLI `--report-format html` requires quality controls and rule-level review. Scoped task/delegation prompts describe actual role capabilities, distinguish native once-only perception from consecutive-delegation checkpoints, and request concise natural-language handoffs without dropping independent findings. They do not prescribe a next role or step.
+
+`reader_source_facts` adds current successful receipt references by natural document identity and physical pages, plus an explicitly non-semantic deduplicated lower bound for complete M01 candidate delivery. It reads only current receipt files, verified OCR receipt state and actually submitted images; it never parses model-authored JSON text as source evidence. This is an input aid, not a review ledger or new completion gate. Without a reliable semantic ledger, prompts use qualitative checked scope rather than invented exact review/remainder counts, and distinguish inspected subjects from risk subjects.
+
+The application supplies a generic blank HTML template and natural document-name map, allows real HTML output writes, and checks seven reader sections, portability, internal-identifier privacy, evidence grade and M06 declared coverage. M06 distinguishes reviewed image/OCR pairs from all candidate endpoint pages. Provenance is host-stamped in artifact metadata; the HTML body carries natural sources and physical pages. Native FINISH still selects the actual current-run report artifact.
+
+Two trusted generic compatibility interfaces default off. `SPReportReferenceContract.content_type` defaults to None; only `text/html` projects report text without head/style/script for the unchanged language ratio check. Raw files and all other checks remain intact. `SPExecutionExtensions.preserve_registered_tool_intent` defaults False; when enabled, the runtime derives identities from the actual extension tool registry. A requested registered capability that cannot survive Perception filtering prevents a false pure-file-reader rewrite of Central's explicit Coder choice. Pure file inspection, explicit Perception, positive report routing, stage guards and budgets stay native. Model metadata/API context cannot activate either interface.
+
+HTML M01 also registers `audit_m01_index`: exact current-run index rows filtered by a plain `document_pair="d001|d007"` string/category/match mode (no JSON array coercion or repair) with original rank, totals and explicit cursors. Whole index rows fit a 10000-character response budget, and the cursor advances by actual delivered count to avoid generic12000-character preview externalization. Navigation is never counted as full passage delivery, and has a distinct recovery identity. Scoped HTML guidance exposes the existing delegation close thresholds (16 tool receipts or >=4 receipts and 200000 result characters), without selecting roles or making full enumeration a gate.
+
+HTML M01 candidate reads return whole records within 60000 characters, explicit remaining IDs and exact oversized-file references; the bounded tool is exempt from generic preview externalization. Continuation is optional according to evidence needs; undelivered text cannot be claimed reviewed. Markdown transport and all comparison algorithms remain unchanged.
+
+Tests: `test_collusion_reader_source_facts_v21.py`, `test_collusion_html_reports_v21.py`, `test_collusion_html_candidate_delivery_v21.py`, `test_collusion_html_candidate_navigation_v21.py`, `test_sp_html_report_language_v21.py`, `test_sp_registered_delegate_intent_v21.py`. Retain independent source freezes, full traces and costs, including unsuccessful trials. Never convert old Markdown reports or inject historical verdicts; no JSON repair.
+
+HTML M01 索引补充：`audit_m01_index` 可选 `sort_by=shared_chars` 按真实共享字符数排序（同分保持原排名，默认仍为原排名），并按实际候选证据返回双端文档与物理页码。缺失定位明确披露，整行与位置映射共同受10000字符预算限制；游标按实际返回数推进。索引不是正文交付或语义复核，原始候选与规则、原生调度不变。回归见 `test_collusion_html_index_locations_v21.py`。
+
+HTML输入精简：默认关闭的 `preloaded_task` 仅在HTML质量模式的非图像子代理启用。只有实际当前Human任务框架、action_id和服务端预载计算列表均匹配时，才将逐字段完全相同的事实改为同一请求中原文位置引用；额外差异、新证据、源回执及历史reasoning保留，原文件不改。框架被摘要移除或内容不等则恢复完整事实。M06保持原图/OCR观察路径。Reporter的读者指南只在system中保留一次；无去重语义台账时各阶段与报告采用定性覆盖描述。短阶段协议与完整HTML工具参数的长度要求区分。回归：`test_collusion_html_prompt_transport_v21.py`。
+
+运行器等待保护：仅当显式角色或Central请求时限超过既有范围时，外层无可观察进展保护使用 `max(600, 显式请求时限+120)` 秒，避免较长的非流式请求被固定600秒提前终止。未配置或使用480/240秒时仍为600秒。请求重试、角色选择、token预算和JSON处理不变；实际值记录effective_config。回归：`test_collusion_progress_watchdog_v21.py`。
+
+### Collusion incremental handoff and HTML acceptance v22
+
+Trusted `SubagentConfig.model_thinking_enabled` defaults None and is applied after the run-scoped configuration extension; model action metadata cannot override it. Collusion `--researcher-no-thinking` defaults off and disables only Researcher thinking. Independent `--evidence-max-tokens` / `--evidence-request-timeout` retain explicit evidence capacities when Reporter grows; omitted values preserve the older shared-capacity behavior. No routing, recovery, action ceiling, historical reasoning, or JSON handling changes. Handoffs emphasize new evidence, corrections and unfinished delegated work; whole source data stays accessible.
+
+HTML5 DOM parsing is in memory only, using html5lib. Legal omitted end tags do not fail delivery; file ownership/existence, actual nonempty body, explicit complete-page boundary, placeholders, internal identity leaks and active/external resources remain delivery errors. Section IDs, table counts, reader layout preferences and exact visible coverage-table phrasing are warnings only. Existing factual metadata and source-receipt scope validation remain independent. A bounded cache reuses format reviews for identical file content; raw reports are never rewritten. Tests: `test_collusion_incremental_html_v22.py` and existing HTML/resource/native-extension suites.
+
+### Collusion resilient delivery and Alibaba API v23
+
+Trusted `SPExecutionExtensions.allow_limited_report` defaults False. When enabled, exhausted non-Reporter recovery retains Central control choices and a Reporter delegation; it does not schedule Reporter automatically or promote partial results. Further evidence delegation after exhaustion is rejected by the control-tool wrapper. Missing source scope counts only the unresolved chain since the latest successful same-role stage. Existing default behavior, report validity and report recovery remain unchanged.
+
+`SubagentConfig.tool_call_limit` defaults None; explicit64 on evidence specialists keeps native loop detection with sufficient graph shutdown steps (400), while repeated-identical-call detection and timeouts remain enabled. Both the agent prompt and real loop guard use the same limit. `--resilient-delivery` is a trusted quality/rule-mode collusion opt-in. It disables only the extra count/volume/repeated-receipt tool withdrawal, not source isolation, JSON validation or report-created feedback. Candidate requests may exceed8IDs; each complete record is delivered within a conservative512000-byte transfer allowance with explicit remaining/oversized references. File reads default to the complete source within that allowance; explicit offsets and truthful next offsets remain. This is a transport bound, not an audit-completion gate.
+
+Producer-known m01_candidates files are registered with SHA and candidate identity; modified/model-authored files cannot supply trusted recovery identities. Primary current artifact references take precedence over unrelated historical stage references. Original source bodies stay unchanged. Alibaba configuration is process-local inside the experiment copy, uses ChatOpenAI and official enable_thinking, streaming usage and zero hidden SDK retries. It does not use vLLM tool-text recovery. Preflight uses synthetic data, stops on its first failure and is separately accounted; M01 starts only after passing. Secrets are redacted and must not enter source snapshots. Tests: `test_collusion_resilient_delivery_v23.py`, `test_sp_limited_report_v23.py`, `test_collusion_aliyun_v23.py` plus existing contracts.
+
+### Collusion Central request ownership v24
+
+Trusted `SPExecutionExtensions.central_recovery_owned` defaults false and
+`central_model_overrides` defaults None. Only the copy's explicit Alibaba
+`--central-efficiency` mode enables them. The lead factory passes a trusted
+`propagate_model_errors` switch to its generic error middleware: no generic
+request cutoff, retry, circuit fallback or assistant-text error conversion wraps
+SP's Central recovery. Specialist chains keep native defaults. Central's existing
+initial/post-delegation retry and once-per-phase THINK checkpoint remain intact;
+transport recovery additionally handles temporary connection/429/5xx failures,
+while fatal errors and cancellation propagate. SDK retries remain zero.
+Central uses 180s initial,480s post-delegation/retry,8192 output tokens,
+reasoning_effort=low, HTTP read/stream gap510s,connect10s/write30s/pool30s.
+Only exact adapter-generated task text is projected for Central; business rules,
+manifest, evidence bodies, task memory, history and native prompts stay intact.
+Detailed HTML layout/writer instructions remain in specialist/Reporter inputs.
+No tool changes, stage forcing, historical reports, output repair or JSON repair.
+Tests: test_collusion_central_v24.py plus native recovery/model/middleware suites.
+
+
+### 围串标 Reporter 流式交付 v25（默认关闭）
+
+仅围串标副本的阿里云 HTML 质量规则审核可显式启用 `--reporter-delivery`。Reporter 使用独立同模型配置、关闭 thinking，完整输出上限32768；建议单次模型请求900秒，HTTP connect10/read330/write60/pool30秒，SDK分片间隔与有效正文/工具参数进展间隔均300秒。整个原生委派3600秒及case14400秒不增加。完整请求超时不原样自动重发；仅无普通输出、30秒内的临时连接/429/5xx错误至多重试一次。Central仍自主决定所有角色与步骤。
+
+`reporter_stream.py` 保留正文与工具参数的实时原始分片、精确时间、结束原因、供应商ID/usage；只记录思考字符数，不写思考正文。运行目录 `reporter-streams/<action_id>/` 中的 `.delta.jsonl`、`.content.partial.txt`、`.tool-*.arguments.partial.txt`、`.tool-*.html.partial` 和 `.status.json` 是观察记录，绝非已通过的报告。不补全JSON、HTML或工具调用；只有模型真实调用write_file后形成的文件才进入原生验收/FINISH。无有效输出或不完整流明确失败，不被当作空成功。
+
+`reporter_delivery.py` 将同一实际任务JSON内完全相同的较长值改为本请求JSON Pointer，递归展开严格等于原始任务；完整规则、双端证据、不同观察、局限和历史推理不裁减。独立 `collusion-reporting-html` skill 替代此模式Reporter的Markdown skill；其他角色和默认技能不变。所有原件与旧结果保留，不向模型输入历史报告。
+
+通用兼容接口 `SubagentConfig.model_errors_propagate=False`、`SPExecutionExtensions.count_missing_reports=False` 默认保持旧路径。仅此模式启用前者以使原生子代理返回真实失败，启用后者让未创建任何报告的失败也适用原生既有三次Reporter恢复上限；不伪造产物。没有报告时保留传输/协议主因，不追加缺少HTML/证据等级等次生诊断。回归：`test_collusion_reporter_v25.py`，并运行现有collusion/SP/模型/执行器测试。
+
+
+### HTML 交付验收的定位反馈（2026-11-12）
+
+围串标 HTML 模式沿用原有内部标识和运行字段检查，失败反馈增加匹配总数以及最多三处违规词和附近原文，供 Central 自主安排的修订使用。长报告不整页回传；定位示例有界，不引入新验收门槛。Reporter 指南要求按定位实际修订文件并检查同类残留，保持审核事实、引文和局限不变。宿主不替换报告文字、不修复 JSON，不改变角色选择、工具范围、预算、超时或原生三次报告恢复上限。Markdown 和未启用此 HTML 适配的调用不受影响。回归：`test_collusion_html_validation_feedback_v26.py`。
+
+### Portable CollusionAudit inputs and shared knowledge
+
+collusion_audit.prepare stages explicitly selected originals into a new project
+root and optionally preserves published IDs after exact path and SHA256 checks.
+The runner accepts trusted CLI project, rules, configuration, output and
+credential paths. Only originals declared in the selected manifest enter tools.
+Keep private inputs and runtime outputs out of Git.
+shared_knowledge.restore reads existing RAGFlow resources, verifies source bytes,
+remote scope, full chunk hashes and page bounds, then atomically publishes a
+local KnowledgeStore. The shared mapping contains metadata only. Reject changed
+remote content instead of silently rebuilding a published mapping.
+Operator commands are in docs/COLLUSION_AUDIT.md.

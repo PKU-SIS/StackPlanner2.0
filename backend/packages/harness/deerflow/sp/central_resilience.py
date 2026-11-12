@@ -5,14 +5,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+import time
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, override
 
+import httpx
 from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelCallResult, ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage
+from openai import APIConnectionError, APIStatusError
 
 logger = logging.getLogger(__name__)
 
@@ -52,12 +55,14 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
         initial_timeout_seconds: float = 90.0,
         retry_timeout_seconds: float = 60.0,
         retry_max_tokens: int = 2048,
+        manage_transport_errors: bool = False,
     ) -> None:
         super().__init__()
         if initial_timeout_seconds <= 0 or retry_timeout_seconds <= 0:
             raise ValueError("Central request timeouts must be positive")
         if retry_max_tokens <= 0:
             raise ValueError("Central retry max tokens must be positive")
+        self.manage_transport_errors = manage_transport_errors
         self.initial_timeout_seconds = float(initial_timeout_seconds)
         self.retry_timeout_seconds = float(retry_timeout_seconds)
         self.retry_max_tokens = int(retry_max_tokens)
@@ -81,9 +86,8 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
         active_delegate = state.get("sp_active_delegate_id")
         loop_iteration = int(state.get("sp_loop_iteration") or 0)
         last_action = state.get("sp_last_action_id")
-        # Perception/planning are the expensive first-decision boundary. Do
-        # not impose this retry policy on later Central decisions after a child
-        # result, where the normal LLM error middleware is sufficient.
+        # Distinguish the initial decision from later decisions so each phase
+        # retains its existing bounded recovery checkpoint.
         return stage in {"perception", "planning"} and current_action is None and not active_delegate and loop_iteration == 0 and not last_action
 
     @staticmethod
@@ -91,6 +95,35 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
         state = request.state if isinstance(request.state, Mapping) else {}
         stage = str(state.get("sp_current_stage") or "").strip().lower()
         return stage in {"perception", "planning", "research", "implementation", "verification", "reporting", "revision"} and state.get("sp_current_action") is None and not state.get("sp_active_delegate_id")
+
+    def _recoverable(self, exc: BaseException) -> bool:
+        if isinstance(exc, (TimeoutError, SPCentralEmptyResponse, SPCentralInvalidToolCall)):
+            return True
+        if not self.manage_transport_errors:
+            return False
+        if isinstance(exc, (httpx.TransportError, APIConnectionError)) or type(exc).__name__ == "StreamChunkTimeoutError":
+            return True
+        if isinstance(exc, (APIStatusError, httpx.HTTPStatusError)):
+            status = getattr(exc, "status_code", None) or getattr(getattr(exc, "response", None), "status_code", 0)
+            # Quota/auth/bad input are terminal, including quota-shaped HTTP429.
+            if "insufficient_quota" in str(getattr(exc, "code", "")) or "insufficient_quota" in str(getattr(exc, "body", "")):
+                return False
+            return status == 429 or 500 <= status < 600
+        return False
+
+    async def _transport_backoff(self, exc: BaseException) -> None:
+        if not self.manage_transport_errors or isinstance(exc, (TimeoutError, SPCentralEmptyResponse, SPCentralInvalidToolCall)):
+            return
+        delay = 1.0
+        headers = getattr(getattr(exc, "response", None), "headers", {})
+        try:
+            delay = max(delay, float(headers.get("retry-after", 1)))
+        except (TypeError, ValueError):
+            pass
+        # Do not violate a long server backoff by immediately retrying.
+        if delay > 5:
+            raise exc
+        await asyncio.sleep(delay)
 
     def _run_key(self, request: ModelRequest) -> str:
         context = self._context(request)
@@ -198,11 +231,16 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
         *,
         timeout_seconds: float,
     ) -> ModelCallResult:
-        result = await asyncio.wait_for(handler(request), timeout=timeout_seconds)
-        failure = self._result_failure(result)
-        if failure is not None:
-            raise failure
-        return result
+        started = time.monotonic()
+        self._emit({"type": "sp_central_request_started", "run_id": self._run_key(request), "timeout_seconds": timeout_seconds})
+        try:
+            result = await asyncio.wait_for(handler(request), timeout=timeout_seconds)
+            failure = self._result_failure(result)
+            if failure is not None:
+                raise failure
+            return result
+        finally:
+            self._emit({"type": "sp_central_request_ended", "run_id": self._run_key(request), "elapsed_seconds": time.monotonic() - started, "timeout_seconds": timeout_seconds})
 
     def _emit_attempt_failure(
         self,
@@ -218,7 +256,7 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
         is_empty = isinstance(error, SPCentralEmptyResponse)
         self._emit(
             {
-                "type": ("sp_central_invalid_tool_call" if is_invalid_tool else "sp_central_empty_response" if is_empty else "sp_central_model_timeout"),
+                "type": ("sp_central_invalid_tool_call" if is_invalid_tool else "sp_central_empty_response" if is_empty else "sp_central_model_timeout" if isinstance(error, TimeoutError) else "sp_central_transport_error"),
                 "run_id": run_key,
                 "attempt": attempt,
                 "timeout_seconds": timeout_seconds,
@@ -247,7 +285,9 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
                 request,
                 timeout_seconds=first_timeout,
             )
-        except (TimeoutError, SPCentralEmptyResponse, SPCentralInvalidToolCall) as first_exc:
+        except Exception as first_exc:
+            if not self._recoverable(first_exc):
+                raise
             self._emit_attempt_failure(
                 request,
                 run_key=run_key,
@@ -256,6 +296,7 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
                 timeout_seconds=first_timeout,
                 error=first_exc,
             )
+            await self._transport_backoff(first_exc)
             try:
                 return await self._invoke_checked(
                     handler,
@@ -265,7 +306,9 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
                     ),
                     timeout_seconds=self.retry_timeout_seconds,
                 )
-            except (TimeoutError, SPCentralEmptyResponse, SPCentralInvalidToolCall) as second_exc:
+            except Exception as second_exc:
+                if not self._recoverable(second_exc):
+                    raise
                 self._emit_attempt_failure(
                     request,
                     run_key=run_key,
@@ -278,11 +321,7 @@ class SPCentralResilienceMiddleware(AgentMiddleware[AgentState]):
                     return self._fallback_response(request, run_key=run_key)
                 if isinstance(second_exc, (SPCentralEmptyResponse, SPCentralInvalidToolCall)):
                     raise SPCentralEmptyResponse("CentralAgent returned an unusable response after retry") from second_exc
-                raise SPCentralModelTimeout(f"CentralAgent model stalled after retry: {self.initial_timeout_seconds}s + {self.retry_timeout_seconds}s") from second_exc
-            except Exception:
-                raise
-        except Exception:
-            raise
+                raise SPCentralModelTimeout(f"CentralAgent model stalled after retry: {first_timeout}s + {self.retry_timeout_seconds}s") from second_exc
 
     @override
     def wrap_model_call(

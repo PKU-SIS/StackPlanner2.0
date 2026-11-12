@@ -60,3 +60,22 @@ config.yaml.bak
 /frontend/playwright-report/
 .gstack/
 .worktrees
+
+# CollusionAudit machine state, originals and experiment outputs
+.tmp/
+.tools/
+.cache/
+.pytest_cache/
+.ruff_cache/
+*.env
+*.key
+!*.env.example
+/collusion_audit/*
+!/collusion_audit/rules.json
+!/collusion_audit/requirements-extra.txt
+!/collusion_audit/shared/
+/collusion_audit/shared/*
+!/collusion_audit/shared/jiuzhoutong-mineru-v16.json
+
+# Local historical tender experiment report
+/docs/TENDER_AUDIT_RESULTS.md

@@ -131,9 +131,10 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
     retry_base_delay_ms: int = 1000
     retry_cap_delay_ms: int = 8000
 
-    def __init__(self, *, app_config: AppConfig, **kwargs: Any) -> None:
+    def __init__(self, *, app_config: AppConfig, propagate_model_errors: bool = False, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
+        self.propagate_model_errors = propagate_model_errors
         self.circuit_failure_threshold = app_config.circuit_breaker.failure_threshold
         self.circuit_recovery_timeout_sec = app_config.circuit_breaker.recovery_timeout_sec
         try:
@@ -358,6 +359,8 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         request: ModelRequest,
         handler: Callable[[ModelRequest], ModelResponse],
     ) -> ModelCallResult:
+        if self.propagate_model_errors:
+            return handler(request)
         if self._check_circuit():
             return self._build_error_fallback_message(
                 self._build_circuit_breaker_message(),
@@ -413,6 +416,8 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         request: ModelRequest,
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelCallResult:
+        if self.propagate_model_errors:
+            return await handler(request)
         if self._check_circuit():
             return self._build_error_fallback_message(
                 self._build_circuit_breaker_message(),
