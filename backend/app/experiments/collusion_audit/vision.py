@@ -5,6 +5,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import math
 import time
 import uuid
 from typing import Annotated
@@ -15,7 +16,15 @@ from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 
 
-def render_original(adapter, document_id, page, image_name):
+def render_original(adapter, document_id, page, image_name, *, region=None):
+    if region is not None:
+        if not getattr(adapter, "general_quality", False):
+            raise ValueError("region requires general_quality")
+        if not isinstance(region, list) or len(region) != 4 or any(type(v) not in (int, float) or not math.isfinite(v) for v in region):
+            raise ValueError("region must contain four finite normalized coordinates")
+        left, top, right, bottom = region
+        if not 0 <= left < right <= 1 or not 0 <= top < bottom <= 1:
+            raise ValueError("region must satisfy 0<=left<right<=1 and 0<=top<bottom<=1")
     doc = adapter.context().by_id[document_id]
     source = doc["_path"]
     if source.suffix.lower() != ".pdf" or page < 1:
@@ -46,13 +55,21 @@ def render_original(adapter, document_id, page, image_name):
             pdf.close()
             raise ValueError("Physical page outside original PDF")
         pdf_page = pdf.get_page(page - 1)
-        bitmap = pdf_page.render(scale=1.5)
+        bitmap = pdf_page.render(scale=3.0 if region is not None else 1.5)
         image = bitmap.to_pil().convert("RGB").copy()
         bitmap.close()
         pdf_page.close()
         pdf.close()
         metadata["mode"] = "original_physical_page_render"
     metadata["original_dimensions"] = list(image.size)
+    if region is not None:
+        width, height = image.size
+        full_image = image
+        image = full_image.crop((round(left * width), round(top * height), round(right * width), round(bottom * height)))
+        full_image.close()
+        metadata["region"] = list(region)
+        metadata["region_coordinate_system"] = "normalized original image; top-left origin"
+        metadata["render_scale"] = 3.0 if not image_name else None
     if max(image.size) > 2200:
         image.thumbnail((2200, 2200))
     metadata["display_dimensions"] = list(image.size)
@@ -71,14 +88,14 @@ def render_original(adapter, document_id, page, image_name):
 def build_view_tool(adapter):
     @tool(
         "view_image",
-        description="查看清洁项目原始PDF的物理页或M06证据中的嵌入图。参数为document_id、page；image_name留空查看整页，或填M06返回的image_name查看该图。仅限清单原件；无需image_path或宿主机路径。每次模型请求可保留最近12种不同图像，超过时需重新查看；不要声称核对未实际显示的图片。",
+        description="查看清洁项目原始PDF的物理页或M06证据中的嵌入图。参数为document_id、page；image_name留空查看整页，或填M06返回的image_name查看该图。仅限清单原件；无需image_path或宿主机路径。每次模型请求可保留最近12种不同图像，超过时需重新查看；不要声称核对未实际显示的图片。启用general_quality时可用region=[左,上,右,下]局部放大，坐标0到1、左上为原点；小字或印章遮挡下不可辨的字不要根据OCR猜写。",
     )
-    async def view_image(document_id: str, page: int, tool_call_id: Annotated[str, InjectedToolCallId], image_name: str = "") -> Command:
+    async def view_image(document_id: str, page: int, tool_call_id: Annotated[str, InjectedToolCallId], image_name: str = "", region: list[float] | None = None) -> Command:
         started = time.monotonic()
-        arguments = {"document_id": document_id, "page": page, "image_name": image_name}
+        arguments = {"document_id": document_id, "page": page, "image_name": image_name, **({"region": region} if region is not None else {})}
         adapter.trace.event("tool.started", tool="view_image", tool_call_id=tool_call_id, arguments=arguments)
         try:
-            metadata, encoded = await asyncio.to_thread(adapter.guarded, lambda: render_original(adapter, document_id, page, image_name))
+            metadata, encoded = await asyncio.to_thread(adapter.guarded, lambda: render_original(adapter, document_id, page, image_name, **({"region": region} if region is not None else {})))
             if adapter.quality_controls:
                 with adapter._cache_lock:
                     adapter.register_rendered_image(metadata)

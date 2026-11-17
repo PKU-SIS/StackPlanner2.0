@@ -86,6 +86,8 @@ def build_fact_index(packet):
                 "sha256",
                 "text_a",
                 "text_b",
+                "selected_reference_comparison",
+                "shared_reference_edits",
                 "match_mode",
                 "differences",
                 "non_template_shared_chars",
@@ -253,6 +255,7 @@ def compact_facts(index):
                     "offset",
                     "candidate_id",
                     "candidate_path",
+                    "selected_reference_comparison",
                     "category_hint",
                     "match_mode",
                     "non_template_shared_chars",
@@ -307,4 +310,6 @@ def compact_facts(index):
             }
             for row in index["findings"]
         ]
+    if "source_quality_navigation" in index:
+        result["source_quality_navigation"] = index["source_quality_navigation"]
     return result

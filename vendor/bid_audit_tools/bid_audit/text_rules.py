@@ -1,10 +1,11 @@
-from collections import defaultdict, Counter
+import re
+from collections import Counter, defaultdict
 from difflib import SequenceMatcher
 from itertools import combinations
-import re
 
-from .core import norm, outcome, groups
-from .tables import response_rows, requirement_key
+from .core import groups, norm, outcome
+from .pdf_access import open_pdf
+from .tables import requirement_key, response_rows
 
 ACTORS = (
     "中标供应商",
@@ -45,9 +46,7 @@ class Template:
             for ti, i in matches:
                 t = self.texts[ti]
                 n = self.span
-                while (
-                    pos + n < len(text) and i + n < len(t) and text[pos + n] == t[i + n]
-                ):
+                while pos + n < len(text) and i + n < len(t) and text[pos + n] == t[i + n]:
                     n += 1
                 best = max(best, n)
             if best:
@@ -66,25 +65,14 @@ class Template:
 def segments(ctx, doc):
     for p in ctx.pages(doc):
         # Remove only recognized platform/footer lines, retaining the original evidence.
-        lines = [
-            x
-            for x in p["text"].splitlines()
-            if not re.match(r"^\s*(广东政府采购智慧云平台|第\s*\d+\s*页)", x)
-            and not (
-                doc.get("bidder")
-                and doc["bidder"] in x
-                and re.search(r"20\d{2}[-年]\d", x)
-            )
-        ]
+        lines = [x for x in p["text"].splitlines() if not re.match(r"^\s*(广东政府采购智慧云平台|第\s*\d+\s*页)", x) and not (doc.get("bidder") and doc["bidder"] in x and re.search(r"20\d{2}[-年]\d", x))]
         text = "".join(lines)
         for m in re.finditer(r"[^。；;！？!?]+[。；;！？!?]?", text):
             t = m.group().strip()
             if 18 <= len(norm(t)) <= 1200:
                 yield (
                     t,
-                    ctx.evidence(
-                        doc, p["page"], t, extraction="text_sentence_fragment"
-                    ),
+                    ctx.evidence(doc, p["page"], t, extraction="text_sentence_fragment"),
                 )
 
 
@@ -109,10 +97,7 @@ def m02(ctx):
                 key = ACTOR_RE.sub("{主体}", n)
                 index[key].append((n, actors, ref))
         for key, entries in index.items():
-            if (
-                len({x[2]["bidder"] for x in entries}) < 2
-                or len({x[0] for x in entries}) < 2
-            ):
+            if len({x[2]["bidder"] for x in entries}) < 2 or len({x[0] for x in entries}) < 2:
                 continue
             forms = sorted({a for _, acts, _ in entries for a in acts})
             substitution_counts[" ↔ ".join(forms)] += 1
@@ -145,15 +130,11 @@ def align_responses(ctx):
             index[(row["round"], row["lot"], key)].append(row)
     # Repeated requirement text within one bidder is not a unique item key.
     # Do not form Cartesian comparisons between distinct equipment/sections.
-    ambiguous = [
-        k for k, rr in index.items() if len(rr) != len({r["bidder"] for r in rr})
-    ]
+    ambiguous = [k for k, rr in index.items() if len(rr) != len({r["bidder"] for r in rr})]
     for k in ambiguous:
         del index[k]
     if ambiguous:
-        ctx.warnings.append(
-            f"{len(ambiguous)} requirement keys repeat within a bidder; excluded from automatic alignment; review original response tables"
-        )
+        ctx.warnings.append(f"{len(ambiguous)} requirement keys repeat within a bidder; excluded from automatic alignment; review original response tables")
     return rows, index
 
 
@@ -189,9 +170,7 @@ def m03(ctx):
                         "evidence": a["evidence"] + b["evidence"],
                     }
                 )
-    unmatched = sum(
-        len(rr) for rr in index.values() if len({r["bidder"] for r in rr}) < 2
-    )
+    unmatched = sum(len(rr) for rr in index.values() if len({r["bidder"] for r in rr}) < 2)
     return outcome(
         {
             "extracted_rows": len(rows),
@@ -201,9 +180,7 @@ def m03(ctx):
             "candidate_threshold": threshold,
         },
         findings,
-        status=("partial" if unmatched else "ok")
-        if comparisons
-        else "insufficient_data",
+        status=("partial" if unmatched else "ok") if comparisons else "insufficient_data",
         limitations=[
             "Exact requirement text, not row number alone, establishes alignment.",
             "Character SequenceMatcher scores are retrieval aids, not semantic/legal findings.",
@@ -228,9 +205,7 @@ UNIT = {
     "年": ("年", 1),
     "°": ("angle", 1),
 }
-NUM = re.compile(
-    r"(>=|<=|≥|≤|>|<|不少于|不低于|不超过|至多|至少)?(\d+(?:\.\d+)?)\s*(mm|cm|nm|m|小时|分钟|秒|天|%|倍|种|档|年|°)"
-)
+NUM = re.compile(r"(>=|<=|≥|≤|>|<|不少于|不低于|不超过|至多|至少)?(\d+(?:\.\d+)?)\s*(mm|cm|nm|m|小时|分钟|秒|天|%|倍|种|档|年|°)")
 
 
 def numeric_deviation(req, resp):
@@ -248,15 +223,7 @@ def numeric_deviation(req, resp):
         return None
     v = Decimal(val) * Decimal(str(UNIT[u][1]))
     av = Decimal(aval) * Decimal(str(UNIT[au][1]))
-    valid = (
-        av >= v
-        if op in (">=", "≥", "不少于", "不低于", "至少")
-        else av <= v
-        if op in ("<=", "≤", "不超过", "至多")
-        else av > v
-        if op == ">"
-        else av < v
-    )
+    valid = av >= v if op in (">=", "≥", "不少于", "不低于", "至少") else av <= v if op in ("<=", "≤", "不超过", "至多") else av > v if op == ">" else av < v
     return {
         "requirement_operator": op,
         "required_value": str(v),
@@ -281,14 +248,8 @@ def m04(ctx):
                 ambiguous += 1
             declared = norm(r.get("declared_deviation")) == "负偏离"
             if declared or (numeric and numeric["unfavorable"]):
-                signature = (
-                    ("numeric", str(numeric))
-                    if numeric and numeric["unfavorable"]
-                    else ("declared", norm(r["response"]))
-                )
-                bad[signature].append(
-                    {**r, "numeric_check": numeric, "declared_negative": declared}
-                )
+                signature = ("numeric", str(numeric)) if numeric and numeric["unfavorable"] else ("declared", norm(r["response"]))
+                bad[signature].append({**r, "numeric_check": numeric, "declared_negative": declared})
         for rr2 in bad.values():
             if len({r["bidder"] for r in rr2}) >= 2:
                 findings.append(
@@ -297,19 +258,12 @@ def m04(ctx):
                         "round": rnd,
                         "lot": lot,
                         "requirement": rr2[0]["requirement"],
-                        "comparisons": [
-                            {k: v for k, v in r.items() if k != "evidence"} for r in rr2
-                        ],
+                        "comparisons": [{k: v for k, v in r.items() if k != "evidence"} for r in rr2],
                         "evidence": [e for r in rr2 for e in r["evidence"]],
                     }
                 )
     aligned_ids = {id(r) for rr in index.values() for r in rr}
-    review = [
-        r
-        for r in rows
-        if id(r) not in aligned_ids
-        or numeric_deviation(r["requirement"], r["response"]) is None
-    ]
+    review = [r for r in rows if id(r) not in aligned_ids or numeric_deviation(r["requirement"], r["response"]) is None]
     return outcome(
         {
             "extracted_rows": len(rows),
@@ -329,7 +283,6 @@ def m04(ctx):
 
 
 def m05(ctx):
-    import pdfplumber
     from .tables import clean_page
 
     titles = (
@@ -351,23 +304,16 @@ def m05(ctx):
                 continue
             reviewed += 1
             if "政策适用性说明" in s and d["_path"].suffix.lower() == ".pdf":
-                with pdfplumber.open(d["_path"]) as pdf:
+                with open_pdf(d["_path"]) as pdf:
                     for table in clean_page(pdf.pages[p["page"] - 1]).find_tables():
                         data = table.extract()
-                        if not data or "序号" not in norm(
-                            "".join(str(v or "") for v in data[0])
-                        ):
+                        if not data or "序号" not in norm("".join(str(v or "") for v in data[0])):
                             continue
                         body = [r for r in data[1:] if re.fullmatch(r"\d+", norm(r[0]))]
                         signature = tuple(tuple(norm(v) for v in r[1:]) for r in body)
-                        if len(body) < 2 or not any(
-                            "暂无" in "".join(r) or "不适用" in "".join(r)
-                            for r in signature
-                        ):
+                        if len(body) < 2 or not any("暂无" in "".join(r) or "不适用" in "".join(r) for r in signature):
                             continue
-                        blanks = [
-                            norm(r[0]) for r in body if not any(norm(v) for v in r[1:])
-                        ]
+                        blanks = [norm(r[0]) for r in body if not any(norm(v) for v in r[1:])]
                         table_index[(d["round"], d["lot"], signature)].append(
                             ctx.evidence(
                                 d,
@@ -390,9 +336,7 @@ def m05(ctx):
                 continue
             # An ordered signature is factual; table layout/blank cells remain visual review.
             key = (d["round"], d["lot"], tuple(found), tuple(markers))
-            index[key].append(
-                ctx.evidence(d, p["page"], p["text"], matched_markers=markers)
-            )
+            index[key].append(ctx.evidence(d, p["page"], p["text"], matched_markers=markers))
     findings = [
         {
             "kind": "policy_default_pattern",
@@ -433,9 +377,7 @@ def m07(ctx):
     for (rnd, lot, key), rr in index.items():
         for r in rr:
             a, b = norm(r["requirement"]), norm(r["response"])
-            for tag, i, j, k, right_end in SequenceMatcher(
-                None, a, b, autojunk=False
-            ).get_opcodes():
+            for tag, i, j, k, right_end in SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
                 before, after = a[i:j], b[k:right_end]
                 if tag == "equal" or len(before) > 30 or len(after) > 30:
                     continue
@@ -464,9 +406,7 @@ def m07(ctx):
                     "edit_type": key[3],
                     "before": key[4],
                     "after": key[5],
-                    "contexts": [
-                        {k: v for k, v in r.items() if k != "evidence"} for r in rr
-                    ],
+                    "contexts": [{k: v for k, v in r.items() if k != "evidence"} for r in rr],
                     "evidence": [e for r in rr for e in r["evidence"]],
                 }
             )
@@ -495,9 +435,7 @@ def m07(ctx):
     return outcome(
         {"response_rows_examined": len(rows), "shared_edit_candidates": len(findings)},
         findings,
-        status="partial"
-        if rows or ctx.manifest.get("error_terms")
-        else "insufficient_data",
+        status="partial" if rows or ctx.manifest.get("error_terms") else "insufficient_data",
         limitations=[
             "A common edit is not necessarily a mistake. Correctness and source lineage require model review.",
             "No general Chinese spelling checker is claimed; known-error literals are caller-supplied and disclosed.",
@@ -516,19 +454,13 @@ def m08(ctx):
                 compact = re.sub(r"\s+", "", p["text"])
                 for m in anomaly.finditer(compact):
                     context = compact[max(0, m.start() - 30) : m.end() + 30]
-                    if re.fullmatch(r"[. …]+", m.group()) and (
-                        re.search(r"\d+$", context) or "目录" in compact
-                    ):
+                    if re.fullmatch(r"[. …]+", m.group()) and (re.search(r"\d+$", context) or "目录" in compact):
                         continue
                     if norm(context) in template.all:
                         excluded += 1
                         continue
-                    ref = ctx.evidence(
-                        d, p["page"], context, extraction="punctuation_context"
-                    )
-                    index[(rnd, lot, context)].append(
-                        {**ref, "punctuation": m.group(), "context": context}
-                    )
+                    ref = ctx.evidence(d, p["page"], context, extraction="punctuation_context")
+                    index[(rnd, lot, context)].append({**ref, "punctuation": m.group(), "context": context})
     findings = [
         {
             "kind": "shared_punctuation_context",
@@ -555,12 +487,8 @@ ENTITY_PATTERNS = {
     "credit_code": re.compile(r"(?<![0-9A-Z])[0-9A-HJ-NPQRTUWXY]{18}(?![0-9A-Z])"),
     "mobile_phone": re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)"),
     "email": re.compile(r"[\w.+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
-    "medical_certificate": re.compile(
-        r"(?:国械注[进准许]|[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼]械注准)\d{8,14}"
-    ),
-    "person": re.compile(
-        r"(?:法定代表人|授权代表|项目负责人|联系人)[：:]([\u4e00-\u9fff]{2,4})(?=[\s，,。；;（(]|$)"
-    ),
+    "medical_certificate": re.compile(r"(?:国械注[进准许]|[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼]械注准)\d{8,14}"),
+    "person": re.compile(r"(?:法定代表人|授权代表|项目负责人|联系人)[：:]([\u4e00-\u9fff]{2,4})(?=[\s，,。；;（(]|$)"),
 }
 
 

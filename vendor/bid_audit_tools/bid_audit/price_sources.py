@@ -6,31 +6,20 @@ from collections import Counter
 from .core import norm
 from .structured_text import blocks, evidence, html_tables
 
-
-_PRICE_LABEL = re.compile(
-    r"预算(?:金额|总价)?|采购预算|(?:最高(?:投标|响应|报价)?|采购|单价|单套|分项|项目|总价)?限价|(?:报价|价格|单价|总价)[^。；\n]{0,12}不(?:得)?(?:超过|高于)"
-)
+_PRICE_LABEL = re.compile(r"预算(?:金额|总价)?|采购预算|(?:最高(?:投标|响应|报价)?|采购|单价|单套|分项|项目|总价)?限价|(?:报价|价格|单价|总价)[^。；\n]{0,12}不(?:得)?(?:超过|高于)")
 
 
 def price_constraints(text):
     seen = set()
     for match in _PRICE_LABEL.finditer(text):
-        start = (
-            max(text.rfind(mark, 0, match.start()) for mark in ["。", "；", "\n"]) + 1
-        )
+        start = max(text.rfind(mark, 0, match.start()) for mark in ["。", "；", "\n"]) + 1
         start = max(start, match.start() - 100)
-        ends = [
-            at
-            for mark in ["。", "；", "\n"]
-            if (at := text.find(mark, match.end())) >= 0
-        ]
+        ends = [at for mark in ["。", "；", "\n"] if (at := text.find(mark, match.end())) >= 0]
         end = min(ends) + 1 if ends else len(text)
         end = min(end, match.end() + 180)
         quote = text[start:end].strip()
         # Adjacent scalar cells are literal source text, not an inferred cap.
-        if not re.search(
-            r"[0-9零一二三四五六七八九十百千万亿壹贰叁肆伍陆柒捌玖拾佰仟]", quote
-        ) and not text[match.end() : end].strip(" ：:；;\n\t"):
+        if not re.search(r"[0-9零一二三四五六七八九十百千万亿壹贰叁肆伍陆柒捌玖拾佰仟]", quote) and not text[match.end() : end].strip(" ：:；;\n\t"):
             scalar = re.match(
                 r"\s*(?:人民币|RMB|￥|¥)?\s*[0-9零一二三四五六七八九十百千万亿壹贰叁肆伍陆柒捌玖拾佰仟,，.．]+\s*(?:万元|元|万)?(?:[;；\n]|$)",
                 text[end:],
@@ -43,15 +32,9 @@ def price_constraints(text):
         seen.add(quote)
         label = match.group()
         yield {
-            "field": "maximum_price"
-            if "限价" in label or re.search(r"不(?:得)?(?:超过|高于)", label)
-            else "budget",
+            "field": "maximum_price" if "限价" in label or re.search(r"不(?:得)?(?:超过|高于)", label) else "budget",
             "text": quote,
-            "scope_hint": "per_unit_or_item"
-            if re.search(r"单[套台项价]|每[套台项]", quote)
-            else "package_or_total"
-            if re.search(r"采购包|总价|总额", quote)
-            else "unspecified",
+            "scope_hint": "per_unit_or_item" if re.search(r"单[套台项价]|每[套台项]", quote) else "package_or_total" if re.search(r"采购包|总价|总额", quote) else "unspecified",
             "contains_arabic_number": bool(re.search(r"\d", quote)),
             "review_note": "A limit label or generic validity clause alone does not establish a numeric cap. Preserve unit/item/package scope and the original comparator.",
         }
@@ -62,14 +45,8 @@ def configuration_header(grid):
     name = quantity = False
     for index, row in enumerate(grid[:5]):
         cells = [re.sub(r"\s+", "", cell) for cell in row]
-        name |= any(
-            len(cell) <= 20
-            and re.search(r"(?:产品|设备|货物|配件)?名称|配置(?:项目|内容|清单)?", cell)
-            for cell in cells
-        )
-        quantity |= any(
-            len(cell) <= 12 and re.search(r"数量|数目|配置数", cell) for cell in cells
-        )
+        name |= any(len(cell) <= 20 and re.search(r"(?:产品|设备|货物|配件)?名称|配置(?:项目|内容|清单)?", cell) for cell in cells)
+        quantity |= any(len(cell) <= 12 and re.search(r"数量|数目|配置数", cell) for cell in cells)
         if name and quantity:
             return index
     return None
@@ -119,7 +96,7 @@ def price_context(ctx, data):
             if block["source_channel"] != "ragflow_mineru":
                 continue
             scope = source_scope(doc, block["text"])
-            for table in html_tables(block["raw"]):
+            for table in html_tables(block["raw"], warnings=getattr(ctx, "warnings", None)):
                 grid = table["rows"]
                 header_end = configuration_header(grid)
                 if header_end is None:
@@ -130,11 +107,7 @@ def price_context(ctx, data):
                 seen_tables.add(key)
                 headings = grid[: header_end + 1]
                 joined = "".join("".join(row) for row in headings)
-                kind = (
-                    "quotation_items"
-                    if any(w in joined for w in ["单价", "总价", "金额"])
-                    else "quantity_name_table"
-                )
+                kind = "quotation_items" if any(w in joined for w in ["单价", "总价", "金额"]) else "quantity_name_table"
                 configs.append(
                     {
                         "document_id": doc["id"],

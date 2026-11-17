@@ -9,6 +9,8 @@ from .knowledge import atomic
 
 
 def review_features(row):
+    if row.get("kind") == "shared_reference_change_for_review":
+        return "reference_clause_change", 1250 + 100 * row.get("matching_similarity", 0)
     text = row.get("text_a", "") + row.get("text_b", "")
     service = sum(word in text for word in ["实施", "安装", "调试", "培训", "售后", "维护", "验收", "服务方案", "质量保证"])
     public = sum(word in text for word in ["信用中国", "公共信用", "财务报表", "会计政策", "资产负债", "会计准则", "行政许可"])
@@ -27,6 +29,7 @@ def evidence_preview(row, evidence):
     sources = [evidence[r] for r in refs[:2] if r in evidence] or row.get("evidence", [])[:2]
     diffs = row.get("observed_edit_patterns", row.get("differences", []))
     return {
+        **({"selected_reference_comparison": row["selected_reference_comparison"]} if "selected_reference_comparison" in row else {}),
         "text_a": row.get("text_a", row.get("text", "")),
         "text_b": row.get("text_b", row.get("text", "")),
         "non_template_shared_chars": row.get("non_template_shared_chars"),

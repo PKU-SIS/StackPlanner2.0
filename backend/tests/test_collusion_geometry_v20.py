@@ -54,7 +54,7 @@ def test_original_pdf_column_geometry_survives_changed_subcolumn_count(tmp_path,
         def __exit__(self, *args):
             pass
 
-    monkeypatch.setattr("pdfplumber.open", lambda path: PDF())
+    monkeypatch.setattr("bid_audit.geometric_tables.open_pdf", lambda path: PDF())
     cache = tmp_path / "cache"
     cache.mkdir()
     ctx = SimpleNamespace(cache=cache, warnings=[], evidence=lambda d, p, q, **kw: {"document_id": d["id"], "page": p, "quote": q, **kw})

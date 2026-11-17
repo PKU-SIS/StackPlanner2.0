@@ -95,6 +95,7 @@ async def run_rule_task(
     knowledge_root=None,
     rule_level_review=False,
     quality_controls=False,
+    general_quality=False,
     reporter_max_tokens=None,
     reporter_request_timeout=None,
     evidence_role_capacity=False,
@@ -178,6 +179,7 @@ async def run_rule_task(
         rule_level_review=rule_level_review,
         request_run_id=run_id,
         quality_controls=quality_controls,
+        general_quality=general_quality,
         reporter_max_tokens=reporter_max_tokens,
         reporter_request_timeout=reporter_request_timeout,
         evidence_role_capacity=evidence_role_capacity,
@@ -267,6 +269,7 @@ async def run_rule_task(
                 },
                 "source_reference_compatibility": True,
                 "quality_controls": quality_controls,
+                "general_quality": general_quality,
                 "report_format": report_format,
                 "reporter_capacity_overrides": {
                     "max_tokens": reporter_max_tokens,
@@ -280,7 +283,7 @@ async def run_rule_task(
                 },
                 "evidence_role_capacity": {
                     "enabled": evidence_role_capacity,
-                    "roles": ["coder", "researcher"],
+                    "roles": list(profile.evidence_role_names()),
                     "max_tokens": (evidence_max_tokens if evidence_max_tokens is not None else reporter_max_tokens) if evidence_role_capacity else None,
                     "http_timeout_seconds": (evidence_request_timeout if evidence_request_timeout is not None else reporter_request_timeout) if evidence_role_capacity else None,
                     "model_request_deadline_seconds": (evidence_request_timeout if evidence_request_timeout is not None else reporter_request_timeout) if evidence_role_capacity else None,
@@ -431,6 +434,7 @@ def worker(args):
                 knowledge_root=args.knowledge_root,
                 rule_level_review=args.rule_level_review,
                 quality_controls=args.quality_controls,
+                general_quality=getattr(args, "general_quality", False),
                 reporter_max_tokens=getattr(args, "reporter_max_tokens", None),
                 reporter_request_timeout=getattr(args, "reporter_request_timeout", None),
                 evidence_role_capacity=getattr(args, "evidence_role_capacity", False),
@@ -497,6 +501,8 @@ def batch(args):
             command += ["--rule-level-review"]
         if args.quality_controls:
             command += ["--quality-controls"]
+        if getattr(args, "general_quality", False):
+            command += ["--general-quality"]
         if getattr(args, "report_format", "markdown") == "html":
             command += ["--report-format", "html"]
         if getattr(args, "central_retry_timeout", None) is not None:
@@ -562,6 +568,7 @@ def main():
     parser.add_argument("--worker-directory")
     parser.add_argument("--knowledge-root", type=Path)
     parser.add_argument("--rule-level-review", action="store_true", help="Deliver full code facts, allow native evidence-driven review, and require a rule report without row judgements")
+    parser.add_argument("--general-quality", action="store_true", help="Opt-in source fidelity, deterministic review facts, concise guidance and budget reserve")
     parser.add_argument("--quality-controls", action="store_true", help="Use trusted fact navigation, tool identity and explicit-reference audit contracts")
     parser.add_argument("--central-retry-timeout", type=float, default=None, help="Opt-in native Central post-delegation and retry timeout seconds")
     parser.add_argument("--central-retry-max-tokens", type=int, default=None, help="Opt-in native Central retry token ceiling; roles and recovery policy unchanged")

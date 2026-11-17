@@ -28,6 +28,13 @@ def bounded_control_navigation(navigation):
                         break
             depth += 1
         result.update(candidate_previews=selected, preview_count=len(selected), central_transport_bounded=True)
+    clause_previews = [row for row in previews if row.get("kind") == "shared_reference_change_for_review"]
+    if clause_previews and result.get("candidate_previews") != previews:
+        # Each distinct changed clause has its own meaning. Keep a bounded
+        # six complete bid/reference observations, not one generic-kind sample.
+        ordinary = [row for row in result.get("candidate_previews", []) if row.get("kind") != "shared_reference_change_for_review"]
+        retained = [*clause_previews[:6], *ordinary[:3]]
+        result.update(candidate_previews=retained, preview_count=len(retained), central_transport_bounded=True)
     supplements = navigation.get("supplementary_collections", {})
     updated = {}
     for name, collection in supplements.items():
@@ -112,6 +119,58 @@ class CurrentCodeFactsMiddleware(AgentMiddleware):
                 from .html_transport import preloaded_fact_projection
 
                 facts = preloaded_fact_projection(facts, request.messages, action_id=self.preloaded_action_id, calculation_runs=self.preloaded_calculation_runs)
+            if getattr(self.adapter, "general_quality", False):
+                from .review_quality import decision_source_card
+
+                source_navigation = index.get("source_quality_navigation", {})
+                requirement_scope = source_navigation.get("requirement_origin_scope_observations", {}).get("records", [])
+                if requirement_scope:
+                    content.append(
+                        {"requirement_public_origin_scope": requirement_scope, "interpretation_boundary": "此为基础比对初始状态；同时核对额外定位的实际招标原文与页码。已找到部分不可再概称来源未知，仍未定位部分不升级为招标原文。"}
+                    )
+                located_responses = source_navigation.get("response_public_source_observations", {}).get("records", [])
+                if located_responses:
+                    content.append({"current_response_public_sources": located_responses, "interpretation_boundary": "实际提供的招标原句与页码优先于旧摘要的未核结论；逐条比对数值、对象和条件。相似定位不是风险判定，不代表全段排除。"})
+                verified_forms = source_navigation.get("reference_source_observations", {}).get("records", [])
+                material_scopes = source_navigation.get("material_scope_observations", {}).get("records", [])
+                if verified_forms or material_scopes:
+                    content.append(
+                        {
+                            "public_form_source_locations": verified_forms,
+                            "contract_and_attachment_scope": material_scopes,
+                            "interpretation_boundary": "先核同一种格式与材料角色。明确模板短句不能被摘要改为未知共同改写；历史业绩合同不能与本次采购方式直接比较。仅解释已定位部分，其余实质差异仍须核实。",
+                        }
+                    )
+                card = decision_source_card(source_navigation)
+                if card:
+                    content.append(
+                        {
+                            "shared_changes_requiring_source_explanation": card,
+                            "interpretation_boundary": "阶段意见不是原文证据。若称全部来自法定或招标模板，请核对这些具体共同改动在公共原文中的位置；未查到来源应保留未确认，不补写已排除结论。",
+                        }
+                    )
+            if getattr(self.adapter, "general_quality", False):
+                fields = index.get("source_quality_navigation", {}).get("replacement_interpretation_facts", {}).get("records", [])
+                if fields:
+                    content.append(
+                        {
+                            "field_context_interpretation": fields,
+                            "interpretation_boundary": "本次代码观察到身份/标准字段语境，不是确认整段公共来源，也不是私有底稿证明。各家填各自姓名公司，或相同字段变化重复多次，不足以推断改写对方；须另有非模板实质文字或异常编辑证据。",
+                        }
+                    )
+            if getattr(self.adapter, "general_quality", False):
+                arithmetic = index.get("source_quality_navigation", {}).get("response_quantity_comparisons", {}).get("records", [])
+                if arithmetic:
+                    content.append({"actual_response_arithmetic": arithmetic, "interpretation_boundary": "按附在对应实际响应旁的代码公式引用换算值，保留运算符和单位；不以模型心算或旧阶段摘要覆盖计算事实。"})
+            if getattr(self.adapter, "general_quality", False):
+                categories = index.get("source_quality_navigation", {}).get("categorical_response_observations", {}).get("records", [])
+                if categories:
+                    content.append(
+                        {
+                            "actual_structure_category_observations": categories,
+                            "interpretation_boundary": "同一结构类别与不同附加描述并存，不可仅按措辞不同排除类别共现；未核实际值只能待核，不能归入已确认不同。代码未判断负偏离或风险，角色及复核步骤由Central自主选择。",
+                        }
+                    )
             content.append({"code_facts": facts, "fact_index_path": "/mnt/user-data/outputs/bid_audit/" + index["audit_run_id"] + "/facts-index.json"})
         receipts = getattr(self.adapter, "ocr_receipts", None)
         if receipts is not None:

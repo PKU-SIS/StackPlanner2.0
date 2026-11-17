@@ -24,16 +24,26 @@ def assertion_errors(metadata, *, expected_grade, rule_id, displayed_pairs, ocr_
     return errors
 
 
-def report_text_errors(text, metadata, *, expected_grade, rule_id, candidate_page_count=None):
+def report_text_errors(text, metadata, *, expected_grade, rule_id, candidate_page_count=None, general_quality=False):
     errors = []
     for raw in re.findall(r"证据等级\s*[:：]\s*([^\n]+)", text.replace("**", "")):
         value = raw.replace("**", "").strip().lstrip("：:")
+        value = re.sub(r"^(?:(?:本项|本次|本报告|该项)(?:规则)?|本规则|该规则)(?:(?:的)?证据等级)?(?:为|是)\s*", "", value)
+        value = re.sub(r"^(?:本项|本次|本报告|该项)(?:全部|所有)?证据(?:均)?属于\s*", "", value)
+        if general_quality:
+            value = re.sub(r"^(?:本报告|本次|本项|上述|所列)[^。；;\n]{0,60}?(?:属于|为|是)\s*", "", value)
+        value = value.lstrip("“‘\"'「『")
         if not value.startswith(expected_grade):
             errors.append("正文证据等级与规则不一致；使用完整原始等级，不要为技术名词片段赋予等级含义。")
     if rule_id == "M11":
         for statement in re.split(r"[。\n]", text.replace("**", "")):
             conditional = re.search(r"可能|假设|若|尚未|未.*验证|未经.*验证|不能|不代表|不等于|无法", statement)
-            definite_mechanism = re.search(r"子集(?:标签|前缀).*(?:是|为|属于|必然).*确定性", statement)
+            mechanism_statement = re.sub(
+                r"(?:确认|核实|查明)\s*子集(?:标签|前缀)\s*是\s*确定性[^，,；;。\n]{0,60}还是[^，,；;。\n]{1,60}",
+                "",
+                statement,
+            )
+            definite_mechanism = re.search(r"子集(?:标签|前缀).*(?:是|为|属于|必然).*确定性", mechanism_statement)
             absolute_reuse = re.search(r"否定跨主体.*(?:字体|字节).*复用|(?:真实字体|字节).*复用.*已.*排除", statement)
             if not conditional and (definite_mechanism or absolute_reuse):
                 errors.append("字体结论超出当前代码事实：生成机制未由实际工具验证时须用条件表述；零字节匹配只限本次成功提取范围，不能写成排除文件复用或共同制作来源。")

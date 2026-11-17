@@ -40,22 +40,11 @@ def _currency(heading, fallback):
 def _header(grid):
     for index, row in enumerate(grid[:5]):
         cells = [norm(c) for c in row]
-        names = [
-            i
-            for i, c in enumerate(cells)
-            if len(c) <= 24
-            and re.search(r"设备名称|产品名称|货物名称|材料名称|品名|物料描述", c)
-        ]
+        names = [i for i, c in enumerate(cells) if len(c) <= 24 and re.search(r"设备名称|产品名称|货物名称|材料名称|品名|物料描述", c)]
         if not names:
             names = [i for i, c in enumerate(cells) if c == "名称"]
         explicit = [i for i, c in enumerate(cells) if len(c) <= 24 and "单价" in c]
-        prices = explicit or [
-            i
-            for i, c in enumerate(cells)
-            if len(c) <= 24
-            and re.search(r"报价|价格|价款|金额|总价", c)
-            and not re.search(r"名称|数量|合计", c)
-        ]
+        prices = explicit or [i for i, c in enumerate(cells) if len(c) <= 24 and re.search(r"报价|价格|价款|金额|总价", c) and not re.search(r"名称|数量|合计", c)]
         if not names or not prices:
             continue
         if len(names) > 1 or len(prices) > 1:
@@ -65,17 +54,11 @@ def _header(grid):
                 "reason": "Repeated side-by-side name/price headers; requirement/response ownership requires source review",
             }
         scope = next(
-            (
-                i
-                for i, c in enumerate(cells)
-                if re.search(r"配置|清单|分项说明|规格型号|型号规格", c)
-            ),
+            (i for i, c in enumerate(cells) if re.search(r"配置|清单|分项说明|规格型号|型号规格", c)),
             None,
         )
         unit = next((i for i, c in enumerate(cells) if c in {"单位", "计量单位"}), None)
-        quantity = next(
-            (i for i, c in enumerate(cells) if "数量" in c and len(c) <= 12), None
-        )
+        quantity = next((i for i, c in enumerate(cells) if "数量" in c and len(c) <= 12), None)
         return {
             "ambiguous": False,
             "header_index": index,
@@ -91,16 +74,13 @@ def _header(grid):
 
 def supplement_m15(ctx, data):
     primary_status = data["status"]
-    currencies = {
-        (r["bidder"], r["round"], r["lot"]): r["currency"]
-        for r in data.get("records", [])
-    }
+    currencies = {(r["bidder"], r["round"], r["lot"]): r["currency"] for r in data.get("records", [])}
     observations, ambiguities, tender = [], [], []
     duplicate_index = {}
     for doc in ctx.documents("bid", "tender"):
         for block in blocks(ctx, doc, raw=False):
             scope = source_scope(doc, block["text"])
-            for table in html_tables(block["raw"]):
+            for table in html_tables(block["raw"], warnings=getattr(ctx, "warnings", None)):
                 grid = table["rows"]
                 head = _header(grid)
                 if head is None:
@@ -127,29 +107,16 @@ def supplement_m15(ctx, data):
                         }
                     )
                     continue
-                for row_index, row in enumerate(
-                    grid[head["header_index"] + 1 :], head["header_index"] + 1
-                ):
-                    if any(
-                        re.fullmatch(r"(?:合计|总计|小计)(?:\(.*\))?", norm(c))
-                        for c in row[:2]
-                    ):
+                for row_index, row in enumerate(grid[head["header_index"] + 1 :], head["header_index"] + 1):
+                    if any(re.fullmatch(r"(?:合计|总计|小计)(?:\(.*\))?", norm(c)) for c in row[:2]):
                         continue
 
                     def cell(key):
-                        return (
-                            row[head[key]]
-                            if head[key] is not None and head[key] < len(row)
-                            else ""
-                        )
+                        return row[head[key]] if head[key] is not None and head[key] < len(row) else ""
 
                     product = norm(cell("name"))
                     raw_price = cell("price")
-                    if (
-                        not product
-                        or not norm(raw_price)
-                        or norm(product) in {"名称", "设备名称", "产品名称"}
-                    ):
+                    if not product or not norm(raw_price) or norm(product) in {"名称", "设备名称", "产品名称"}:
                         continue
                     try:
                         cents = amount_cents(raw_price, head["heading"])
@@ -170,34 +137,16 @@ def supplement_m15(ctx, data):
                     configuration = norm(cell("scope"))
                     currency = _currency(
                         head["heading"] + str(raw_price),
-                        currencies.get(
-                            (doc.get("bidder", ""), doc["round"], doc["lot"])
-                        ),
+                        currencies.get((doc.get("bidder", ""), doc["round"], doc["lot"])),
                     )
-                    unit_cents = (
-                        cents
-                        if "单价" in head["heading"] and unit and currency != "unknown"
-                        else None
-                    )
+                    unit_cents = cents if "单价" in head["heading"] and unit and currency != "unknown" else None
                     quantity_literal = norm(cell("quantity"))
-                    if (
-                        unit_cents is None
-                        and unit
-                        and currency != "unknown"
-                        and "总价" in head["heading"]
-                        and re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", quantity_literal)
-                    ):
+                    if unit_cents is None and unit and currency != "unknown" and "总价" in head["heading"] and re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", quantity_literal):
                         quantity = Decimal(quantity_literal)
-                        if (
-                            quantity > 0
-                            and Decimal(cents) / quantity
-                            == (Decimal(cents) / quantity).to_integral_value()
-                        ):
+                        if quantity > 0 and Decimal(cents) / quantity == (Decimal(cents) / quantity).to_integral_value():
                             unit_cents = int(Decimal(cents) / quantity)
                     value = unit_cents if unit_cents is not None else cents
-                    value_kind = (
-                        "unit_price" if unit_cents is not None else "quote_amount"
-                    )
+                    value_kind = "unit_price" if unit_cents is not None else "quote_amount"
                     scope_type = (
                         "configuration_lines"
                         if head["scope"] is not None
@@ -223,15 +172,15 @@ def supplement_m15(ctx, data):
                         "literal_price": raw_price,
                         "quote_price_yuan": f"{Decimal(cents) / 100:.2f}",
                         "comparison_value_yuan": f"{Decimal(value) / 100:.2f}",
-                        "unit_price_yuan": f"{Decimal(unit_cents) / 100:.2f}"
-                        if unit_cents is not None
-                        else None,
+                        "unit_price_yuan": f"{Decimal(unit_cents) / 100:.2f}" if unit_cents is not None else None,
                         "unit_pricing_verified": unit_cents is not None,
                         "quantity_literal": quantity_literal or None,
-                        "review_note": "Unit pricing verification is limited to the literal column/arithmetic. Independent items, product comparability, tax basis and current procurement scope still require source review. Never derive missing subprices from the overall total.",
-                        "evidence": [
-                            source("Actual priced row; no quantity inferred", row_index)
-                        ],
+                        "review_note": (
+                            "Unit pricing verification is limited to the literal column/arithmetic. Independent items, produ"
+                            "ct comparability, tax basis and current procurement scope still require source review. Never de"
+                            "rive missing subprices from the overall total."
+                        ),
+                        "evidence": [source("Actual priced row; no quantity inferred", row_index)],
                     }
                     key = (
                         doc["role"],
@@ -254,17 +203,11 @@ def supplement_m15(ctx, data):
                                 existing["evidence"].append(ev)
                     else:
                         duplicate_index[key] = row_value
-                        (tender if doc["role"] == "tender" else observations).append(
-                            row_value
-                        )
+                        (tender if doc["role"] == "tender" else observations).append(row_value)
     conflicts = []
     groups = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
     for row in observations:
-        if (
-            row["source_scope"] == "contract_or_performance_attachment_unverified"
-            or not row["unit"]
-            or row["currency"] == "unknown"
-        ):
+        if row["source_scope"] == "contract_or_performance_attachment_unverified" or not row["unit"] or row["currency"] == "unknown":
             continue
         group = (
             row["round"],
@@ -306,8 +249,7 @@ def supplement_m15(ctx, data):
                         "key": list(key),
                         "value_a_yuan": x["comparison_value_yuan"],
                         "value_b_yuan": y["comparison_value_yuan"],
-                        "equal": x["comparison_value_yuan"]
-                        == y["comparison_value_yuan"],
+                        "equal": x["comparison_value_yuan"] == y["comparison_value_yuan"],
                         "evidence": x["evidence"] + y["evidence"],
                     }
                 )
@@ -329,7 +271,11 @@ def supplement_m15(ctx, data):
                     "all_prices_equal": matched == len(common),
                     "unit_pricing_verified": group[4] == "unit_price",
                     "comparison_is_risk_verdict": False,
-                    "scope_note": "Provisional aligned literal prices only. Quote amounts are not automatically independently priced unit items; the agent must verify rule applicability before interpreting m/n. Within-bid equal prices alone are not cross-bid agreement.",
+                    "scope_note": (
+                        "Provisional aligned literal prices only. Quote amounts are not automatically independently pric"
+                        "ed unit items; the agent must verify rule applicability before interpreting m/n. Within-bid equ"
+                        "al prices alone are not cross-bid agreement."
+                    ),
                     "lines": lines,
                     "evidence": [e for line in lines for e in line["evidence"]],
                 }
@@ -341,9 +287,7 @@ def supplement_m15(ctx, data):
     data["supplemental_tender_price_observations"] = tender
     data["findings"].extend(comparisons)
     for pair in data.get("not_applicable_pairs", []):
-        pair["scope"] = (
-            "Validated dedicated primary quote files only; not a claim about all bid attachments"
-        )
+        pair["scope"] = "Validated dedicated primary quote files only; not a claim about all bid attachments"
     data["metrics"].update(
         primary_quote_status=primary_status,
         supplemental_priced_observations=len(observations),
@@ -354,6 +298,8 @@ def supplement_m15(ctx, data):
     if observations or ambiguities:
         data["status"] = "partial"
     data["limitations"].append(
-        "Primary not_applicable applies only to dedicated quote-file rows. Supplemental raw price vectors require verification of independent unit pricing, item scope, units, configuration, tax and shared fixed-price sources; total/quantity is never used to invent missing subquotes."
+        "Primary not_applicable applies only to dedicated quote-file rows. Supplemental raw price vector"
+        "s require verification of independent unit pricing, item scope, units, configuration, tax and s"
+        "hared fixed-price sources; total/quantity is never used to invent missing subquotes."
     )
     return data

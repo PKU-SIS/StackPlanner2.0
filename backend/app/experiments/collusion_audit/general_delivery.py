@@ -9,6 +9,8 @@ from .knowledge import atomic
 
 
 def priority(row):
+    if row.get("kind") == "shared_reference_change_for_review":
+        return 1250 + 100 * row.get("matching_similarity", 0)
     text = json.dumps(row, ensure_ascii=False)
     score = float(row.get("occurrence_count", 0)) * 8 + min(float(row.get("non_template_shared_chars", 0)), 600)
     if row.get("kind") in {
@@ -78,7 +80,9 @@ def selected_preview_offsets(ranked, limit=6):
         return {offset for offset, _ in ranked}
     groups = {}
     for offset, row in ranked:
-        groups.setdefault(row.get("kind", ""), []).append(offset)
+        kind = row.get("kind", "")
+        key = (kind, tuple((edit.get("shared"), edit.get("reference")) for edit in row.get("shared_reference_edits", []))) if kind == "shared_reference_change_for_review" else kind
+        groups.setdefault(key, []).append(offset)
     selected = []
     depth = 0
     while len(selected) < min(limit, len(ranked)):

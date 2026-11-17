@@ -147,12 +147,16 @@ class StreamingReporterModel(ChatOpenAI):
     def _convert_chunk_to_generation_chunk(self, chunk, *args, **kwargs):
         result = super()._convert_chunk_to_generation_chunk(chunk, *args, **kwargs)
         if result is not None:
-            choices = chunk.get("choices") or []
+            # JSON output uses the SDK beta stream, whose `chunk` events wrap
+            # the exact provider chunk. Read transport fields, never infer them
+            # from complete-looking content or an EOF.
+            payload = chunk.get("chunk") if isinstance(chunk.get("chunk"), dict) else chunk
+            choices = payload.get("choices") or []
             delta = choices[0].get("delta") or {} if choices else {}
             result.message.additional_kwargs["_delivery_observation"] = {
                 "thinking_chars": len(delta.get("reasoning_content") or delta.get("reasoning") or ""),
-                "provider_request_id": chunk.get("id"),
-                "usage": chunk.get("usage"),
+                "provider_request_id": payload.get("id"),
+                "usage": payload.get("usage"),
                 "finish_reason": choices[0].get("finish_reason") if choices else None,
             }
         return result

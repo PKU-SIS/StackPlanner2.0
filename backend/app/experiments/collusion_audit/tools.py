@@ -32,6 +32,7 @@ class AuditTools:
             self.ledger = ReviewLedger(self.outputs / "coverage")
         self.runs = []
         self._read_receipts = {}
+        self._read_result_cache = {}
         self._context = None
         self._cache_lock = threading.RLock()
         from .source_receipts import OCRReadReceipts
@@ -43,6 +44,10 @@ class AuditTools:
 
         action_id = CURRENT_DELEGATION.get()
         call_id, started = uuid.uuid4().hex, time.monotonic()
+        from .calculation_process import CALCULATION_CANCEL
+
+        cancellation = threading.Event() if name == "audit_" + self.rule_id.lower() else None
+        cancellation_token = CALCULATION_CANCEL.set(cancellation) if cancellation is not None else None
         self.trace.event("tool.started", tool=name, tool_call_id=call_id, arguments=arguments)
 
         async def heartbeat():
@@ -50,6 +55,7 @@ class AuditTools:
                 await asyncio.sleep(5)
                 self.trace.event("tool.progress", tool=name, tool_call_id=call_id, elapsed_seconds=time.monotonic() - started, detail="calculation still running")
 
+        direct_reused = False
         beat = asyncio.create_task(heartbeat())
         try:
             from .knowledge import atomic, fingerprint
@@ -59,7 +65,13 @@ class AuditTools:
             receipt_key = fingerprint({"action": action_id, "tool": name, "arguments": arguments}) if self.knowledge is not None and action_id and name in READ_TOOLS else None
             if name == "read_file" and "/coverage/" in str(arguments.get("file_path", "")):
                 receipt_key = None  # Coverage changes after every committed batch.
-            if receipt_key and receipt_key in self._read_receipts:
+            direct_reused = False
+            if receipt_key and getattr(self, "general_quality", False) and receipt_key in self._read_result_cache:
+                import copy
+
+                result = copy.deepcopy(self._read_result_cache[receipt_key])
+                direct_reused = True
+            elif receipt_key and receipt_key in self._read_receipts:
                 result = {"status": "already_returned", "result_ref": self._read_receipts[receipt_key], "note": "同一委派已完整返回相同请求，复用先前内容；确需重读可用read_file读取result_ref。"}
             else:
                 result = await asyncio.to_thread(self.guarded, function)
@@ -67,21 +79,33 @@ class AuditTools:
                     relative = "read_receipts/" + receipt_key + ".json"
                     atomic(self.outputs / relative, result)
                     self._read_receipts[receipt_key] = "/mnt/user-data/outputs/" + relative
+                    if getattr(self, "general_quality", False):
+                        import copy
+
+                        self._read_result_cache[receipt_key] = copy.deepcopy(result)
             failed = isinstance(result, dict) and result.get("status") == "error"
             record = {"tool": name, "tool_call_id": call_id, "arguments": arguments, "status": "failed" if failed else "completed", "duration_ms": (time.monotonic() - started) * 1000}
+        except asyncio.CancelledError:
+            if cancellation is not None:
+                cancellation.set()
+                self.trace.event("calculation.awaiter_cancelled", tool=name, tool_call_id=call_id)
+            raise
         except Exception as exc:
             result = {"status": "error", "error": type(exc).__name__ + ": " + str(exc)}
             record = {"tool": name, "tool_call_id": call_id, "arguments": arguments, "status": "failed", "duration_ms": (time.monotonic() - started) * 1000}
         finally:
+            if cancellation_token is not None:
+                CALCULATION_CANCEL.reset(cancellation_token)
             beat.cancel()
             await asyncio.gather(beat, return_exceptions=True)
         record["action_id"] = action_id
+        record["direct_cached_result_reused"] = direct_reused
         record["deduplicated_read"] = isinstance(result, dict) and result.get("status") == "already_returned"
         if name == "ragflow_retrieve":
             chunks = result.get("chunks", []) if isinstance(result, dict) else []
             record["chunk_count"] = len(chunks)
             record["chunk_ids"] = [str(r.get("id", r.get("chunk_id"))) for r in chunks]
-            record["http_request_attempted"] = not record["deduplicated_read"]
+            record["http_request_attempted"] = not (record["deduplicated_read"] or direct_reused)
         if name == "audit_" + self.rule_id.lower() and isinstance(result, dict):
             record["calculation_cache_hit"] = result.get("cache", {}).get("hit", False)
         if record["status"] == "completed":
@@ -302,7 +326,21 @@ class AuditTools:
                 if self.shared_cache is not None:
                     from .cache import calculate_cached
 
-                    result = calculate_cached(self.rule_id, self.project, self.outputs, self.cache, self.shared_cache, parsed_texts=derived)
+                    if self.rule_id in {"M03", "M04", "M07"} and hasattr(self.knowledge, "root"):
+                        from .calculation_process import calculate_in_worker
+
+                        result = calculate_in_worker(
+                            self.rule_id,
+                            self.project,
+                            self.outputs,
+                            self.cache,
+                            self.shared_cache,
+                            self.knowledge.root,
+                            general_quality=getattr(self, "general_quality", False),
+                            on_event=lambda event, **fields: self.trace.event("calculation." + event, **fields),
+                        )
+                    else:
+                        result = calculate_cached(self.rule_id, self.project, self.outputs, self.cache, self.shared_cache, parsed_texts=derived)
                 else:
                     result = run_rule(self.rule_id, self.project / "manifest.json", self.outputs / "bid_audit", permitted_root=self.project, cache_dir=self.cache, parsed_texts=derived)
                 result["result_directory"] = "/mnt/user-data/outputs/bid_audit/" + result["run_id"]
@@ -318,6 +356,10 @@ class AuditTools:
                         from .fact_index import build_fact_index, compact_facts
 
                         index = build_fact_index(packet)
+                        if getattr(self, "general_quality", False):
+                            from .review_quality import fact_navigation
+
+                            index["source_quality_navigation"] = fact_navigation(packet, result["result_directory"])
                         self.fact_indexes[result["run_id"]] = index
                         result["fact_index_path"] = result["result_directory"] + "/facts-index.json"
                         result["code_facts"] = compact_facts(index)
@@ -536,7 +578,7 @@ class AuditTools:
                         if len(parts) != 2 or parts[1] not in {"parsed.md", "page_coverage.json"}:
                             raise ValueError("Only current knowledge parsed documents are readable")
                         entry = self.knowledge.document(parts[0])
-                        text = (self.knowledge.root / entry["snapshot"] / parts[1]).read_text()
+                        text = self.knowledge.parsed_text(parts[0]) if parts[1] == "parsed.md" and getattr(self, "general_quality", False) else (self.knowledge.root / entry["snapshot"] / parts[1]).read_text()
                         read_limit = self.read_window_length(text, offset, read_limit)
                         # Register only fully returned chunks, not truncated windows.
                         window = text[offset : offset + read_limit]

@@ -1,13 +1,12 @@
 """Provenance-preserving OCR table recovery and scoped parameter comparison."""
 
 import json
-
+import re
+import unicodedata
 from collections import defaultdict
 from decimal import Decimal
 from difflib import SequenceMatcher
 from itertools import combinations
-import re
-import unicodedata
 
 from .core import norm, outcome
 from .structured_text import blocks, evidence, html_tables
@@ -19,12 +18,7 @@ HEADING = re.compile(r"^[（(][一二三四五六七八九十百\d]+[）)][^:：
 
 
 def key(text):
-    return (
-        re.sub(r"^[★▲△\s\d.、)）(（]+", "", norm(text))
-        .rstrip("。；;.")
-        .replace("：", ":")
-        .replace("，", ",")
-    )
+    return re.sub(r"^[★▲△\s\d.、)）(（]+", "", norm(text)).rstrip("。；;.").replace("：", ":").replace("，", ",")
 
 
 def section_key(text):
@@ -33,9 +27,7 @@ def section_key(text):
 
 
 def is_model(text):
-    return bool(re.fullmatch(r"[A-Za-z0-9 +_./\-]{2,70}", text.strip())) and bool(
-        re.search("[A-Za-z]", text)
-    )
+    return bool(re.fullmatch(r"[A-Za-z0-9 +_./\-]{2,70}", text.strip())) and bool(re.search("[A-Za-z]", text))
 
 
 def parse_grid(grid, state=None):
@@ -43,10 +35,7 @@ def parse_grid(grid, state=None):
     rows = []
     section = state.get("section", "")
     header = state.get("header")
-    if not any(
-        any(norm(c) in DEV or any(w in norm(c) for w in HEADER_RESP) for c in raw)
-        for raw in grid
-    ):
+    if not any(any(norm(c) in DEV or any(w in norm(c) for w in HEADER_RESP) for c in raw) for raw in grid):
         return [], state
     for rn, raw in enumerate(grid):
         cells = [str(c or "").strip() for c in raw]
@@ -87,12 +76,7 @@ def parse_grid(grid, state=None):
                 confidence = "deviation_anchor"
         if qi is None and header is not None:
             hq, ha, hd, width = header
-            if (
-                len(cells) == width
-                and max(hq, ha) < len(cells)
-                and len(n[hq]) >= 5
-                and len(n[ha]) >= 2
-            ):
+            if len(cells) == width and max(hq, ha) < len(cells) and len(n[hq]) >= 5 and len(n[ha]) >= 2:
                 qi, ai = hq, ha
                 di = hd if hd is not None and hd < len(cells) else None
         if qi is None:
@@ -103,17 +87,9 @@ def parse_grid(grid, state=None):
             continue
         if not resp or any(x in norm(req) for x in HEADER_REQ):
             continue
-        item = next(
-            (c for c in n[: max(0, qi)] if re.fullmatch(r"\d+(?:\.\d+)*", c)), ""
-        )
+        item = next((c for c in n[: max(0, qi)] if re.fullmatch(r"\d+(?:\.\d+)*", c)), "")
         starts = bool(re.match(r"^[★▲△]*\s*\d+[)）.、]", req))
-        if (
-            rows
-            and not item
-            and not starts
-            and di is None
-            and rows[-1]["section"] == section
-        ):
+        if rows and not item and not starts and di is None and rows[-1]["section"] == section:
             rows[-1]["requirement"] += "\n" + req
             rows[-1]["response"] += "\n" + resp
             rows[-1]["table_rows"].append(rn + 1)
@@ -126,9 +102,7 @@ def parse_grid(grid, state=None):
                 "requirement": req,
                 "response": resp,
                 "declared_deviation": cells[di] if di is not None else "",
-                "model": next((c for c in cells[ai + 1 : di] if is_model(c)), "")
-                if di is not None
-                else "",
+                "model": next((c for c in cells[ai + 1 : di] if is_model(c)), "") if di is not None else "",
                 "table_rows": [rn + 1],
                 "column_inference": confidence,
                 "source_cell_count": len(cells),
@@ -164,19 +138,9 @@ def recover_orphan(row, catalog):
     if not candidates:
         return None
     best = candidates[0]
-    competitors = [
-        q
-        for score, q in candidates[1:]
-        if score >= best[0] - 0.025
-        and key(q["requirement"]) != key(best[1]["requirement"])
-    ]
+    competitors = [q for score, q in candidates[1:] if score >= best[0] - 0.025 and key(q["requirement"]) != key(best[1]["requirement"])]
     if competitors:
-        tied = [
-            q
-            for score, q in candidates
-            if score >= best[0] - 0.025
-            and section_key(q.get("section", "")) == section_key(row.get("section", ""))
-        ]
+        tied = [q for score, q in candidates if score >= best[0] - 0.025 and section_key(q.get("section", "")) == section_key(row.get("section", ""))]
         distinct = {key(q["requirement"]) for q in tied}
         if len(distinct) != 1:
             return None
@@ -197,11 +161,7 @@ def response_views(views):
     candidates = set()
     for block, grids in views:
         for table in grids:
-            if any(
-                any(w in norm(c) for w in HEADER_RESP)
-                for row in table["rows"]
-                for c in row
-            ):
+            if any(any(w in norm(c) for w in HEADER_RESP) for row in table["rows"] for c in row):
                 seeds.update(block["physical_pages"])
             if any(norm(c) in DEV for row in table["rows"] for c in row):
                 candidates.update(block["physical_pages"])
@@ -213,11 +173,7 @@ def response_views(views):
         neighbors = {p for p in candidates if any(abs(p - q) <= 3 for q in selected)}
         changed = not neighbors <= selected
         selected.update(neighbors)
-    return [
-        (block, grids)
-        for block, grids in views
-        if set(block["physical_pages"]) & selected
-    ]
+    return [(block, grids) for block, grids in views if set(block["physical_pages"]) & selected]
 
 
 def collect_catalog(ctx, doc, views):
@@ -246,20 +202,9 @@ def collect_catalog(ctx, doc, views):
                     continue
                 if not ordinal:
                     continue
-                texts = [
-                    c
-                    for c in cells
-                    if len(norm(c)) >= 6
-                    and not any(w in norm(c) for w in HEADER_REQ + HEADER_RESP)
-                    and not is_model(c)
-                ]
+                texts = [c for c in cells if len(norm(c)) >= 6 and not any(w in norm(c) for w in HEADER_REQ + HEADER_RESP) and not is_model(c)]
                 parameter = next(
-                    (
-                        c
-                        for c in texts
-                        if re.match(r"^[★▲△]*\s*\d+[)）.、]", c)
-                        or any(w in c for w in [":", "：", "≥", "≤"])
-                    ),
+                    (c for c in texts if re.match(r"^[★▲△]*\s*\d+[)）.、]", c) or any(w in c for w in [":", "：", "≥", "≤"])),
                     None,
                 )
                 if parameter:
@@ -285,28 +230,19 @@ def collect_catalog(ctx, doc, views):
                         }
                     )
     for row in catalog:
-        preceding = [
-            i
-            for kind, i in headings
-            if kind == row["table_family"] and i <= int(row["item_no"])
-        ]
+        preceding = [i for kind, i in headings if kind == row["table_family"] and i <= int(row["item_no"])]
         if row["table_family"] == "business":
             row["section"] = "商务条件"
         elif preceding:
             row["section"] = headings[(row["table_family"], max(preceding))]
     unique = {}
     for row in catalog:
-        unique.setdefault(
-            (row["table_family"], row["item_no"], key(row["requirement"])), row
-        )
+        unique.setdefault((row["table_family"], row["item_no"], key(row["requirement"])), row)
     return list(unique.values())
 
 
 def infer_sections(rows, catalog):
-    lookup = {
-        (r.get("table_family", "technical"), r["item_no"], key(r["requirement"])): r
-        for r in catalog
-    }
+    lookup = {(r.get("table_family", "technical"), r["item_no"], key(r["requirement"])): r for r in catalog}
     for row in rows:
         if row.get("table_family") == "business":
             row["section"] = "商务条件"
@@ -346,19 +282,10 @@ def merge_source_views(rows):
                 old
                 for old in result
                 if old["document_id"] == row["document_id"]
-                and old.get("table_family", "technical")
-                == row.get("table_family", "technical")
-                and (
-                    not old.get("section")
-                    or not row.get("section")
-                    or section_key(old["section"]) == section_key(row["section"])
-                )
+                and old.get("table_family", "technical") == row.get("table_family", "technical")
+                and (not old.get("section") or not row.get("section") or section_key(old["section"]) == section_key(row["section"]))
                 and pages.intersection(old.get("physical_pages", []))
-                and (
-                    not old.get("item_no")
-                    or not row.get("item_no")
-                    or old["item_no"] == row["item_no"]
-                )
+                and (not old.get("item_no") or not row.get("item_no") or old["item_no"] == row["item_no"])
                 and SequenceMatcher(
                     None,
                     key(old["requirement"]),
@@ -384,17 +311,11 @@ def merge_source_views(rows):
         )
         previous.update(chosen)
         previous["extraction_variants"] = variants
-        previous["evidence"] = [
-            e for variant in variants for e in variant.get("evidence", [])
-        ]
+        previous["evidence"] = [e for variant in variants for e in variant.get("evidence", [])]
         readings = [measurements(r["response"]) for r in variants]
-        signatures = {
-            str([(m["dimension"], m["values"]) for m in rr]) for rr in readings if rr
-        }
+        signatures = {str([(m["dimension"], m["values"]) for m in rr]) for rr in readings if rr}
         if len(signatures) > 1:
-            previous["readout_conflict"] = (
-                "Original/OCR numeric readings differ; inspect original before a numeric verdict."
-            )
+            previous["readout_conflict"] = "Original/OCR numeric readings differ; inspect original before a numeric verdict."
     return result
 
 
@@ -409,9 +330,7 @@ def response_rows(ctx):
     unresolved = []
     catalogs = {}
     for doc in ctx.documents("bid"):
-        views = [
-            (block, html_tables(block["raw"])) for block in blocks(ctx, doc, raw=False)
-        ]
+        views = [(block, html_tables(block["raw"], warnings=getattr(ctx, "warnings", None))) for block in blocks(ctx, doc, raw=False)]
         views = response_views(views)
         catalog = collect_catalog(ctx, doc, views)
         catalogs[doc["id"]] = catalog
@@ -424,11 +343,7 @@ def response_rows(ctx):
             for ti, table in enumerate(grids):
                 tables += 1
                 if table.get("layout_warnings"):
-                    ctx.warnings.append(
-                        doc["id"]
-                        + ": OCR table layout conflicts preserved for review; chunk "
-                        + block["chunk_ids"][0]
-                    )
+                    ctx.warnings.append(doc["id"] + ": OCR table layout conflicts preserved for review; chunk " + block["chunk_ids"][0])
                 rows, state = parse_grid(table["rows"], state)
                 for row in rows:
                     row["physical_pages"] = block["physical_pages"]
@@ -448,9 +363,7 @@ def response_rows(ctx):
                     if row["split_column_orphan"]:
                         recovered = recover_orphan(row, catalog)
                         if recovered is None:
-                            unresolved.append(
-                                {**row, "document_id": doc["id"], "evidence": refs}
-                            )
+                            unresolved.append({**row, "document_id": doc["id"], "evidence": refs})
                             continue
                         row = recovered
                         refs += row.pop("requirement_evidence", [])
@@ -469,14 +382,10 @@ def response_rows(ctx):
                 if not rows:
                     unparsed += 1
         geometry_count = 0
-        if getattr(ctx, "_include_geometry", False) and str(
-            doc["_path"]
-        ).lower().endswith(".pdf"):
+        if getattr(ctx, "_include_geometry", False) and str(doc["_path"]).lower().endswith(".pdf"):
             from .geometric_tables import extract_responses
 
-            selected_pages = sorted(
-                {p for block, _ in views for p in block["physical_pages"]}
-            )
+            selected_pages = sorted({p for block, _ in views for p in block["physical_pages"]})
             geometry = extract_responses(ctx, doc, selected_pages)
             infer_sections(geometry, catalog)
             geometry_count = len(geometry)
@@ -516,23 +425,16 @@ def response_rows(ctx):
     for row in result:
         by_doc[row["document_id"]].append(row)
     if by_doc:
-        master_id = max(
-            by_doc, key=lambda doc_id: len({r.get("section") for r in by_doc[doc_id]})
-        )
+        master_id = max(by_doc, key=lambda doc_id: len({r.get("section") for r in by_doc[doc_id]}))
         master = by_doc[master_id]
-        master_keys = [
-            (r.get("table_family", "technical"), key(r["requirement"])) for r in master
-        ]
+        master_keys = [(r.get("table_family", "technical"), key(r["requirement"])) for r in master]
         for doc_id, rr in by_doc.items():
             if doc_id == master_id:
                 continue
             for a, b, n in SequenceMatcher(
                 None,
                 master_keys,
-                [
-                    (r.get("table_family", "technical"), key(r["requirement"]))
-                    for r in rr
-                ],
+                [(r.get("table_family", "technical"), key(r["requirement"])) for r in rr],
                 autojunk=False,
             ).get_matching_blocks():
                 if n < 2:
@@ -542,9 +444,7 @@ def response_rows(ctx):
                     row = rr[b + offset]
                     if source.get("section"):
                         row["section"] = source["section"]
-                        row["section_inference"] = (
-                            "ordered_multi_item_requirement_sequence"
-                        )
+                        row["section_inference"] = "ordered_multi_item_requirement_sequence"
                         row["section_reference_document"] = master_id
     dedup = {}
     for row in result:
@@ -562,9 +462,7 @@ def response_rows(ctx):
             dedup[k] = row
     for row in dedup.values():
         row["alignment_warnings"] = alignment_flags(row["requirement"], row["response"])
-    ctx._response_alignment_conflicts_v20 = [
-        r for r in dedup.values() if r["alignment_warnings"]
-    ]
+    ctx._response_alignment_conflicts_v20 = [r for r in dedup.values() if r["alignment_warnings"]]
     ctx._response_rows_v20 = list(dedup.values())
     ctx._response_coverage_v20 = extraction
     ctx._unresolved_response_rows_v20 = unresolved
@@ -628,19 +526,12 @@ def measurements(text):
         rows.append(
             {
                 "operator": m[1] or "",
-                "values": [
-                    format((Decimal(m[i]) * scale).normalize(), "f")
-                    for i in [2, 3]
-                    if m[i] is not None
-                ],
+                "values": [format((Decimal(m[i]) * scale).normalize(), "f") for i in [2, 3] if m[i] is not None],
                 "unit": unit,
                 "dimension": dimension,
                 "label": label,
                 "source": m.group(),
-                "uncertain": any(
-                    x in text[max(last, m.start() - 5) : m.end() + 3]
-                    for x in ["约", "±", "左右"]
-                ),
+                "uncertain": any(x in text[max(last, m.start() - 5) : m.end() + 3] for x in ["约", "±", "左右"]),
             }
         )
         last = m.end()
@@ -652,22 +543,14 @@ def numeric_checks(requirement, response):
     result = []
     used = set()
     for q in req:
-        candidates = [
-            (i, a)
-            for i, a in enumerate(resp)
-            if i not in used and a["dimension"] == q["dimension"]
-        ]
+        candidates = [(i, a) for i, a in enumerate(resp) if i not in used and a["dimension"] == q["dimension"]]
         if not candidates:
             continue
         i, a = max(
             candidates,
             key=lambda x: SequenceMatcher(None, q["label"], x[1]["label"]).ratio(),
         )
-        if (
-            q["label"]
-            and a["label"]
-            and SequenceMatcher(None, q["label"], a["label"]).ratio() < 0.45
-        ):
+        if q["label"] and a["label"] and SequenceMatcher(None, q["label"], a["label"]).ratio() < 0.45:
             continue
         used.add(i)
         qv, av = list(map(Decimal, q["values"])), list(map(Decimal, a["values"]))
@@ -675,38 +558,16 @@ def numeric_checks(requirement, response):
         relation = "needs_semantic_review"
         if not q["uncertain"] and not a["uncertain"]:
             if len(qv) == len(av) == 2:
-                relation = (
-                    "same_interval"
-                    if qv == av
-                    else "response_interval_narrower_than_required"
-                    if av[0] > qv[0] or av[1] < qv[1]
-                    else "response_interval_covers_required"
-                )
-                bad = (
-                    None
-                    if relation == "response_interval_narrower_than_required"
-                    else False
-                )
+                relation = "same_interval" if qv == av else "response_interval_narrower_than_required" if av[0] > qv[0] or av[1] < qv[1] else "response_interval_covers_required"
+                bad = None if relation == "response_interval_narrower_than_required" else False
             elif len(qv) == len(av) == 1 and not a["operator"]:
                 if q["operator"]:
                     op = q["operator"]
-                    valid = (
-                        av[0] >= qv[0]
-                        if op in [">=", "≥", "不少于", "不低于", "至少"]
-                        else av[0] <= qv[0]
-                        if op in ["<=", "≤", "不超过", "至多"]
-                        else av[0] > qv[0]
-                        if op == ">"
-                        else av[0] < qv[0]
-                    )
+                    valid = av[0] >= qv[0] if op in [">=", "≥", "不少于", "不低于", "至少"] else av[0] <= qv[0] if op in ["<=", "≤", "不超过", "至多"] else av[0] > qv[0] if op == ">" else av[0] < qv[0]
                     bad = not valid
-                    relation = (
-                        "unfavorable_inequality" if bad else "satisfies_inequality"
-                    )
+                    relation = "unfavorable_inequality" if bad else "satisfies_inequality"
                 else:
-                    relation = (
-                        "same_point_value" if qv == av else "different_point_value"
-                    )
+                    relation = "same_point_value" if qv == av else "different_point_value"
                     bad = False if qv == av else None
         signature = json.dumps(
             [q["dimension"], q["operator"], q["values"], a["values"], relation],
@@ -727,26 +588,16 @@ def numeric_checks(requirement, response):
 
 def template_requirement_proof(ctx, requirement, rnd, lot):
     """Normalized exact source support, never inferred from a bidder's own column."""
-    needle = re.sub(
-        r"^[★▲△]*(?:\(\d{1,3}\)|\d{1,3}[)）、]|\d{1,3}\.(?!\d))", "", norm(requirement)
-    ).rstrip("。;.")
+    needle = re.sub(r"^[★▲△]*(?:\(\d{1,3}\)|\d{1,3}[)）、]|\d{1,3}\.(?!\d))", "", norm(requirement)).rstrip("。;.")
     if len(needle) < 8:
         return []
     if not hasattr(ctx, "_requirement_template_views_v20"):
-        ctx._requirement_template_views_v20 = [
-            (doc, block, norm(block["text"]))
-            for doc in ctx.documents("tender", "public_template")
-            for block in blocks(ctx, doc)
-        ]
+        ctx._requirement_template_views_v20 = [(doc, block, norm(block["text"])) for doc in ctx.documents("tender", "public_template") for block in blocks(ctx, doc)]
     matches = []
     used = set()
     for doc, block, text in ctx._requirement_template_views_v20:
         identity = (doc["id"], block["source_channel"])
-        if (
-            (doc["round"], doc["lot"]) != (rnd, lot)
-            or identity in used
-            or needle not in text
-        ):
+        if (doc["round"], doc["lot"]) != (rnd, lot) or identity in used or needle not in text:
             continue
         used.add(identity)
         matches.append(
@@ -789,26 +640,21 @@ def m03(ctx):
                     {
                         "kind": "same_own_requirement_copy",
                         "requirement_reference_verified": bool(proof),
-                        "template_source_positions": [
-                            {k: v for k, v in item.items() if k != "evidence"}
-                            for item in proof
-                        ],
+                        "template_source_positions": [{k: v for k, v in item.items() if k != "evidence"} for item in proof],
                         "section": section,
                         "document_a": a["document_id"],
                         "document_b": b["document_id"],
                         "requirement": a["requirement"],
                         "response_a": a["response"],
                         "response_b": b["response"],
-                        "evidence": a["evidence"]
-                        + b["evidence"]
-                        + [item["evidence"] for item in proof],
-                        "review_note": "Both responses repeat their own stated requirement. Only requirement_reference_verified=true has actual current tender/public source support; otherwise not a verified template exclusion. No risk verdict.",
+                        "evidence": a["evidence"] + b["evidence"] + [item["evidence"] for item in proof],
+                        "review_note": (
+                            "Both responses repeat their own stated requirement. Only requirement_reference_verified=true has actual current tender/public source support; otherwise not a verified template exclusion. No risk verdict."
+                        ),
                     }
                 )
                 continue
-            ratio = SequenceMatcher(
-                None, norm(a["response"]), norm(b["response"]), autojunk=False
-            ).ratio()
+            ratio = SequenceMatcher(None, norm(a["response"]), norm(b["response"]), autojunk=False).ratio()
             if ratio >= threshold:
                 findings.append(
                     {
@@ -845,9 +691,7 @@ def m03(ctx):
         requirement_copy_pairs=copies,
         ambiguous_rows=ambiguous,
         unresolved_rows=getattr(ctx, "_unresolved_response_rows_v20", []),
-        limitations=[
-            "Equipment section and requirement text define alignment; repeated ambiguous rows stay for review. OCR errors and product-public text remain model checks."
-        ],
+        limitations=["Equipment section and requirement text define alignment; repeated ambiguous rows stay for review. OCR errors and product-public text remain model checks."],
     )
 
 
@@ -858,22 +702,15 @@ def same_direction_pairs(rows):
         negative = [r for r in rr if norm(r.get("declared_deviation")) == "负偏离"]
         if len({r["bidder"] for r in negative}) < 2:
             continue
-        values = [
-            [(x["dimension"], x["values"]) for x in measurements(r["response"])]
-            for r in negative
-        ]
+        values = [[(x["dimension"], x["values"]) for x in measurements(r["response"])] for r in negative]
         result.append(
             {
                 "kind": "co_declared_negative_for_review",
                 "section": section,
                 "requirement": negative[0]["requirement"],
-                "same_actual_numeric_values": all(v == values[0] for v in values)
-                if all(values)
-                else None,
+                "same_actual_numeric_values": all(v == values[0] for v in values) if all(values) else None,
                 "requires_agent_review": True,
-                "comparisons": [
-                    {k: v for k, v in r.items() if k != "evidence"} for r in negative
-                ],
+                "comparisons": [{k: v for k, v in r.items() if k != "evidence"} for r in negative],
                 "evidence": [e for r in negative for e in r["evidence"]],
                 "review_note": "Same negative label is not same direction/magnitude. Read the complete actual responses and numeric checks before judging.",
             }
@@ -897,14 +734,8 @@ def m04(ctx):
                     "response_interval_narrower_than_required",
                     "different_point_value",
                 ]:
-                    matches[check["signature"]].append(
-                        {**row, "numeric_check": check, "declared_negative": negative}
-                    )
-            if (
-                not checks
-                or negative
-                or any(c["semantic_judgement_needed"] for c in checks)
-            ):
+                    matches[check["signature"]].append({**row, "numeric_check": check, "declared_negative": negative})
+            if not checks or negative or any(c["semantic_judgement_needed"] for c in checks):
                 review.append({**row, "numeric_checks": checks})
         for signature, matched in matches.items():
             unique = {r["bidder"]: r for r in matched}
@@ -913,23 +744,17 @@ def m04(ctx):
             compared += 1
             matched = list(unique.values())
             check = matched[0]["numeric_check"]
-            confirmed = check["unfavorable"] is True or all(
-                r["declared_negative"] for r in matched
-            )
+            confirmed = check["unfavorable"] is True or all(r["declared_negative"] for r in matched)
             findings.append(
                 {
-                    "kind": "shared_unfavorable_response"
-                    if confirmed
-                    else "shared_numeric_mismatch_for_semantic_review",
+                    "kind": "shared_unfavorable_response" if confirmed else "shared_numeric_mismatch_for_semantic_review",
                     "section": section,
                     "requirement": matched[0]["requirement"],
                     "round": rnd,
                     "lot": lot,
                     "numeric_relation": check["relation"],
                     "same_numeric_signature": signature,
-                    "comparisons": [
-                        {k: v for k, v in r.items() if k != "evidence"} for r in matched
-                    ],
+                    "comparisons": [{k: v for k, v in r.items() if k != "evidence"} for r in matched],
                     "evidence": [e for r in matched for e in r["evidence"]],
                     "review_note": "Same range narrowing/point mismatch is a candidate; direction, allowed choices and actual values require model review. Self-declared no deviation is not proof.",
                 }
@@ -937,9 +762,7 @@ def m04(ctx):
         # Non-numeric declared-negative responses remain comparable by full content.
         declared = defaultdict(list)
         for r in rr:
-            if norm(r.get("declared_deviation")) == "负偏离" and not numeric_checks(
-                r["requirement"], r["response"]
-            ):
+            if norm(r.get("declared_deviation")) == "负偏离" and not numeric_checks(r["requirement"], r["response"]):
                 declared[norm(r["response"])].append(r)
         for text, matched in declared.items():
             if len({r["bidder"] for r in matched}) >= 2:
@@ -968,7 +791,5 @@ def m04(ctx):
         response_inventory=rows,
         ambiguous_rows=ambiguous,
         unresolved_rows=getattr(ctx, "_unresolved_response_rows_v20", []),
-        limitations=[
-            "Arithmetic comparison preserves units/operators and separates interval coverage from semantic benefit. Different magnitudes are not merged; labels alone do not prove actual compliance or joint error."
-        ],
+        limitations=["Arithmetic comparison preserves units/operators and separates interval coverage from semantic benefit. Different magnitudes are not merged; labels alone do not prove actual compliance or joint error."],
     )

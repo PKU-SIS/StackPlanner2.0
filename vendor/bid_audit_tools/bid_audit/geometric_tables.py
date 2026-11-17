@@ -6,6 +6,7 @@ from pathlib import Path
 import pdfplumber
 
 from .core import digest, dump, norm
+from .pdf_access import PDF_ACCESS_VERSION, open_pdf
 from .tables import clean_page
 
 
@@ -22,17 +23,7 @@ def extract_responses(ctx, doc, selected_pages):
 
     selected = sorted(set(selected_pages))
     algorithm = digest(Path(__file__).read_bytes())
-    cache = ctx.cache / (
-        digest(
-            (
-                doc["sha256"]
-                + algorithm
-                + str(selected)
-                + getattr(pdfplumber, "__version__", "")
-            ).encode()
-        )
-        + ".geometric-responses.json"
-    )
+    cache = ctx.cache / (digest((doc["sha256"] + algorithm + PDF_ACCESS_VERSION + str(selected) + getattr(pdfplumber, "__version__", "")).encode()) + ".geometric-responses.json")
     if cache.exists():
         return json.loads(cache.read_text())
     result = []
@@ -40,7 +31,7 @@ def extract_responses(ctx, doc, selected_pages):
     previous = None
     section = ""
     family = "technical"
-    with pdfplumber.open(doc["_path"]) as pdf:
+    with open_pdf(doc["_path"]) as pdf:
         for pnum in selected:
             if pnum < 1 or pnum > len(pdf.pages):
                 ctx.warnings.append(doc["id"] + ": geometric source page outside PDF")
@@ -54,19 +45,11 @@ def extract_responses(ctx, doc, selected_pages):
                     continue
                 header = [norm(c) for c in raw[0]]
                 qi = next(
-                    (
-                        i
-                        for i, c in enumerate(header)
-                        if any(w in c for w in HEADER_REQ)
-                    ),
+                    (i for i, c in enumerate(header) if any(w in c for w in HEADER_REQ)),
                     None,
                 )
                 ai = next(
-                    (
-                        i
-                        for i, c in enumerate(header)
-                        if any(w in c for w in HEADER_RESP)
-                    ),
+                    (i for i, c in enumerate(header) if any(w in c for w in HEADER_RESP)),
                     None,
                 )
                 found = qi is not None and ai is not None
@@ -79,19 +62,13 @@ def extract_responses(ctx, doc, selected_pages):
                     indices = {
                         "requirement": qi,
                         "response": ai,
-                        "deviation": next(
-                            (i for i, c in enumerate(header) if "偏离" in c), None
-                        ),
+                        "deviation": next((i for i, c in enumerate(header) if "偏离" in c), None),
                         "item": next(
                             (i for i, c in enumerate(header) if c in {"序号", "编号"}),
                             None,
                         ),
                         "model": next(
-                            (
-                                i
-                                for i, c in enumerate(header)
-                                if c in {"型号", "规格型号"}
-                            ),
+                            (i for i, c in enumerate(header) if c in {"型号", "规格型号"}),
                             None,
                         ),
                     }
@@ -121,12 +98,7 @@ def extract_responses(ctx, doc, selected_pages):
                     for field, (left, right) in active.items():
                         box = (bbox[0] + left * width, y0, bbox[0] + right * width, y1)
                         try:
-                            text = (
-                                page.crop(box).extract_text(
-                                    x_tolerance=1, y_tolerance=2
-                                )
-                                or ""
-                            )
+                            text = page.crop(box).extract_text(x_tolerance=1, y_tolerance=2) or ""
                         except (ValueError, TypeError):
                             text = ""
                         values[field] = text.strip()
@@ -135,11 +107,7 @@ def extract_responses(ctx, doc, selected_pages):
                     if HEADING.fullmatch(q):
                         section = section_key(q)
                         continue
-                    if (
-                        len(norm(q)) < 5
-                        or len(norm(a)) < 2
-                        or any(w in norm(q) for w in HEADER_REQ)
-                    ):
+                    if len(norm(q)) < 5 or len(norm(a)) < 2 or any(w in norm(q) for w in HEADER_REQ):
                         continue
                     ref = ctx.evidence(
                         doc,

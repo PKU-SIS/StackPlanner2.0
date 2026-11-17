@@ -55,6 +55,7 @@ def expand_frame(frame):
 class ReporterDeliveryMiddleware(AgentMiddleware):
     def __init__(self, action_id, trace, request_timeout=900):
         self.action_id, self.trace, self.request_timeout = action_id, trace, request_timeout
+        self.postwrite_projection = None
 
     def project(self, request):
         messages = []
@@ -81,7 +82,8 @@ class ReporterDeliveryMiddleware(AgentMiddleware):
             messages.append(message)
         if before:
             self.trace.event("reporter.input_projection", action_id=self.action_id, before_chars=before, after_chars=after, lossless_roundtrip=True)
-        return request.override(messages=messages)
+        projected = request.override(messages=messages)
+        return self.postwrite_projection.project(projected) if self.postwrite_projection is not None else projected
 
     async def awrap_model_call(self, request, handler):
         from openai import APIConnectionError, APIStatusError

@@ -981,3 +981,144 @@ Your unwavering commitment and expertise have been the driving force behind Deer
 安装、模型与凭据配置、项目准备和全规则运行见 [围串标审核指南](docs/COLLUSION_AUDIT.md)。
 协作者可配置自己的原件目录，并通过共享映射复用胃肠镜项目已完成的 MinerU 解析。
 通用规则、源码、测试和脱敏示例随分支提供。
+
+### Isolated collusion calculation recovery
+
+This collusion copy reads hybrid-xref originals through a document-scoped PDFMiner compatibility layer without rewriting PDFs or installed libraries. M03/M04/M07 calculation workers reuse verified source-only caches and are terminated and reaped on cancellation or their bounded calculation deadline; native SP scheduling, model budgets and JSON handling remain unchanged. See [the implementation and regression guide](docs/COLLUSION_SOURCE_CALCULATION_RECOVERY.md).
+
+Collusion HTML evidence-grade checks accept bounded natural-language declarations such as “本项证据等级为参数响应线索” and quoted complete grade names. Changed or incomplete grades remain invalid, metadata still requires the exact rule-library value, and no model report or JSON is rewritten.
+
+Collusion quote tools accept procurement-lot footers such as “第 (1) 采购包” and “第（1）采购包”, including equivalent full-width punctuation. Header/footer lot conflicts remain errors; original amounts, currencies and arithmetic checks are unchanged.
+
+Collusion OCR tables with invalid span attributes are isolated from column comparisons: original cell text and MinerU snapshots remain available, warnings disclose the missing layout, and other tables continue. No geometry is guessed and no JSON is repaired.
+
+Collusion HTML validation accepts bounded natural introductions to the unchanged literal evidence grade and treats a future request to determine whether a font prefix uses deterministic or random generation as an open question. Separate unsupported certainty or reuse-exclusion claims remain rejected; report bytes and metadata are never repaired.
+
+### Optional general evidence-quality review (v33)
+
+The isolated collusion adapter accepts `--general-quality` with explicit quality
+controls and rule-level review. It detaches generated hierarchical chunk paths
+from the immutable OCR body view, exposes source-addressed reference differences,
+unit computations, price ceilings and shared-customer observations, and applies
+concise rule-specific interpretation guidance. These are facts and hypotheses,
+never automatic risk verdicts. Duplicate reads reuse their complete cached body;
+model context retains the first identical tool body and all distinct reads. A
+normal partial handoff is requested before the existing native token cap. Central
+still decides all roles and steps; no JSON repair is added. Existing reports,
+knowledge snapshots and default behavior are preserved.
+
+The v33 validation also covers explicit `tool_choice=none` at normal handoff and
+post-write closing, identity-field diagnostics (company/certificate differences
+are not independent authorship evidence), and a concise current-source change
+card beside stage opinions. Natural language introductory text before an exact
+evidence grade is accepted only by this opt-in; metadata must still match the
+full rule value. Model-authored reports and JSON are never repaired.
+
+High-alignment shared wording changes now also appear as explicitly unverified
+primary candidates with both bidder quotes and the selected reference quote.
+This changes evidence visibility, not risk verdicts or Central scheduling.
+Normal role substitutions stay in the complete supplementary data. Closing
+instructions retain the literal rule grade in the final model request.
+
+Distinct reference-clause changes retain separate preview groups, with up to six
+complete bid/reference observations in Central transport. This avoids reducing
+several semantically different changes to a single generic-kind example. Original
+lexical counts are separated from totals including additional reference changes.
+
+
+General-quality provenance checks retain lexical residual counts and original
+detector labels while marking source origin unverified. M02 identity context now
+uses its actual primary collection, and personal-field observations stay visible
+in bounded navigation. Reference lookup preserves recall under leading list
+markers. Findings and original quotes remain intact; no automatic verdict is
+introduced.
+
+
+Collusion general-quality follow-up v34 resumes the paused source-view and review
+fixes. Full parsed-document reads and OCR receipts use the same derived body view
+without editing persisted MinerU snapshots. Optional normalized image regions
+render original PDF crops at higher resolution; invalid bounds fail before reads.
+M03/M04/M07 calculations are attached to their actual response records, with
+formulas pinned beside model handoffs. PDF dates preserve raw values and explicit
+timezone offsets; absent zones are never inferred. M08/M12/M15 diagnostics
+disclose detector scope and supplemental-list applicability. Source-unknown
+clauses remain uncertain through handoffs; role selection stays native. Default
+behavior is unchanged unless --general-quality is enabled. Tests:
+backend/tests/test_collusion_resumed_quality_v34.py.
+
+The M04 follow-up keeps bounded literal letter-shape aliases beside original
+responses and pinned handoffs. Shared structure categories remain separate from
+different safety clauses or scalar magnitudes; unresolved responses are not
+confirmed differences. The tool does not compute a risk verdict or select roles.
+
+
+Collusion general-quality follow-up v35 addresses a reproduced Reporter loop.
+After a successful current-delegation HTML write and tool withdrawal, the
+remaining protocol request retains the complete written HTML, successful receipt,
+original delegation requirements and system constraints, while removing past
+tool-call roles. Pre-projection inputs are archived in full. The trusted Alibaba
+Reporter requests native JSON-object mode only for this remaining protocol step;
+generation and model outputs are never repaired, filled or rewritten. Defaults
+remain unchanged outside --general-quality plus Reporter delivery. In the same
+opt-in mode, explicit evidence capacity/deadlines and normal budget handoff also
+cover native Perception, without changing tool permissions, thinking or routing.
+Regression: backend/tests/test_collusion_postwrite_projection_v35.py.
+
+The Reporter stream recorder accepts both ordinary provider chunks and the
+SDK beta JSON-mode `chunk` event wrapper. Finish reason, provider ID and usage
+are read from the actual nested provider chunk; complete-looking JSON without
+a real terminal marker still fails. Test: test_collusion_reporter_json_stream_v36.py.
+
+In general-quality mode, Perception source declaration understands the actual
+producer registry dictionary (source_sha256), preserving SHA checks. A local
+image/candidate review without an explicit path receives one verified current
+calculation source; explicit Central refs and missing requested paths stay intact.
+No task_ready/result fields are filled by the host. Guidance distinguishes
+unreviewed candidates from missing caller information, requests concise valid
+native JSON with proper string escaping, and leaves scope depth/roles to Central.
+Effective configuration uses the same evidence-role list as runtime capacity.
+Regression: test_collusion_perception_scope_v37.py.
+
+
+Collusion general-quality mode adds v38 delimiter source observations for M07/M08.
+It compares unmatched/crossed round, square, curly, lenticular and book-title
+delimiters within actual visible source units, groups by semantic position and
+round/lot/bidder, and discloses identical inherited local template anomalies.
+Raw characters, offsets, source positions and reference candidates are retained;
+OCR, split units/pages and numbered-list explanations require original checks.
+A template anomaly at another position cannot exclude the bidder observation.
+Findings are candidates without risk verdicts; defaults, native scheduling, model
+settings and JSON parsing are unchanged. Test: test_collusion_delimiters_v38.py.
+
+括号比较同时保留参考源单位的其他配对观察；局部配对正常不能概括为整段正确。通用复核提示要求图片裁剪坐标为原生数组，参数错误不原样重试；这些提示只在默认关闭的 general-quality 适配中启用，不转换或修复模型JSON。
+
+
+Collusion source context v39 (general-quality opt-in): current source results include
+`reference_source_observations` with same-form literal/explicit-blank template
+locations and `material_scope_observations` with original contract headers, parties,
+projects and dates. Weak or explicitly different-purpose reference matches do not
+become shared-rewrite hypotheses. Unmatched substantive clauses and historical
+annexes remain available for review; source matching is not a risk verdict.
+Native Central scheduling and JSON handling are unchanged. Original PDFs, MinerU
+snapshots and prior deliveries are immutable. Regression: backend/tests/
+test_collusion_reference_context_v39.py.
+
+
+Collusion source-context v40 refines the general-quality opt-in: cropped form
+openings retain their observed purpose; same-purpose public sources take priority
+over a slightly closer other form. Decision source cards carry actual reference
+locations/quotes through handoffs. M03 separately pins counts of bid-stated
+requirements versus verified tender sources. Unknown correspondence stays unknown
+in every report section; source facts never become host-assigned verdicts.
+Defaults, native scheduling and JSON handling remain unchanged. Regression:
+backend/tests/test_collusion_reference_scope_v40.py.
+
+
+Collusion source-context v41 (general-quality opt-in) locates actual current-round/lot
+tender quotes and physical pages beside M03 response records, retaining raw initial
+verification flags and distinguishing later source locations. Similarity never
+automatically excludes shared-response risks or changed quantities. Layout guidance
+distinguishes original-page observation from correlated text extraction order;
+brand claims require actual bid identity rather than shared technical prose.
+No native scheduling, model budget, JSON handling, originals or prior reports change.
+Regression: backend/tests/test_collusion_response_reference_v41.py.

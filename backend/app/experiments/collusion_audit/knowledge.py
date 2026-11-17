@@ -60,7 +60,8 @@ def order_chunks(rows):
 
 
 class KnowledgeStore:
-    def __init__(self, root):
+    def __init__(self, root, *, general_quality=False):
+        self.general_quality = general_quality
         self.root = Path(root).resolve()
         self.index = json.loads((self.root / "index.json").read_text())
         if not self.index.get("ready"):
@@ -86,7 +87,20 @@ class KnowledgeStore:
             if expected and hashlib.sha256(source.read_bytes()).hexdigest() != expected:
                 raise ValueError("Knowledge snapshot changed")
             self._rows[document_id] = [json.loads(s) for s in source.read_text().splitlines()]
+            if self.general_quality:
+                from bid_audit.source_quality import source_chunk
+
+                self._rows[document_id] = [source_chunk(row) for row in self._rows[document_id]]
         return self._rows[document_id]
+
+    def parsed_text(self, document_id):
+        entry = self.document(document_id)
+        folder = (self.root / entry["snapshot"]).resolve()
+        if not folder.is_relative_to(self.root):
+            raise ValueError("Snapshot escaped knowledge root")
+        if not self.general_quality:
+            return (folder / "parsed.md").read_text()
+        return "\n\n".join("[chunk " + row["id"] + " | pages " + ",".join(str(p) for p in sorted({int(p[0]) for p in row["positions"]})) + "]\n" + row["content"] for row in self.rows(document_id))
 
     def read(self, document_id, offset=0, limit=5):
         if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 20:
@@ -211,4 +225,14 @@ class RagClient:
             },
         )
         store.validate_hits(document_id, data.get("chunks", []))
+        if store.general_quality:
+            from bid_audit.source_quality import VERSION
+
+            local = {row["id"]: row for row in store.rows(document_id)}
+            data["chunks"] = [
+                {**hit, "content": local[str(hit.get("id", hit.get("chunk_id")))]["content"], "source_view_version": VERSION, "structural_metadata": local[str(hit.get("id", hit.get("chunk_id")))].get("structural_metadata", {})}
+                for hit in data.get("chunks", [])
+            ]
+            for hit in data["chunks"]:
+                hit.pop("content_with_weight", None)
         return {"document_id": document_id, "dataset_id": entry["dataset_id"], "page": page, "total": data.get("total"), "chunks": data.get("chunks", [])}

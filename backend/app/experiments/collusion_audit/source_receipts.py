@@ -22,7 +22,7 @@ class OCRReadReceipts:
                 folder = (self.knowledge.root / self.knowledge.document(doc)["snapshot"]).resolve()
                 if not folder.is_relative_to(self.knowledge.root):
                     raise ValueError("Snapshot escaped knowledge root")
-                text = (folder / "parsed.md").read_text()
+                text = self.knowledge.parsed_text(doc) if getattr(self.knowledge, "general_quality", False) else (folder / "parsed.md").read_text()
             else:
                 text = self.knowledge.page_text(doc, int(match[3]), int(match[4] or match[3]))["text"]
             self.texts[path] = text

@@ -1,8 +1,8 @@
 """General editing, punctuation, policy and entity evidence from original views."""
 
+import re
 from collections import Counter, defaultdict
 from difflib import SequenceMatcher
-import re
 
 from .core import norm, outcome
 from .structured_text import blocks, evidence, html_tables, shared_passages
@@ -12,15 +12,9 @@ def edit_patterns(passages):
     groups = defaultdict(dict)
     for pair in passages:
         a, b = pair["text_a"], pair["text_b"]
-        for tag, i, j, k, z in SequenceMatcher(
-            None, a, b, autojunk=False
-        ).get_opcodes():
+        for tag, i, j, k, z in SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
             before, after = a[i:j], b[k:z]
-            if (
-                tag != "replace"
-                or not 1 <= len(before) <= 16
-                or not 1 <= len(after) <= 16
-            ):
+            if tag != "replace" or not 1 <= len(before) <= 16 or not 1 <= len(after) <= 16:
                 continue
             if not re.search("[\u4e00-\u9fff]", before + after):
                 continue
@@ -52,9 +46,7 @@ def edit_patterns(passages):
         )
         result.append(
             {
-                "kind": "stable_cross_document_replacement"
-                if len(items) >= 2
-                else "single_replacement_for_review",
+                "kind": "stable_cross_document_replacement" if len(items) >= 2 else "single_replacement_for_review",
                 "document_a": da,
                 "document_b": db,
                 "before": before,
@@ -97,9 +89,7 @@ def paired_anomalies(passages):
             seen.add(identity)
             result.append(
                 {
-                    "kind": "shared_error_hypothesis"
-                    if shared
-                    else "single_side_edit_artifact_for_review",
+                    "kind": "shared_error_hypothesis" if shared else "single_side_edit_artifact_for_review",
                     "pattern": token,
                     "same_error_on_both_sides": shared,
                     "text_a": a,
@@ -107,9 +97,7 @@ def paired_anomalies(passages):
                     "document_a": pair["document_a"],
                     "document_b": pair["document_b"],
                     "evidence": pair.get("evidence", []),
-                    "non_template_shared_chars": pair.get(
-                        "non_template_shared_chars", 0
-                    ),
+                    "non_template_shared_chars": pair.get("non_template_shared_chars", 0),
                     "review_note": "Repeated character groups can be grammatical, quoted, OCR-produced or template-origin; review is required. A single-sided artifact is not a cross-bidder common error.",
                 }
             )
@@ -117,7 +105,7 @@ def paired_anomalies(passages):
 
 
 def requirement_edit_patterns(ctx):
-    from .enhanced_tables import response_rows, alignment_flags
+    from .enhanced_tables import alignment_flags, response_rows
 
     templates = template_texts(ctx)
     groups = defaultdict(list)
@@ -125,16 +113,9 @@ def requirement_edit_patterns(ctx):
         if alignment_flags(row["requirement"], row["response"]):
             continue
         a, b = norm(row["requirement"]), norm(row["response"])
-        for tag, i, j, k, z in SequenceMatcher(
-            None, a, b, autojunk=False
-        ).get_opcodes():
+        for tag, i, j, k, z in SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
             before, after = a[i:j], b[k:z]
-            if (
-                tag == "replace"
-                and 1 <= len(before) <= 16
-                and 1 <= len(after) <= 16
-                and re.search("[\u4e00-\u9fff]", before + after)
-            ):
+            if tag == "replace" and 1 <= len(before) <= 16 and 1 <= len(after) <= 16 and re.search("[\u4e00-\u9fff]", before + after):
                 groups[(before, after)].append(row)
     result = []
     for (before, after), rows in groups.items():
@@ -146,20 +127,8 @@ def requirement_edit_patterns(ctx):
                 "before": before,
                 "after": after,
                 "occurrence_count": len(rows),
-                "public_source_match": all(
-                    any(
-                        norm(r["requirement"]) in t
-                        for t in templates[(r["round"], r["lot"])]
-                    )
-                    for r in rows
-                ),
-                "requirement_reference_verified": all(
-                    any(
-                        norm(r["requirement"]) in t
-                        for t in templates[(r["round"], r["lot"])]
-                    )
-                    for r in rows
-                ),
+                "public_source_match": all(any(norm(r["requirement"]) in t for t in templates[(r["round"], r["lot"])]) for r in rows),
+                "requirement_reference_verified": all(any(norm(r["requirement"]) in t for t in templates[(r["round"], r["lot"])]) for r in rows),
                 "contexts": [
                     {
                         "document_id": r["document_id"],
@@ -170,7 +139,11 @@ def requirement_edit_patterns(ctx):
                     for r in rows
                 ],
                 "evidence": [e for r in rows for e in r["evidence"]],
-                "review_note": "The immediate reference is a bid-stated requirement column; only explicit source matches verify it against tender/public originals. Standard first-person response conversions alone are not abnormal and are not automatically excluded from the evidence inventory.",
+                "review_note": (
+                    "The immediate reference is a bid-stated requirement column; only explicit source matches verify"
+                    " it against tender/public originals. Standard first-person response conversions alone are not a"
+                    "bnormal and are not automatically excluded from the evidence inventory."
+                ),
             }
         )
     return result
@@ -186,9 +159,7 @@ def m02(ctx):
         {
             "paired_passages_examined": len(data["findings"]),
             "stable_replacement_groups": len(stable),
-            "single_replacement_groups": sum(
-                r["occurrence_count"] < 2 for r in patterns
-            ),
+            "single_replacement_groups": sum(r["occurrence_count"] < 2 for r in patterns),
             "requirement_reference_groups": len(reference_edits),
             "template_exclusions": len(data.get("template_exclusions", [])),
         },
@@ -196,9 +167,7 @@ def m02(ctx):
         status="partial",
         single_edit_candidates=[r for r in patterns if r["occurrence_count"] < 2],
         edit_artifacts=paired_anomalies(data["findings"]),
-        limitations=[
-            "No fixed actor-word lexicon limits discovery. Contexts can overlap and do not establish independent document authorship. Repeated normal pronouns alone are weak evidence."
-        ],
+        limitations=["No fixed actor-word lexicon limits discovery. Contexts can overlap and do not establish independent document authorship. Repeated normal pronouns alone are weak evidence."],
     )
 
 
@@ -214,9 +183,7 @@ def m07(ctx):
     for (rnd, lot, section, rkey), rr in index.items():
         for row in rr:
             a, b = norm(row["requirement"]), norm(row["response"])
-            for tag, i, j, k, z in SequenceMatcher(
-                None, a, b, autojunk=False
-            ).get_opcodes():
+            for tag, i, j, k, z in SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
                 if tag == "equal" or max(j - i, z - k) > 30:
                     continue
                 changes[(rnd, lot, section, rkey, tag, a[i:j], b[k:z])].append(row)
@@ -250,22 +217,14 @@ def m07(ctx):
         {
             "paired_passages_examined": len(passages),
             "response_rows_examined": len(rows),
-            "shared_error_hypotheses": sum(
-                r["kind"] == "shared_error_hypothesis" for r in findings
-            ),
-            "single_side_edit_artifacts": sum(
-                r["kind"] == "single_side_edit_artifact_for_review" for r in findings
-            ),
-            "stable_replacement_groups": sum(
-                r["occurrence_count"] >= 2 for r in patterns
-            ),
+            "shared_error_hypotheses": sum(r["kind"] == "shared_error_hypothesis" for r in findings),
+            "single_side_edit_artifacts": sum(r["kind"] == "single_side_edit_artifact_for_review" for r in findings),
+            "stable_replacement_groups": sum(r["occurrence_count"] >= 2 for r in patterns),
         },
         findings,
         status="partial",
         replacement_contexts=[r for r in patterns if r["occurrence_count"] >= 2],
-        limitations=[
-            "Single-side mechanical-edit artifacts are disclosed for comparison, never promoted to joint error. Spelling/grammar and OCR validation remain model work; no project-specific error dictionary is used."
-        ],
+        limitations=["Single-side mechanical-edit artifacts are disclosed for comparison, never promoted to joint error. Spelling/grammar and OCR validation remain model work; no project-specific error dictionary is used."],
     )
 
 
@@ -287,9 +246,7 @@ def m08(ctx):
     template_sources = defaultdict(list)
     for td in ctx.documents("tender", "public_template"):
         for tb in punctuation_units(td, blocks(ctx, td)):
-            template_sources[(td["round"], td["lot"])].append(
-                (td, tb, norm(tb["text"]))
-            )
+            template_sources[(td["round"], td["lot"])].append((td, tb, norm(tb["text"])))
     anomaly = re.compile(r"[，,；;：:。]{2,}|[.．]{5,}|…{3,}|[（(]{2,}|[）)]{2,}")
     seen = set()
     for doc in ctx.documents("bid"):
@@ -300,16 +257,10 @@ def m08(ctx):
                 context = text[max(0, m.start() - 35) : m.end() + 35]
                 if re.fullmatch(r"[.． …]+", m.group()):
                     line_suffix = text[m.end() :].split("\n", 1)[0]
-                    toc_lines = re.findall(
-                        r"[^\n]*[.．]{5,}\s*\d+(?:[-–]\d+)?\s*(?:页)?\s*(?:\n|$)", text
-                    )
-                    if len(toc_lines) >= 2 and re.fullmatch(
-                        r"\s*\d+(?:[-–]\d+)?\s*(?:页)?\s*", line_suffix
-                    ):
+                    toc_lines = re.findall(r"[^\n]*[.．]{5,}\s*\d+(?:[-–]\d+)?\s*(?:页)?\s*(?:\n|$)", text)
+                    if len(toc_lines) >= 2 and re.fullmatch(r"\s*\d+(?:[-–]\d+)?\s*(?:页)?\s*", line_suffix):
                         continue
-                if re.fullmatch(r"[.． …]+", m.group()) and (
-                    re.search(r"\d+$", context.rstrip()) or "目录" in text
-                ):
+                if re.fullmatch(r"[.． …]+", m.group()) and (re.search(r"\d+$", context.rstrip()) or "目录" in text):
                     continue
                 local = text[max(0, m.start() - 14) : m.end() + 14]
                 ref = evidence(
@@ -328,13 +279,7 @@ def m08(ctx):
                     continue
                 seen.add(identity)
                 matched = next(
-                    (
-                        (td, tb)
-                        for td, tb, normalized in template_sources[
-                            (doc["round"], doc["lot"])
-                        ]
-                        if norm(local) in normalized
-                    ),
+                    ((td, tb) for td, tb, normalized in template_sources[(doc["round"], doc["lot"])] if norm(local) in normalized),
                     None,
                 )
                 if matched is not None:
@@ -402,10 +347,7 @@ def m08(ctx):
                         "kind": "shared_punctuation_context",
                         "punctuation": scope[2],
                         "context": group[0]["context"],
-                        "contexts": [
-                            {"document_id": r["document_id"], "text": r["context"]}
-                            for r in group
-                        ],
+                        "contexts": [{"document_id": r["document_id"], "text": r["context"]} for r in group],
                         "evidence": [e for r in group for e in r["evidence"]],
                     }
                 )
@@ -423,7 +365,12 @@ def m08(ctx):
         template_exclusions=excluded,
         unpaired_anomalies=all_rows,
         limitations=[
-            "Anomaly detection uses actual visible characters within original HTML/DOCX units, not delimiters inserted by plain-text conversion. Width/whitespace normalization is only used for grouping/source matching after detection. Original punctuation/context and source positions are retained; OCR and original-image verification remain necessary."
+            (
+                "Anomaly detection uses actual visible characters within original HTML/DOCX units, not delimiter"
+                "s inserted by plain-text conversion. Width/whitespace normalization is only used for grouping/s"
+                "ource matching after detection. Original punctuation/context and source positions are retained;"
+                " OCR and original-image verification remain necessary."
+            )
         ],
     )
 
@@ -452,10 +399,8 @@ def m05(ctx):
             if "目录" in text[:80] and len(present) > 2:
                 continue
             found.update(present)
-            markers = re.findall(
-                r"(?:暂无|不适用|不涉及|无此项|无相关|无此类)|[/／]{2,}|[_＿]{3,}", text
-            )
-            table_rows = [t["rows"] for t in html_tables(block["raw"])]
+            markers = re.findall(r"(?:暂无|不适用|不涉及|无此项|无相关|无此类)|[/／]{2,}|[_＿]{3,}", text)
+            table_rows = [t["rows"] for t in html_tables(block["raw"], warnings=getattr(ctx, "warnings", None))]
             ident = (
                 doc["id"],
                 tuple(block["physical_pages"]),
@@ -465,29 +410,21 @@ def m05(ctx):
             if ident in seen:
                 continue
             seen.add(ident)
-            refs = [
-                evidence(
-                    ctx, doc, block, block["text"], extraction="policy_form_source"
-                )
-            ]
+            refs = [evidence(ctx, doc, block, block["text"], extraction="policy_form_source")]
             row = {
                 "kind": "policy_form_observation",
                 "document_id": doc["id"],
                 "form_titles": present,
                 "default_markers": markers,
                 "table_rows": table_rows,
-                "blank_cell_count": sum(
-                    not norm(c) for table in table_rows for rr in table for c in rr
-                ),
+                "blank_cell_count": sum(not norm(c) for table in table_rows for rr in table for c in rr),
                 "evidence": refs,
                 "form_body_status": "candidate_body_not_verified",
                 "review_note": "Title/blank/default similarity may be a mandatory or public form; verify optional filling space and source before treating as a clue.",
             }
             forms.append(row)
             if markers:
-                index[
-                    (doc["round"], doc["lot"], tuple(present), tuple(markers))
-                ].append({**row, "bidder": doc["bidder"]})
+                index[(doc["round"], doc["lot"], tuple(present), tuple(markers))].append({**row, "bidder": doc["bidder"]})
         coverage.append(
             {
                 "document_id": doc["id"],
@@ -500,10 +437,7 @@ def m05(ctx):
             "kind": "policy_default_pattern",
             "form_titles": list(k[2]),
             "ordered_default_markers": list(k[3]),
-            "comparisons": [
-                {x: r[x] for x in ["document_id", "blank_cell_count", "table_rows"]}
-                for r in rr
-            ],
+            "comparisons": [{x: r[x] for x in ["document_id", "blank_cell_count", "table_rows"]} for r in rr],
             "evidence": [e for r in rr for e in r["evidence"]],
         }
         for k, rr in index.items()
@@ -514,9 +448,7 @@ def m05(ctx):
         findings,
         status="partial",
         form_observations=forms,
-        limitations=[
-            "Full original form candidates, cell blanks and ordered defaults are exposed. A matching form title or platform default is not abnormal filling; missing titles do not prove absence."
-        ],
+        limitations=["Full original form candidates, cell blanks and ordered defaults are exposed. A matching form title or platform default is not abnormal filling; missing titles do not prove absence."],
     )
 
 
@@ -524,12 +456,7 @@ def performance_table(grid):
     if not grid:
         return None
     headers = "".join(norm(x) for x in grid[0])
-    if not (
-        "项目名称" in headers
-        and any(
-            w in headers for w in ["客户", "用户", "合同", "金额", "联系", "采购人"]
-        )
-    ):
+    if not ("项目名称" in headers and any(w in headers for w in ["客户", "用户", "合同", "金额", "联系", "采购人"])):
         return None
     body = []
     for row in grid[1:]:
@@ -552,12 +479,8 @@ def m09(ctx):
         **ENTITY_PATTERNS,
         "identity_number": re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)"),
         "bank_account": re.compile(r"(?:账号|帐号)[：:]?\s*([0-9]{12,30})"),
-        "address": re.compile(
-            r"(?:注册地址|住所|经营场所|联系地址)[：:]\s*([^\n；;]{6,100})"
-        ),
-        "person": re.compile(
-            r"(?:法定代表人|授权代表|委托代理人|项目负责人|联系人)[：:]\s*([\u4e00-\u9fff]{2,4})(?=[\s，,。；;（(]|$)"
-        ),
+        "address": re.compile(r"(?:注册地址|住所|经营场所|联系地址)[：:]\s*([^\n；;]{6,100})"),
+        "person": re.compile(r"(?:法定代表人|授权代表|委托代理人|项目负责人|联系人)[：:]\s*([\u4e00-\u9fff]{2,4})(?=[\s，,。；;（(]|$)"),
     }
     template = template_texts(ctx)
     index = defaultdict(list)
@@ -568,7 +491,7 @@ def m09(ctx):
     for doc in ctx.documents("bid"):
         for block in blocks(ctx, doc):
             raw = block["text"]
-            for table in html_tables(block["raw"]):
+            for table in html_tables(block["raw"], warnings=getattr(ctx, "warnings", None)):
                 observed = performance_table(table["rows"])
                 if observed is not None:
                     performance.append(
@@ -595,14 +518,8 @@ def m09(ctx):
                     if ident in seen:
                         continue
                     seen.add(ident)
-                    refs = [
-                        evidence(
-                            ctx, doc, block, context, entity=value, entity_type=kind
-                        )
-                    ]
-                    public = any(
-                        norm(value) in t for t in template[(doc["round"], doc["lot"])]
-                    )
+                    refs = [evidence(ctx, doc, block, context, entity=value, entity_type=kind)]
+                    public = any(norm(value) in t for t in template[(doc["round"], doc["lot"])])
                     row = {
                         "kind": "entity_occurrence",
                         "document_id": doc["id"],
@@ -627,22 +544,16 @@ def m09(ctx):
                 "kind": "shared_entity",
                 "entity_type": k[2],
                 "value": k[3],
-                "public_source_match": any(
-                    r["found_in_tender_or_public_template"] for r in rr
-                ),
+                "public_source_match": any(r["found_in_tender_or_public_template"] for r in rr),
                 "occurrence_count": len(rr),
-                "contexts": [
-                    {"document_id": r["document_id"], "text": r["context"]} for r in rr
-                ],
+                "contexts": [{"document_id": r["document_id"], "text": r["context"]} for r in rr],
                 "evidence": [e for r in rr for e in r["evidence"]],
                 "review_note": "Identity belongs to the owner in each local context, not necessarily the bidder. Shared manufacturer/issuer/buyer/bank details require role verification.",
             }
         )
     return outcome(
         {
-            "extracted_entity_occurrences": dict(
-                Counter(r["entity_type"] for r in inventory)
-            ),
+            "extracted_entity_occurrences": dict(Counter(r["entity_type"] for r in inventory)),
             "entity_occurrences_by_document": dict(by_doc),
             "shared_identifier_groups": len(findings),
             "performance_tables_collected": len(performance),
@@ -651,7 +562,5 @@ def m09(ctx):
         status="partial",
         entity_inventory=inventory,
         performance_observations=performance,
-        limitations=[
-            "Original and OCR visible fields are scanned; no external relationship data. Reused certificates/customers/manufacturer identifiers are distinct from bidder principals. No history-derived entity dictionary is used."
-        ],
+        limitations=["Original and OCR visible fields are scanned; no external relationship data. Reused certificates/customers/manufacturer identifiers are distinct from bidder principals. No history-derived entity dictionary is used."],
     )

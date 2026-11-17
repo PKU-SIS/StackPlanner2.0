@@ -24,7 +24,7 @@ def calculate_cached(rule_id, project, outputs, parse_cache, cache_root, *, pars
             "rule": rule_id,
             "code": code_fingerprint(),
             "parsed_texts": fingerprint(parsed_texts) if parsed_texts is not None else None,
-            "dependencies": {n: version(n) for n in ["pypdf", "pdfplumber", "Pillow", "python-docx"]},
+            "dependencies": {n: version(n) for n in ["pypdf", "pdfplumber", "pdfminer.six", "Pillow", "python-docx"]},
         }
     )
     folder = cache_root / key

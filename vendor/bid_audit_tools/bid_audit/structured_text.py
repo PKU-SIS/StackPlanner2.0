@@ -1,9 +1,8 @@
 """Original-only derived source views. Never replace original PDF bytes/text."""
 
-from pathlib import Path
-
-from html.parser import HTMLParser
 import json
+from html.parser import HTMLParser
+from pathlib import Path
 
 from .core import digest
 from .m01_recall import plain
@@ -29,8 +28,8 @@ class TableParser(HTMLParser):
             values = dict(attrs)
             self.cell = {
                 "text": [],
-                "rowspan": int(values.get("rowspan", "1")),
-                "colspan": int(values.get("colspan", "1")),
+                "rowspan": values.get("rowspan", "1"),
+                "colspan": values.get("colspan", "1"),
             }
         elif self.cell is not None and tag in {"br", "p", "div"}:
             self.cell["text"].append("\n")
@@ -52,10 +51,25 @@ class TableParser(HTMLParser):
         elif tag == "table":
             if self.depth == 1:
                 issues = []
-                self.tables.append(
-                    {"rows": expand(self.rows, issues), "layout_warnings": issues}
-                )
+                try:
+                    table = {
+                        "rows": expand(self.rows, issues),
+                        "layout_warnings": issues,
+                    }
+                except InvalidTableSpan:
+                    issues.append("Invalid OCR table span: structured rows unavailable; original cell text retained, verify the original page before column-based conclusions.")
+                    table = {
+                        "rows": [],
+                        "layout_warnings": issues,
+                        "unexpanded_rows": [[c["text"] for c in row] for row in self.rows],
+                        "structured_rows_unavailable": True,
+                    }
+                self.tables.append(table)
             self.depth = max(0, self.depth - 1)
+
+
+class InvalidTableSpan(ValueError):
+    """Untrusted OCR geometry cannot safely define a column grid."""
 
 
 def expand(rows, issues=None):
@@ -63,21 +77,20 @@ def expand(rows, issues=None):
     carry = {}
     for raw in rows:
         values = {column: text for column, (n, text) in carry.items()}
-        next_carry = {
-            column: (n - 1, text) for column, (n, text) in carry.items() if n > 1
-        }
+        next_carry = {column: (n - 1, text) for column, (n, text) in carry.items() if n > 1}
         cursor = 0
         for cell in raw:
             while cursor in values:
                 cursor += 1
-            rs, cs = cell["rowspan"], cell["colspan"]
+            try:
+                rs, cs = int(cell["rowspan"]), int(cell["colspan"])
+            except (ValueError, TypeError) as exc:
+                raise InvalidTableSpan("Invalid HTML table span") from exc
             if not 1 <= rs <= 1000 or not 1 <= cs <= 100:
-                raise ValueError("Invalid HTML table span")
+                raise InvalidTableSpan("Invalid HTML table span")
             if any(col in values for col in range(cursor, cursor + cs)):
                 if issues is not None:
-                    issues.append(
-                        "Cell colspan overlaps a carried rowspan; shifted to next free span; original cell texts preserved."
-                    )
+                    issues.append("Cell colspan overlaps a carried rowspan; shifted to next free span; original cell texts preserved.")
                 while any(col in values for col in range(cursor, cursor + cs)):
                     cursor += 1
             for col in range(cursor, cursor + cs):
@@ -90,19 +103,20 @@ def expand(rows, issues=None):
     return result
 
 
-def html_tables(text):
+def html_tables(text, warnings=None):
     parser = TableParser()
     parser.feed(text)
+    if warnings is not None:
+        for table in parser.tables:
+            if table.get("structured_rows_unavailable"):
+                warnings.extend(table["layout_warnings"])
     return parser.tables
 
 
 def attach(ctx, parsed):
     ctx.derived_sources = parsed or {}
     for doc_id, value in ctx.derived_sources.items():
-        if (
-            doc_id not in ctx.by_id
-            or value.get("source_sha256") != ctx.by_id[doc_id]["sha256"]
-        ):
+        if doc_id not in ctx.by_id or value.get("source_sha256") != ctx.by_id[doc_id]["sha256"]:
             raise ValueError("Derived text source hash mismatch: " + doc_id)
         for row in value.get("chunks", []):
             if not row.get("id") or not isinstance(row.get("content"), str):
@@ -122,16 +136,8 @@ def blocks(ctx, doc, *, raw=True, ocr=True):
                 "source_channel": "original_text",
             }
     if ocr:
-        for row in (
-            getattr(ctx, "derived_sources", {}).get(doc["id"], {}).get("chunks", [])
-        ):
-            pages = sorted(
-                {
-                    p[0]
-                    for p in row.get("positions", [])
-                    if isinstance(p, list) and p and type(p[0]) is int
-                }
-            )
+        for row in getattr(ctx, "derived_sources", {}).get(doc["id"], {}).get("chunks", []):
+            pages = sorted({p[0] for p in row.get("positions", []) if isinstance(p, list) and p and type(p[0]) is int})
             yield {
                 "text": plain(row["content"]),
                 "raw": row["content"],
@@ -171,20 +177,13 @@ def coverage(ctx):
                 "mineru_chunk_count": len(derived),
                 "mineru_physical_page_count": len(opages),
                 "original_pdf_physical_page_count": len(pages) if pages else None,
-                "pdf_pages_without_mineru_chunk_position": sorted(
-                    set(pages) - set(opages)
-                ),
+                "pdf_pages_without_mineru_chunk_position": sorted(set(pages) - set(opages)),
                 "mineru_used_in_comparison": bool(derived),
             }
         )
         for i, w in enumerate(ctx.warnings):
             if w.startswith(doc["id"] + ":") and "no OCR performed" in w:
-                ctx.warnings[i] = (
-                    w.replace(
-                        "; no OCR performed", "; ORIGINAL TEXT LAYER sparsity only"
-                    )
-                    + f"; persisted MinerU input: {len(derived)} chunks, {len(opages)} positioned pages"
-                )
+                ctx.warnings[i] = w.replace("; no OCR performed", "; ORIGINAL TEXT LAYER sparsity only") + f"; persisted MinerU input: {len(derived)} chunks, {len(opages)} positioned pages"
     return result
 
 

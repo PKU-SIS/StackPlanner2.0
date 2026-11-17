@@ -133,6 +133,7 @@ class CollusionProfile:
     reporter_delivery = False
     central_efficiency = False
     resilient_delivery = False
+    general_quality = False
     quality_controls = False
     report_format = "markdown"
 
@@ -148,6 +149,7 @@ class CollusionProfile:
         rule_level_review=False,
         request_run_id=None,
         quality_controls=False,
+        general_quality=False,
         reporter_max_tokens=None,
         reporter_request_timeout=None,
         evidence_role_capacity=False,
@@ -173,6 +175,9 @@ class CollusionProfile:
             raise ValueError("Resilient delivery requires explicit quality controls and rule-level review")
         if type(central_efficiency) is not bool or (central_efficiency and not (quality_controls and rule_level_review and report_format == "html")):
             raise ValueError("Central efficiency requires HTML quality rule-level review")
+        if general_quality and not (quality_controls and rule_level_review):
+            raise ValueError("General quality requires explicit quality controls and rule-level review")
+        self.general_quality = general_quality
         self.central_efficiency = central_efficiency
         self.resilient_delivery = resilient_delivery
         self.report_format = report_format
@@ -210,7 +215,7 @@ class CollusionProfile:
         if knowledge_root is not None:
             from .knowledge import KnowledgeStore
 
-            self.knowledge = KnowledgeStore(knowledge_root)
+            self.knowledge = KnowledgeStore(knowledge_root, general_quality=general_quality)
             manifest = json.loads((self.project / "manifest.json").read_text())
             for doc in manifest["documents"]:
                 if Path(doc["path"]).suffix.lower() == ".pdf" and self.knowledge.document(doc["id"])["source_sha256"] != doc["expected_sha256"]:
@@ -230,6 +235,7 @@ class CollusionProfile:
             quality_controls=quality_controls,
             report_format=report_format,
         )
+        self.adapters.general_quality = general_quality
         self.adapters.resilient_delivery = resilient_delivery
         self.tools = self.adapters.build()
         self.manifest = json.loads((self.project / "manifest.json").read_text())
@@ -256,6 +262,12 @@ class CollusionProfile:
             )
         if central:
             skill = central_skill(skill)
+        if central and self.general_quality:
+            skill += (
+                "\n【委派与验收范围】索引和完整集合已持久化，不要求子代理抄写全量候选摘要表或逐条台账来证明读取。委派聚焦当前证据中的具体矛盾与尚未核实的解释"
+                "，交接只保留新增事实、关键来源和未完成范围。shared_reference_edits表示实际共同改动的词语，不能把要求提交某种文件的名称"
+                "当成该段正文的公共模板来源；风险强弱仍由实际证据判断。角色、步骤与是否继续均由Central自主选择。"
+            )
         delivery_knowledge = KNOWLEDGE_GUIDANCE.split("【可核对业务完成门】", 1)[0] + RULE_LEVEL_GUIDANCE if self.rule_level_review else KNOWLEDGE_GUIDANCE
         if self.report_format == "html":
             delivery_knowledge = html_protocol(delivery_knowledge)
@@ -349,8 +361,31 @@ class CollusionProfile:
             for virtual in requested:
                 path = (self.outputs / virtual.removeprefix(prefix)).resolve()
                 expected = self.adapters._calculation_source_files.get(str(path))
+                if self.general_quality and isinstance(expected, dict):
+                    expected = expected.get("source_sha256") if expected.get("source") == "verified_current_calculation_source" else None
                 if path.is_relative_to(self.outputs.resolve()) and expected and path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == expected and virtual not in refs:
                     refs.append(virtual)
+            if self.general_quality and not refs and not requested:
+                # A visual/local review may name candidate IDs instead of a
+                # filename. Declare one actual current producer-verified source;
+                # do not replace a Central selection or hide a missing file.
+                for calculation in reversed(self.adapters.runs):
+                    if calculation.get("status") == "error":
+                        continue
+                    directory = str(calculation.get("result_directory") or "")
+                    if not directory.startswith(prefix):
+                        continue
+                    for filename in ("facts-index.json", "result.json", "sources.json"):
+                        virtual = directory + "/" + filename
+                        path = (self.outputs / virtual.removeprefix(prefix)).resolve()
+                        known = self.adapters._calculation_source_files.get(str(path))
+                        if not isinstance(known, dict) or known.get("source") != "verified_current_calculation_source" or known.get("audit_run_id") != calculation.get("run_id"):
+                            continue
+                        if path.is_relative_to(self.outputs.resolve()) and path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == known.get("source_sha256"):
+                            refs.append(virtual)
+                            break
+                    if refs:
+                        break
             if refs:
                 task.input_refs = refs
                 self.trace.event("collusion.declared_perception_sources", action_id=task.action_id, paths=refs, decisions_unchanged=True)
@@ -546,13 +581,22 @@ class CollusionProfile:
                     "不重复推导已有确定性统计，不为当前受托检查重写整任务报告或重新索取报告期间、董事会约束等通用信息。"
                     "真正缺少且影响当前受托检查的信息仍如实保留；未核位置可以列为局限，不能冒充已核。后续是否继续和角色仍由Central决定。"
                 )
+                if self.general_quality:
+                    extra += (
+                        "\n【局部观察交接格式】只交接本次新增事实、关键差异和来源位置，细表及完整原文留在实际来源文件。"
+                        "最终直接返回正常原生阶段JSON：summary、artifact_type=perception_observation、artifact_content、artifact_metadata；"
+                        "metadata明确completion_status、evidence_gaps、data_limitations。JSON字符串中的必要英文双引号必须正确转义；"
+                        "说明性引号优先用中文引号，不转抄包含大量未转义引号的长段。不得修饰原文读数或把未看部分说成已核。"
+                        "局部剩余候选未查看不等于调用者缺少决策关键信息；已提供的项目和当前计算来源不得重新询问是否提供。"
+                        "受托范围已做完即可交接，后续补查深度和角色仍由Central自主选择；真实外部必需资料缺失仍须如实说明。"
+                    )
         if task.subagent_type == "memory_recaller":
             extra = "本任务是隔离的新项目，没有可用长期历史。只召回确有来源的新增长期记忆；没有则返回summary简短说明、items=[]，不把当前规则或流程重新总结成记忆，不读其他项目。"
         capacity = {}
         if self.reporter_delivery and task.subagent_type == "reporter":
             capacity.update(model="aliyun-qwen-reporter-stream", model_thinking_enabled=False, model_errors_propagate=True)
-        if self.quality_controls and (task.subagent_type == "reporter" or (getattr(self, "evidence_role_capacity", False) and task.subagent_type in {"coder", "researcher"})):
-            evidence_role = task.subagent_type in {"coder", "researcher"}
+        evidence_role = task.subagent_type in self.evidence_role_names()
+        if self.quality_controls and (task.subagent_type == "reporter" or (getattr(self, "evidence_role_capacity", False) and evidence_role)):
             tokens = self.evidence_max_tokens if evidence_role and self.evidence_max_tokens is not None else self.reporter_max_tokens
             timeout = self.evidence_request_timeout if evidence_role and self.evidence_request_timeout is not None else self.reporter_request_timeout
             if tokens is not None:
@@ -570,6 +614,8 @@ class CollusionProfile:
 
             base_prompt = html_protocol(base_prompt)
             extra = html_protocol(extra) + "\n" + READER_GUIDANCE
+        if self.general_quality and task.subagent_type == "reporter":
+            extra += "\n【本次原始证据等级字面量】artifact_metadata.evidence_level必须原样填写：" + str(self.rule.get("证据等级") or "") + "。这是当前完整规则原值，不能遗漏、改写或用风险意见代替。正文可用自然语言解释，但不得自造其他等级。"
         if self.resilient_delivery:
             extra = resilient_read_guidance(extra)
         return replace(
@@ -590,6 +636,7 @@ class CollusionProfile:
         from .control_scope import CompactControlScopeMiddleware
         from .fact_context import CurrentCodeFactsMiddleware
         from .repetition import DelegationReadScopeMiddleware
+        from .review_budget import ReviewBudgetMiddleware
         from .vision import AuditImageRequestMiddleware
 
         return SPExecutionExtensions(
@@ -640,6 +687,11 @@ class CollusionProfile:
                     if self.knowledge and task.subagent_type != "memory_recaller"
                     else ()
                 ),
+                *(
+                    (ReviewBudgetMiddleware(self.trace, expected_grade=str(self.rule.get("证据等级") or "") if task.subagent_type == "reporter" else None),)
+                    if self.general_quality and task.subagent_type in {"coder", "researcher", "perception", "reporter"}
+                    else ()
+                ),
                 *((self.reporter_delivery_middleware(task),) if self.reporter_delivery and task.subagent_type == "reporter" else ()),
             ),
             skill_names=("stackplanner-long-task", "stackplanner-reporting", "collusion-reporting-html") if self.reporter_delivery else ("stackplanner-long-task", "stackplanner-reporting"),
@@ -648,7 +700,13 @@ class CollusionProfile:
     def reporter_delivery_middleware(self, task):
         from .reporter_delivery import ReporterDeliveryMiddleware
 
-        return ReporterDeliveryMiddleware(task.action_id, self.trace, request_timeout=self.reporter_request_timeout or 900)
+        delivery = ReporterDeliveryMiddleware(task.action_id, self.trace, request_timeout=self.reporter_request_timeout or 900)
+        path = task.context_refs.get("audit_report_contract", {}).get("path")
+        if self.general_quality and self.report_format == "html" and isinstance(path, str):
+            from .postwrite import PostWriteProtocolProjection
+
+            delivery.postwrite_projection = PostWriteProtocolProjection(task.action_id, self.outputs, path, str(self.rule.get("证据等级") or ""), trace=self.trace, json_mode=True, retain_source_context=self.rule_id == "M06")
+        return delivery
 
     def observe_result(self, task, result):
         from .recovery import recovery_scope_key
@@ -747,10 +805,21 @@ class CollusionProfile:
             + self.instructions(central=central)
         )
 
+    def evidence_role_names(self):
+        return ("coder", "researcher", "perception") if self.general_quality else ("coder", "researcher")
+
     def quality_guidance(self):
         from .quality_guidance import guidance
 
         text = guidance(self.rule_id)
+        if self.general_quality:
+            from .quality_guidance import RULES
+            from .review_quality import guidance as source_guidance
+
+            existing = RULES.get(self.rule_id, "")
+            if self.rule_id == "M01":
+                existing = existing.replace("全757或任意项目的全候选", "本次全量候选").replace("优先核对较长服务/实施近同、多个对应段落和稳定替换，", "关注共享内容中未被公共来源解释的实际改动，不按章节类别直接排除；")
+            text = source_guidance(self.rule_id) + "\n" + existing + "\n完整代码明细仍可读，索引只作导航；按当前原生协议和文件契约交付，保留规则原始证据等级。"
         if self.report_format == "html":
             text = text.replace("正文写“视觉判读候选数：N”", "正文覆盖表写“逐对查看图像”及实际组数")
             text = text.replace("正文逐字写“候选涉及唯一页数：N”和“OCR文本判读候选数：N”", "正文覆盖表分别写“涉及不同页面”及页数、“逐对核对扫描文字”及组数")
@@ -847,6 +916,7 @@ class CollusionProfile:
                 expected_grade=grade,
                 rule_id="reader-visual" if self.report_format == "html" and self.rule_id == "M06" else self.rule_id,
                 candidate_page_count=scope.get("candidate_page_count"),
+                general_quality=self.general_quality,
             )
             if self.rule_id == "M06":
                 errors += self.visual_text_errors(text, metadata)

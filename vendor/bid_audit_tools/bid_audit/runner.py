@@ -1,15 +1,16 @@
 from __future__ import annotations
-from datetime import datetime, timezone
+
 import hashlib
 import json
-from pathlib import Path
 import platform
+import time
 import traceback
 import uuid
-import time
+from datetime import UTC, datetime
+from pathlib import Path
 
 from . import __version__
-from .core import Context, dump, contained, file_hash, groups, outcome
+from .core import Context, contained, dump, file_hash, groups, outcome
 from .registry import NAMES, TOOLS
 
 
@@ -62,13 +63,7 @@ def run_rule(
         raise ValueError("Unknown rule id")
     start = time.monotonic()
     output_root = Path(output_root).resolve()
-    run_id = (
-        rule_id
-        + "_"
-        + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-        + "_"
-        + uuid.uuid4().hex[:10]
-    )
+    run_id = rule_id + "_" + datetime.now(UTC).strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:10]
     out = output_root / run_id
     out.mkdir(parents=True, exist_ok=False)
     base = {
@@ -78,7 +73,7 @@ def run_rule(
         "rule_id": rule_id,
         "rule_name": NAMES[rule_id],
         "run_id": run_id,
-        "run_at_utc": datetime.now(timezone.utc).isoformat(),
+        "run_at_utc": datetime.now(UTC).isoformat(),
         "python": platform.python_version(),
         "risk_verdict": None,
         "requires_agent_review": True,
@@ -90,40 +85,31 @@ def run_rule(
             cache_dir or output_root / ".cache",
             permitted_root=permitted_root,
         )
-        if int(rule_id[1:]) <= 12 and not any(
-            len({d["bidder"] for d in ds}) >= 2
-            for ds in groups(ctx.documents("bid")).values()
-        ):
+        if int(rule_id[1:]) <= 12 and not any(len({d["bidder"] for d in ds}) >= 2 for ds in groups(ctx.documents("bid")).values()):
             data = outcome(
                 status="insufficient_data",
-                limitations=[
-                    "At least two bidders in the same round and lot are required."
-                ],
+                limitations=["At least two bidders in the same round and lot are required."],
             )
-        elif rule_id in ("M06", "M10", "M11", "M12") and not any(
-            len({d["bidder"] for d in ds}) >= 2
-            for ds in groups(
-                [d for d in ctx.documents("bid") if d["_path"].suffix.lower() == ".pdf"]
-            ).values()
-        ):
+        elif rule_id in ("M06", "M10", "M11", "M12") and not any(len({d["bidder"] for d in ds}) >= 2 for ds in groups([d for d in ctx.documents("bid") if d["_path"].suffix.lower() == ".pdf"]).values()):
             data = outcome(
                 status="insufficient_data",
-                limitations=[
-                    "This rule requires original PDFs from at least two bidders in the same round and lot."
-                ],
+                limitations=["This rule requires original PDFs from at least two bidders in the same round and lot."],
             )
         elif rule_id == "M01":
             from .m01_recall import audit_m01
 
             data = audit_m01(ctx, parsed_texts)
         elif parsed_texts is not None:
-            from .structured_text import attach
             from .enhanced_rules import run as run_enhanced
+            from .structured_text import attach
 
             attach(ctx, parsed_texts)
             data = run_enhanced(ctx, rule_id)
         else:
             data = TOOLS[rule_id](ctx)
+        from .source_quality import enrich
+
+        data = enrich(ctx, rule_id, data, parsed_texts)
         warnings = sorted(set(ctx.warnings))
         if warnings and data["status"] == "ok":
             data["status"] = "partial"
@@ -139,9 +125,7 @@ def run_rule(
         for name, items in collections.items():
             with (out / (name + ".jsonl")).open("w", encoding="utf-8") as f:
                 for item in items:
-                    f.write(
-                        json.dumps(item, ensure_ascii=False, allow_nan=False) + "\n"
-                    )
+                    f.write(json.dumps(item, ensure_ascii=False, allow_nan=False) + "\n")
         dump(out / "sources.json", ctx.source_inventory())
         dump(out / "manifest.snapshot.json", ctx.manifest)
         summary = {
@@ -150,10 +134,7 @@ def run_rule(
             "warnings": warnings,
             "manifest_sha256": file_hash(manifest_path),
             "parameters": ctx.params,
-            "collections": {
-                k: {"count": len(v), "file": k + ".jsonl"}
-                for k, v in collections.items()
-            },
+            "collections": {k: {"count": len(v), "file": k + ".jsonl"} for k, v in collections.items()},
             "evidence_count": len(evidence),
             "finding_count": len(collections["findings"]),
             "elapsed_seconds": round(time.monotonic() - start, 3),
@@ -162,9 +143,7 @@ def run_rule(
         # Imported versions are part of the audit environment, without imposing network access.
         from importlib.metadata import version
 
-        summary["dependencies"] = {
-            k: version(k) for k in ("pypdf", "pdfplumber", "Pillow", "python-docx")
-        }
+        summary["dependencies"] = {k: version(k) for k in ("pypdf", "pdfplumber", "Pillow", "python-docx")}
     except Exception as e:
         summary = {
             **base,
@@ -174,9 +153,7 @@ def run_rule(
             "evidence_count": None,
             "collections": {},
             "elapsed_seconds": round(time.monotonic() - start, 3),
-            "limitations": [
-                "Execution failed. Do not interpret this result as zero anomalies."
-            ],
+            "limitations": ["Execution failed. Do not interpret this result as zero anomalies."],
         }
         (out / "error.log").write_text(traceback.format_exc(), encoding="utf-8")
     dump(out / "result.json", summary)
@@ -186,12 +163,7 @@ def run_rule(
 def read_result(run_directory, collection="findings", offset=0, limit=5):
     root = Path(run_directory).resolve()
     summary = json.loads((root / "result.json").read_text())
-    if (
-        type(offset) is not int
-        or offset < 0
-        or type(limit) is not int
-        or not 1 <= limit <= 20
-    ):
+    if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 20:
         raise ValueError("offset >= 0 and 1 <= limit <= 20 required")
     if collection not in summary["collections"]:
         raise ValueError("Unknown result collection")
@@ -211,7 +183,5 @@ def read_result(run_directory, collection="findings", offset=0, limit=5):
         "offset": offset,
         "total": spec["count"],
         "items": items,
-        "next_offset": offset + len(items)
-        if offset + len(items) < spec["count"]
-        else None,
+        "next_offset": offset + len(items) if offset + len(items) < spec["count"] else None,
     }
