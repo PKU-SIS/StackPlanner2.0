@@ -1421,3 +1421,23 @@ Offline callers may bind a trusted run-local action policy during graph executio
 The trusted optional run policy can return a rejected file-delivery decision to Central through recover_delivery_with_central. Its presence preserves Central role selection during artifact recovery. Native artifact identity, completion, schema validation and recovery limits still apply.
 
 The DCC benchmark profile disables long-term memory updates and automatic injection; task-local MemoryStack remains enabled. Explicit recall actions are a separate control path.
+
+`sp/evidence_quotes.py` provides optional diagnostic quotation feedback under
+`SP_CLAUSE_QUOTE_REVIEW=1`. Scope it to the executor's validated `clause` Skill,
+host-designated Reporter, exact two-string text/explanation array schema, artifact
+JSON delivery, and the sole public uploads/document.txt requirement with no RAG
+documents. Reconstruct only complete paired successful original read_file ranges
+from this executor; hidden/unobserved prefetch, previews, truncation, missing lines
+and conflicting snapshots yield `unavailable`. Existing source completion gates
+are independent and unchanged. Whitespace normalization and permissive terminal
+punctuation segmentation allow separate/reordered original sentences. This does
+not establish sentence completeness, semantic truth, absence of false positives,
+or official metric validity; abbreviation splits can under-detect alterations.
+At most two same-instance model reviews follow ordinary native format checks and
+guards. Never filter, repair, score or hard-reject a prediction using this heuristic.
+Retain candidate bytes and host diagnostics under
+AIMessage.additional_kwargs.sp_clause_quote_review, including in the exact matching
+saved executor ai_messages entry (stream capture deduplicates by ID before hooks).
+Review prompts are transient. Exhaustion keeps the original result and diagnostics;
+native status/schema/source/stop gates remain authoritative. Tests:
+`tests/test_sp_evidence_quotes.py` and `tests/test_sp_public_format_repair.py`.

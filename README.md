@@ -687,3 +687,19 @@ reasoning mode and comparison requirements.
 For CLAUSE file-mode source navigation and native Qwen delivery handling, see [the CLAUSE execution guide](docs/clause_autonomous.md).
 
 DCC 基准配置关闭跨任务长期记忆更新和自动注入；任务内 MemoryStack 仍然可用。
+
+Optional CLAUSE quotation review is enabled with `SP_CLAUSE_QUOTE_REVIEW=1`
+in the native executor process. It applies only to the validated `clause` Skill
+on the designated Reporter, with the public text/explanation array schema and
+the single uploaded `document.txt` source. The same specialist may receive at
+most two quotation-review prompts. The check allows whitespace differences and
+noncontiguous/reordered sentences from that document. It does not assess defect
+correctness, choose replacement passages, remove findings, change rewards or
+official scores, or reject an otherwise accepted output. Missing complete
+original tool evidence produces `unavailable`, not a quotation failure.
+Diagnostics are retained in each candidate's
+`additional_kwargs.sp_clause_quote_review` in the native graph and saved
+`SubagentResult.ai_messages`; feedback prompts are transient. This heuristic
+can miss altered combinations around abbreviations and is not proof of audit
+quality. It is disabled by default; enabling it changes execution and requires
+a new run rather than resuming or rewriting saved predictions.

@@ -636,7 +636,16 @@ class SubagentExecutor:
 
             # Reverse after_model order: native cost/safety guards must run
             # before a format-correction jump can re-enter the model.
-            middlewares.insert(0, PublicArtifactFormatRepairMiddleware(self.public_output_contract, action_id=self.reporter_action_id, auditor_role=self.source_prefetch_auditor_role))
+            middlewares.insert(
+                0,
+                PublicArtifactFormatRepairMiddleware(
+                    self.public_output_contract,
+                    action_id=self.reporter_action_id,
+                    auditor_role=self.source_prefetch_auditor_role,
+                    skill_names=self.config.skills,
+                    captured_sources=lambda: self._prefetch_captured,
+                ),
+            )
         if self.source_prefetch_settings is not None:
             from deerflow.sp.source_prefetch import SourcePrefetchVisibilityMiddleware
 

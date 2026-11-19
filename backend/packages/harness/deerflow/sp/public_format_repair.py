@@ -163,10 +163,14 @@ def augment_public_format_request(request):
 class PublicArtifactFormatRepairMiddleware(AgentMiddleware):
     """Keep public schema corrections inside the host-bound auditor instance."""
 
-    def __init__(self, contract: Mapping[str, Any], *, action_id: str | None = None, auditor_role: str | None = None):
+    def __init__(self, contract: Mapping[str, Any], *, action_id: str | None = None, auditor_role: str | None = None, skill_names=None, captured_sources=None):
         self.contract = contract
         self.action_id = action_id
         self.auditor_role = auditor_role
+        from deerflow.sp.evidence_quotes import clause_quote_review_enabled
+
+        self.quote_review_enabled = clause_quote_review_enabled(contract, skill_names, auditor_role)
+        self.captured_sources = captured_sources
 
     @hook_config(can_jump_to=["model"])
     def after_model(self, state, runtime):
@@ -182,14 +186,26 @@ class PublicArtifactFormatRepairMiddleware(AgentMiddleware):
                 or not required["files"]
             ):
                 return None
-        return public_format_repair_update(state, self.contract, scope=self.action_id)
+        update = public_format_repair_update(state, self.contract, scope=self.action_id)
+        if update is not None or not self.quote_review_enabled:
+            return update
+        from deerflow.sp.evidence_quotes import quote_review_update
+
+        captured = self.captured_sources() if self.captured_sources is not None else None
+        return quote_review_update(state, self.contract, scope=self.action_id or "native", captured_sources=captured)
 
     @hook_config(can_jump_to=["model"])
     async def aafter_model(self, state, runtime):
         return self.after_model(state, runtime)
 
     def wrap_model_call(self, request, handler):
-        return handler(augment_public_format_request(request))
+        from deerflow.sp.evidence_quotes import augment_quote_review_request
+
+        request = augment_public_format_request(request)
+        return handler(augment_quote_review_request(request) if self.quote_review_enabled else request)
 
     async def awrap_model_call(self, request, handler):
-        return await handler(augment_public_format_request(request))
+        from deerflow.sp.evidence_quotes import augment_quote_review_request
+
+        request = augment_public_format_request(request)
+        return await handler(augment_quote_review_request(request) if self.quote_review_enabled else request)
