@@ -525,6 +525,9 @@ class DR2SPExecutorProvider:
             usage_records = list(getattr(raw_result, "token_usage_records", None) or [])
             if callable(report_usage) and usage_records:
                 report_usage(usage_records)
+            from deerflow.sp.evidence_quotes import emit_quote_review_events
+
+            emit_quote_review_events(raw_result, writer)
 
         adapter = DR2SubagentExecutorAdapter(
             executor_factory,

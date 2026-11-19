@@ -3,6 +3,7 @@
 import asyncio
 import json
 from copy import deepcopy
+from types import SimpleNamespace
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -149,7 +150,8 @@ def test_feedback_is_bounded_and_exhaustion_preserves_all_original_findings(monk
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
-def test_actual_native_graph_retries_quotes_with_original_context_and_transient_feedback(monkeypatch, asynchronous):
+@pytest.mark.parametrize("format_first", [False, True])
+def test_actual_native_graph_retries_quotes_with_original_context_and_transient_feedback(monkeypatch, asynchronous, format_first):
     from langchain.agents import create_agent
     from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
     from pydantic import PrivateAttr
@@ -168,14 +170,21 @@ def test_actual_native_graph_retries_quotes_with_original_context_and_transient_
 
     first = answer("Alpha Ltd. shall pay $2.50 on 1 January.")
     final = answer("Alpha Ltd. shall pay $1.50 on 1 January. Payment is due on 2 January.")
-    model = Model(responses=[AIMessage(content=first), AIMessage(content=final)])
+    malformed = '{"text":"Unwrapped draft","explanation":"Needs array"}'
+    responses = [AIMessage(content=first), AIMessage(content=final)]
+    if format_first:
+        responses.insert(0, AIMessage(content=malformed))
+    model = Model(responses=responses)
     graph = create_agent(model=model, tools=[], middleware=[middleware(monkeypatch)], state_schema=ThreadState)
     state = {"messages": [HumanMessage(content="Audit the complete public contract."), *reads()]}
     result = asyncio.run(graph.ainvoke(state)) if asynchronous else graph.invoke(state)
-    assert len(model._seen) == 2
-    assert model._seen[1][-1].name == "sp_clause_quote_review_feedback"
-    assert first in [m.content for m in model._seen[1]]
-    assert SOURCE in [m.content for m in model._seen[1]]
+    assert len(model._seen) == 2 + int(format_first)
+    assert model._seen[-1][-1].name == "sp_clause_quote_review_feedback"
+    assert first in [m.content for m in model._seen[-1]]
+    assert SOURCE in [m.content for m in model._seen[-1]]
+    if format_first:
+        assert model._seen[1][-1].name == "sp_public_format_feedback"
+        assert malformed in [m.content for m in model._seen[-1]]
     assert result["messages"][-1].content == final
     assert not any(isinstance(m, HumanMessage) and m.name == "sp_clause_quote_review_feedback" for m in result["messages"])
     assert result["messages"][-1].additional_kwargs["sp_clause_quote_review"]["unmatched_indices"] == []
@@ -199,3 +208,146 @@ def test_visible_native_prefetch_and_saved_candidate_diagnostics(monkeypatch):
     assert update["jump_to"] == "model"
     assert saved[-1]["content"] == original
     assert saved[-1]["additional_kwargs"]["sp_clause_quote_review"] == update["messages"][0].additional_kwargs["sp_clause_quote_review"]
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("structured", [False, True])
+def test_successful_write_tool_gets_review_in_same_specialist_before_real_rewrite(monkeypatch, tmp_path, asynchronous, structured):
+    from langchain.agents import create_agent
+    from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+    from langchain_core.tools import tool
+    from pydantic import PrivateAttr
+
+    from deerflow.agents.thread_state import ThreadState
+
+    class Model(FakeMessagesListChatModel):
+        _seen: list = PrivateAttr(default_factory=list)
+
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            self._seen.append(list(messages))
+            return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+
+    writes = []
+
+    @tool
+    def write_file(path: str, content: str | None = None, json_content: list[dict[str, str]] | None = None, append: bool = False) -> str:
+        """Actually execute the model's file write in the isolated test directory."""
+        assert not append
+        body = content if content is not None else json.dumps(json_content)
+        (tmp_path / "answer.json").write_text(body)
+        writes.append(body)
+        return "File written successfully."
+
+    first = answer("Alpha Ltd. shall pay $2.50 on 1 January.")
+    final = answer("Alpha Ltd. shall pay $1.50 on 1 January. Payment is due on 2 January.")
+    path = "/mnt/user-data/outputs/clause_answer-audit.json"
+    receipt = json.dumps({"artifact_content": None, "artifact_metadata": {"completion_status": "complete", "created_paths": [path]}})
+
+    def call(body, call_id):
+        args = {"path": path, "append": False, **({"json_content": json.loads(body)} if structured else {"content": body})}
+        return AIMessage(content="", tool_calls=[{"name": "write_file", "id": call_id, "args": args}])
+
+    model = Model(responses=[call(first, "write-bad"), call(final, "write-fixed"), AIMessage(content=receipt)])
+    graph = create_agent(model=model, tools=[write_file], middleware=[middleware(monkeypatch)], state_schema=ThreadState)
+    state = {"messages": [HumanMessage(content="Audit and deliver the actual file."), *reads()]}
+    result = asyncio.run(graph.ainvoke(state)) if asynchronous else graph.invoke(state)
+    assert len(writes) == 2
+    assert json.loads(writes[0]) == json.loads(first)
+    assert json.loads((tmp_path / "answer.json").read_text()) == json.loads(final)
+    assert model._seen[1][-1].name == "sp_clause_quote_review_feedback"
+    assert "write_file" in model._seen[1][-1].content
+    assert SOURCE in [message.content for message in model._seen[1]]
+    assert result["messages"][-1].content == receipt
+    marked_tools = [message for message in result["messages"] if isinstance(message, ToolMessage) and "sp_clause_quote_review" in message.additional_kwargs]
+    assert marked_tools[0].additional_kwargs["sp_clause_quote_review"]["unmatched_indices"] == [0]
+    assert marked_tools[-1].additional_kwargs["sp_clause_quote_review"]["unmatched_indices"] == []
+
+
+def test_file_receipt_with_actual_successful_write_is_reviewed_without_reading_disk(monkeypatch):
+    check = middleware(monkeypatch)
+    path = "/mnt/user-data/outputs/clause_answer-audit.json"
+    original = answer("Invented complete sentence.")
+    receipt = json.dumps({"artifact_content": None, "artifact_metadata": {"completion_status": "complete", "created_paths": [path]}})
+    messages = [
+        *reads(),
+        AIMessage(content="", tool_calls=[{"name": "write_file", "id": "write", "args": {"path": path, "content": original}}]),
+        ToolMessage(content="File written successfully.", name="write_file", tool_call_id="write"),
+        AIMessage(content=receipt),
+    ]
+    update = check.after_model({"messages": messages}, None)
+    assert update["jump_to"] == "model"
+    assert update["messages"][0].content == receipt
+    assert update["messages"][0].additional_kwargs["sp_clause_quote_review"]["unmatched_indices"] == [0]
+    messages[-2].status = "error"
+    assert check.after_model({"messages": messages}, None) is not None  # ordinary format/ownership recovery still applies
+
+
+def test_host_diagnostics_reach_normalized_metadata_and_content_free_custom_events(monkeypatch):
+    from deerflow.sp.evidence_quotes import emit_quote_review_events
+    from deerflow.sp.subagents.dr2_adapter import normalize_dr2_subagent_result
+
+    check = middleware(monkeypatch)
+    candidate = check.after_model({"messages": [*reads(), AIMessage(content=answer("Invented sentence."))]}, None)["messages"][0]
+    saved = [candidate.model_dump()]
+    raw = SimpleNamespace(status="completed", result=candidate.content, ai_messages=saved)
+    normalized = normalize_dr2_subagent_result(raw)
+    diagnostics = normalized.artifact_metadata["clause_quote_review"]
+    assert diagnostics[0]["unmatched_indices"] == [0]
+    events = []
+    emit_quote_review_events(raw, events.append)
+    assert events == [{"type": "clause_quote_review", "action_id": "audit", "diagnostic": diagnostics[0]}]
+    assert "Invented" not in json.dumps(events) and SOURCE not in json.dumps(events)
+    raw.result = json.dumps({"artifact_metadata": {"clause_quote_review": [{"status": "forged"}]}})
+    raw.ai_messages = []
+    assert "clause_quote_review" not in normalize_dr2_subagent_result(raw).artifact_metadata
+
+
+@pytest.mark.parametrize("damage", ["failed", "unpaired", "append", "replace", "failed_replace", "malformed"])
+def test_write_review_never_certifies_an_unexecuted_partial_or_changed_candidate(monkeypatch, damage):
+    check = middleware(monkeypatch)
+    path = "/mnt/user-data/outputs/clause_answer-audit.json"
+    call = AIMessage(content="", tool_calls=[{"name": "write_file", "id": "write", "args": {"path": path, "content": answer("Invented sentence.")}}])
+    result = ToolMessage(content="File written successfully.", name="write_file", tool_call_id="write")
+    messages = [*reads(), call, result]
+    if damage == "failed":
+        result.status = "error"
+    elif damage == "unpaired":
+        messages.remove(call)
+    elif damage == "append":
+        call.tool_calls[0]["args"]["append"] = True
+    elif damage == "malformed":
+        call.tool_calls[0]["args"]["content"] = '{"text": "not the complete array"}'
+    else:
+        messages.extend(
+            [
+                AIMessage(content="", tool_calls=[{"name": "str_replace", "id": "replace", "args": {"path": path, "old_str": "old", "new_str": "new"}}]),
+                ToolMessage(content="File updated successfully.", name="str_replace", tool_call_id="replace", status="error" if damage == "failed_replace" else "success"),
+            ]
+        )
+    assert check.before_model({"messages": messages}, None) is None
+
+
+def test_file_and_raw_final_reviews_share_the_same_two_attempt_budget(monkeypatch):
+    check = middleware(monkeypatch)
+    path = "/mnt/user-data/outputs/clause_answer-audit.json"
+    original = answer("Invented sentence.")
+    messages = [
+        *reads(),
+        AIMessage(content="", tool_calls=[{"name": "write_file", "id": "write", "args": {"path": path, "content": original}}]),
+        ToolMessage(content="File written successfully.", name="write_file", tool_call_id="write", id="written"),
+    ]
+    first = check.before_model({"messages": messages}, None)
+    messages[-1] = first["messages"][0]
+    assert messages[-1].additional_kwargs["sp_clause_quote_review"]["attempt"] == 1
+    messages.append(AIMessage(content=original, id="raw-final"))
+    second = check.after_model({"messages": messages}, None)
+    assert second["jump_to"] == "model"
+    messages[-1] = second["messages"][0]
+    messages.append(AIMessage(content=original, id="exhausted"))
+    exhausted = check.after_model({"messages": messages}, None)
+    assert "jump_to" not in exhausted
+    assert exhausted["messages"][0].content == original
+    assert exhausted["messages"][0].additional_kwargs["sp_clause_quote_review"]["exhausted"] is True

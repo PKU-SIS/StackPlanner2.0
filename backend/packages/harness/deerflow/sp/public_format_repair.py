@@ -172,6 +172,17 @@ class PublicArtifactFormatRepairMiddleware(AgentMiddleware):
         self.quote_review_enabled = clause_quote_review_enabled(contract, skill_names, auditor_role)
         self.captured_sources = captured_sources
 
+    def before_model(self, state, runtime):
+        if not self.quote_review_enabled:
+            return None
+        from deerflow.sp.evidence_quotes import quote_write_review_update
+
+        captured = self.captured_sources() if self.captured_sources is not None else None
+        return quote_write_review_update(state, self.contract, scope=self.action_id or "native", captured_sources=captured)
+
+    async def abefore_model(self, state, runtime):
+        return self.before_model(state, runtime)
+
     @hook_config(can_jump_to=["model"])
     def after_model(self, state, runtime):
         if self.contract.get("delivery_mode") != "artifact":

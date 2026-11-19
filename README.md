@@ -703,3 +703,17 @@ Diagnostics are retained in each candidate's
 can miss altered combinations around abbreviations and is not proof of audit
 quality. It is disabled by default; enabling it changes execution and requires
 a new run rather than resuming or rewriting saved predictions.
+
+Quotation review also inspects a complete array passed to an actually successful
+native `write_file` call before the next ordinary specialist turn, and recognizes
+file receipts backed by those real writes. It supports string `content` and
+structured `json_content`; appends, changed snapshots, failed/unpaired writes and
+ambiguous receipts cannot certify a candidate. The same two-review budget covers
+file and direct-final paths. A file correction requires another model-executed
+write; an inline array or a receipt does not rewrite it. Feedback explicitly
+preserves OCR word-internal spaces/fragments and forbids decorative quote marks.
+On specialist completion, native custom events expose
+`type: clause_quote_review`, `action_id`, and content-free `diagnostic` status.
+The same trusted diagnostic list is available in normalized
+`SPSubagentResult.artifact_metadata.clause_quote_review`; model metadata claims
+cannot supply it. These diagnostics do not affect acceptance or official scores.

@@ -1249,6 +1249,15 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
     test_verification = artifact_metadata.get("test_verification")
     tests = [dict(test_verification)] if isinstance(test_verification, Mapping) else []
 
+    from deerflow.sp.evidence_quotes import collect_quote_review_diagnostics
+
+    # Reserved host diagnostics come only from captured native message metadata,
+    # never from a model's artifact_metadata claim. They do not affect status.
+    artifact_metadata.pop("clause_quote_review", None)
+    quote_diagnostics = collect_quote_review_diagnostics(ai_messages if isinstance(ai_messages, list) else [], scope=task.action_id if task is not None else None)
+    if quote_diagnostics:
+        artifact_metadata["clause_quote_review"] = quote_diagnostics
+
     return SPSubagentResult(
         status=status,
         result=normalized_result,
