@@ -1043,6 +1043,8 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
                 "<sp-public-source-audit-required>\n"
                 "The required public source audit has not yet completed. The public contract already names its audit role; "
                 "do not repeat perception or route this evidence read to an unrelated coder. "
+                "Only sp_delegate is currently bound. Memory preflight is deferred while this public-source audit workflow proceeds; "
+                "do not call sp_recall_memory or any other unbound tool, or insert a delayed preflight into audit recovery or delivery. "
                 f'Call sp_delegate exactly once with target_agent="{target}", stage="{stage}", {refs_instruction}metadata={json.dumps(metadata, ensure_ascii=False)}. '
                 "Ask that auditor to use its allowed native tools to read all source_requirements.files and all scoped source_requirements.document_ids, "
                 "then audit the complete original task and return its public output format. Native host prefetch may provide the same real source reads; "

@@ -1459,3 +1459,9 @@ action_id and diagnostic on specialist completion; no document, prediction or go
 text is included. This avoids relying on already-emitted step snapshots or final
 Central messages. CPU graph tests cover format then quote feedback with original
 source context, real tool execution/rewrite, bounded shared attempts and metadata.
+
+Memory-preflight prompts must follow the actual request's bound tools and defer
+to required public-source audit, recovery and delivery workflows. Keep ordinary
+new-conversation recall required when available; do not insert it after an audit
+has begun. The audit-only binding and existing completion gates are unchanged.
+Sync/async request coverage: `tests/test_sp_memory_preflight_availability.py`.

@@ -717,3 +717,7 @@ On specialist completion, native custom events expose
 The same trusted diagnostic list is available in normalized
 `SPSubagentResult.artifact_metadata.clause_quote_review`; model metadata claims
 cannot supply it. These diagnostics do not affect acceptance or official scores.
+
+Central's new-conversation memory preflight requires the recall tool to be
+currently bound. Required public-source audit, recovery and delivery workflows
+take priority and continue without an inserted memory preflight.

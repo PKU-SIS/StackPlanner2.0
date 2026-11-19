@@ -169,7 +169,9 @@ class PromptContextBuilder:
         if new_conversation:
             full_header.extend(
                 [
-                    "- On new_conversation, the first CentralAgent decision is the one-time long-term-memory preflight; existing task context does not suppress that preflight.",
+                    "- On new_conversation, when sp_recall_memory is currently bound and no higher-priority public-source audit, recovery, or delivery instruction applies, "
+                    "the first CentralAgent decision is the one-time long-term-memory preflight.",
+                    "- A required public-source audit, recovery, or delivery workflow takes priority; never call an unbound tool or interrupt that workflow with a delayed memory preflight.",
                     "- After a recall_memory entry exists in this run, do not repeat the preflight.",
                 ]
             )

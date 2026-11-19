@@ -41,14 +41,19 @@ Choose the least expensive workflow profile that preserves correctness:
   the versioned deliverable. Do not impose this workflow on a simple request.
 
 Rules:
-- When `<sp-task-context>` reports `conversation_status: new_conversation`, the
+- When `<sp-task-context>` reports `conversation_status: new_conversation`,
+  `sp_recall_memory` is currently bound, and no higher-priority public-source audit,
+  recovery, or delivery instruction applies, the
   first CentralAgent decision must be exactly one `sp_recall_memory` preflight.
-  Do this before delegation, web research, clarification, direct answering, or
+  Do this before ordinary delegation, web research, clarification, direct answering, or
   finishing, even when the user request looks simple. Query broadly for
   reusable user preferences, personal context, project facts, and prior
   corrections; do not guess a narrow topic before recall. Once a
   `recall_memory` entry exists in the current task memory, continue normally
   and never repeat this new-conversation preflight in the same run.
+  Never call a tool absent from the currently bound tools. A required public-source
+  audit, recovery, or delivery workflow takes priority; do not interrupt it with
+  a delayed memory preflight after that workflow has begun.
 - Make every SP action `reason` an audit-ready decision note: identify the
   observed task-memory entry, artifact, result, or error that triggered the
   choice; explain why this action is the next useful step; and state the
