@@ -1475,3 +1475,18 @@ only the reason whitelist, never replacement spans or arbitrary diagnostic text.
 Native graph tests verify both feedback requests after an ignored first review.
 Mock HTTP tests exercise sync/async `VllmChatModel` serialization through that
 same native graph, retaining the source and both transient review requests.
+
+Initial public guidance is a distinct caller boundary from mid-run quote-review
+feedback. `TaskMemoryMiddleware` anchors only the latest visible user message in
+`user_request`; `build_handler_context_refs` uses that same complete message for
+the delegated `original_query` and `latest_user_input`. Include required current
+workflow guidance in that message. A separate first user prelude still reaches
+Central's serialized HTTP request when `fresh_user_turn_after_terminal` is
+omitted or false. Only a true flag invokes fresh-turn message isolation, which
+removes the prelude from that request. The first state message may still reach
+Reporter through `thread_first_user_input`, with whitespace compressed and a
+2,400-character historical cap; do not describe it as entirely undelivered.
+`tests/test_sp_public_guidance_boundary.py` covers sync/async native graph and
+provider HTTP serialization with the flag omitted, false and true, plus actual
+rendered Reporter task anchors and bounded historical guidance. These are
+behavioral regression tests and do not change native production semantics.

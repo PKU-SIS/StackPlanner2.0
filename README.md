@@ -728,3 +728,13 @@ non-verbatim text. It supplies no replacement passages and retains the same
 two-review budget, source checks and support for noncontiguous source sentences.
 CPU tests also capture the real OpenAI-compatible provider's HTTP payloads to
 verify that transient feedback reaches the model despite its hidden UI metadata.
+
+Callers should include public workflow guidance in the latest visible user
+message when it is part of the current task. Task memory and the delegated
+Reporter's `original_query`/`latest_user_input` anchor that complete message.
+A separate first user prelude reaches Central's HTTP request when
+`fresh_user_turn_after_terminal` is absent or false; a true flag isolates the
+latest user turn and removes the prelude from that request. The separate prelude
+is absent from the current task anchors, although Reporter may still receive it
+as compressed historical context capped at 2,400 characters. Sync/async CPU
+tests capture these HTTP and Reporter boundaries without external services.
