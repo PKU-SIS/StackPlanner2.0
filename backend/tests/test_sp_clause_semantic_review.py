@@ -46,6 +46,17 @@ def middleware(monkeypatch, *, quote=False, **kwargs):
     return PublicArtifactFormatRepairMiddleware(contract(), action_id="audit", auditor_role="reporter", skill_names=["clause"], **kwargs)
 
 
+def assert_public_issue_scope(content):
+    note = content.lower()
+    for family in ["ambiguity", "inconsistency", "misaligned terminology", "omission", "structural flaws"]:
+        assert family + ":" in note
+    assert "plausible readings" in note
+    assert "document's own" in note
+    assert "need not be a contradiction" in note
+    assert "no supported issue" in note and "[]" in note
+    assert "claimed inconsistency" not in note
+
+
 def test_semantic_review_is_explicit_and_scoped_to_the_public_clause_reporter(monkeypatch):
     from deerflow.sp.semantic_review import clause_semantic_review_enabled
 
@@ -200,10 +211,72 @@ def test_real_native_http_orders_one_semantic_pass_then_two_quote_reviews(monkey
     assert semantic[0]["role"] == "user" and "hide_from_ui" not in semantic[0]
     assert "every supported distinct finding" in semantic[0]["content"]
     assert "whole document" in semantic[0]["content"]
+    assert_public_issue_scope(semantic[0]["content"])
     assert all(any(message.get("content") == SOURCE for message in payload["messages"]) for payload in payloads)
     assert result["messages"][-1].content == GOOD
     assert [info["status"] for info in collect_semantic_review_diagnostics(result["messages"], finalize=True)] == ["requested", "completed"]
     assert not any(isinstance(message, HumanMessage) and message.name == "sp_clause_semantic_review_feedback" for message in result["messages"])
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("no_issue", [False, True])
+def test_semantic_scope_http_preserves_one_pass_and_model_owned_empty_or_nonempty_final(monkeypatch, asynchronous, no_issue):
+    import httpx
+    from langchain.agents import create_agent
+
+    from deerflow.agents.thread_state import ThreadState
+    from deerflow.models.vllm_provider import VllmChatModel
+    from deerflow.sp.semantic_review import collect_semantic_review_diagnostics
+
+    source = "Payment is due on 1 January.\nBoth parties agree on that date." if no_issue else SOURCE
+    final = "[]" if no_issue else GOOD
+    source_messages = reads()
+    source_messages[-1].content = source
+    payloads = []
+
+    def endpoint(request):
+        payloads.append(json.loads(request.content))
+        assert len(payloads) <= 2  # The scope clarification cannot add another review.
+        return httpx.Response(
+            200,
+            json={
+                "id": f"scope-fixture-{len(payloads)}",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "Qwen3-semantic-scope-fixture",
+                "choices": [{"index": 0, "message": {"role": "assistant", "content": final}, "finish_reason": "stop"}],
+            },
+        )
+
+    transport = httpx.MockTransport(endpoint)
+
+    def graph(**clients):
+        model = VllmChatModel(model="Qwen3-semantic-scope-fixture", api_key="fixture-key", base_url="http://fixture.invalid/v1", max_retries=0, **clients)
+        return create_agent(model=model, tools=[], middleware=[middleware(monkeypatch)], state_schema=ThreadState)
+
+    state = {"messages": [HumanMessage(content="Audit the complete public document using the bound task."), *source_messages]}
+    if asynchronous:
+
+        async def run():
+            async with httpx.AsyncClient(transport=transport) as client:
+                return await graph(http_async_client=client).ainvoke(state)
+
+        result = asyncio.run(run())
+    else:
+        with httpx.Client(transport=transport) as client:
+            result = graph(http_client=client).invoke(state)
+    assert len(payloads) == 2
+    note = payloads[1]["messages"][-1]
+    assert note["name"] == "sp_clause_semantic_review_feedback"
+    assert_public_issue_scope(note["content"])
+    assert "every supported distinct finding" in note["content"]
+    assert "count limit" in note["content"]
+    assert "host supplies no replacement text or labels" in note["content"]
+    assert all(any(message.get("content") == source for message in payload["messages"]) for payload in payloads)
+    assert result["messages"][-1].content == final
+    diagnostics = collect_semantic_review_diagnostics(result["messages"], finalize=True)
+    assert [info["status"] for info in diagnostics] == ["requested", "completed"]
+    assert [info["candidate_items"] for info in diagnostics] == ([0, 0] if no_issue else [1, 1])
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])

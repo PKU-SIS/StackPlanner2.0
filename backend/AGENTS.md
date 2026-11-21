@@ -1507,6 +1507,15 @@ budget. Preserve the completed-Reporter Central tool restriction. Do not add a
 second delegation, inference judge, gold lookup, category routing, finding cap,
 host filtering or answer replacement.
 
+The single semantic request must cover the public Skill's five alternative issue
+families: ambiguity, inconsistency, misaligned terminology, omission and structural
+flaws. Ground each in the document's readings, statements, terminology, internally
+evidenced gaps or structure, respectively. Do not require every finding to be a
+contradiction, import external checklists or force a category mix. Preserve model
+judgment, all supported distinct findings and a genuine no-issue `[]` result.
+Sync/async provider HTTP tests verify this scope reaches the same one-pass request
+while empty/nonempty candidate bytes and the separate quote budget stay unchanged.
+
 Host message annotations share one semantic budget per action across raw finals,
 artifact_content, successful complete write_file and backed file receipts.
 Parallel tool batches must anchor feedback after their last result without

@@ -752,6 +752,13 @@ replacement passages and never deletes, rewrites or scores findings. Existing
 source, status, schema, budget and safety gates remain in force, as does Central's
 guard against repeating a completed Reporter delegation.
 
+That one pass covers all five public issue families: ambiguity, inconsistency,
+misaligned terminology, omission and structural flaws. Each has a document-based
+evidence standard; a supported ambiguity, missing provision or structural defect
+need not be a contradiction between clauses. The model reviews the whole source
+without an external checklist, a required category mix or a finding-count limit,
+and may return `[]` after a complete review finds no supported issue.
+
 Raw finals, artifact bodies and actual successful file writes share one semantic
 request per action. A real file review requires a model-executed complete rewrite;
 an unchanged old-file receipt is recorded as exhausted. Missing or conflicting
