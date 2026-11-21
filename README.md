@@ -726,3 +726,5 @@ Optional CLAUSE quotation feedback gives each already-unmatched finding a short
 source-only reason: an unsupported outer quotation wrapper, a line label, or
 non-verbatim text. It supplies no replacement passages and retains the same
 two-review budget, source checks and support for noncontiguous source sentences.
+CPU tests also capture the real OpenAI-compatible provider's HTTP payloads to
+verify that transient feedback reaches the model despite its hidden UI metadata.

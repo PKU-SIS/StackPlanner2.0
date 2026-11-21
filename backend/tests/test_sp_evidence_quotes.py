@@ -236,6 +236,61 @@ def test_actual_native_requests_keep_specific_feedback_after_an_ignored_wrapper_
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
+def test_native_quote_feedback_survives_openai_http_serialization(monkeypatch, asynchronous):
+    import httpx
+    from langchain.agents import create_agent
+
+    from deerflow.agents.thread_state import ThreadState
+    from deerflow.models.vllm_provider import VllmChatModel
+
+    original, final = answer('"Payment is due on 2 January."'), answer("Payment is due on 2 January.")
+    payloads = []
+
+    def endpoint(request):
+        payloads.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "id": "fixture-completion",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "Qwen3-quote-fixture",
+                "choices": [{"index": 0, "message": {"role": "assistant", "content": original if len(payloads) < 3 else final}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 20, "completion_tokens": 20, "total_tokens": 40},
+            },
+        )
+
+    transport = httpx.MockTransport(endpoint)
+
+    def graph(**clients):
+        model = VllmChatModel(model="Qwen3-quote-fixture", api_key="fixture-key", base_url="http://fixture.invalid/v1", max_retries=0, **clients)
+        return create_agent(model=model, tools=[], middleware=[middleware(monkeypatch)], state_schema=ThreadState)
+
+    state = {"messages": [HumanMessage(content="Audit the complete public contract."), *reads()]}
+    if asynchronous:
+
+        async def run():
+            async with httpx.AsyncClient(transport=transport) as client:
+                return await graph(http_async_client=client).ainvoke(state)
+
+        result = asyncio.run(run())
+    else:
+        with httpx.Client(transport=transport) as client:
+            result = graph(http_client=client).invoke(state)
+
+    assert len(payloads) == 3
+    for attempt, payload in enumerate(payloads[1:], 1):
+        note = payload["messages"][-1]
+        assert note["role"] == "user"
+        assert f"{attempt}/2" in note["content"]
+        assert "finding 0: unmatched_outer_wrapper" in note["content"]
+        assert any(message.get("content") == SOURCE for message in payload["messages"])
+        assert any(message.get("content") == original for message in payload["messages"])
+        assert "hide_from_ui" not in note
+    assert result["messages"][-1].content == final
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
 @pytest.mark.parametrize("format_first", [False, True])
 def test_actual_native_graph_retries_quotes_with_original_context_and_transient_feedback(monkeypatch, asynchronous, format_first):
     from langchain.agents import create_agent

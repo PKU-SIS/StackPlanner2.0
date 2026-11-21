@@ -1473,3 +1473,5 @@ the original observed public source. The first two require that the source
 supports the text without that decoration. Keep feedback transient and export
 only the reason whitelist, never replacement spans or arbitrary diagnostic text.
 Native graph tests verify both feedback requests after an ignored first review.
+Mock HTTP tests exercise sync/async `VllmChatModel` serialization through that
+same native graph, retaining the source and both transient review requests.
