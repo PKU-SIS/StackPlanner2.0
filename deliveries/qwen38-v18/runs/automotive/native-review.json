@@ -1,0 +1,77 @@
+{
+  "action_id": "spact_sp-fixed-c0-review-r1",
+  "base_digest": "73796876254d6813be7afa450b951b21e103651536ef1dd094c931ac804a4875",
+  "candidate_id": "c1",
+  "candidate_sha256": "ca0853f9aa70bcfe60b86d4e526bcd33f153bf7bee089e87a09fb854a2c451c2",
+  "covered_requirement_ids": [
+    "r1",
+    "r2",
+    "r3"
+  ],
+  "created_at": "2026-11-19T04:25:05+00:00",
+  "edits": [],
+  "findings": [
+    {
+      "draft_ids": [],
+      "kind": "other",
+      "message": "Estimated word count 10,619 is within range (9,000–11,000) but near the upper bound. No action required per first-pass length policy.",
+      "node_ids": [],
+      "severity": "advisory"
+    }
+  ],
+  "host_length_finding": null,
+  "inputs_digest": "ac917095ccd0c1fffb64bc95a1e0635879e2783a2429037f97441477cb912522",
+  "length": {
+    "body_words": 9980,
+    "candidate_sha256": "ca0853f9aa70bcfe60b86d4e526bcd33f153bf7bee089e87a09fb854a2c451c2",
+    "counter_version": "mixed-word-estimate-v1",
+    "direction": "within",
+    "estimated_words": 10619,
+    "in_estimated_range": true,
+    "max_words": 11000,
+    "measured_word_count": null,
+    "min_words": 9000,
+    "nodes": [
+      {
+        "estimated_words": 837,
+        "node_id": "n1"
+      },
+      {
+        "estimated_words": 1584,
+        "node_id": "n2"
+      },
+      {
+        "estimated_words": 1656,
+        "node_id": "n3"
+      },
+      {
+        "estimated_words": 1634,
+        "node_id": "n4"
+      },
+      {
+        "estimated_words": 1651,
+        "node_id": "n5"
+      },
+      {
+        "estimated_words": 1247,
+        "node_id": "n6"
+      },
+      {
+        "estimated_words": 1183,
+        "node_id": "n7"
+      }
+    ],
+    "reference_words": 637,
+    "rendered_sha256": "2375c79ae9a2f42c7bd37441c22529f9c019d3c3184e746ef0e1fe102d4eda3f",
+    "scope": "whole_document",
+    "target_words": 10000,
+    "word_verified": false
+  },
+  "length_auto_revision": false,
+  "length_only_blocking": false,
+  "outcome": "deliver",
+  "review_id": "rv1",
+  "reviewed_candidate_sha256": "ca0853f9aa70bcfe60b86d4e526bcd33f153bf7bee089e87a09fb854a2c451c2",
+  "status": "ready",
+  "tree_version": 2
+}

@@ -1,0 +1,28 @@
+{
+  "case_id": 17,
+  "status": "completed",
+  "version": "v18",
+  "source": "/data2/pkuiti/zmy/codex-relay-work/qwen38-v18-lowcode-v22-20261119",
+  "report_sha256": "225cd26e25abf39cda9c7b06359cf5ce5d582df3ccd4738608fb9db2adb7c182",
+  "scores": {
+    "comprehensiveness": 0.4999999999999999,
+    "insight": 0.5460122699386503,
+    "instruction_following": 0.5191176470588235,
+    "readability": 0.5007320644216691,
+    "overall_score": 0.5207691266894178
+  },
+  "race_overall_percent": 52.07691266894178,
+  "race_tokens": 39369,
+  "judge_calls": 2,
+  "judge_requested": "deepseek-flash",
+  "judge_returned": [
+    "deepseek-flash"
+  ],
+  "generation_tokens": 2745313,
+  "generation_tokens_changed": false,
+  "formal_delivered": true,
+  "original_sources_and_report_unchanged": true,
+  "official_leaderboard_comparable": false,
+  "fact_status": "not_run",
+  "finished_at": "2026-11-19T08:31:54.038067+00:00"
+}

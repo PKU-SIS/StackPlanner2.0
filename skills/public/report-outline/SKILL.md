@@ -24,7 +24,8 @@ Prefer `report_submit_outline(tree={...})` to stage the complete tree object.
 The host serializes it, retains invalid proposals for correction and returns
 the assigned delivery path. Return the compact file-delivery envelope after
 submission; the normal report acceptance gate still decides acceptance. Do not
-encode the tree into a JSON string. `write_file` remains a fallback for chunks.
+encode the tree into a JSON string. File chunks are a fallback only when
+`report_packet.delivery.allow_chunked_write=true` and `write_file` is available.
 
 1. Read the request and every user input in the packet, including corrections.
 2. Read the saved-material catalog. For exact evidence use
@@ -281,7 +282,7 @@ Return the complete tree JSON in `artifact_content`:
   information through node scope, constraints, ordering, and retained detail;
   do not impose fixed prose proportions.
 
-### Envelope and body
+## Envelope and body
 
 Return one JSON envelope:
 
@@ -298,41 +299,38 @@ fenced block. `summary`, `artifact_type`, and `artifact_metadata` stay outside
 the tree. A serialized `artifact_content` string is tolerated only when its
 entire content is the tree JSON object.
 
-### File delivery
-
-For fixed-round consolidation (`metadata.report_outline_structured=true`), use
-**only `report_submit_outline(tree=complete_object)`** to create the candidate;
-`write_file` is unavailable. This rule overrides the fallback/chunk instructions
-below. Preserve all nodes and returned gap outcomes. Submit once, use any
-validation feedback to correct in place, and return the actual saved tree path.
-Known material/source mismatches are canonicalized from the ledger by the host.
-If an identifier error remains, attempt its correction at most once using the
-existing catalog; do not open repeated reads, restart research or rebuild the
-whole plan. Do not invent IDs or discard required sections to pass validation.
+## File delivery
 
 File delivery is preferred for every report Outline, including the first plan.
-If `report_packet.delivery.mode` is `optional_file` or `required_file`, write
-the **complete tree object** to `report_packet.delivery.path` with `write_file`.
-When the mode is `required_file`, inline tree content is rejected even if it
-looks complete. For a first plan or any tree larger than one response, use file
-chunks rather than trying to fit the whole tree into one output. The file
-contains all tree fields, including `report_title`, `requirements`, `nodes`,
-`removed_node_ids`, `write_requests`, `gap_outcomes`, `user_decisions`,
-`feedback_dispositions`, and `draft_dispositions`; do not write only `nodes`.
-For a tree larger than one model output, write the first chunk with
-`append=False`, then use `append=True` for later chunks after reading the
-current file with `read_file` (the normal read-after-write contract). Never omit
-an awaiting gap or a required field just to shorten the output. Finish with
-valid full JSON in the file, then return `artifact_content=null` and
-`artifact_metadata.delivery_mode="file"` with the `tree_path`/`created_paths`
-reference. The delivery file contains only the tree object; never write
-`summary`, `artifact_type`, `artifact_metadata`, or an `artifact_content`
-wrapper into it. Do not rewrite an already-valid tree merely to restate it; a
-read-back check is enough. Once file delivery is declared, do not silently use
-a different inline body; inline `artifact_content` remains the compatibility
-path when no file delivery is requested.
+Use `report_submit_outline(tree=complete_object)` to serialize and validate the
+complete tree at `report_packet.delivery.path`. In compact mode or fixed-round
+structured consolidation, `report_packet.delivery.allow_chunked_write=false`:
+`write_file` is unavailable, so submit a complete object, including on retries
+and recovery. Do not plan file chunks or return the tree inline in this mode.
+Preserve all nodes, user requirements, evidence locators and returned gap outcomes.
 
-### Required, recommended, optional
+For fixed-round consolidation (`metadata.report_outline_structured=true`), known
+material/source mismatches are canonicalized from the ledger by the host. If an
+identifier error remains, attempt its correction at most once using the existing
+catalog; do not open repeated reads, restart research or rebuild the whole plan.
+Do not invent IDs or discard required sections to pass validation.
+
+Only when `report_packet.delivery.allow_chunked_write=true` AND `write_file` is
+available may you use it as a fallback to write the complete tree object to the
+assigned path. If chunks are needed, use `append=False` for the first, then
+`append=True` after reading the current file. Never omit an awaiting gap or a
+required field to shorten the output. The file contains every tree field,
+including `report_title`, `requirements`, `nodes`, `removed_node_ids`,
+`write_requests`, `gap_outcomes`, `user_decisions`, `feedback_dispositions`, and
+`draft_dispositions`; never write only `nodes` or put the envelope in the file.
+
+After successful submission, return `artifact_content=null` and
+`artifact_metadata.delivery_mode="file"` with the actual `tree_path`/`created_paths`
+reference. For `required_file`, inline content is rejected even if complete.
+Do not resubmit an already-valid tree merely to restate it. Inline
+`artifact_content` remains the compatibility path when no file delivery is requested.
+
+## Required, recommended, optional
 
 - Hard: `report_title`; at least one `requirements[]` object with `id`,
   `input_id`, `text`; at least one `nodes[]` object with `node_id`, `kind`
@@ -347,7 +345,7 @@ path when no file delivery is requested.
   empty `removed_node_ids`, `gap_outcomes`, `user_decisions`,
   `feedback_dispositions`, and `draft_dispositions`.
 
-### Partial local example
+## Partial local example
 
 This is intentionally **one node**, not a complete report plan. The real tree
 must cover every hard user requirement.
@@ -392,19 +390,21 @@ must cover every hard user requirement.
 }
 ```
 
-If `report_packet.rejected_outline` is present on a `plan` or `revise` task,
-follow `report_packet.delivery.instruction`. When the host has already copied the
-candidate into the current delivery, read the relevant tail of that current
-delivery first instead of requiring a full read of the old candidate. If only
-the tail is missing, append the missing content; correct a mid-file error
-normally. Preserve valid nodes, requirements, evidence locators and completed
-updates; do not overwrite newer delivery progress, and leave the original
-candidate unchanged. Only when the host did not prefill should the old candidate
-be used as the recovery basis and written to the specified delivery path. The
-final result must still be complete JSON passing tree, citation and business
-validation; do not change this schema or move evidence preparation to Writer.
+## Retained candidate recovery
 
-### gap_outcomes shape
+If `report_packet.rejected_outline` is present on a `plan` or `revise` task,
+follow `report_packet.delivery.instruction`. If the host copied the candidate
+into the current delivery, read that delivery's relevant tail first; otherwise
+read the retained candidate as the recovery basis. Preserve valid nodes,
+requirements, evidence locators, completed updates and newer delivery progress;
+leave the original candidate unchanged. When chunked writing is allowed and
+available, append a missing suffix or correct a mid-file error. Otherwise build
+a complete corrected tree object and submit it with `report_submit_outline`;
+file-fragment appends are unavailable. The final result must pass the original
+complete JSON, tree, citation and business validation. Do not auto-fill missing
+content or move evidence preparation to Writer.
+
+## gap_outcomes shape
 
 When judging returned research, include complete objects, for example:
 
@@ -485,9 +485,9 @@ reference an existing `input_id`.
 
 Research results arrive as `awaiting_outline`. On the next accepted output you
 must give a disposition for **every gap currently awaiting_outline**; omitting
-one leaves that returned result unjudged and invalid. If the output is close to
-the model or host limit, write the tree to the delivery file in chunks; never
-drop an awaiting gap to save space. Do not re-list a gap already closed in the
+one leaves that returned result unjudged and invalid. Use the configured complete-tree delivery tool; chunked file writing is a
+fallback only when explicitly allowed and available. Never drop an awaiting
+gap to save space. Do not re-list a gap already closed in the
 ledger. The normal transitions are:
 
 - `resolved`: the evidence satisfies the question and constraints; state the

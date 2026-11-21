@@ -1,0 +1,44 @@
+{
+  "from_ds_10k": {
+    "base": "/data2/pkuiti/zmy/codex-relay-work/sp2-outline-self-budget-threebands-20261117/profiles/10000/code",
+    "changed": [
+      "backend/packages/harness/deerflow/agents/middlewares/invalid_tool_call_repair_middleware.py",
+      "backend/packages/harness/deerflow/agents/middlewares/web_search_budget_middleware.py",
+      "backend/packages/harness/deerflow/config/subagents_config.py",
+      "backend/packages/harness/deerflow/sandbox/search.py",
+      "backend/packages/harness/deerflow/sandbox/tools.py",
+      "backend/packages/harness/deerflow/sp/report/entry.py",
+      "backend/packages/harness/deerflow/sp/report/hooks.py",
+      "backend/packages/harness/deerflow/sp/report/length.py",
+      "backend/packages/harness/deerflow/sp/report/prompts.py",
+      "backend/packages/harness/deerflow/sp/report/submit_outline.py",
+      "backend/packages/harness/deerflow/sp/report/tree.py",
+      "backend/packages/harness/deerflow/subagents/config.py",
+      "backend/packages/harness/deerflow/subagents/executor.py",
+      "skills/public/report-outline/SKILL.md",
+      "skills/public/report-word-budget/SKILL.md"
+    ],
+    "added": [
+      "backend/packages/harness/deerflow/agents/middlewares/outline_evidence_action_middleware.py",
+      "backend/packages/harness/deerflow/skills/prompt_sections.py",
+      "backend/packages/harness/deerflow/sp/report/phase_prompts.py"
+    ],
+    "removed": [
+      "backend/pyproject.toml",
+      "backend/uv.lock"
+    ],
+    "scope": "Runtime and skill files; excludes tests and AGENTS.md"
+  },
+  "from_v16": {
+    "base": "/data2/pkuiti/zmy/codex-relay-work/qwen38-full-repaired-budget-v16-20261119/code",
+    "changed": [
+      "backend/packages/harness/deerflow/agents/middlewares/invalid_tool_call_repair_middleware.py",
+      "backend/packages/harness/deerflow/sp/report/hooks.py",
+      "backend/packages/harness/deerflow/subagents/config.py",
+      "backend/packages/harness/deerflow/subagents/executor.py"
+    ],
+    "added": [],
+    "removed": [],
+    "scope": "Runtime and skill files; excludes tests and AGENTS.md"
+  }
+}

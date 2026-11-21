@@ -149,6 +149,31 @@ class TestHashToolCalls:
 
         assert _hash_tool_calls([forward_call]) == _hash_tool_calls([reversed_call])
 
+    def test_changed_read_file_version_is_progress_but_same_version_is_stable(self):
+        from deerflow.agents.middlewares.read_before_write_middleware import READ_MARK_KEY
+
+        call = {"name": "read_file", "args": {"path": "/tmp/draft.md", "start_line": 1, "end_line": 30}}
+        first = {"messages": [ToolMessage(content="old", tool_call_id="r1", name="read_file", additional_kwargs={READ_MARK_KEY: {"path": "/tmp/draft.md", "hash": "old-sha"}})]}
+        second = {"messages": [ToolMessage(content="new", tool_call_id="r2", name="read_file", additional_kwargs={READ_MARK_KEY: {"path": "/tmp/draft.md", "hash": "new-sha"}})]}
+
+        first_hash = _hash_tool_calls([call], state=first)
+        assert first_hash == _hash_tool_calls([call], state=first)
+        assert first_hash != _hash_tool_calls([call], state=second)
+
+    def test_same_version_read_loop_still_trips_the_existing_hard_limit(self):
+        from deerflow.agents.middlewares.read_before_write_middleware import READ_MARK_KEY
+
+        guard = LoopDetectionMiddleware(warn_threshold=2, hard_limit=4)
+        runtime = _make_runtime()
+        call = {"name": "read_file", "args": {"path": "/tmp/draft.md", "start_line": 1, "end_line": 30}, "id": "read"}
+        mark = ToolMessage(content="draft", tool_call_id="prior", name="read_file", additional_kwargs={READ_MARK_KEY: {"path": "/tmp/draft.md", "hash": "same-sha"}})
+        state = {"messages": [mark, AIMessage(content="", tool_calls=[call])]}
+        for _ in range(3):
+            assert guard.after_model(state, runtime) is None
+        stopped = guard.after_model(state, runtime)
+        assert stopped["messages"][0].tool_calls == []
+        assert guard.consume_stop_reason("test-run") == "loop_capped"
+
     def test_stringified_non_dict_args_do_not_crash(self):
         non_dict_json_call = {"name": "bash", "args": '"echo hello"'}
         plain_string_call = {"name": "bash", "args": "echo hello"}

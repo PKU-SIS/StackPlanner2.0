@@ -1,0 +1,73 @@
+{
+  "id": 17,
+  "delivered": true,
+  "error": null,
+  "elapsed_seconds": 2053.3,
+  "events": 273,
+  "writable_count": 7,
+  "current_drafts": 7,
+  "missing_nodes": [],
+  "final_chars": 16138,
+  "citation_sources": 25,
+  "final_hash_ok": true,
+  "last_stage": "finished",
+  "last_handler": {
+    "next_step": "finish",
+    "error": null,
+    "action_id": "spact_sp-fixed-c0-finish-r1-rv1",
+    "action_type": "FINISH",
+    "idempotency_key": "spidem_sp-fixed-c0-finish-r1-rv1",
+    "target_agent": null,
+    "stage": null,
+    "loop_iteration": 11,
+    "run_id": "full-17-92e18e15666c"
+  },
+  "length": {
+    "body_words": 9412,
+    "candidate_sha256": "6379596ab6f0dc7bb9b9f4fbb125246d0e310253369f0516a58f81a09ffbaeff",
+    "counter_version": "mixed-word-estimate-v1",
+    "direction": "within",
+    "estimated_words": 9976,
+    "in_estimated_range": true,
+    "max_words": 11000,
+    "measured_word_count": null,
+    "min_words": 9000,
+    "nodes": [
+      {
+        "estimated_words": 645,
+        "node_id": "n1"
+      },
+      {
+        "estimated_words": 1136,
+        "node_id": "n2"
+      },
+      {
+        "estimated_words": 1751,
+        "node_id": "n3"
+      },
+      {
+        "estimated_words": 1545,
+        "node_id": "n4"
+      },
+      {
+        "estimated_words": 1243,
+        "node_id": "n5"
+      },
+      {
+        "estimated_words": 1467,
+        "node_id": "n6"
+      },
+      {
+        "estimated_words": 1504,
+        "node_id": "n7"
+      }
+    ],
+    "reference_words": 562,
+    "rendered_sha256": "225cd26e25abf39cda9c7b06359cf5ce5d582df3ccd4738608fb9db2adb7c182",
+    "scope": "whole_document",
+    "target_words": 10000,
+    "word_verified": false
+  },
+  "word_length_verified": false,
+  "overall_pass": true
+}

@@ -80,6 +80,40 @@ def test_failure_is_not_completed_or_retried_in_same_run(tmp_path):
     assert not ledger.payload["drafts"]
 
 
+def test_technical_writer_failure_gets_one_outline_repair_then_human_handoff(tmp_path):
+    from deerflow.sp.report.context import SPReportContextMiddleware
+
+    ctx = seeded(tmp_path, 1)
+
+    class Executor:
+        def execute(self, task):
+            return SPSubagentResult(status=SPSubagentStatus.FAILED, error="controlled failure")
+
+    runtime = SimpleNamespace(context={"run_id": "run1", "thread_id": "t1"})
+
+    def executor_provider(state, runtime):
+        return Executor()
+
+    writer_pipeline.run_writer_pipeline(ctx.state, executor_provider=executor_provider, runtime=runtime, max_workers=1)
+    middleware = SPReportContextMiddleware(executor_provider=executor_provider, max_writers=1)
+
+    repair = middleware.before_model(ctx.state, runtime)
+    repair_call = repair["messages"][0].tool_calls[0]
+    assert repair["jump_to"] == "tools"
+    assert repair_call["name"] == "sp_delegate"
+    assert repair_call["args"]["target_agent"] == "outline"
+    assert repair_call["args"]["metadata"]["report_task"] == "revise"
+    assert repair_call["args"]["metadata"]["report_writer_failure_keys"] == ["w0"]
+
+    handoff = middleware.before_model(ctx.state, runtime)
+    handoff_call = handoff["messages"][0].tool_calls[0]
+    assert handoff["jump_to"] == "tools"
+    assert handoff_call["name"] == "sp_ask_human"
+    assert "失败章节" in handoff_call["args"]["question"]
+
+    assert middleware.before_model(ctx.state, runtime) is None
+
+
 def test_dependency_and_write_last_wait_for_current_drafts(tmp_path):
     ctx = seeded(tmp_path, 3)
     ledger = ReportLedger.load_for_context(report_context(ctx.state))

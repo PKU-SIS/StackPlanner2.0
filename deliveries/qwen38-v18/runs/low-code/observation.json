@@ -1,0 +1,182 @@
+{
+  "name": "band10000-case17-outline-selected",
+  "case_id": 17,
+  "target_words": 10000,
+  "query_sha256": "d802fc1b50547a39983b83819a784a0f49632b40e66a977a68ea7d353832dd2a",
+  "status": "candidate",
+  "words": 9976,
+  "deviation": -24,
+  "deviation_percent": -0.24,
+  "within_5_percent": true,
+  "within_10_percent": true,
+  "formal_delivered": true,
+  "review": {
+    "action_id": "spact_sp-fixed-c0-review-r1",
+    "base_digest": "2b7f439570241eb7bd7dd243bc05428964d00efcd977e39c0515628500400f4a",
+    "candidate_id": "c1",
+    "candidate_sha256": "6379596ab6f0dc7bb9b9f4fbb125246d0e310253369f0516a58f81a09ffbaeff",
+    "covered_requirement_ids": [
+      "R1",
+      "R2",
+      "R3",
+      "R4"
+    ],
+    "created_at": "2026-11-19T08:07:51+00:00",
+    "edits": [],
+    "findings": [],
+    "host_length_finding": null,
+    "inputs_digest": "7515d98d026f06a8579d69eb300824f13e64803c53c1a5cfd00ab4f1d86fbd49",
+    "length": {
+      "body_words": 9412,
+      "candidate_sha256": "6379596ab6f0dc7bb9b9f4fbb125246d0e310253369f0516a58f81a09ffbaeff",
+      "counter_version": "mixed-word-estimate-v1",
+      "direction": "within",
+      "estimated_words": 9976,
+      "in_estimated_range": true,
+      "max_words": 11000,
+      "measured_word_count": null,
+      "min_words": 9000,
+      "nodes": [
+        {
+          "estimated_words": 645,
+          "node_id": "n1"
+        },
+        {
+          "estimated_words": 1136,
+          "node_id": "n2"
+        },
+        {
+          "estimated_words": 1751,
+          "node_id": "n3"
+        },
+        {
+          "estimated_words": 1545,
+          "node_id": "n4"
+        },
+        {
+          "estimated_words": 1243,
+          "node_id": "n5"
+        },
+        {
+          "estimated_words": 1467,
+          "node_id": "n6"
+        },
+        {
+          "estimated_words": 1504,
+          "node_id": "n7"
+        }
+      ],
+      "reference_words": 562,
+      "rendered_sha256": "225cd26e25abf39cda9c7b06359cf5ce5d582df3ccd4738608fb9db2adb7c182",
+      "scope": "whole_document",
+      "target_words": 10000,
+      "word_verified": false
+    },
+    "length_auto_revision": false,
+    "length_only_blocking": false,
+    "outcome": "deliver",
+    "path": "/data2/pkuiti/zmy/codex-relay-work/qwen38-v18-lowcode-v22-20261119/local-storage/runs/band10000-case17-outline-selected/runtime/users/full-eval/threads/full-17/user-data/outputs/report/r1/review/rv1.json",
+    "review_id": "rv1",
+    "reviewed_candidate_sha256": "6379596ab6f0dc7bb9b9f4fbb125246d0e310253369f0516a58f81a09ffbaeff",
+    "status": "ready",
+    "tree_version": 2,
+    "virtual_path": "/mnt/user-data/outputs/report/r1/review/rv1.json"
+  },
+  "blocking_findings": [],
+  "report_sha256": "225cd26e25abf39cda9c7b06359cf5ce5d582df3ccd4738608fb9db2adb7c182",
+  "generation_tokens": 2745313,
+  "tokens_include_cached_input": true,
+  "central_generation_tokens": 136567,
+  "subagent_generation_tokens": 2608746,
+  "native_attempt_count": 13,
+  "generation_counter": "central-plus-unique-native-attempt-v2",
+  "outline": {
+    "writable_nodes": 7,
+    "total_arguments": 20,
+    "selected_body_target_words": 8300,
+    "body_max_sum": 9000,
+    "tree_version": 2,
+    "tree_sha256": "e12c53a377bd484de3c19b3f8bfc6647cedcfb4d1836b74ba2210039ae4fb178",
+    "chapters": [
+      {
+        "node_id": "n1",
+        "title": "引言：为什么这个问题重要",
+        "arguments": 2,
+        "target_words": 600,
+        "max_words": 700
+      },
+      {
+        "node_id": "n2",
+        "title": "市场格局与采用现实",
+        "arguments": 3,
+        "target_words": 1200,
+        "max_words": 1300
+      },
+      {
+        "node_id": "n3",
+        "title": "生产力证据：效率提升与感知鸿沟",
+        "arguments": 3,
+        "target_words": 1500,
+        "max_words": 1600
+      },
+      {
+        "node_id": "n4",
+        "title": "维护成本与技术债务：特定场景下的隐性代价",
+        "arguments": 3,
+        "target_words": 1400,
+        "max_words": 1500
+      },
+      {
+        "node_id": "n5",
+        "title": "开发者与业务者的视角张力",
+        "arguments": 3,
+        "target_words": 1100,
+        "max_words": 1200
+      },
+      {
+        "node_id": "n6",
+        "title": "架构边界与适用场景",
+        "arguments": 3,
+        "target_words": 1200,
+        "max_words": 1300
+      },
+      {
+        "node_id": "n7",
+        "title": "未来轨迹：混合模型而非全面转向",
+        "arguments": 3,
+        "target_words": 1300,
+        "max_words": 1400
+      }
+    ]
+  },
+  "ledger_phase": null,
+  "writer_recovery": null,
+  "candidate_count": 1,
+  "length_contract": {
+    "compact_outline": true,
+    "counter_version": "mixed-word-estimate-v1",
+    "enabled": true,
+    "heading_reserve_words": 300,
+    "length_auto_revision": false,
+    "max_words": 11000,
+    "measurement_mode": "estimate",
+    "min_words": 9000,
+    "outline_body_budget_range": {
+      "default_words": 8500,
+      "max_words": 9000,
+      "min_words": 7800
+    },
+    "outline_budget_selection": true,
+    "reference_reserve_words": 1000,
+    "safety_margin_words": 500,
+    "scope": "whole_document",
+    "target_words": 10000,
+    "writer_task_cards": true
+  },
+  "token_accounting_complete": true,
+  "elapsed_seconds": 2053.3,
+  "complete_native_delivery": true,
+  "within_30_minutes": false,
+  "within_length_band": true,
+  "speed_length_delivery_pass": false
+}

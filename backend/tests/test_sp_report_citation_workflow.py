@@ -60,6 +60,8 @@ def test_central_batches_multiple_gap_ids_and_keeps_the_existing_single_attempt_
     assert "one fixed attempt" in _normalized(REPORT_RESEARCH_PROMPT)
     assert "one Researcher delegation" in _normalized(CONTEXT_INSTRUCTIONS)
     assert "report_gap_ids" in CONTEXT_INSTRUCTIONS
+    assert "technical_failed` is unresolved" in CONTEXT_INSTRUCTIONS
+    assert "Never end" in CONTEXT_INSTRUCTIONS
 
 
 def test_one_research_packet_preserves_multiple_nodes_questions_and_original_user_scope(tmp_path):

@@ -1879,6 +1879,15 @@ def ls_tool(runtime: Runtime, description: str, path: str) -> str:
         thread_data = None
         if is_local_sandbox(runtime):
             thread_data = get_thread_data(runtime)
+            if path in (VIRTUAL_PATH_PREFIX, VIRTUAL_PATH_PREFIX + "/"):
+                if thread_data is None:
+                    raise SandboxRuntimeError("Thread data not available for local sandbox")
+                # This is a virtual mount index, never a host-parent listing.
+                return "\n".join(
+                    f"{VIRTUAL_PATH_PREFIX}/{name}/"
+                    for name in ("workspace", "uploads", "outputs")
+                    if thread_data.get(f"{name}_path")
+                ) or "(empty)"
             validate_local_tool_path(path, thread_data, read_only=True)
             if _is_skills_path(path) or _is_acp_workspace_path(path):
                 # Skills and ACP workspace paths are resolved by the sandbox's
@@ -2004,12 +2013,12 @@ def grep_tool(
     case_sensitive: bool = False,
     max_results: int = _DEFAULT_GREP_MAX_RESULTS,
 ) -> str:
-    """Search for matching lines inside text files under a root directory.
+    """Search matching lines in one text file or files under a directory.
 
     Args:
         description: Explain why you are searching file contents in short words. ALWAYS PROVIDE THIS PARAMETER FIRST.
         pattern: The string or regex pattern to search for.
-        path: The **absolute** root directory to search under.
+        path: The **absolute** text file or root directory to search.
         glob: Optional glob filter for candidate files, for example `**/*.py`.
         literal: Whether to treat `pattern` as a plain string. Default is False.
         case_sensitive: Whether matching is case-sensitive. Default is False.
@@ -2052,7 +2061,7 @@ def grep_tool(
     except SandboxError as e:
         return f"Error: {e}"
     except FileNotFoundError:
-        return f"Error: Directory not found: {requested_path}"
+        return f"Error: Path not found: {requested_path}"
     except NotADirectoryError:
         return f"Error: Path is not a directory: {requested_path}"
     except re.error as e:
@@ -2112,6 +2121,41 @@ def read_current_file_content(runtime: Runtime | None, path: str) -> str:
     return sandbox.read_file(path)
 
 
+def _read_registered_material_alias(runtime: Runtime, path: str, start_line: int | None, end_line: int | None) -> str | None:
+    """Route a missing mN.md alias to the existing identity/hash-checked reader.
+
+    Read-only compatibility for exact report-local material IDs. No ID/source
+    guessing, cross-report search, new evidence, or write-path aliasing.
+    """
+    match = re.fullmatch(r"/mnt/user-data/outputs/report/(r[1-9][0-9]*)/materials/(m[1-9][0-9]*)\.md", path)
+    if match is None or not is_local_sandbox(runtime):
+        return None
+    thread_data = get_thread_data(runtime)
+    validate_local_tool_path(path, thread_data, read_only=True)
+    _resolve_and_validate_user_data_path(path, thread_data)
+    from deerflow.sp.report.ledger import ReportLedger
+    from deerflow.sp.report.read_material import build_read_material_tool
+    from deerflow.sp.report.store import ReportPaths, report_lock
+
+    outputs = Path(thread_data["outputs_path"]).resolve()
+    paths = ReportPaths(outputs, match[1])
+    # Reject redirected report/ledger/material roots, even within this thread.
+    for candidate in (outputs / "report", paths.directory, paths.ledger, paths.materials):
+        if candidate.resolve() != candidate:
+            raise PermissionError("Material alias must stay in its named report")
+    if not paths.ledger.is_file():
+        return None
+    with report_lock(paths):
+        ledger = ReportLedger.load(paths)
+        if sum(row.get("material_id") == match[2] for row in ledger.materials()) != 1:
+            return json.dumps({"error": "unknown_or_ambiguous_material_id", "material_id": match[2]})
+        # Reuse native provenance, hash, line-range and output-size gates.
+        return build_read_material_tool(paths=paths).invoke({
+            "material_id": match[2], "start_line": start_line if start_line is not None else 1,
+            "end_line": end_line,
+        })
+
+
 @tool("read_file", parse_docstring=True)
 def read_file_tool(
     runtime: Runtime,
@@ -2125,7 +2169,7 @@ def read_file_tool(
 
     Args:
         description: Explain why you are reading this file in short words. ALWAYS PROVIDE THIS PARAMETER FIRST.
-        path: The **absolute** path to the file to read.
+        path: The **absolute** file path. For report evidence prefer report_read_material(material_id). A missing report/rN/materials/mN.md alias uses that same reader and returns its bounded, numbered JSON with source identity.
         start_line: Optional starting line number (1-indexed, inclusive). If only start_line is supplied, read from that line through the end.
         end_line: Optional ending line number (1-indexed, inclusive). If only end_line is supplied, read from the beginning through that line.
         line_numbers: Optional: prefix each returned line with its 1-indexed line number. Default false preserves ordinary read output. Use true when exact evidence locations matter.
@@ -2136,7 +2180,13 @@ def read_file_tool(
             skill_name = _extract_skill_name_from_skills_path(path) or "unknown"
             return f"Error: Skill '{skill_name}' is disabled. Access to its files is blocked. Enable the skill in settings before using it."
         requested_path = path
-        content = read_current_file_content(runtime, path)
+        try:
+            content = read_current_file_content(runtime, path)
+        except FileNotFoundError:
+            material = _read_registered_material_alias(runtime, path, start_line, end_line)
+            if material is not None:
+                return material
+            raise
         if not content:
             return "(empty)"
         source_lines = content.splitlines()

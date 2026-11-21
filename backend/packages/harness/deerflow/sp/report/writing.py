@@ -203,6 +203,10 @@ def accept_draft(
         "rewrite_of": prior.get("draft_id") if prior_was_rewrite_source and prior is not None else None,
         "created_at": now,
     }
+    if ledger.payload.get("length_contract"):
+        from deerflow.sp.report.length import COUNTER_VERSION, estimate_words
+
+        record["length"] = {"estimated_words": estimate_words(content), "counter_version": COUNTER_VERSION, "word_verified": False, "measured_word_count": None}
     if prior_was_rewrite_source and prior is not None:
         prior["rewrite_source_consumed_by"] = draft_id
     ledger.payload.setdefault("drafts", []).append(record)
@@ -467,11 +471,7 @@ def apply_write_requests(ledger: ReportLedger, tree: Mapping[str, Any]) -> list[
             record["updated_at"] = utc_now_iso()
     for node_id, historical_keys in completed_incoming_by_node.items():
         current_draft = next(
-            (
-                item
-                for item in drafts(ledger)
-                if item.get("is_current") is True and str(item.get("node_id")) == node_id
-            ),
+            (item for item in drafts(ledger) if item.get("is_current") is True and str(item.get("node_id")) == node_id),
             None,
         )
         if current_draft is not None:
@@ -487,10 +487,7 @@ def apply_write_requests(ledger: ReportLedger, tree: Mapping[str, Any]) -> list[
         )
         if not effective_followup:
             keys = ", ".join(sorted(historical_keys))
-            raise ReportValidationError(
-                f"completed write request(s) {keys} for node {node_id} have no current draft and no effective "
-                "follow-up request after this revision; issue a new write key if new writing is required"
-            )
+            raise ReportValidationError(f"completed write request(s) {keys} for node {node_id} have no current draft and no effective follow-up request after this revision; issue a new write key if new writing is required")
     _refresh(ledger)
     return applied
 

@@ -1,0 +1,104 @@
+{
+  "results": [
+    {
+      "version": "v18",
+      "run_record": "qwen38-v18-lowcode-v22-20261119",
+      "case_id": 17,
+      "topic": "low-code",
+      "whole_document_estimated_words": 9976,
+      "elapsed_seconds": 2053.3,
+      "generation_tokens": 2745313,
+      "tokens_include_cached_input": true,
+      "formal_delivered": true,
+      "native_overall_pass": true,
+      "reference_source_count": 25,
+      "selected_body_budget": 8300,
+      "writable_nodes": 7,
+      "total_arguments": 20,
+      "race_status": "completed",
+      "race_score": 52.07691266894178,
+      "race_tokens": 39369,
+      "report_sha256": "225cd26e25abf39cda9c7b06359cf5ce5d582df3ccd4738608fb9db2adb7c182",
+      "source_directory": "/data2/pkuiti/zmy/codex-relay-work/qwen38-v18-lowcode-v22-20261119/local-storage/runs/band10000-case17-outline-selected",
+      "race_overall_percent": 52.07691266894178,
+      "race_score_scale": "0-100 reference-relative RACE",
+      "race_scores": {
+        "comprehensiveness": 0.4999999999999999,
+        "insight": 0.5460122699386503,
+        "instruction_following": 0.5191176470588235,
+        "readability": 0.5007320644216691,
+        "overall_score": 0.5207691266894178
+      },
+      "race_judge_requested": "deepseek-flash",
+      "race_judge_returned": [
+        "deepseek-flash"
+      ],
+      "race_judge_calls": 2,
+      "fact_status": "not_run"
+    },
+    {
+      "version": "v18",
+      "run_record": "qwen38-newcase-v18-20261119",
+      "case_id": 10,
+      "topic": "automotive",
+      "whole_document_estimated_words": 10619,
+      "elapsed_seconds": 2529.8,
+      "generation_tokens": 2401978,
+      "tokens_include_cached_input": true,
+      "formal_delivered": true,
+      "native_overall_pass": true,
+      "reference_source_count": 20,
+      "selected_body_budget": 8400,
+      "writable_nodes": 7,
+      "total_arguments": 22,
+      "race_status": "completed",
+      "race_score": 52.2813205206761,
+      "race_tokens": 52595,
+      "report_sha256": "2375c79ae9a2f42c7bd37441c22529f9c019d3c3184e746ef0e1fe102d4eda3f",
+      "source_directory": "/data2/pkuiti/zmy/codex-relay-work/qwen38-newcase-v18-20261119/local-storage/runs/band10000-case10-outline-selected",
+      "race_overall_percent": 52.2813205206761,
+      "race_score_scale": "0-100 reference-relative RACE",
+      "race_scores": {
+        "comprehensiveness": 0.5214814814814815,
+        "insight": 0.5240963855421686,
+        "instruction_following": 0.5252225519287833,
+        "readability": 0.5180180180180181,
+        "overall_score": 0.522813205206761
+      },
+      "race_judge_requested": "deepseek-flash",
+      "race_judge_returned": [
+        "deepseek-flash"
+      ],
+      "race_judge_calls": 2,
+      "fact_status": "not_run"
+    }
+  ],
+  "measurement": "mixed-word-estimate-v1; not Microsoft Word measured",
+  "token_accounting": "Central plus unique native attempts; includes cached/repeated input and output; scoring separate",
+  "race_protocol": {
+    "upstream": {
+      "repository": "https://github.com/Ayanami0730/deep_research_bench",
+      "commit": "f2735b5c3636759c22f9e936c0232de8bf545b67"
+    },
+    "judge_requested": "deepseek-flash",
+    "judge_returned": [
+      "deepseek-flash"
+    ],
+    "temperature": 0,
+    "thinking": "disabled",
+    "sample_selection": "one successful judgment per unchanged report; no score selection",
+    "cleaner_rubric_reference_prompts_aggregation": "Existing pinned upstream protocol; all source hashes verified before calls",
+    "score_formula": "100 * weighted_target / (weighted_target + weighted_reference)",
+    "dimension_scale": "result.json scores are 0-1; document tables multiply by 100",
+    "official_leaderboard_comparable": false,
+    "fact_status": "not_run",
+    "race_tokens_include": "All cleaner and scoring input/output tokens, including cached input; excluded from generation_tokens",
+    "new_report_generation_calls": 0,
+    "new_judge_calls": 4,
+    "race_tokens": 91964,
+    "evaluation_output_routing": "Isolated evaluation driver redirects output to data disk; frozen generation code and reports unchanged",
+    "transport_sha256": "2b17e637cb199e9124cdc4e248c9ecd1e71879a297addddeba98dce5698cb365",
+    "source_hash_manifest_sha256": "87be73fe0c548315e55948c65c22581f4db8379cf36f73fe077d5155ec8d9804",
+    "evaluation_script_sha256": "b2363cb5477e19fb8e0435cba35bd13ef24b305d83fc1a1c91c4efe7f9018b84"
+  }
+}

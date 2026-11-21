@@ -1,4 +1,4 @@
-"""One opt-in, same-run syntax correction for a failed structured submission."""
+"""One opt-in, same-run correction for a failed or missing structured submission."""
 
 from __future__ import annotations
 
@@ -17,6 +17,15 @@ _REPAIR = (
     "read materials, search, or register new research. Return exactly one report_submit_outline tool call with valid JSON arguments. "
     "The host will validate it normally; do not claim a file was written before the tool succeeds."
 )
+_MISSING_SUBMISSION = (
+    "[HOST MISSING OUTLINE SUBMISSION] This structured consolidation has not submitted a validated outline. "
+    "Your completed response did not deliver a tree. Continue this SAME task once, using the accepted tree, "
+    "returned research and exact evidence already in this conversation. Do not restart planning, read materials, "
+    "search, or register new research. Submit the complete consolidated tree with exactly one report_submit_outline "
+    "tool call, preserving requirements, nodes, evidence, locators and required gap outcomes. The host will perform "
+    "all normal validation; do not claim a file exists or a gap is resolved before validation succeeds. "
+    "Then return the normal compact file-delivery envelope using the tool's actual returned tree_path."
+)
 _SOURCE_FIX = (
     "[HOST SOURCE CORRECTION] Correct the reported material/source identifiers once, using the existing catalog and candidate. "
     "No reads, searches or re-planning. Preserve nodes and useful content; never invent material IDs or line ranges. "
@@ -24,8 +33,9 @@ _SOURCE_FIX = (
 )
 _FINISH = "[HOST SUBMISSION ACK] No further tools are available. Return the compact normal file-delivery JSON envelope using the actual submission result. Do not re-plan or collect evidence."
 _SCHEMA_FIX = (
-    "[HOST SUBMISSION VALIDATION] The JSON syntax was corrected, but the normal submission tool returned tree validation errors. "
-    "Correct only those reported fields in the existing complete tree and resubmit report_submit_outline. Preserve node IDs, requirements, facts and evidence. "
+    "[HOST SUBMISSION VALIDATION] The corrective submission reached the normal tool, which returned tree validation errors. "
+    "For a budget-only error with candidate_budget_patch feedback, use report_patch_outline_budget with the offered hashes and node_budgets. "
+    "Otherwise correct only the reported fields and resubmit report_submit_outline. Preserve node IDs, requirements, facts and evidence. "
     "Do not re-plan, read materials, search, register research, or invent sources/locators. Existing run budgets still apply. "
     "After validation succeeds, return the compact file-delivery envelope."
 )
@@ -38,13 +48,17 @@ class InvalidToolCallRepairMiddleware(AgentMiddleware):
     and guard middleware stay in the same run. No parser guesses or tool replay.
     """
 
-    def __init__(self, *, budget: TokenBudgetConfig | None = None, output_limit: int = 32768, tool_limit: int = 50, aborted: Callable[[], bool] | None = None, bound_source_correction: bool = False):
+    def __init__(self, *, budget: TokenBudgetConfig | None = None, output_limit: int = 32768, tool_limit: int = 50, aborted: Callable[[], bool] | None = None, bound_source_correction: bool = False, require_outline_submission: bool = False):
         super().__init__()
         self.budget = budget
         self.output_limit = output_limit
         self.tool_limit = tool_limit
         self.aborted = aborted or (lambda: False)
         self.bound_source_correction = bound_source_correction
+        self.require_outline_submission = require_outline_submission
+        self.validated_outline_submission = False
+        self.repair_kind = "invalid_arguments"
+        self.repair_instruction = _REPAIR
         self.source_corrections = 0
         self.source_fix = False
         self.used = False
@@ -52,6 +66,7 @@ class InvalidToolCallRepairMiddleware(AgentMiddleware):
         self.correcting = False
         self.finish_only = False
         self.schema_fix = False
+        self.candidate_budget_patch = False
         self.failed = False
         self.events: list[dict[str, Any]] = []
 
@@ -104,13 +119,32 @@ class InvalidToolCallRepairMiddleware(AgentMiddleware):
         if self.schema_fix and self.used:
             if last.invalid_tool_calls:
                 return self._failed_reply(last, "invalid_arguments_after_correction")
-            if last.tool_calls and (len(last.tool_calls) != 1 or last.tool_calls[0]["name"] != "report_submit_outline"):
+            allowed = {"report_submit_outline"} | ({"report_patch_outline_budget"} if self.candidate_budget_patch else set())
+            if last.tool_calls and (len(last.tool_calls) != 1 or last.tool_calls[0]["name"] not in allowed):
                 return self._failed_reply(last, "unexpected_tool_during_validation")
             return None
-        if self.used or last.tool_calls or len(last.invalid_tool_calls) != 1:
+        if self.used or last.tool_calls:
             return None
-        invalid = last.invalid_tool_calls[0]
-        if invalid.get("name") != "report_submit_outline" or not invalid.get("args") or self.aborted():
+        missing = self.require_outline_submission and not self.validated_outline_submission and not last.invalid_tool_calls
+        if missing:
+            try:
+                final = json.loads(last.content)
+            except (TypeError, ValueError):
+                final = None
+            # Real failure/HITL/guard envelopes retain their ordinary handling.
+            # A generic non-delivery reply (as in the observed proceed/notes
+            # response) is a premature completion, not evidence of a saved tree.
+            if isinstance(final, dict) and (final.get("status") not in (None, "completed") or final.get("stop_reason")):
+                return None
+        if missing:
+            invalid = None
+        elif len(last.invalid_tool_calls) == 1:
+            invalid = last.invalid_tool_calls[0]
+            if invalid.get("name") != "report_submit_outline" or not invalid.get("args"):
+                return None
+        else:
+            return None
+        if self.aborted():
             return None
         finish = last.response_metadata.get("finish_reason")
         if finish in {"length", "max_tokens"} or int((last.usage_metadata or {}).get("output_tokens", 0)) >= self.output_limit:
@@ -119,17 +153,23 @@ class InvalidToolCallRepairMiddleware(AgentMiddleware):
         if "FORCED STOP" in str(last.content) or not self._budget_allows(messages, last):
             self.events.append({"status": "skipped_budget"})
             return None
-        event = {"status": "correction_requested", "tool": invalid["name"], "tool_call_id": invalid.get("id")}
-        try:
-            json.loads(invalid["args"])
-        except json.JSONDecodeError as exc:
-            event.update(error=exc.msg, line=exc.lineno, column=exc.colno, position=exc.pos)
-        except (TypeError, ValueError):
-            event["error"] = "Arguments must be one valid JSON object"
+        event = {"status": "correction_requested", "tool": "report_submit_outline"}
+        if missing:
+            self.repair_kind = "missing_outline_submission"
+            self.repair_instruction = _MISSING_SUBMISSION
+            event["reason"] = self.repair_kind
+        else:
+            event["tool_call_id"] = invalid.get("id")
+            try:
+                json.loads(invalid["args"])
+            except json.JSONDecodeError as exc:
+                event.update(error=exc.msg, line=exc.lineno, column=exc.colno, position=exc.pos)
+            except (TypeError, ValueError):
+                event["error"] = "Arguments must be one valid JSON object"
         self.events.append(event)
         self.used = self.pending = True
         diagnostic = {key: value for key, value in event.items() if key not in {"status", "tool_call_id"}}
-        return {"messages": [HumanMessage(content=_REPAIR + "\nParser diagnostic: " + json.dumps(diagnostic, ensure_ascii=False))], "jump_to": "model"}
+        return {"messages": [HumanMessage(content=self.repair_instruction + "\nHost diagnostic: " + json.dumps(diagnostic, ensure_ascii=False))], "jump_to": "model"}
 
     @hook_config(can_jump_to=["model"])
     def after_model(self, state, runtime):
@@ -152,12 +192,15 @@ class InvalidToolCallRepairMiddleware(AgentMiddleware):
                 extra = {key: value for key, value in message.additional_kwargs.items() if key not in {"tool_calls", "function_call"}}
                 message = message.model_copy(update={"content": "[Unexecuted invalid tool arguments]\n" + raw, "invalid_tool_calls": [], "additional_kwargs": extra})
             messages.append(message)
-        instruction = _REPAIR if self.pending else _SOURCE_FIX if self.source_fix else _SCHEMA_FIX if self.schema_fix else _FINISH
+        instruction = self.repair_instruction if self.pending else _SOURCE_FIX if self.source_fix else _SCHEMA_FIX if self.schema_fix else _FINISH
         if messages and isinstance(messages[0], SystemMessage):
             messages[0] = messages[0].model_copy(update={"content": str(messages[0].content) + "\n\n" + instruction})
         else:
             messages.insert(0, SystemMessage(content=instruction))
-        tools = [item for item in request.tools or [] if (item.get("name") if isinstance(item, dict) else getattr(item, "name", "")) == "report_submit_outline"] if self.pending or self.schema_fix else []
+        allowed = {"report_submit_outline"}
+        if self.schema_fix and not self.pending and self.candidate_budget_patch:
+            allowed.add("report_patch_outline_budget")
+        tools = [item for item in request.tools or [] if (item.get("name") if isinstance(item, dict) else getattr(item, "name", "")) in allowed] if self.pending or self.schema_fix else []
         if self.pending:
             self.pending = False
             self.correcting = True
@@ -170,13 +213,16 @@ class InvalidToolCallRepairMiddleware(AgentMiddleware):
         return await handler(self.prepare_request(request))
 
     def _submission_result(self, request, response):
-        if request.tool_call.get("name") != "report_submit_outline":
+        if request.tool_call.get("name") not in {"report_submit_outline", "report_patch_outline_budget"}:
             return response
         try:
             payload = json.loads(response.content)
         except (ValueError, TypeError, AttributeError):
             return response
-        if self.bound_source_correction and isinstance(payload, dict) and payload.get("validation_ok") is True:
+        self.candidate_budget_patch = isinstance(payload, dict) and isinstance(payload.get("candidate_budget_patch"), dict)
+        if isinstance(payload, dict) and payload.get("saved") is True and payload.get("validation_ok") is True:
+            self.validated_outline_submission = True
+        if (self.bound_source_correction or request.tool_call.get("name") == "report_patch_outline_budget") and isinstance(payload, dict) and payload.get("validation_ok") is True:
             self.used = self.finish_only = True
             self.source_fix = self.schema_fix = self.pending = False
             self.events.append({"status": "submission_validated", "validation_ok": True})
@@ -212,6 +258,6 @@ class InvalidToolCallRepairMiddleware(AgentMiddleware):
         return self._submission_result(request, await handler(request))
 
     def consume_stop_reason(self, run_id=None):
-        reason = "tool_argument_repair_failed" if self.failed else None
+        reason = ("outline_delivery_repair_failed" if self.repair_kind == "missing_outline_submission" else "tool_argument_repair_failed") if self.failed else None
         self.failed = False
         return reason

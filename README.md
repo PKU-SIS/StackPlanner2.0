@@ -1,3 +1,5 @@
+> 本分支：`zmy/qwen38-v18-approved-20261119`。已交付的 Qwen3.8-27B v18，一万字档；未混入 v19/v20/v21 或新的 Qwen3-30B-A3B 实验。 使用说明及已有成绩见 [deliveries/qwen38-v18/BRANCH.md](deliveries/qwen38-v18/BRANCH.md)。
+
 # StackPlanner 2.0 (SP2.0)
 
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](./backend/pyproject.toml)

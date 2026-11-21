@@ -1,0 +1,13 @@
+{
+  "started_at": "2026-11-19T08:31:00.247550+00:00",
+  "case_id": 10,
+  "report_sha256": "2375c79ae9a2f42c7bd37441c22529f9c019d3c3184e746ef0e1fe102d4eda3f",
+  "version": "v18",
+  "source": "/data2/pkuiti/zmy/codex-relay-work/qwen38-newcase-v18-20261119",
+  "judge_requested": "deepseek-flash",
+  "transport_sha256": "2b17e637cb199e9124cdc4e248c9ecd1e71879a297addddeba98dce5698cb365",
+  "race_driver_sha256": "83813306724ae9543b4383d1e580d1ae2f535ec9e78fa574fca5e78b0022640e",
+  "automatic_restart": false,
+  "report_regeneration": false,
+  "protocol": "Existing frozen upstream cleaner, rubric, reference, prompts and weighted aggregation"
+}

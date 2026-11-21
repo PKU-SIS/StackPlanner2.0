@@ -22,6 +22,7 @@ WEB_SEARCH_TOOL_NAME = "web_search"
 MAX_WEB_SEARCHES_PER_TURN = 50
 MAX_PARALLEL_WEB_SEARCHES = 4
 MAX_CONSECUTIVE_WEB_SEARCH_FAILURES = 2
+_LOCAL_GUARD_CODES = frozenset({"WEB_SEARCH_PARALLEL_LIMIT", "WEB_SEARCH_DUPLICATE_SKIPPED", "WEB_SEARCH_ATTEMPTS_EXHAUSTED", "WEB_SEARCH_BUDGET_EXHAUSTED"})
 
 
 def _real_user_turn_start(messages: list[Any]) -> int:
@@ -67,6 +68,23 @@ def _is_failed_search(message: ToolMessage) -> bool:
     )
 
 
+def _is_local_search_guard(message: ToolMessage) -> bool:
+    """Local admission refusals did not contact the search provider.
+
+    Recognize the existing structured response too, so persisted histories from
+    before the explicit marker retain the same failure-streak interpretation.
+    """
+    if (message.additional_kwargs or {}).get("web_search_guard") is True:
+        return True
+    if not isinstance(message.content, str):
+        return False
+    try:
+        payload = json.loads(message.content)
+    except (json.JSONDecodeError, TypeError):
+        return False
+    return isinstance(payload, Mapping) and isinstance(payload.get("error"), str) and payload["error"] in _LOCAL_GUARD_CODES and payload.get("retryable") is False
+
+
 def _completed_searches(messages: list[Any]) -> list[tuple[str, ToolMessage]]:
     """Pair completed search ToolMessages with their original normalized query."""
     query_by_call_id: dict[str, str] = {}
@@ -108,6 +126,7 @@ def _guard_message(request: ToolCallRequest, *, code: str, message: str, status:
         tool_call_id=str(request.tool_call.get("id") or "web-search-guard"),
         name=WEB_SEARCH_TOOL_NAME,
         status=status,
+        additional_kwargs={"web_search_guard": True},
     )
 
 
@@ -139,7 +158,11 @@ class WebSearchBudgetMiddleware(AgentMiddleware):
                 return _guard_message(
                     request,
                     code="WEB_SEARCH_PARALLEL_LIMIT",
-                    message=("This turn already contains enough parallel searches. Analyze the first results before issuing more queries."),
+                    message=(
+                        f"At most {MAX_PARALLEL_WEB_SEARCHES} web_search calls are allowed in one tool batch. "
+                        "This query was not sent to the provider. Analyze the first results, "
+                        "then submit any still-needed queries in batches within that limit."
+                    ),
                 )
 
         completed = _completed_searches(messages)
@@ -162,6 +185,8 @@ class WebSearchBudgetMiddleware(AgentMiddleware):
 
         consecutive_failures = 0
         for _, previous in reversed(completed):
+            if _is_local_search_guard(previous):
+                continue
             if not _is_failed_search(previous):
                 break
             consecutive_failures += 1

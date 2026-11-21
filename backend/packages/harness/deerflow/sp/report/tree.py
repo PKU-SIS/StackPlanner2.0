@@ -33,11 +33,7 @@ def parse_tree_payload(value: Any) -> dict[str, Any]:
     if isinstance(value, Mapping):
         payload = dict(value)
         if _outline_envelope_payload(payload):
-            raise ReportValidationError(
-                "Outline delivery contains a response envelope, not the tree body; "
-                "write only the tree object to the delivery file and keep summary/"
-                "artifact_metadata outside it"
-            )
+            raise ReportValidationError("Outline delivery contains a response envelope, not the tree body; write only the tree object to the delivery file and keep summary/artifact_metadata outside it")
         return payload
     if not isinstance(value, str) or not value.strip():
         raise ReportValidationError("Outline result has no artifact_content JSON")
@@ -52,22 +48,11 @@ def parse_tree_payload(value: Any) -> dict[str, Any]:
     try:
         payload = json.loads(candidate)
     except json.JSONDecodeError as exc:
-        raise ReportValidationError(
-            "Outline tree JSON syntax error at "
-            f"line {exc.lineno}, column {exc.colno}: {exc.msg} "
-            f"(position {exc.pos}); the complete document was not accepted and "
-            "no nested object was extracted"
-        ) from exc
+        raise ReportValidationError(f"Outline tree JSON syntax error at line {exc.lineno}, column {exc.colno}: {exc.msg} (position {exc.pos}); the complete document was not accepted and no nested object was extracted") from exc
     if not isinstance(payload, dict):
-        raise ReportValidationError(
-            f"Outline tree JSON must be one object, got {type(payload).__name__}"
-        )
+        raise ReportValidationError(f"Outline tree JSON must be one object, got {type(payload).__name__}")
     if _outline_envelope_payload(payload):
-        raise ReportValidationError(
-            "Outline delivery contains a response envelope, not the tree body; "
-            "write only the tree object to the delivery file and keep summary/"
-            "artifact_metadata outside it"
-        )
+        raise ReportValidationError("Outline delivery contains a response envelope, not the tree body; write only the tree object to the delivery file and keep summary/artifact_metadata outside it")
     return payload
 
 
@@ -112,6 +97,19 @@ def validate_tree_with_diagnostics(payload: Mapping[str, Any], ledger: ReportLed
         return validate_tree(payload, ledger)
     except ReportValidationError as exc:
         errors = _diagnose_tree_contract(payload, ledger)
+        # Budget arithmetic is independent of evidence identity. Report it in
+        # the same rejection instead of discovering it after another full tree.
+        from deerflow.sp.report.length import validate_budgets
+
+        try:
+            validate_budgets(payload, ledger)
+        except ReportValidationError as budget_error:
+            if str(budget_error) != str(exc):
+                errors.append(str(budget_error))
+        except (AttributeError, KeyError, TypeError, ValueError):
+            # Malformed containers are explained by structural diagnostics;
+            # this optional pass must not replace the authoritative rejection.
+            pass
         if errors:
             raise ReportValidationError(f"{exc}\nDiagnostic context:\n- " + "\n- ".join(errors)) from exc
         raise
@@ -136,15 +134,9 @@ def _diagnose_tree_contract(payload: Mapping[str, Any], ledger: ReportLedger) ->
             return []
 
     if "tree" in payload:
-        errors.append(
-            "artifact_content has an extra top-level 'tree' field; if the tree body is nested there, "
-            "return that body directly (the field itself is not an acceptance requirement)"
-        )
+        errors.append("artifact_content has an extra top-level 'tree' field; if the tree body is nested there, return that body directly (the field itself is not an acceptance requirement)")
     if "tree_version" in payload:
-        errors.append(
-            "artifact_content has an extra 'tree_version' field; it is not required, and any nested "
-            "tree body still needs the normal required fields"
-        )
+        errors.append("artifact_content has an extra 'tree_version' field; it is not required, and any nested tree body still needs the normal required fields")
     text(payload.get("report_title"), "tree.report_title")
 
     requirements = list_value(payload.get("requirements"), "tree.requirements") if "requirements" in payload else None
@@ -231,6 +223,10 @@ def _diagnose_tree_contract(payload: Mapping[str, Any], ledger: ReportLedger) ->
                     material = ledger.material(material_id.strip())
                     if material is None:
                         errors.append(f"tree.nodes[{node_id}] references unknown material: {material_id.strip()}")
+                source_ids = item.get("source_ids")
+                canonical = (material or {}).get("source_id")
+                if isinstance(source_ids, list) and source_ids and canonical and canonical not in source_ids:
+                    errors.append(f"tree.nodes[{node_id}].evidence[{ev_index}].source_ids do not include {canonical}")
                 text(item.get("use"), f"tree.nodes[{node_id}].evidence[{ev_index}].use")
                 locator = item.get("locator")
                 if locator is not None and not isinstance(locator, Mapping):
@@ -410,6 +406,10 @@ def validate_tree(payload: Mapping[str, Any], ledger: ReportLedger) -> dict[str,
         "feedback_dispositions": _as_list(tree.get("feedback_dispositions"), "tree.feedback_dispositions"),
         "draft_dispositions": _as_list(tree.get("draft_dispositions"), "tree.draft_dispositions"),
     }
+    from deerflow.sp.report.length import validate_budget_patch, validate_budgets
+
+    validate_budgets(normalized, ledger)
+    validate_budget_patch(tree, ledger)
     return normalized
 
 

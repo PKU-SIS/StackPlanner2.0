@@ -1,0 +1,28 @@
+{
+  "case_id": 10,
+  "status": "completed",
+  "version": "v18",
+  "source": "/data2/pkuiti/zmy/codex-relay-work/qwen38-newcase-v18-20261119",
+  "report_sha256": "2375c79ae9a2f42c7bd37441c22529f9c019d3c3184e746ef0e1fe102d4eda3f",
+  "scores": {
+    "comprehensiveness": 0.5214814814814815,
+    "insight": 0.5240963855421686,
+    "instruction_following": 0.5252225519287833,
+    "readability": 0.5180180180180181,
+    "overall_score": 0.522813205206761
+  },
+  "race_overall_percent": 52.2813205206761,
+  "race_tokens": 52595,
+  "judge_calls": 2,
+  "judge_requested": "deepseek-flash",
+  "judge_returned": [
+    "deepseek-flash"
+  ],
+  "generation_tokens": 2401978,
+  "generation_tokens_changed": false,
+  "formal_delivered": true,
+  "original_sources_and_report_unchanged": true,
+  "official_leaderboard_comparable": false,
+  "fact_status": "not_run",
+  "finished_at": "2026-11-19T08:31:59.556864+00:00"
+}

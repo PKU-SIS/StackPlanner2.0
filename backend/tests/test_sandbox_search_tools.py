@@ -294,15 +294,13 @@ def test_find_glob_matches_raises_not_a_directory(tmp_path) -> None:
         pass
 
 
-def test_find_grep_matches_raises_not_a_directory(tmp_path) -> None:
+def test_find_grep_matches_accepts_one_file(tmp_path) -> None:
     file_path = tmp_path / "file.txt"
     file_path.write_text("TODO\n", encoding="utf-8")
 
-    try:
-        find_grep_matches(file_path, "TODO")
-        assert False, "Expected NotADirectoryError"
-    except NotADirectoryError:
-        pass
+    matches, truncated = find_grep_matches(file_path, "TODO")
+    assert matches == [GrepMatch(path=str(file_path), line_number=1, line="TODO")]
+    assert truncated is False
 
 
 def test_find_grep_matches_skips_symlink_outside_root(tmp_path) -> None:

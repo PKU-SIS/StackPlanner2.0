@@ -1,0 +1,43 @@
+{
+  "calls": [
+    {
+      "model_requested": "deepseek-flash",
+      "model_returned": "deepseek-flash",
+      "fingerprint": "29c10368d56e1de1bcfef135b609dc777a7ac8512301488f6110d259648bd1bb",
+      "stage": "score",
+      "finished_at": "2026-11-19T08:31:59.502310+00:00",
+      "elapsed_seconds": 30.23,
+      "usage": {
+        "prompt_tokens": 31004,
+        "completion_tokens": 4979,
+        "total_tokens": 35983,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 31004
+      },
+      "finish_reason": "stop"
+    },
+    {
+      "model_requested": "deepseek-flash",
+      "model_returned": "deepseek-flash",
+      "fingerprint": "583f0fd24db384a82ab8fe1a724226f8adc55a3c11b381a1040e54c38a345bd3",
+      "stage": "clean",
+      "finished_at": "2026-11-19T08:31:29.187986+00:00",
+      "elapsed_seconds": 28.94,
+      "usage": {
+        "prompt_tokens": 9119,
+        "completion_tokens": 7493,
+        "total_tokens": 16612,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 9119
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "scope": "Usage, timing and request fingerprints only; no request bodies, hidden reasoning or credentials"
+}

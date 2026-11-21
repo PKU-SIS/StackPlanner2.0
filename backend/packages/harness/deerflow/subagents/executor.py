@@ -662,11 +662,32 @@ class SubagentExecutor:
             from deerflow.agents.middlewares.invalid_tool_call_repair_middleware import InvalidToolCallRepairMiddleware
 
             self._tool_argument_repair_middleware = InvalidToolCallRepairMiddleware(
-                budget=app_config.subagents.get_token_budget_for(self.config.name), output_limit=self.max_tokens_per_step or 32768,
-                tool_limit=_subagent_tool_loop_limits(self.config.max_turns, self.config.tool_call_limit or _SUBAGENT_TOOL_LOOP_HARD_CAP)[1], aborted=self._parent_aborted,
+                budget=app_config.subagents.get_token_budget_for(self.config.name),
+                output_limit=self.max_tokens_per_step or 32768,
+                tool_limit=_subagent_tool_loop_limits(self.config.max_turns, self.config.tool_call_limit or _SUBAGENT_TOOL_LOOP_HARD_CAP)[1],
+                aborted=self._parent_aborted,
                 bound_source_correction=self.config.bound_outline_source_correction,
+                require_outline_submission=self.config.require_outline_submission,
             )
             middlewares.insert(0, self._tool_argument_repair_middleware)
+        if self.config.report_writer_length is not None:
+            from deerflow.sp.report.writer_length import ReportWriterLengthMiddleware
+
+            middlewares.insert(
+                0,
+                ReportWriterLengthMiddleware(
+                    binding=self.config.report_writer_length,
+                    output_limit=self.max_tokens_per_step or 32768,
+                    aborted=self._parent_aborted,
+                ),
+            )
+        if self.config.report_outline_evidence_packet is not None and app_config.subagents.report_outline_evidence_action:
+            from deerflow.agents.middlewares.outline_evidence_action_middleware import OutlineEvidenceActionMiddleware
+
+            middlewares.append(OutlineEvidenceActionMiddleware(
+                packet=self.config.report_outline_evidence_packet,
+                followup_actions=app_config.subagents.report_outline_followup_actions,
+            ))
         # Collect every guard middleware that exposes ``consume_stop_reason``
         # (TokenBudgetMiddleware, LoopDetectionMiddleware) so _aexecute can read
         # each after the run and surface whichever cap fired. Duck-typed
@@ -818,6 +839,10 @@ class SubagentExecutor:
             try:
                 content = await asyncio.to_thread(skill.skill_file.read_text, encoding="utf-8")
                 content = content.strip()
+                if self.config.skill_prompt_sections and skill.category == SkillCategory.PUBLIC:
+                    from deerflow.skills.prompt_sections import select_prompt_sections
+
+                    content = select_prompt_sections(content, self.config.skill_prompt_sections.get(skill.name))
                 if content:
                     messages.append(SystemMessage(content=f'<skill name="{skill.name}">\n{content}\n</skill>'))
                     logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} loaded skill: {skill.name}")

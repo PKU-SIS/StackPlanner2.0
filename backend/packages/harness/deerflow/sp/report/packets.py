@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable, Mapping
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -47,11 +48,7 @@ def _outline_candidate_view(record: Any) -> dict[str, Any] | None:
             return None
         if not isinstance(parsed, Mapping) or not any(key in parsed for key in ("nodes", "requirements", "report_title")):
             return None
-    return {
-        key: record.get(key)
-        for key in ("virtual_path", "sha256", "chars", "action_id", "kind", "parse_error", "errors", "created_at")
-        if record.get(key) is not None
-    }
+    return {key: record.get(key) for key in ("virtual_path", "sha256", "chars", "action_id", "kind", "parse_error", "errors", "created_at") if record.get(key) is not None}
 
 
 def _material_entry(material: Mapping[str, Any]) -> dict[str, Any]:
@@ -214,7 +211,7 @@ def build_writer_packet(
     parent_id = node.get("parent_id")
     parent = nodes.get(str(parent_id)) if parent_id else None
     siblings = [{"node_id": item.get("node_id"), "title": item.get("title"), "status": item.get("status")} for item in nodes.values() if item.get("parent_id") == parent_id and item.get("node_id") != node_id]
-    return {
+    packet = {
         "report_id": ledger.payload.get("report_id"),
         "write_key": write_key,
         "node_id": node_id,
@@ -238,12 +235,38 @@ def build_writer_packet(
         },
         "prior_draft": prior,
     }
+    if ledger.payload.get("length_contract"):
+        from deerflow.sp.report.length import budget_summary, node_budget, writer_generation_budget
+
+        packet["length"] = {**budget_summary(tree, ledger), "node": node_budget(node)}
+        generation = writer_generation_budget(node, ledger.payload["length_contract"])
+        if generation is not None:
+            packet["length"]["generation"] = generation
+    if (ledger.payload.get("length_contract") or {}).get("writer_task_cards"):
+        from deerflow.sp.report.task_card import build_task_card
+
+        card = build_task_card(node, ledger)
+        packet["task_card"] = card
+        packet["basis"] = {key: value for key, value in basis.items() if key != "node_spec"}
+        packet["requirements"] = deepcopy(basis.get("node_spec", {}).get("requirement_context", []))
+    return packet
 
 
 def build_integrate_review_packet(ledger: ReportLedger) -> dict[str, Any]:
     inputs_view = report_assembly.review_inputs(ledger)
     candidate = inputs_view["candidate"]
     tree = inputs_view["tree"]
+    compact = bool((ledger.payload.get("length_contract") or {}).get("compact_outline"))
+    selected_materials = {str(e.get("material_id")) for n in tree.get("nodes") or [] for e in n.get("evidence") or [] if isinstance(e, Mapping)}
+    for entry in candidate.get("citation_map") or []:
+        if isinstance(entry, Mapping) and entry.get("material_id"):
+            selected_materials.add(str(entry["material_id"]))
+    # Source-only citations may not identify an exact saved material version.
+    # Keep those versions rather than silently choosing or omitting support.
+    for source in candidate.get("source_table") or []:
+        versions = {str(v.get("material_id")) for v in source.get("material_versions") or [] if isinstance(v, Mapping)}
+        if not selected_materials.intersection(versions):
+            selected_materials.update(versions)
     candidate_text, candidate_error = _read_text(candidate.get("path"))
     tree_text = json.dumps(tree, ensure_ascii=False, indent=2)
     inputs = []
@@ -261,6 +284,8 @@ def build_integrate_review_packet(ledger: ReportLedger) -> dict[str, Any]:
         )
     materials = []
     for item in inputs_view["materials"]:
+        if compact and str(item.get("material_id")) not in selected_materials:
+            continue
         # ``review_inputs`` carries the agent-facing virtual path in ``path``.
         # Resolve the host path from the ledger material identity instead of
         # asking Path() to open the virtual path.
@@ -275,7 +300,7 @@ def build_integrate_review_packet(ledger: ReportLedger) -> dict[str, Any]:
             }
         )
     request_text, request_error = _read_text(ledger.paths.request)
-    return {
+    packet = {
         "report_id": ledger.payload.get("report_id"),
         "report_task": "integrate_review",
         "request": {
@@ -306,7 +331,7 @@ def build_integrate_review_packet(ledger: ReportLedger) -> dict[str, Any]:
             "requirements": tree.get("requirements") or [],
         },
         "inputs": inputs,
-        "drafts": inputs_view["drafts"],
+        "drafts": [{key: value for key, value in draft.items() if key != "body"} for draft in inputs_view["drafts"]] if compact else inputs_view["drafts"],
         "materials": materials,
         "materials_note": (
             "Material text is a bounded preview; complete sources remain at their paths. The full candidate and drafts are inlined. "
@@ -316,6 +341,18 @@ def build_integrate_review_packet(ledger: ReportLedger) -> dict[str, Any]:
         "citation_map": inputs_view["citation_map"],
         "current_review": ledger.payload.get("review"),
     }
+    if compact:
+        packet["material_catalog_path"] = ledger.paths.virtual(ledger.paths.catalog)
+        packet["materials_note"] = (
+            "Only tree-bound/citation-bound material previews are inlined. The complete original material catalog remains at material_catalog_path; "
+            "read originals by material ID/path when a specific finding requires it. The complete candidate body is inlined once. "
+            "Draft entries retain IDs, paths and hashes without repeating their bodies. Preserve the original review criteria."
+        )
+    if ledger.payload.get("length_contract"):
+        from deerflow.sp.report.length import candidate_length
+
+        packet["length"] = candidate_length(ledger, candidate)
+    return packet
 
 
 def build_outline_packet(ledger: ReportLedger) -> dict[str, Any]:
@@ -408,7 +445,7 @@ def build_outline_packet(ledger: ReportLedger) -> dict[str, Any]:
 
     rejected_outline = _outline_candidate_view(ledger.payload.get("rejected_outline"))
 
-    return {
+    packet = {
         "report_id": ledger.payload.get("report_id"),
         "request": {
             "text": request_text,
@@ -440,6 +477,13 @@ def build_outline_packet(ledger: ReportLedger) -> dict[str, Any]:
         "unapplied_input_ids": ledger.unapplied_input_ids(),
         "rejected_outline": rejected_outline,
     }
+    if ledger.payload.get("length_contract"):
+        from deerflow.sp.report.length import budget_summary
+
+        packet["length"] = budget_summary(load_current_tree(ledger) or {}, ledger)
+        if packet["tree"] is not None:
+            packet["tree"]["sha256"] = tree_payload.get("sha256")
+    return packet
 
 
 def build_researcher_packet(ledger: ReportLedger, gap_ids: Iterable[str], *, action_id: str) -> dict[str, Any]:
@@ -505,6 +549,7 @@ def build_researcher_packet(ledger: ReportLedger, gap_ids: Iterable[str], *, act
         "materials_note": "Only gap-related source identities are inlined. Read original evidence by report_read_material; the complete catalog remains at material_catalog_path.",
         "material_catalog_path": ledger.paths.virtual(ledger.paths.catalog),
         "instructions": REPORT_RESEARCH_PROMPT,
+        **({"compact_outline": True} if (ledger.payload.get("length_contract") or {}).get("compact_outline") else {}),
     }
 
 
@@ -536,6 +581,7 @@ def build_pre_research_packet(ledger: ReportLedger, *, action_id: str) -> dict[s
         "material_catalog_path": ledger.paths.virtual(ledger.paths.catalog),
         "gaps": [],
         "instructions": REPORT_PRE_RESEARCH_PROMPT,
+        **({"compact_outline": True} if (ledger.payload.get("length_contract") or {}).get("compact_outline") else {}),
     }
 
 

@@ -1,0 +1,26 @@
+{
+  "upstream": {
+    "repository": "https://github.com/Ayanami0730/deep_research_bench",
+    "commit": "f2735b5c3636759c22f9e936c0232de8bf545b67"
+  },
+  "judge_requested": "deepseek-flash",
+  "judge_returned": [
+    "deepseek-flash"
+  ],
+  "temperature": 0,
+  "thinking": "disabled",
+  "sample_selection": "one successful judgment per unchanged report; no score selection",
+  "cleaner_rubric_reference_prompts_aggregation": "Existing pinned upstream protocol; all source hashes verified before calls",
+  "score_formula": "100 * weighted_target / (weighted_target + weighted_reference)",
+  "dimension_scale": "result.json scores are 0-1; document tables multiply by 100",
+  "official_leaderboard_comparable": false,
+  "fact_status": "not_run",
+  "race_tokens_include": "All cleaner and scoring input/output tokens, including cached input; excluded from generation_tokens",
+  "new_report_generation_calls": 0,
+  "new_judge_calls": 4,
+  "race_tokens": 91964,
+  "evaluation_output_routing": "Isolated evaluation driver redirects output to data disk; frozen generation code and reports unchanged",
+  "transport_sha256": "2b17e637cb199e9124cdc4e248c9ecd1e71879a297addddeba98dce5698cb365",
+  "source_hash_manifest_sha256": "87be73fe0c548315e55948c65c22581f4db8379cf36f73fe077d5155ec8d9804",
+  "evaluation_script_sha256": "b2363cb5477e19fb8e0435cba35bd13ef24b305d83fc1a1c91c4efe7f9018b84"
+}

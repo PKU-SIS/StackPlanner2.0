@@ -151,6 +151,10 @@ def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
         "context_refs": task.context_refs,
         "metadata": task.metadata,
     }
+    if task.metadata.get("report_role") == "writer" and task.context_refs.get("report_packet", {}).get("task_card"):
+        # Retain the complete immutable basis on the host for native acceptance;
+        # avoid leaking unselected planning tasks back into the model prompt.
+        payload["metadata"] = {key: value for key, value in task.metadata.items() if key != "report_draft_basis"}
     return "\n".join(
         [
             "<sp-subagent-task>",

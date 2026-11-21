@@ -253,6 +253,33 @@ def msg(classes):
 class TestAgentConstruction:
     """Test _create_agent() wiring before execution starts."""
 
+    @pytest.mark.parametrize("enabled", [False, True])
+    def test_budgeted_report_writer_installs_host_length_policy(self, classes, base_config, monkeypatch, enabled):
+        from deerflow.config.token_budget_config import TokenBudgetConfig
+        from deerflow.sp.report.writer_length import ReportWriterLengthMiddleware
+
+        executor_module = sys.modules["deerflow.subagents.executor"]
+        binding = dict(outputs_path="/tmp/test-writer-length", report_id="r1", node_id="n1", write_key="w1", draft_id="d1", action_id="a1")
+        base_config.report_writer_length = binding if enabled else None
+        budget = TokenBudgetConfig(enabled=True, max_tokens=1000000)
+        app_config = SimpleNamespace(models=[SimpleNamespace(name="test-model")], subagents=SimpleNamespace(get_token_budget_for=lambda name: budget))
+        monkeypatch.setattr(executor_module, "create_chat_model", lambda **kwargs: object())
+        monkeypatch.setitem(sys.modules, "deerflow.agents.middlewares.tool_error_handling_middleware", _module("deerflow.agents.middlewares.tool_error_handling_middleware", build_subagent_runtime_middlewares=lambda **kwargs: []))
+        captured = {}
+
+        def capture(**kwargs):
+            captured.update(kwargs)
+            return object()
+
+        monkeypatch.setattr(executor_module, "create_agent", capture)
+        executor = classes["SubagentExecutor"](config=base_config, tools=[], app_config=app_config, thinking_enabled=False)
+        executor._create_agent()
+        policies = [item for item in captured["middleware"] if isinstance(item, ReportWriterLengthMiddleware)]
+        assert len(policies) == int(enabled)
+        if enabled:
+            assert policies[0].aborted == executor._parent_aborted
+            assert policies[0].binding == binding
+
     def test_subagent_loop_guard_stops_before_graph_recursion_boundary(self, classes):
         guard = SimpleNamespace(
             tool_freq_warn=30,
@@ -338,6 +365,7 @@ class TestAgentConstruction:
 
     def test_scoped_output_default_and_explicit_override(self, classes, base_config):
         from dataclasses import replace
+
         config = replace(base_config, max_output_tokens=65536)
         default = classes["SubagentExecutor"](config=config, tools=[])
         explicit = classes["SubagentExecutor"](config=config, tools=[], max_tokens_per_step=1234)

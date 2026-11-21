@@ -217,13 +217,14 @@ Tool contract:
   in the report-outline skill. After the first accepted tree, this tool may be
   used only for a research target explicitly authorized by new user input; it
   must not open a second automatic round.
-- `write_file` writes the host-assigned delivery path. When file delivery is
-  requested, write the complete tree object there; use `append=True` for later
-  chunks after `read_file`. Never write only `nodes`.
-- Prefer `report_submit_outline(tree={...})` for a complete structured tree.
+- Use `report_submit_outline(tree={...})` for a complete structured tree.
   The host serializes and stages it at the assigned path, returning validation
   diagnostics without bypassing final acceptance. Do not encode its tree
   argument as a string. After success return the compact file-delivery envelope.
+- Only when `report_packet.delivery.allow_chunked_write=true` AND `write_file`
+  is available may you use file chunks as a fallback: write the complete tree
+  object to the assigned path, using `append=True` after `read_file` for later
+  chunks. Otherwise use `report_submit_outline`, including for recovery.
 
 Initial plan:
 - Produce a compact structure sufficient to guide the fixed research round and
@@ -257,12 +258,13 @@ One fixed research round and final consolidation:
   locators before Writer receives it.
 
 Output and recovery contract:
-- Return one JSON envelope with `summary`, `artifact_content` (the full tree
-  object), `artifact_type:"outline"`, and
+- Return one JSON envelope with `summary`, `artifact_content`, `artifact_type:"outline"`, and
   `artifact_metadata.completion_status:"complete"`. Do not wrap the envelope in
   prose or fences and do not add a `tree` wrapper.
 - File delivery: if `report_packet.delivery.mode` is `optional_file` or
-  `required_file`, write the complete tree object to `report_packet.delivery.path`.
+  `required_file`, stage the complete tree with `report_submit_outline` at
+  `report_packet.delivery.path`; file chunks are allowed only under the tool
+  contract above. Without file delivery, `artifact_content` is the full tree object.
   `required_file` rejects inline content. The delivery file contains only the
   tree object, never the envelope. Return a compact envelope with
   `artifact_content=null`, `artifact_type="outline"` and
@@ -276,11 +278,11 @@ Output and recovery contract:
   schema, examples and scope rules.
 - A rejected candidate is retained by the host. On a recovery task, follow the
   host instruction: the current delivery file may already contain the retained
-  prefix. Read its relevant tail first. If the retained file merely ends before
-  the tree is closed, append only the missing suffix; if it has a mid-file error,
-  correct that part normally with the existing tools. Do not rewrite a valid
-  prefix merely to restate it, and do not treat a generated append that was not
-  executed as accepted. Never auto-fill braces, drop nodes, or submit a partial
+  prefix. Read its relevant tail first. When chunked writing is allowed and
+  available, append only a missing suffix or correct a mid-file error. Otherwise
+  preserve the valid planning work in a complete corrected tree object and
+  submit it with `report_submit_outline`. Do not treat unexecuted tools as
+  accepted progress. Never auto-fill braces, drop nodes, or submit a partial
   tree. Final acceptance always parses complete JSON and runs the strict tree,
   citation and business validations.
 
@@ -518,4 +520,239 @@ is needed. Do not attach edits in the fixed acceptance path.
  "status": "ready|issues"}.
 Do not duplicate the full review in artifact_metadata.
 </report-integrate-review-mode>
+""".strip()
+
+
+REPORT_COMPACT_OUTLINE_PROMPT = """
+<compact-report-outline>
+Plan a short report that fully answers the original user request within
+report_packet.length's body_target_words/body_max_words. Reduce actual optional
+work substantially: fewer topics, claims, examples, frameworks and evidence
+needs, not the same long outline merged into fewer headings.
+Normally aim for 6-8 chapters with 1-2 concise core arguments each. These are
+suggestions, never reasons to omit a required country, comparison, distinction
+or depth priority. Assign each distinct required answer or comparison one primary
+chapter using the existing requirement_ids. A broad requirement may span several
+chapters: divide its subquestions explicitly instead of dropping required scope.
+In node.question say what this chapter answers and how deeply; in argument list
+only the answers to develop. Name relevant sibling chapters for details covered
+there. Cross-chapter synthesis should compare or draw implications without
+retelling their facts. Introductions/conclusions should not repeat the body.
+Select the depth from the user request: develop requested priorities with
+necessary support, cover other required items concisely, and remove optional
+background, extra cases and unrequested indicator catalogues. Never downgrade
+explicitly requested detail. For required comparisons prefer compact tables with
+short interpretation when useful, preserving evidence and needed distinctions.
+Keep questions, arguments, conclusions and evidence-use instructions brief and
+consistent. scope_exclusions is optional. Do not produce writer_tasks or
+writer_framework: the host derives the task card from the native node fields.
+Normal evidence locators, requirement coverage and source rules still apply.
+Group genuinely missing support into a small shared batch, normally 1-3 research
+questions; include more if needed for explicit requirements. Use the original
+fixed supplementary research batch. Consolidation should refine the selected
+answers, not expand to every detail found or open new automatic research.
+Allocate positive target_words/max_words to writable nodes, target <= max.
+Their sums must fit the supplied body allocation range/maximum. Without a
+body_budget_recommendation, body_target_words is the target-sum ceiling.
+Body budgets already exclude reference/heading reserves; do not subtract them
+again. Do not add paragraph arithmetic or duplicate
+writing specifications. Budgets must correspond to realistic reduced content.
+Stage plans with report_submit_outline, not write_file. With current drafts,
+leave tree.draft_dispositions empty and provide explicit keep_nodes,
+rewrite_nodes, drop_nodes lists covering current drafts, plus decision_reason;
+the host supplies the current draft IDs/actions. Budget patches use the same
+native protocol. Preserve the original content review and content revision.
+</compact-report-outline>
+""".strip()
+
+REPORT_OUTLINE_BUDGET_SELECTION_PROMPT = """
+<outline-body-budget-selection>
+length.contract.target_words is the final whole-report goal. The smaller
+length.body_budget_recommendation is an empirical INTERNAL generation range,
+not final output length. Start at default_words; in this existing Outline call,
+choose B within min_words..max_words after selecting necessary chapter tasks.
+Use writable-node count, total argument count, their distribution and compound
+tasks as references, not quotas or a formula. More tasks do not automatically
+justify more budget: remove optional duplication first; consider the lower half
+when tasks invite excessive expansion. Focused required analysis can use the
+middle, or upper half when necessary depth warrants it. This is a heuristic.
+Assign B by chapter importance and workload, not equally or by writing order.
+Record only native constraints.target_words/max_words: SUM(target_words)=B;
+SUM(max_words)<=length.body_max_words. No new total field or planning call.
+body_target_words starts at the default and then reflects the selected sum;
+it is not a fixed ceiling in this mode. Observed N/A ranges are reference only.
+Preserve explicit coverage, evidence checks, native review and necessary repair.
+Do not expand toward the final whole-report goal inside each Writer budget.
+</outline-body-budget-selection>
+""".strip()
+
+REPORT_COMPACT_WRITER_PROMPT = """
+<compact-report-writer>
+Write a complete concise chapter within its assigned target/maximum. Use
+length.generation when present, otherwise length.node and assigned-chapter-length.
+Plan the full answer and ending before writing. Chinese glyphs and full-width
+punctuation count individually in this local estimate, not measured Word counts.
+The host task_card summarizes the native chapter question, arguments, conclusion
+and budget. Treat its question as the chapter's answer boundary and depth,
+its tasks as the required answers, and its conclusion as the brief takeaway.
+Cover the assigned parts of the user requirements; do not independently answer
+the whole report request in every chapter. Details assigned to a sibling need
+only a brief reference here, unless needed to understand this chapter's answer.
+Develop explicitly requested priorities; answer other required items concisely.
+Remove optional background, extra examples and unrequested evaluation tasks.
+A comparison table plus a short explanation can replace repeated country or
+category profiles. Preserve every required object, distinction and qualification;
+never reduce requested depth merely to satisfy a suggested task count.
+Use report_packet.evidence and targeted source reads for accurate citations and
+necessary qualifications. The task card itself is not evidence. Do not repeat
+an entire source-reading pass or treat every discovered fact as a writing task.
+Develop selected answers directly with essential support. Remove optional
+history, repeated introductions, extra cases, parallel frameworks and indicator
+catalogues. Use brief paragraphs or concise comparisons as appropriate.
+Fit content into the budget through selection and concise language; keep a
+complete ending. Never truncate prose or drop necessary user distinctions.
+Save the complete supported first draft through the normal writing tools and
+return the normal completion envelope. Do not add a length-rewrite loop.
+</compact-report-writer>
+""".strip()
+
+REPORT_COMPACT_RESEARCH_PROMPT = """
+<compact-report-research>
+This report uses a compact first-pass outline. Keep the original research stage,
+tools, factual checks and required delivery format. Focus on the original user
+request and the assigned shared gaps. Reuse saved authoritative evidence for
+the same fact; seek complementary evidence for genuinely unsupported required
+claims. Do not collect near-duplicate pages or invent extra countries, exact
+metrics, histories or case catalogues to enlarge coverage. Required countries,
+classification distinctions, conflicting evidence and limitations remain covered.
+There is no source-count quota to fill. Finish when the assigned essential needs
+are supported or their evidence limitations are established. Deliver a concise
+cited synthesis with material/source identities and locators usable by Outline;
+avoid repeating long excerpts or adding a new multi-chapter report inside it.
+Supplementary research remains the native one fixed shared batch.
+Do not expand a gap into a complete indicator system or a survey of several
+frameworks. Seek only the evidence needed for the central selected answer.
+When a standard or framework is useful but detailed comparison is not requested,
+one appropriate approach and its essential dimensions suffice; report relevant
+limitations without adding a new research assignment.
+</compact-report-research>
+""".strip()
+
+REPORT_LENGTH_PROMPT = """
+<report-length-control>
+Only this explicitly enabled report has a whole-document word-budget contract.
+Read report_packet.length. Its versioned estimate counts displayed mixed-language
+words including headings, tables, citation labels and the final references;
+it is NOT a measured Microsoft Word count. Do not use len(text), CJK-only counts
+or tokens as Word counts. Never claim Word measurement without an actual result.
+
+Outline: allocate target_words/max_words in every writable node's constraints.
+The body budget excludes reserved references, headings and safety margin; the
+host checks aggregate budgets against the whole-report contract. A writable node
+is one substantive chapter that can satisfy several related requirements.
+For a 10,000-15,000-word report, normally plan about 6-10 writable chapters;
+this is planning guidance, not a fixed node-count gate. Plan a short report
+from the original request, selecting content for this length from the start.
+Fewer nodes must also mean fewer optional claims, examples, background passages
+and comparisons to develop. Do not pack the long report's original workload
+into a few large nodes or recreate all its subdivisions as internal headings.
+First identify every explicit user requirement. Preserve that coverage, then
+select the essential arguments and representative evidence needed to answer it;
+available research material is not a checklist of content to include.
+As a starting point, give each chapter about 2-3 principal arguments and one
+brief representative example when useful. These are selection guidelines, not
+hard caps: a required country-by-country comparison or systematic classification
+must still cover its named objects. Choose additional countries, frameworks,
+cases and historical detail for their distinct contribution, not completeness.
+Use the existing question, argument, conclusion and constraints fields to make
+the selected scope and optional-detail boundaries clear; do not invent a schema.
+Assign each developed argument and detailed example one primary chapter. Other
+chapters may briefly refer to it rather than reproduce the full explanation.
+Allocate the actual
+body_target_words across these chapters before issuing any write requests.
+Group related objects, countries, methods and comparison dimensions inside one
+chapter using paragraphs, internal subheadings or tables. Each required object
+and analysis must remain explicit in that node's question, arguments,
+requirement_ids and evidence. Split only when an independent argument or the
+user's required structure needs a separate chapter, rather than one Writer per
+source, fact, comparison cell or short subsection. When grouping content, select
+the shared essential argument and omit redundant or optional detail; do not just
+concatenate every former argument. Use section nodes for the
+navigation hierarchy. Prefer more space for essential evidence/analysis, less
+for background and repeated summaries. Assign each argument a primary chapter
+and develop it once. Keep research, requirements and all evidence gates.
+For budget-only revisions use report_patch_outline_budget
+with the packet's accepted tree version/SHA. Return its staged file through the
+normal acceptance path. Supply required keep/rewrite dispositions and new write
+requests; budget changes affect draft fingerprints. Use full tree submission when
+research dispositions, evidence, requirements or structure actually change.
+For an overlong draft, turn the revision into explicit content choices in the
+existing tree: what stays developed, what becomes a brief mention, what optional
+detail is omitted, and which chapter owns duplicated material. Revise the
+arguments/constraints accordingly and keep the necessary evidence bindings.
+Changing only target_words/max_words while retaining the entire workload is not
+a content-selection revision. Never remove an explicit user requirement.
+
+When length.contract.paragraph_plan_required=true, make the content selection
+executable in every writable node's existing constraints:
+paragraph_plan=[{"paragraph":1,"purpose":"one concise purpose","target_words":200},...]
+and scope_exclusions=["optional details deliberately not developed",...].
+Use 3-6 ordered paragraphs per chapter, with target sums at 80-100% of that
+chapter's target_words; include a complete ending. Keep roughly 2-3 core
+judgements, one brief representative case when useful, and name the concrete
+background, extra cases and full framework lists being omitted. Preserve every
+explicit country/classification/analysis requirement; required distinctions may
+share a compact table or paragraph. Re-select optional scope rather than packing
+all seven countries or all available theories into a smaller number of nodes.
+Use the original query to choose representative coverage, not the research
+catalog as a mandatory coverage list. The host checks this plan's shape and
+budget before writing; actual completeness and factual support remain your duty.
+
+Writer: follow the assigned node word target and maximum in report_packet.length.
+If length.generation exists, use its lower target_words/max_words as your actual
+generation goal instead of length.node or any prose length suggestion in the
+node constraints. For example, node allocation 1000 with generation target 400
+means draft toward 400, not 1000. The host deliberately lowered the generation
+goal after observed overshoot; do not expand the body back to the allocation or
+add filler to meet the whole-report minimum yourself. The whole-document
+acceptance range is unchanged. In this mode the measurement tool is not exposed;
+save once and let the host count the completed draft, without asking for tools.
+Plan the body toward target_words from the start. In Chinese most visible CJK
+glyphs count individually; a 400-word budget cannot hold 800 Chinese characters.
+Before drafting, distribute the assigned target across the required claims,
+evidence and qualifications. Write the concise supported chapter directly.
+Plan the complete argument before writing the first paragraph. Reserve space
+for the answer/conclusion and necessary qualifications; use short, precise
+sentences and integrate evidence into the argument. Choose the appropriate
+depth of explanation to fit the chapter, rather than start a long essay and
+stop when space runs out. Optional case details, background and repetition
+yield to the assigned maximum; the user's essential requirements remain covered.
+Treat the selected node scope as the boundary of development. Supporting material
+does not authorize additional topics or examples. Do not expand every argument
+into a separate background-example-risk-recommendation sequence or turn every
+listed source/framework into a subsection. Keep enough analysis and evidence to
+answer the assigned question, with required distinctions and limitations intact.
+State each essential claim with its support once; integrate related objects
+inside the chapter and omit repeated introductions and closing summaries.
+A long evidence catalog does not require repeating every excerpt. Tables count
+too. Save the supported body and return the normal Writer envelope directly.
+The host records the actual completion estimate without another model turn.
+When exposed, report_measure_draft is available for diagnostics when needed; routine
+completion does not need this tool call or a model-authored word count.
+Do not add a node-level rewrite solely for length. Complete the selected argument
+within the assigned maximum while preserving essential distinctions, citations
+and qualifications. Do not silently expand the budget or submit an unfinished
+body. In budgeted mode, a genuine conflict between mandatory coverage and the
+available space may use native node_feedback kind=spec_conflict without a
+completed-draft claim, even if some partial content could be written; first
+attempt concise planning and removal of optional detail. Whole-report acceptance
+still owns any required revision. Never truncate the file, omit the ending,
+or replace analysis with filler. Tool checks retain their existing ceiling of two.
+
+Integration review: retain the existing coverage/evidence review. In this mode
+only, the host additionally enforces the explicit whole-report estimated range,
+using the final citation display and source list. Never certify a measured Word
+count from this estimate. Length findings use the existing bounded content
+revision path; they grant no research rounds, extra budgets or infinite retries.
+</report-length-control>
 """.strip()

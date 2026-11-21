@@ -48,6 +48,13 @@ class SubagentConfig:
     finalize_token_fraction: float = 0.7
     repair_invalid_tool_calls: bool = False
     bound_outline_source_correction: bool = False
+    require_outline_submission: bool = False
+    # Host-only report Writer identity; None leaves ordinary agents unchanged.
+    report_writer_length: dict[str, str] | None = None
+    # Host-selected sections of bundled Skill text; None loads the complete file.
+    skill_prompt_sections: dict[str, list[str]] | None = None
+    # Optional first-turn saved-evidence selection for report planning only.
+    report_outline_evidence_packet: dict | None = None
     # Internal specialists are addressable by orchestration code through the
     # registry but are not advertised to, or callable from, the default lead
     # agent's generic task tool.

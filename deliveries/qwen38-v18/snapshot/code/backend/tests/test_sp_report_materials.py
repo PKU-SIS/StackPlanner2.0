@@ -1,0 +1,650 @@
+"""P1 material capture: exact tool return, stable identities, honest failures."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import tempfile
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from langchain.tools import tool
+from langchain_core.messages import AIMessage, HumanMessage
+
+from deerflow.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
+from deerflow.community.direct_fetch.tools import FetchedBody
+from deerflow.sandbox.local.local_sandbox import LocalSandbox
+from deerflow.sandbox.tools import read_file_tool, write_file_tool
+from deerflow.sp.actions.handlers.base import HandlerContext
+from deerflow.sp.actions.schema import ActionType, SPAction
+from deerflow.sp.memory import TaskMemoryStack
+from deerflow.sp.report import hooks
+from deerflow.sp.report import materials as report_materials
+from deerflow.sp.report import store as report_store
+from deerflow.sp.report.ledger import ReportLedger
+from deerflow.sp.report.materials import build_fetch_material_tool, build_register_user_material_tool
+from deerflow.sp.report.tree import validate_tree
+from deerflow.sp.subagents import SPSubagentTask
+from deerflow.subagents.config import SubagentConfig
+
+
+def _context(tmp_path: Path) -> HandlerContext:
+    state = {
+        "thread_data": {"outputs_path": str(tmp_path)},
+        "messages": [HumanMessage(content="写一份示例公司研究报告", id="m1")],
+    }
+    ctx = HandlerContext(state=state, stack=TaskMemoryStack(), thread_id="t1", run_id="run1")
+    hooks.start_report(ctx, SPAction.create(ActionType.REPLAN, reason="start", task="start", metadata={"report_action": "start"}))
+    return ctx
+
+
+def _paths(ctx: HandlerContext) -> report_store.ReportPaths:
+    context = hooks.report_context(ctx.state)
+    assert context.outputs_path and context.report_id
+    return report_store.ReportPaths(context.outputs_path, context.report_id)
+
+
+def _local_runtime(tmp_path: Path) -> SimpleNamespace:
+    for sub in ("workspace", "uploads", "outputs"):
+        (tmp_path / sub).mkdir(parents=True, exist_ok=True)
+    thread_data = {
+        "workspace_path": str(tmp_path / "workspace"),
+        "uploads_path": str(tmp_path / "uploads"),
+        # Report output paths are rooted at tmp_path, not a nested outputs dir.
+        "outputs_path": str(tmp_path),
+    }
+    return SimpleNamespace(
+        state={"sandbox": {"sandbox_id": "local:t1"}, "thread_data": thread_data},
+        context={"thread_id": "t1", "run_id": "run1"},
+    )
+
+
+def _begin(ctx: HandlerContext, action_id: str = "a-material") -> None:
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    ledger.begin_research_action(action_id, [], allow_empty=True, kind="pre_research")
+    ledger.save()
+
+
+def _tool_for(paths: report_store.ReportPaths, fetch_tool, action_id: str = "a-material"):
+    return build_fetch_material_tool(paths=paths, action_id=action_id, gap_ids=[], fetch_tool=fetch_tool)
+
+
+@tool("web_fetch")
+def _short_fetch(url: str) -> str:
+    """Fetch a URL."""
+    return "Short page body."
+
+
+def test_long_and_short_returns_are_saved_verbatim(tmp_path):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    long_text = "第 1 行：示例公司年度报告。\n" + "\n".join(f"line {index}" for index in range(500))
+
+    @tool("web_fetch")
+    def fetch(url: str) -> str:
+        """Fetch a URL."""
+        return long_text
+
+    material_tool = _tool_for(_paths(ctx), fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/report", title="Annual report"))
+    assert payload["saved"] is True
+    assert payload["chars"] == len(long_text)
+    assert payload["lines"] == long_text.count("\n") + 1
+    material_path = Path(payload["path"].replace("/mnt/user-data/outputs", str(tmp_path)))
+    assert material_path.read_text(encoding="utf-8") == long_text
+    assert payload["source_id"] == "S1" and payload["material_id"] == "m1"
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.materials()[0]["virtual_path"] == payload["path"]
+
+    short = json.loads(build_fetch_material_tool(paths=_paths(ctx), action_id="a-material", gap_ids=[], fetch_tool=_short_fetch).func(url="https://example.com/short"))
+    assert short["saved"] is True
+    assert short["material_id"] == "m2"
+
+
+def test_crlf_return_is_saved_with_exact_content_identity(tmp_path):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    crlf_text = "line one\r\nline two\r\n"
+
+    @tool("web_fetch")
+    def fetch(url: str) -> str:
+        """Fetch a URL."""
+        return crlf_text
+
+    material_tool = _tool_for(_paths(ctx), fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/crlf"))
+    assert payload["saved"] is True
+    material_path = Path(payload["path"].replace("/mnt/user-data/outputs", str(tmp_path)))
+    assert material_path.read_bytes().decode("utf-8") == crlf_text
+    assert payload["sha256"] == report_store.sha256_text(crlf_text)
+
+
+def test_material_content_mismatch_still_fails(tmp_path, monkeypatch):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    original = report_store.write_text_atomic
+
+    def altered_write(path: Path, text: str) -> None:
+        if str(path).endswith(".txt"):
+            original(path, text.replace("Short", "Altered", 1))
+        else:
+            original(path, text)
+
+    monkeypatch.setattr(report_store, "write_text_atomic", altered_write)
+    material_tool = _tool_for(_paths(ctx), _short_fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/page"))
+    assert payload["saved"] is False
+    assert "material verification failed" in payload["error"]
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.materials() == []
+
+
+def test_same_url_reuses_source_and_content_identity(tmp_path):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    material_tool = _tool_for(_paths(ctx), _short_fetch)
+    first = json.loads(material_tool.func(url="https://example.com/page#section"))
+    second = json.loads(material_tool.func(url="https://example.com/page"))
+    assert first["source_id"] == second["source_id"] == "S1"
+    assert first["material_id"] == second["material_id"] == "m1"
+    assert second["duplicate_of"] == "m1"
+
+
+def test_same_url_new_content_keeps_source_and_allocates_material(tmp_path):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    versions = iter(["version one", "version two"])
+
+    @tool("web_fetch")
+    def fetch(url: str) -> str:
+        """Fetch a URL."""
+        return next(versions)
+
+    material_tool = _tool_for(_paths(ctx), fetch)
+    first = json.loads(material_tool.func(url="https://example.com/page"))
+    second = json.loads(material_tool.func(url="https://example.com/page"))
+    assert first["source_id"] == second["source_id"] == "S1"
+    assert first["material_id"] == "m1"
+    assert second["material_id"] == "m2"
+    assert second["duplicate_of"] is None
+
+
+def test_fetch_error_is_not_registered_as_material(tmp_path):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+
+    @tool("web_fetch")
+    def fetch(url: str) -> str:
+        """Fetch a URL."""
+        return "Error: HTTP 404 while fetching https://example.com/missing"
+
+    material_tool = _tool_for(_paths(ctx), fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/missing"))
+    assert payload["saved"] is False
+    assert "fetch_failed" in payload["error"]
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.materials() == []
+    action = ledger.action("a-material")
+    assert action["tool_executions"][-1]["ok"] is False
+
+
+def test_fetch_exception_is_not_registered_as_material(tmp_path):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+
+    @tool("web_fetch")
+    def fetch(url: str) -> str:
+        """Fetch a URL."""
+        raise TimeoutError("upstream timed out")
+
+    material_tool = _tool_for(_paths(ctx), fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/slow"))
+    assert payload["saved"] is False
+    assert "TimeoutError" in payload["error"]
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.materials() == []
+
+
+def test_material_write_failure_is_not_registered(tmp_path, monkeypatch):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    original = report_store.write_text_atomic
+
+    def failing_write(path: Path, text: str) -> None:
+        if str(path).endswith(".txt"):
+            raise OSError("disk full")
+        original(path, text)
+
+    monkeypatch.setattr(report_store, "write_text_atomic", failing_write)
+    material_tool = _tool_for(_paths(ctx), _short_fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/page"))
+    assert payload["saved"] is False
+    assert "material_save_failed" in payload["error"]
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.materials() == []
+
+
+def test_known_truncation_marker_is_reported(tmp_path):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+
+    @tool("web_fetch")
+    def fetch(url: str) -> str:
+        """Fetch a URL."""
+        return "partial body ...<truncated>"
+
+    material_tool = _tool_for(_paths(ctx), fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/partial"))
+    assert payload["saved"] is True
+    assert payload["upstream_truncation"] is True
+    assert payload["content_scope"] == "fetch_tool_return"
+
+
+def test_async_fetch_tool_is_supported(tmp_path):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+
+    @tool("web_fetch")
+    async def async_fetch(url: str) -> str:
+        """Fetch a URL asynchronously."""
+        await asyncio.sleep(0)
+        return "async page body"
+
+    material_tool = _tool_for(_paths(ctx), async_fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/async"))
+    assert payload["saved"] is True
+    assert Path(payload["path"].replace("/mnt/user-data/outputs", str(tmp_path))).read_text(encoding="utf-8") == "async page body"
+
+
+def test_async_fetch_tool_works_inside_a_running_loop(tmp_path):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+
+    @tool("web_fetch")
+    async def async_fetch(url: str) -> str:
+        """Fetch a URL asynchronously."""
+        await asyncio.sleep(0)
+        return "loop page body"
+
+    material_tool = _tool_for(_paths(ctx), async_fetch)
+
+    async def call_from_loop() -> dict:
+        return json.loads(material_tool.func(url="https://example.com/loop"))
+
+    payload = asyncio.run(call_from_loop())
+    assert payload["saved"] is True
+
+
+def test_async_jina_style_provider_marks_truncation(tmp_path):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+
+    @tool("web_fetch")
+    async def async_fetch(url: str) -> str:
+        """Fetch a URL asynchronously."""
+        return "jina body"
+
+    async_fetch.coroutine.__module__ = "deerflow.community.jina_ai.tools"
+    material_tool = _tool_for(_paths(ctx), async_fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/jina"))
+    assert payload["saved"] is True
+    assert payload["upstream_truncation"] is True
+
+
+def test_concurrent_material_calls_keep_both_identities(tmp_path):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    material_tool = _tool_for(_paths(ctx), _short_fetch)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(
+            executor.map(
+                lambda url: json.loads(material_tool.func(url=url)),
+                ["https://example.com/a", "https://example.com/b"],
+            )
+        )
+    assert all(item["saved"] for item in results)
+    assert {item["source_id"] for item in results} == {"S1", "S2"}
+    assert {item["material_id"] for item in results} == {"m1", "m2"}
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert len(ledger.payload["sources"]) == 2
+    assert len(ledger.materials()) == 2
+    catalog = (tmp_path / "report" / "r1" / "materials" / "catalog.md").read_text(encoding="utf-8")
+    assert "m1" in catalog and "m2" in catalog
+
+
+def test_user_input_registration_reuses_saved_original_and_is_citable(tmp_path):
+    ctx = _context(tmp_path)
+    paths = _paths(ctx)
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    input_item = ledger.inputs()[0]
+    input_id = str(input_item["input_id"])
+    original = Path(str(input_item["path"])).read_text(encoding="utf-8")
+    tool = build_register_user_material_tool(paths=paths)
+
+    payload = json.loads(tool.func(input_id=input_id, title="用户提供的示例材料"))
+    assert payload["saved"] is True
+    assert payload["input_id"] == input_id
+    assert payload["source_kind"] == "user_input"
+    assert payload["source_id"] == "S1"
+    assert payload["material_id"] == "m1"
+    assert payload["url"] is None
+    material_path = Path(str(payload["path"]).replace("/mnt/user-data/outputs", str(tmp_path)))
+    assert material_path.read_text(encoding="utf-8") == original
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    source = ledger.payload["sources"][0]
+    assert source["source_kind"] == "user_input"
+    assert source["input_id"] == input_id
+    assert not (ledger.payload.get("actions") or {})
+    assert ledger.materials()[0]["input_id"] == input_id
+
+    tree = {
+        "report_title": "用户材料报告",
+        "requirements": [{"id": "R1", "input_id": input_id, "text": "使用用户提供的原文", "hard": True}],
+        "nodes": [
+            {
+                "node_id": "n1",
+                "parent_id": None,
+                "kind": "writable",
+                "title": "用户提供的材料",
+                "question": "用户原文说明了什么？",
+                "argument": ["读取已登记的用户材料"],
+                "conclusion": "用户原文已登记为可引用材料。",
+                "constraints": {"must_cite": ["S1"]},
+                "requirement_ids": ["R1"],
+                "relations": [],
+                "gap_ids": [],
+                "status": "planned",
+                "evidence": [
+                    {
+                        "material_id": payload["material_id"],
+                        "source_ids": [payload["source_id"]],
+                        "locator": {"lines": [1, 1]},
+                        "use": "提供用户原文",
+                    }
+                ],
+            }
+        ],
+        "removed_node_ids": [],
+        "write_requests": [],
+        "gap_outcomes": [],
+        "user_decisions": [],
+        "feedback_dispositions": [],
+        "draft_dispositions": [],
+    }
+    validate_tree(tree, ledger)
+
+    again = json.loads(tool.func(input_id=input_id, title="用户提供的示例材料"))
+    assert again["material_id"] == "m1"
+    assert again["duplicate_of"] == "m1"
+    assert len(ReportLedger.load_for_context(hooks.report_context(ctx.state)).materials()) == 1
+
+
+def test_outline_subagent_exposes_user_material_registration_tool(tmp_path):
+    ctx = _context(tmp_path)
+    report = hooks.report_context(ctx.state)
+    task = SPSubagentTask(
+        action_id="a-outline-plan",
+        subagent_type="outline",
+        task="plan the report",
+        description="plan",
+        metadata={"report_role": "outline", "report_id": report.report_id, "report_task": "plan"},
+    )
+    tools = [SimpleNamespace(name=name) for name in ("read_file", "write_file", "grep", "glob", "ls")]
+    config = SubagentConfig(
+        name="sp-outline",
+        description="outline",
+        system_prompt="",
+        disallowed_tools=["write_file"],
+        max_turns=36,
+    )
+
+    returned_config, returned_tools, role = hooks.configure_report_subagent(
+        task,
+        state=ctx.state,
+        available_tools=tools,
+        subagent_config=config,
+    )
+
+    assert role == "outline"
+    assert returned_config.max_turns == 350
+    assert returned_config.tool_call_limit == 50
+    assert returned_config.finalize_after_tool_calls == 30
+    assert returned_config.finalize_token_fraction == 0.5
+    assert returned_config.repair_invalid_tool_calls is True
+    assert config.repair_invalid_tool_calls is False
+    assert "write_file" in returned_config.finalize_keep_tools
+    assert config.max_turns == 36
+    assert "report_save_user_material" in returned_config.tools
+    assert any(getattr(tool, "name", "") == "report_save_user_material" for tool in returned_tools)
+
+
+def test_deepseek_search_capture_is_bound_only_to_report_researcher(tmp_path, monkeypatch):
+    from deerflow.community.deepseek_tools import tools as deepseek_tools
+
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    report = hooks.report_context(ctx.state)
+    monkeypatch.setattr(deepseek_tools, "_post", lambda *args: {"results": [{"url": "https://example.com/source", "content": "Saved by search"}]})
+    tools = [deepseek_tools.web_search_tool, _short_fetch, SimpleNamespace(name="read_file")]
+    config = SubagentConfig(name="sp-researcher", description="research", max_turns=80)
+    ordinary = SPSubagentTask(action_id="ordinary", subagent_type="researcher", task="research", description="research")
+    unchanged, original_tools, role = hooks.configure_report_subagent(ordinary, state=ctx.state, available_tools=tools, subagent_config=config)
+    assert unchanged is config and original_tools is tools and role is None
+
+    task = SPSubagentTask(action_id="a-material", subagent_type="researcher", task="research", description="research", metadata={"report_role": "researcher", "report_id": report.report_id})
+    report_config, report_tools, role = hooks.configure_report_subagent(task, state=ctx.state, available_tools=tools, subagent_config=config)
+    assert role == "researcher"
+    assert report_config.max_turns == 350 and config.max_turns == 80
+    assert report_config.tool_call_limit == 50
+    assert report_config.finalize_after_tool_calls == 40
+    searches = [item for item in report_tools if item.name == "web_search"]
+    assert len(searches) == 1 and searches[0] is not deepseek_tools.web_search_tool
+    assert json.loads(searches[0].invoke({"query": "query"}))["saved_count"] == 1
+    assert len(ReportLedger.load_for_context(report).materials()) == 1
+
+
+def test_outline_five_call_material_read_write_read_passes_real_loop_guard(tmp_path, monkeypatch):
+    ctx = _context(tmp_path)
+    paths = _paths(ctx)
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    input_id = str(ledger.inputs()[0]["input_id"])
+    material_tool = build_register_user_material_tool(paths=paths)
+
+    runtime = _local_runtime(tmp_path)
+    monkeypatch.setattr("deerflow.sandbox.tools.ensure_sandbox_initialized", lambda runtime: LocalSandbox("t1"))
+    monkeypatch.setattr("deerflow.sandbox.tools.ensure_thread_directories_exist", lambda runtime: None)
+
+    # Same Outline role budget: 78 turns -> hard 12, warn 7.  The role-config
+    # conversion itself is covered by test_subagent_executor; this test exercises
+    # the real middleware and real tool side effects, not just the number.
+    guard = LoopDetectionMiddleware(tool_total_warn=7, tool_total_hard_limit=12)
+
+    material_payload = json.loads(material_tool.func(input_id=input_id, title="用户材料"))
+    material_path = str(material_payload["path"])
+    tree_path = "/mnt/user-data/outputs/report/r1/tree/middleware-roundtrip.json"
+    tree_body = json.dumps(
+        {"report_title": "roundtrip", "requirements": [], "nodes": []},
+        ensure_ascii=False,
+    )
+    actions = [
+        ("report_save_user_material", {"input_id": input_id, "title": "用户材料"}),
+        ("read_file", {"description": "read material first", "path": material_path, "start_line": 1, "end_line": 1, "line_numbers": True}),
+        ("read_file", {"description": "read material second", "path": material_path, "start_line": 1, "end_line": 1, "line_numbers": True}),
+        ("write_file", {"description": "write tree", "path": tree_path, "content": tree_body}),
+        ("read_file", {"description": "read tree back", "path": tree_path}),
+    ]
+
+    for index, (tool_name, args) in enumerate(actions, start=1):
+        ai_message = AIMessage(
+            content="",
+            tool_calls=[{"name": tool_name, "args": args, "id": f"call-{index}", "type": "tool_call"}],
+        )
+        assert guard.after_model({"messages": [ai_message]}, runtime) is None
+
+        if tool_name == "report_save_user_material":
+            material_payload = json.loads(material_tool.func(**args))
+            assert material_payload["saved"] is True
+        elif tool_name == "read_file":
+            result = read_file_tool.func(runtime=runtime, **args)
+            assert not result.startswith("Error:")
+            if args.get("line_numbers"):
+                assert result.startswith("1: ")
+        else:
+            result = write_file_tool.func(runtime=runtime, **args)
+            assert result == "OK"
+
+    assert (tmp_path / "report" / "r1" / "tree" / "middleware-roundtrip.json").read_text(encoding="utf-8") == tree_body
+
+
+def _tiny_pdf(text: str) -> bytes:
+    """Build a minimal single-page text PDF without external fixtures."""
+    stream = f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET".encode()
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream",
+    ]
+    out = bytearray(b"%PDF-1.4\n")
+    offsets: list[int] = []
+    for index, obj in enumerate(objects, 1):
+        offsets.append(len(out))
+        out += f"{index} 0 obj\n".encode() + obj + b"\nendobj\n"
+    xref_pos = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n".encode() + b"0000000000 65535 f \n"
+    for offset in offsets:
+        out += f"{offset:010d} 00000 n \n".encode()
+    out += f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_pos}\n%%EOF\n".encode()
+    return bytes(out)
+
+
+def _material_fetch_options() -> dict:
+    return {
+        "timeout": 20.0,
+        "max_bytes": 1_048_576,
+        "max_chars": 20_000,
+        "allow_private_addresses": False,
+        "trust_env": False,
+    }
+
+
+def _patch_direct_fetch_payload(monkeypatch, payload: FetchedBody) -> None:
+    async def fake_bytes(url: str, **kwargs):
+        return payload
+
+    monkeypatch.setattr(
+        "deerflow.community.direct_fetch.tools.fetch_public_bytes",
+        fake_bytes,
+    )
+    monkeypatch.setattr(
+        report_materials,
+        "_fetch_module",
+        lambda _tool: "deerflow.community.direct_fetch.tools",
+    )
+    monkeypatch.setattr(report_materials, "_direct_fetch_options", _material_fetch_options)
+
+
+def test_pdf_material_is_converted_to_markdown(tmp_path, monkeypatch):
+    pytest.importorskip("markitdown")
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    _patch_direct_fetch_payload(
+        monkeypatch,
+        FetchedBody(_tiny_pdf("SP2 PDF extraction probe"), "application/pdf", None),
+    )
+
+    material_tool = _tool_for(_paths(ctx), _short_fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/paper.pdf"))
+
+    assert payload["saved"] is True
+    assert payload["content_scope"] == "converted_pdf_markdown"
+    assert payload["upstream_truncation"] is False
+    saved = Path(str(payload["path"]).replace("/mnt/user-data/outputs", str(tmp_path))).read_text(encoding="utf-8")
+    assert "SP2 PDF extraction probe" in saved
+    assert "%PDF" not in saved
+    assert "\ufffd" not in saved
+
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.materials()[0]["content_scope"] == "converted_pdf_markdown"
+
+
+def test_pdf_conversion_failure_is_not_registered(tmp_path, monkeypatch):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    _patch_direct_fetch_payload(
+        monkeypatch,
+        FetchedBody(_tiny_pdf("unused"), "application/pdf", None),
+    )
+
+    async def fake_convert(_path):
+        return None
+
+    monkeypatch.setattr("deerflow.utils.file_conversion.convert_file_to_markdown", fake_convert)
+
+    material_tool = _tool_for(_paths(ctx), _short_fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/broken.pdf"))
+
+    assert payload["saved"] is False
+    assert "pdf_conversion_failed" in payload["error"]
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.materials() == []
+
+
+def test_text_payload_through_byte_path_keeps_text_semantics(tmp_path, monkeypatch):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    _patch_direct_fetch_payload(
+        monkeypatch,
+        FetchedBody(b"plain body through bytes path", "text/plain", "utf-8"),
+    )
+
+    material_tool = _tool_for(_paths(ctx), _short_fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/plain"))
+
+    assert payload["saved"] is True
+    assert payload["content_scope"] == "fetch_tool_return"
+    saved = Path(str(payload["path"]).replace("/mnt/user-data/outputs", str(tmp_path))).read_text(encoding="utf-8")
+    assert saved == "plain body through bytes path"
+
+
+def test_pdf_empty_conversion_is_not_registered_and_temp_is_cleaned(tmp_path, monkeypatch):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    _patch_direct_fetch_payload(
+        monkeypatch,
+        FetchedBody(_tiny_pdf("unused"), "application/pdf", None),
+    )
+
+    async def empty_convert(path):
+        md_path = path.with_suffix(".md")
+        md_path.write_text("   \n", encoding="utf-8")
+        return md_path
+
+    monkeypatch.setattr("deerflow.utils.file_conversion.convert_file_to_markdown", empty_convert)
+    before = set(Path(tempfile.gettempdir()).glob("sp2-report-pdf-*"))
+
+    material_tool = _tool_for(_paths(ctx), _short_fetch)
+    payload = json.loads(material_tool.func(url="https://example.com/empty.pdf"))
+
+    after = set(Path(tempfile.gettempdir()).glob("sp2-report-pdf-*"))
+    assert payload["saved"] is False
+    assert "pdf_conversion_failed" in payload["error"]
+    assert before == after
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert ledger.materials() == []
+
+
+def test_report_writer_uses_verified_budget_without_changing_ordinary_config(tmp_path):
+    ctx = _context(tmp_path)
+    _begin(ctx)
+    report = hooks.report_context(ctx.state)
+    base = SubagentConfig(name="sp-reporter", description="write", max_turns=80)
+    task = SPSubagentTask(action_id="write-budget",subagent_type="reporter",task="write",description="write",metadata={"report_role":"writer","report_id":report.report_id})
+    config, _, role = hooks.configure_report_subagent(task,state=ctx.state,available_tools=[SimpleNamespace(name="read_file"),SimpleNamespace(name="write_file")],subagent_config=base)
+    assert role == "writer" and config.max_turns == 350 and config.tool_call_limit == 50
+    assert base.max_turns == 80 and base.tool_call_limit is None

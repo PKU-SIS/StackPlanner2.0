@@ -1,0 +1,189 @@
+{
+  "name": "band10000-case10-outline-selected",
+  "case_id": 10,
+  "target_words": 10000,
+  "query_sha256": "5dfa4c7f98fd34cfc7be669095a6c1f4257b1123a76b0bb87cd71ffe9e6aa8fe",
+  "status": "candidate",
+  "words": 10619,
+  "deviation": 619,
+  "deviation_percent": 6.19,
+  "within_5_percent": false,
+  "within_10_percent": true,
+  "formal_delivered": true,
+  "review": {
+    "action_id": "spact_sp-fixed-c0-review-r1",
+    "base_digest": "73796876254d6813be7afa450b951b21e103651536ef1dd094c931ac804a4875",
+    "candidate_id": "c1",
+    "candidate_sha256": "ca0853f9aa70bcfe60b86d4e526bcd33f153bf7bee089e87a09fb854a2c451c2",
+    "covered_requirement_ids": [
+      "r1",
+      "r2",
+      "r3"
+    ],
+    "created_at": "2026-11-19T04:25:05+00:00",
+    "edits": [],
+    "findings": [
+      {
+        "draft_ids": [],
+        "kind": "other",
+        "message": "Estimated word count 10,619 is within range (9,000–11,000) but near the upper bound. No action required per first-pass length policy.",
+        "node_ids": [],
+        "severity": "advisory"
+      }
+    ],
+    "host_length_finding": null,
+    "inputs_digest": "ac917095ccd0c1fffb64bc95a1e0635879e2783a2429037f97441477cb912522",
+    "length": {
+      "body_words": 9980,
+      "candidate_sha256": "ca0853f9aa70bcfe60b86d4e526bcd33f153bf7bee089e87a09fb854a2c451c2",
+      "counter_version": "mixed-word-estimate-v1",
+      "direction": "within",
+      "estimated_words": 10619,
+      "in_estimated_range": true,
+      "max_words": 11000,
+      "measured_word_count": null,
+      "min_words": 9000,
+      "nodes": [
+        {
+          "estimated_words": 837,
+          "node_id": "n1"
+        },
+        {
+          "estimated_words": 1584,
+          "node_id": "n2"
+        },
+        {
+          "estimated_words": 1656,
+          "node_id": "n3"
+        },
+        {
+          "estimated_words": 1634,
+          "node_id": "n4"
+        },
+        {
+          "estimated_words": 1651,
+          "node_id": "n5"
+        },
+        {
+          "estimated_words": 1247,
+          "node_id": "n6"
+        },
+        {
+          "estimated_words": 1183,
+          "node_id": "n7"
+        }
+      ],
+      "reference_words": 637,
+      "rendered_sha256": "2375c79ae9a2f42c7bd37441c22529f9c019d3c3184e746ef0e1fe102d4eda3f",
+      "scope": "whole_document",
+      "target_words": 10000,
+      "word_verified": false
+    },
+    "length_auto_revision": false,
+    "length_only_blocking": false,
+    "outcome": "deliver",
+    "path": "/data2/pkuiti/zmy/codex-relay-work/qwen38-newcase-v18-20261119/local-storage/runs/band10000-case10-outline-selected/runtime/users/full-eval/threads/full-10/user-data/outputs/report/r1/review/rv1.json",
+    "review_id": "rv1",
+    "reviewed_candidate_sha256": "ca0853f9aa70bcfe60b86d4e526bcd33f153bf7bee089e87a09fb854a2c451c2",
+    "status": "ready",
+    "tree_version": 2,
+    "virtual_path": "/mnt/user-data/outputs/report/r1/review/rv1.json"
+  },
+  "blocking_findings": [],
+  "report_sha256": "2375c79ae9a2f42c7bd37441c22529f9c019d3c3184e746ef0e1fe102d4eda3f",
+  "generation_tokens": 2401978,
+  "tokens_include_cached_input": true,
+  "central_generation_tokens": 47735,
+  "subagent_generation_tokens": 2354243,
+  "native_attempt_count": 13,
+  "generation_counter": "central-plus-unique-native-attempt-v2",
+  "outline": {
+    "writable_nodes": 7,
+    "total_arguments": 22,
+    "selected_body_target_words": 8400,
+    "body_max_sum": 9000,
+    "tree_version": 2,
+    "tree_sha256": "ad50c058fda3839d3aec425f03f69f180124426bd649fb27729d3e1e827bb87c",
+    "chapters": [
+      {
+        "node_id": "n1",
+        "title": "引言：窗口期下为何需要统一的商业化临界点评估体系",
+        "arguments": 2,
+        "target_words": 720,
+        "max_words": 800
+      },
+      {
+        "node_id": "n2",
+        "title": "评估体系框架：三支柱方法论骨架与量化维度",
+        "arguments": 3,
+        "target_words": 1280,
+        "max_words": 1380
+      },
+      {
+        "node_id": "n3",
+        "title": "研发制造维度：四大使能技术成熟度与研发门槛",
+        "arguments": 3,
+        "target_words": 1280,
+        "max_words": 1380
+      },
+      {
+        "node_id": "n4",
+        "title": "使用场景维度：路线现状与TCO商业化临界点量化",
+        "arguments": 5,
+        "target_words": 1720,
+        "max_words": 1800
+      },
+      {
+        "node_id": "n5",
+        "title": "残值管理维度：电池SoH锚点与跨路线残值建模",
+        "arguments": 4,
+        "target_words": 1280,
+        "max_words": 1380
+      },
+      {
+        "node_id": "n6",
+        "title": "综合：分路线商业化临界点阈值矩阵与决策含义",
+        "arguments": 3,
+        "target_words": 1370,
+        "max_words": 1440
+      },
+      {
+        "node_id": "n7",
+        "title": "结论：评估体系的核心结论与后续方向",
+        "arguments": 2,
+        "target_words": 750,
+        "max_words": 820
+      }
+    ]
+  },
+  "ledger_phase": null,
+  "writer_recovery": null,
+  "candidate_count": 1,
+  "length_contract": {
+    "compact_outline": true,
+    "counter_version": "mixed-word-estimate-v1",
+    "enabled": true,
+    "heading_reserve_words": 300,
+    "length_auto_revision": false,
+    "max_words": 11000,
+    "measurement_mode": "estimate",
+    "min_words": 9000,
+    "outline_body_budget_range": {
+      "default_words": 8500,
+      "max_words": 9000,
+      "min_words": 7800
+    },
+    "outline_budget_selection": true,
+    "reference_reserve_words": 1000,
+    "safety_margin_words": 500,
+    "scope": "whole_document",
+    "target_words": 10000,
+    "writer_task_cards": true
+  },
+  "token_accounting_complete": true,
+  "elapsed_seconds": 2529.8,
+  "complete_native_delivery": true,
+  "within_30_minutes": false,
+  "within_length_band": true,
+  "speed_length_delivery_pass": false
+}

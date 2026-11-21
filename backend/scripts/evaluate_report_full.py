@@ -8,6 +8,7 @@ import concurrent.futures
 import hashlib
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -30,6 +31,53 @@ def safe(value):
     if hasattr(value, "model_dump"):
         return safe(value.model_dump())
     return str(value)
+
+
+def run_worker_process(command, *, directory, log, timeout_seconds, no_progress_seconds=300, poll_seconds=1, terminate_grace_seconds=5):
+    """Enforce deadlines outside the graph, including blocked cancellation paths."""
+    process = subprocess.Popen(command, cwd=directory, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    began = last_progress = time.monotonic()
+    stamp = None
+    stop_reason = None
+    events = directory / "events.jsonl"
+
+    def stop():
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=terminate_grace_seconds)
+        except subprocess.TimeoutExpired:
+            pass
+        # Also reap descendants which may outlive the process-group leader.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
+
+    try:
+        while process.poll() is None:
+            now = time.monotonic()
+            if events.exists():
+                info = events.stat()
+                current = (info.st_mtime_ns, info.st_size)
+                if current != stamp:
+                    stamp = current
+                    last_progress = now
+            if now - began >= timeout_seconds:
+                stop_reason = "hard_timeout"
+            elif now - last_progress >= no_progress_seconds:
+                stop_reason = "no_progress_timeout"
+            if stop_reason:
+                stop()
+                break
+            time.sleep(poll_seconds)
+    except BaseException:
+        stop()
+        raise
+    return {"returncode": process.returncode, "stop_reason": stop_reason, "elapsed_seconds": round(time.monotonic() - began, 2)}
 
 
 def worker(directory, not_before, timeout):
@@ -64,6 +112,7 @@ def worker(directory, not_before, timeout):
 
     set_current_user(SimpleNamespace(id="full-eval", role="admin"))
     query = json.loads((directory / "query.json").read_text())
+    request_message = HumanMessage(content=query["prompt"], additional_kwargs={"report_length": query["report_length"]} if query.get("report_length") is not None else {})
     thread = f"full-{query['id']}"
     app = get_app_config()
     runtime = dict(
@@ -93,7 +142,7 @@ def worker(directory, not_before, timeout):
             graph.checkpointer = checkpoint
             try:
                 async with asyncio.timeout(timeout):
-                    iterator = graph.astream({"messages": [HumanMessage(content=query["prompt"])]}, config=graph_config, context=runtime, stream_mode=["values", "custom"]).__aiter__()
+                    iterator = graph.astream({"messages": [request_message]}, config=graph_config, context=runtime, stream_mode=["values", "custom"]).__aiter__()
                     while True:
                         try:
                             mode, data = await asyncio.wait_for(anext(iterator), timeout=300)
@@ -136,6 +185,7 @@ def worker(directory, not_before, timeout):
             final_hash_ok=bool(content) and hashlib.sha256(content.encode()).hexdigest() == final.get("sha256"),
             last_stage=last.get("sp_current_stage"),
             last_handler=safe(last.get("sp_last_handler_result")),
+            **({"length": final.get("length"), "word_length_verified": False} if ledger.get("length_contract") else {}),
             overall_pass=bool(ledger.get("delivered")) and bool(content) and not error,
         ),
     )
@@ -149,7 +199,51 @@ def main():
     parser.add_argument("--timeout", type=int, default=1500)
     parser.add_argument("--worker", action="store_true")
     parser.add_argument("--start", action="store_true")
+    parser.add_argument("--word-length", nargs=3, type=int, metavar=("MIN", "TARGET", "MAX"), help="Opt-in whole-document estimated Word range; exact Word verification remains separate")
+    parser.add_argument("--writer-target-percent", type=int, help="Experimental Writer generation target scale (1-100); requires --word-length and preserves final acceptance range")
+    parser.add_argument("--paragraph-plan", action="store_true", help="Require Outline-authored paragraph plans and scope exclusions; requires --word-length")
+    parser.add_argument("--compact-outline", action="store_true", help="First-pass scope selection: at most 8 chapters, 2 arguments per chapter and 3 initial shared research gaps; requires --word-length")
+    parser.add_argument("--writer-task-cards", action="store_true", help="Require selected claims/facts and exact bounded source passages in Writer input; requires --compact-outline")
+    parser.add_argument("--no-length-revision", action="store_true", help="Stop on a length-only failure without compression; native content review remains")
+    parser.add_argument("--writer-submission-limit", action="store_true", help="Check chapter length before save; at most one complete resubmission; requires --word-length")
+    parser.add_argument("--writer-submission-tolerance-percent", type=int, help="Chapter saving tolerance (0-5); requires --writer-submission-limit; whole-report range unchanged")
     args = parser.parse_args()
+    if args.writer_target_percent is not None and args.word_length is None:
+        parser.error("--writer-target-percent requires --word-length")
+    if args.paragraph_plan and args.word_length is None:
+        parser.error("--paragraph-plan requires --word-length")
+    if args.compact_outline and args.word_length is None:
+        parser.error("--compact-outline requires --word-length")
+    if args.writer_task_cards and not args.compact_outline:
+        parser.error("--writer-task-cards requires --compact-outline")
+    if args.no_length_revision and args.word_length is None:
+        parser.error("--no-length-revision requires --word-length")
+    if args.compact_outline and (args.paragraph_plan or args.writer_submission_limit):
+        parser.error("--compact-outline cannot combine with --paragraph-plan or --writer-submission-limit")
+    if args.writer_submission_limit and args.word_length is None:
+        parser.error("--writer-submission-limit requires --word-length")
+    if args.writer_submission_tolerance_percent is not None and not args.writer_submission_limit:
+        parser.error("--writer-submission-tolerance-percent requires --writer-submission-limit")
+    length_contract = None
+    if args.word_length is not None:
+        from deerflow.sp.report.length import normalize_contract
+
+        length_values = dict(zip(("min_words", "target_words", "max_words"), args.word_length, strict=True))
+        if args.writer_target_percent is not None:
+            length_values["writer_target_percent"] = args.writer_target_percent
+        if args.paragraph_plan:
+            length_values["paragraph_plan_required"] = True
+        if args.compact_outline:
+            length_values["compact_outline"] = True
+        if args.writer_task_cards:
+            length_values["writer_task_cards"] = True
+        if args.no_length_revision:
+            length_values["length_auto_revision"] = False
+        if args.writer_submission_limit:
+            length_values["writer_submission_limit"] = True
+        if args.writer_submission_tolerance_percent is not None:
+            length_values["writer_submission_tolerance_percent"] = args.writer_submission_tolerance_percent
+        length_contract = normalize_contract(length_values)
     gate = datetime.fromisoformat(args.not_before).timestamp()
     out = args.output.resolve()
     if args.worker:
@@ -167,12 +261,13 @@ def main():
             timeout=args.timeout,
             scope="native make_sp_agent Central graph from original query; no stage replay; SQLite checkpoints; frontend excluded",
             status="waiting" if args.start else "prepared_only",
+            **({"report_length": length_contract} if length_contract is not None else {}),
         ),
     )
     for i in ids:
         d = out / str(i)
         d.mkdir()
-        dump(d / "query.json", queries[i])
+        dump(d / "query.json", {**queries[i], **({"report_length": length_contract} if length_contract is not None else {})})
         (d / "request.md").write_text(queries[i]["prompt"])
     hashes = {}
     for prefix in ("backend/packages/harness/deerflow", "backend/scripts", "skills/public"):
@@ -194,14 +289,15 @@ def main():
     def run(i):
         d = out / str(i)
         with (d / "worker.log").open("w") as log:
-            try:
-                result = subprocess.run(
-                    [sys.executable, str(Path(__file__).resolve()), "--worker", "--output", str(d), "--not-before", args.not_before, "--timeout", str(args.timeout)], stdout=log, stderr=subprocess.STDOUT, timeout=args.timeout + 90
-                )
-                if not (d / "metrics.json").exists():
-                    dump(d / "metrics.json", dict(id=i, overall_pass=False, error=f"worker_exit_{result.returncode}"))
-            except subprocess.TimeoutExpired:
-                dump(d / "metrics.json", dict(id=i, overall_pass=False, error="hard_timeout"))
+            result = run_worker_process(
+                [sys.executable, str(Path(__file__).resolve()), "--worker", "--output", str(d), "--not-before", args.not_before, "--timeout", str(args.timeout)],
+                directory=d,
+                log=log,
+                timeout_seconds=args.timeout + 90,
+            )
+            dump(d / "process-result.json", result)
+            if result["stop_reason"] or not (d / "metrics.json").exists():
+                dump(d / "metrics.json", dict(id=i, overall_pass=False, delivered=False, error=result["stop_reason"] or f"worker_exit_{result['returncode']}", elapsed_seconds=result["elapsed_seconds"]))
         return json.loads((d / "metrics.json").read_text())
 
     rows = []

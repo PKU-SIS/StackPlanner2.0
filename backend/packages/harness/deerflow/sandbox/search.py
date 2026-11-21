@@ -165,12 +165,17 @@ def find_grep_matches(
 ) -> tuple[list[GrepMatch], bool]:
     matches: list[GrepMatch] = []
     truncated = False
+    selected_symlink = root.is_symlink()
     root = root.resolve()
 
     if not root.exists():
         raise FileNotFoundError(root)
-    if not root.is_dir():
+    single_file = root.is_file()
+    if not single_file and not root.is_dir():
         raise NotADirectoryError(root)
+    if single_file and selected_symlink:
+        return matches, truncated
+    search_root = root.parent if single_file else root
 
     regex_source = re.escape(pattern) if literal else pattern
     flags = 0 if case_sensitive else re.IGNORECASE
@@ -179,9 +184,11 @@ def find_grep_matches(
     # Skip lines longer than this to prevent ReDoS on minified / no-newline files.
     _max_line_chars = line_summary_length * 10
 
-    for current_root, dirs, files in os.walk(root):
+    # An explicitly selected file must never cause a search of its siblings.
+    walk = [(str(search_root), [], [root.name])] if single_file else os.walk(root)
+    for current_root, dirs, files in walk:
         dirs[:] = [name for name in dirs if not should_ignore_name(name)]
-        rel_dir = Path(current_root).relative_to(root)
+        rel_dir = Path(current_root).relative_to(search_root)
 
         for name in files:
             if should_ignore_name(name):
@@ -197,7 +204,7 @@ def find_grep_matches(
                 if candidate_path.is_symlink():
                     continue
                 file_path = candidate_path.resolve()
-                if not file_path.is_relative_to(root):
+                if not file_path.is_relative_to(search_root):
                     continue
                 if file_path.stat().st_size > max_file_size or is_binary_file(file_path):
                     continue

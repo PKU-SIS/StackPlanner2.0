@@ -1,0 +1,188 @@
+{
+  "source_events_sha256": "1d349c51b69dc9f0ec5ced8ea44bce475d8cf3fc9dfbbc60e9bbcfebf9fee308",
+  "tasks": [
+    {
+      "task_id": "spact_report-entry-recall-83eeb9b297cc03c1304e",
+      "role": "memory_recaller",
+      "started_at": 1795059777.6827984,
+      "ended_at": 1795059839.2399054,
+      "usage": {
+        "input_tokens": 8892,
+        "output_tokens": 2865,
+        "total_tokens": 11757
+      },
+      "status": "completed",
+      "stop_reason": null,
+      "elapsed_seconds": 61.557
+    },
+    {
+      "task_id": "report-entry-start-83eeb9b297cc03c1304e",
+      "role": "researcher",
+      "started_at": 1795059839.2789414,
+      "ended_at": 1795060274.902172,
+      "usage": {
+        "input_tokens": 216726,
+        "output_tokens": 17988,
+        "total_tokens": 234714
+      },
+      "status": "completed",
+      "stop_reason": null,
+      "elapsed_seconds": 435.623
+    },
+    {
+      "task_id": "chatcmpl-tool-940f73806035065a",
+      "role": "outline",
+      "started_at": 1795060284.658342,
+      "ended_at": 1795060969.3572724,
+      "usage": {
+        "input_tokens": 378744,
+        "output_tokens": 27688,
+        "total_tokens": 406432
+      },
+      "status": "completed",
+      "stop_reason": null,
+      "elapsed_seconds": 684.699
+    },
+    {
+      "task_id": "chatcmpl-tool-9d0922f125850489",
+      "role": "researcher",
+      "started_at": 1795060981.5075095,
+      "ended_at": 1795061321.3646462,
+      "usage": {
+        "input_tokens": 213600,
+        "output_tokens": 13790,
+        "total_tokens": 227390
+      },
+      "status": "completed",
+      "stop_reason": null,
+      "elapsed_seconds": 339.857
+    },
+    {
+      "task_id": "chatcmpl-tool-be1a6c979933ae88",
+      "role": "outline",
+      "started_at": 1795061333.8539307,
+      "ended_at": 1795061937.1707156,
+      "usage": {
+        "input_tokens": 311085,
+        "output_tokens": 24048,
+        "total_tokens": 335133
+      },
+      "status": "completed",
+      "stop_reason": null,
+      "elapsed_seconds": 603.317
+    },
+    {
+      "task_id": "spact_71d72606ce854fe3ae1139e4a6b3e86a",
+      "role": "reporter",
+      "started_at": 1795061938.0513294,
+      "ended_at": 1795062060.7388682,
+      "usage": {
+        "input_tokens": 132396,
+        "output_tokens": 2432,
+        "total_tokens": 134828
+      },
+      "status": "completed",
+      "stop_reason": null,
+      "elapsed_seconds": 122.688
+    },
+    {
+      "task_id": "spact_64ac7394ee58492c9234533bffb1ea0b",
+      "role": "reporter",
+      "started_at": 1795061938.1550252,
+      "ended_at": 1795062115.4058232,
+      "usage": {
+        "input_tokens": 171399,
+        "output_tokens": 3139,
+        "total_tokens": 174538
+      },
+      "status": "completed",
+      "stop_reason": null,
+      "elapsed_seconds": 177.251
+    },
+    {
+      "task_id": "spact_e0bf8eefe1af424788bb7e37d870306e",
+      "role": "reporter",
+      "started_at": 1795061938.2725716,
+      "ended_at": 1795062107.5865927,
+      "usage": {
+        "input_tokens": 97503,
+        "output_tokens": 2977,
+        "total_tokens": 100480
+      },
+      "status": "completed",
+      "stop_reason": null,
+      "elapsed_seconds": 169.314
+    },
+    {
+      "task_id": "spact_2a0b857ceb724934866c51c09d8b901c",
+      "role": "reporter",
+      "started_at": 1795061938.4107773,
+      "ended_at": 1795062112.847698,
+      "usage": {
+        "input_tokens": 88943,
+        "output_tokens": 3075,
+        "total_tokens": 92018
+      },
+      "status": "completed",
+      "stop_reason": null,
+      "elapsed_seconds": 174.437
+    },
+    {
+      "task_id": "spact_dc39d888205e4bd798dfaa52fce34eb8",
+      "role": "reporter",
+      "started_at": 1795061938.5308821,
+      "ended_at": 1795062182.874485,
+      "usage": {
+        "input_tokens": 223190,
+        "output_tokens": 5287,
+        "total_tokens": 228477
+      },
+      "status": "completed",
+      "stop_reason": null,
+      "elapsed_seconds": 244.344
+    },
+    {
+      "task_id": "spact_b0549daaf6af4cedb40f7cdf71fa305a",
+      "role": "reporter",
+      "started_at": 1795061938.6921086,
+      "ended_at": 1795062101.1027148,
+      "usage": {
+        "input_tokens": 81371,
+        "output_tokens": 2852,
+        "total_tokens": 84223
+      },
+      "status": "completed",
+      "stop_reason": null,
+      "elapsed_seconds": 162.411
+    },
+    {
+      "task_id": "spact_4149f3bec7f2453a80aa3188fb777feb",
+      "role": "reporter",
+      "started_at": 1795062060.9091964,
+      "ended_at": 1795062209.3588305,
+      "usage": {
+        "input_tokens": 93134,
+        "output_tokens": 3962,
+        "total_tokens": 97096
+      },
+      "status": "completed",
+      "stop_reason": null,
+      "elapsed_seconds": 148.45
+    },
+    {
+      "task_id": "sp-fixed-c0-review-r1",
+      "role": "outline",
+      "started_at": 1795062209.7140098,
+      "ended_at": 1795062304.897835,
+      "usage": {
+        "input_tokens": 224684,
+        "output_tokens": 2473,
+        "total_tokens": 227157
+      },
+      "status": "completed",
+      "stop_reason": null,
+      "elapsed_seconds": 95.184
+    }
+  ],
+  "note": "Public task metadata only. Concurrent task durations must not be added as wall time."
+}

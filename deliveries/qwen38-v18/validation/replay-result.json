@@ -1,0 +1,30 @@
+{
+  "passed": true,
+  "live_model_calls": 0,
+  "source_hashes": {
+    "/data2/pkuiti/zmy/codex-relay-work/qwen38-full-repaired-budget-v16-20261119/local-storage/runs/band10000-case17-outline-selected/events.jsonl": "ba77e90fc1cd3ccbf2f226cdda436bdd223169a0556db4e4bec0d126d3cd4f10",
+    "/data2/pkuiti/zmy/codex-relay-work/qwen38-full-repaired-budget-v16-20261119/local-storage/runs/band10000-case17-outline-selected/runtime/users/full-eval/threads/full-17/user-data/outputs/report/r1/ledger.json": "5e8f3a48ecc3f5535690c28f1bfc05dc3af7d7cb9a89fea26f98e3a27468f5a8",
+    "/data2/pkuiti/zmy/codex-relay-work/qwen38-full-repaired-budget-v16-20261119/project/config.yaml": "4fb422d831f4118b72f59d93bf4ca02ea77fd50aac32892be534e172fd710311"
+  },
+  "baseline_early_exit_not_repaired": true,
+  "actual_public_failed_reply_repaired_in_same_graph": true,
+  "normal_submission_validation_passed": true,
+  "normal_acceptance_passed": true,
+  "staging_did_not_commit_ledger": true,
+  "research_closed_only_by_native_acceptance": true,
+  "source_snapshots_unchanged": true,
+  "original_budget": {
+    "enabled": true,
+    "max_tokens": 2000000,
+    "max_input_tokens": null,
+    "max_output_tokens": null,
+    "warn_threshold": 0.7,
+    "hard_stop_threshold": 1.0
+  },
+  "scripted_responses": 3,
+  "new_executed_tools": [
+    "report_submit_outline"
+  ],
+  "measured_online_time_saved_seconds": null,
+  "scope": "Exact public failed reply and actual later submitted tree with reconstructed pre-consolidation ledger; public tool-result IDs matched in recorded tool-name order and initial skill context retained as human text. Scripted completion, not a full original-prompt, live-model or speed validation"
+}

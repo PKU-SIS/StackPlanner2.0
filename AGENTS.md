@@ -160,3 +160,7 @@ These apply repo-wide; module guides own the module-specific detail.
   frontend tests live in `frontend/tests/`.
 - **Format before pushing** — run `make format` (backend) / `pnpm check` (frontend). Backend
   CI enforces `ruff format --check`, so formatting must be clean before a push.
+
+## Approved SP2 snapshot branch
+
+Branch `zmy/qwen38-v18-approved-20261119` preserves an approved tested snapshot. See `deliveries/qwen38-v18/BRANCH.md` for provenance, model settings, checks, and migration limits. Keep frozen delivery files byte-identical; new experiments belong in separate data-disk storage. No model calls, scoring, service changes, or changes to the SP2 stage sequence are part of this delivery.

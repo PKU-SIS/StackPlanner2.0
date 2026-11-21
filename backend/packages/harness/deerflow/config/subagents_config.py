@@ -91,6 +91,16 @@ class CustomSubagentConfig(BaseModel):
 class SubagentsAppConfig(BaseModel):
     """Configuration for the subagent system."""
 
+    report_outline_followup_actions: bool = Field(
+        default=False,
+        description="Guide later initial Outline actions while preserving all native messages, tools and settings.",
+    )
+
+    report_outline_evidence_action: bool = Field(
+        default=False,
+        description="Scope the existing first report Outline turn to necessary saved-evidence reads.",
+    )
+
     timeout_seconds: int = Field(
         default=1800,
         ge=1,
