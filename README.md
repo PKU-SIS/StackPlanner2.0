@@ -1,4 +1,4 @@
-> 本分支：`zmy/ds-threebands-unified-20261121`。统一 DeepSeek 运行代码，用 `--length-band 10000|20000|30000` 切换档位。用法见 [DS_THREEBANDS.md](docs/research-report/DS_THREEBANDS.md)；原三档冻结快照和历史结果保留在 deliveries/deepseek-threebands/。
+> 报告主线：`sp2DeepResearch`。统一 DeepSeek 运行代码，用 `--length-band 10000|20000|30000` 切换档位。用法见 [DS_THREEBANDS.md](docs/research-report/DS_THREEBANDS.md)；原三档冻结快照和历史结果保留在 deliveries/deepseek-threebands/。Qwen v18 保留独立分支；旧版本通过 `archive/report/*` 标签追溯，整合说明见 [分支整理记录](docs/research-report/BRANCH_CONSOLIDATION_20261121.md)。
 
 # StackPlanner 2.0 (SP2.0)
 

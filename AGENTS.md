@@ -161,8 +161,8 @@ These apply repo-wide; module guides own the module-specific detail.
 - **Format before pushing** — run `make format` (backend) / `pnpm check` (frontend). Backend
   CI enforces `ruff format --check`, so formatting must be clean before a push.
 
-## Approved SP2 snapshot branch
+## Report development branch
 
-Branch `zmy/ds-threebands-unified-20261121` integrates the approved DS bands in one runtime while preserving the original tested snapshots under deliveries/. See `deliveries/deepseek-threebands/BRANCH.md` for provenance, model settings, checks, and migration limits. Keep frozen delivery files byte-identical; new experiments belong in separate data-disk storage. No model calls, scoring, service changes, or changes to the SP2 stage sequence are part of this delivery.
+The long-lived report branch is `sp2DeepResearch`, advanced from the unified DeepSeek three-band runtime. Use `--length-band` for the existing native contracts and role guidance. Qwen v18 remains on its independent branch; `main`, DCC and audit branches are outside this consolidation. See `docs/research-report/BRANCH_CONSOLIDATION_20261121.md` for exact sources, archive tags and validation boundaries.
 
-The active local branch is `zmy/ds-threebands-unified-20261121`: shared report code selects native contracts and role guidance with `--length-band`; old deliveries remain frozen. See `docs/research-report/DS_THREEBANDS.md` and `backend/AGENTS.md`. Publication is handled through explicit user instructions; historical validation metadata describes the state when checks ran.
+Keep all frozen historical copies under `deliveries/` byte-identical. Their recorded scores and validation state belong to those snapshots; new integrated-code experiments need independent runtime/config/output directories. Do not change report stages or add post-generation length processing. The scoped empty-tree correction continues to use existing budgets, cancellation and strict validation. Deployment is separate from Git branch consolidation.
