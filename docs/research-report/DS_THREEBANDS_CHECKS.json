@@ -1,0 +1,19 @@
+{
+  "branch": "zmy/ds-threebands-unified-20261121",
+  "scope": "shared DS runtime and parameter-selected contracts/prompts; original SP2 stages preserved",
+  "regression_passed": 532,
+  "post_format_targeted_passed": 20,
+  "ruff_check": "passed",
+  "ruff_format_check": "passed",
+  "archived_snapshot_hashes": "passed",
+  "new_complete_reports": 0,
+  "new_race_calls": 0,
+  "uploaded": false,
+  "changes_from_original_profiles": [
+    "Share the explicit entry fix already in the approved 10k/20k snapshots across all bands.",
+    "Select archived compact Outline and Writer guidance from the final length contract.",
+    "Correct the historical 20k Writer label from 30000 to 20000.",
+    "Keep budget skill guidance consistent with the selected band.",
+    "Expose --length-band while preserving the manual --word-length entry."
+  ]
+}

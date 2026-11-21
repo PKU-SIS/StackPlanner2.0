@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 REPORT_CENTRAL_PROMPT = """
 <report-mode>
 Report mode is selected from the semantic intent of the current visible
@@ -613,6 +616,40 @@ Save the complete supported first draft through the normal writing tools and
 return the normal completion envelope. Do not add a length-rewrite loop.
 </compact-report-writer>
 """.strip()
+
+_LONG_REPORT_ARGUMENT_GUIDANCE = (
+    "For this approximately 30000-word report, each substantive writable node should develop at least 4 distinct arguments, aim for 5, and normally at most 6. "
+    "An introduction, brief methodological framing or conclusion may have fewer. Keep the existing chapter-count guidance; do not add headings just to increase length. "
+    "Apply this argument guidance to initial planning, consolidation and content revision. Each argument must answer a distinct useful subquestion within the assigned chapter, "
+    "with supporting evidence and necessary qualifications. Prioritize deeper treatment of user-required questions. Do not invent additional arguments, split one judgement into synonyms, "
+    "duplicate sibling content, or introduce optional background to fill a quota. When evidence or scope cannot support four useful arguments, state the limitation briefly in the native "
+    "constraints instead of padding. Explicit requirements and evidence limitations take precedence over counts. Fit the arguments within the existing assigned word budget. "
+    "The host projects argument[] into Writer task_card.tasks; do not create another task schema."
+)
+
+
+def compact_outline_prompt(contract: Mapping[str, Any]) -> str:
+    """Use the tested long-report guidance only for the selected 30k band."""
+    if contract.get("target_words") == 30000:
+        return REPORT_COMPACT_OUTLINE_PROMPT.replace(
+            "Normally aim for 6-8 chapters with 1-2 concise core arguments each.",
+            "Normally aim for 6-8 chapters. " + _LONG_REPORT_ARGUMENT_GUIDANCE,
+        )
+    return REPORT_COMPACT_OUTLINE_PROMPT
+
+
+def compact_writer_prompt(contract: Mapping[str, Any]) -> str:
+    """Preserve each band's Writer guidance without applying 30k text to 10k."""
+    target = contract.get("target_words")
+    if target not in (20000, 30000):
+        return REPORT_COMPACT_WRITER_PROMPT
+    expansion = (
+        f"For this approximately {target}-word variant, develop every argument already selected in task_card.tasks with its essential reasoning, evidence and qualifications. "
+        "Do not collapse distinct assigned arguments into a list of conclusions. Do not independently invent arguments to reach a count. "
+        "Respect the assigned chapter budget and complete ending; no padding, truncation or length-only rewrite loop."
+    )
+    return REPORT_COMPACT_WRITER_PROMPT.replace("<compact-report-writer>\n", "<compact-report-writer>\n" + expansion + "\n", 1)
+
 
 REPORT_COMPACT_RESEARCH_PROMPT = """
 <compact-report-research>

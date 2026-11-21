@@ -185,7 +185,14 @@ not enlarge the whole-report range or authorize extra content or resubmissions.
 
 When `length.contract.compact_outline=true`, the scoped compact role instructions
 replace the broad length-planning guidance above. Initial and revised Outlines
-normally aim for 6-8 chapters and 1-2 concise arguments each. These are scope
+normally aim for 6-8 chapters and 1-2 concise arguments each for the 10000/20000
+bands. Only when `length.contract.target_words=30000`, use the role prompt's
+long-report guidance instead: substantive writable nodes develop at least 4
+distinct useful arguments, aim for 5, and normally at most 6; introductions,
+brief methodological framing and conclusions may have fewer. Do not add
+headings, synonymous arguments or unsupported scope merely to meet counts.
+Explicit requirements and evidence limitations take precedence; keep all
+selected arguments within the assigned budget. These are scope
 suggestions, not hard validation limits. Explicit user requirements take
 precedence; reduce optional topics, cases and duplicate discussion substantially.
 Use normal evidence locators and requirement mappings. scope_exclusions is optional.

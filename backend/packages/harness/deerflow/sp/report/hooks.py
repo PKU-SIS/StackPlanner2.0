@@ -644,9 +644,9 @@ def configure_report_subagent(
                 available_tools = [*available_tools, patch_tool]
         prompt = REPORT_INTEGRATE_REVIEW_PROMPT if report_task == "integrate_review" else REPORT_OUTLINE_PROMPT
         if length_enabled:
-            from deerflow.sp.report.prompts import REPORT_COMPACT_OUTLINE_PROMPT, REPORT_LENGTH_PROMPT
+            from deerflow.sp.report.prompts import REPORT_LENGTH_PROMPT, compact_outline_prompt
 
-            prompt = _join_prompt(prompt, REPORT_COMPACT_OUTLINE_PROMPT if compact_outline else REPORT_LENGTH_PROMPT)
+            prompt = _join_prompt(prompt, compact_outline_prompt(length_contract) if compact_outline else REPORT_LENGTH_PROMPT)
             if length_contract.get("outline_budget_selection") and report_task != "integrate_review":
                 from deerflow.sp.report.prompts import REPORT_OUTLINE_BUDGET_SELECTION_PROMPT
 
@@ -654,7 +654,9 @@ def configure_report_subagent(
             if report_task == "integrate_review" and length_contract.get("length_auto_revision") is False:
                 prompt = _join_prompt(
                     prompt,
-                    "FIRST-PASS LENGTH POLICY: keep the original content-review criteria. Record length concerns as advisory only. Do not request compression or rewrites solely for length; the host measures the range and stops a length-only failure. Required-content blockers still follow the native content-revision path.",
+                    "FIRST-PASS LENGTH POLICY: keep the original content-review criteria. Record length concerns as advisory only. "
+                    "Do not request compression or rewrites solely for length; the host measures the range and stops a length-only failure. "
+                    "Required-content blockers still follow the native content-revision path.",
                 )
         disallowed_tools = list(subagent_config.disallowed_tools or [])
         if report_task == "integrate_review":
@@ -695,7 +697,7 @@ def configure_report_subagent(
         writer_prompt = REPORT_WRITER_PROMPT
         if length_enabled:
             from deerflow.sp.report.length import build_measure_draft_tool
-            from deerflow.sp.report.prompts import REPORT_COMPACT_WRITER_PROMPT, REPORT_LENGTH_PROMPT
+            from deerflow.sp.report.prompts import REPORT_LENGTH_PROMPT, compact_writer_prompt
 
             # Lower generation targets use automatic host completion counting.
             # Exclude optional model checks in this explicitly scoped mode.
@@ -705,7 +707,7 @@ def configure_report_subagent(
                 )
                 selected.append(measure_tool)
                 available_tools = [*available_tools, measure_tool]
-            writer_prompt = _join_prompt(writer_prompt, REPORT_COMPACT_WRITER_PROMPT if compact_outline else REPORT_LENGTH_PROMPT)
+            writer_prompt = _join_prompt(writer_prompt, compact_writer_prompt(length_contract) if compact_outline else REPORT_LENGTH_PROMPT)
             length_packet = task.context_refs.get("report_packet", {}).get("length", {})
             if (length_packet.get("contract") or {}).get("writer_submission_limit"):
                 writer_prompt = _join_prompt(

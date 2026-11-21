@@ -102,6 +102,26 @@ def normalize_contract(value: Any) -> dict[str, Any] | None:
     return result
 
 
+def contract_for_band(target_words: int) -> dict[str, Any]:
+    """Select an approved DS band without changing the native report lifecycle."""
+    _integer(target_words, "length_band")
+    if target_words not in _OUTLINE_BODY_RANGES:
+        raise ReportValidationError("length_band must be 10000, 20000 or 30000")
+    contract = normalize_contract(
+        {
+            "min_words": target_words * 9 // 10,
+            "target_words": target_words,
+            "max_words": target_words * 11 // 10,
+            "compact_outline": True,
+            "writer_task_cards": True,
+            "length_auto_revision": False,
+            "outline_budget_selection": True,
+        }
+    )
+    assert contract is not None
+    return contract
+
+
 def writer_generation_budget(node: Mapping[str, Any], contract: Mapping[str, Any]) -> dict[str, int] | None:
     """Derive optional lower generation guidance without changing acceptance.
 

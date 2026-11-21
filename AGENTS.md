@@ -163,4 +163,6 @@ These apply repo-wide; module guides own the module-specific detail.
 
 ## Approved SP2 snapshot branch
 
-Branch `zmy/ds-threebands-approved-20261117` preserves an approved tested snapshot. See `deliveries/deepseek-threebands/BRANCH.md` for provenance, model settings, checks, and migration limits. Keep frozen delivery files byte-identical; new experiments belong in separate data-disk storage. No model calls, scoring, service changes, or changes to the SP2 stage sequence are part of this delivery.
+Branch `zmy/ds-threebands-unified-20261121` integrates the approved DS bands in one runtime while preserving the original tested snapshots under deliveries/. See `deliveries/deepseek-threebands/BRANCH.md` for provenance, model settings, checks, and migration limits. Keep frozen delivery files byte-identical; new experiments belong in separate data-disk storage. No model calls, scoring, service changes, or changes to the SP2 stage sequence are part of this delivery.
+
+The active local branch is `zmy/ds-threebands-unified-20261121`: shared report code selects native contracts and role guidance with `--length-band`; old deliveries remain frozen. See `docs/research-report/DS_THREEBANDS.md` and `backend/AGENTS.md`. Upload remains paused at the user's request.

@@ -199,15 +199,34 @@ def main():
     parser.add_argument("--timeout", type=int, default=1500)
     parser.add_argument("--worker", action="store_true")
     parser.add_argument("--start", action="store_true")
+    parser.add_argument("--length-band", type=int, choices=(10000, 20000, 30000), help="Select the approved DS length contract, Outline budget and role guidance; cannot combine with manual length flags")
     parser.add_argument("--word-length", nargs=3, type=int, metavar=("MIN", "TARGET", "MAX"), help="Opt-in whole-document estimated Word range; exact Word verification remains separate")
     parser.add_argument("--writer-target-percent", type=int, help="Experimental Writer generation target scale (1-100); requires --word-length and preserves final acceptance range")
     parser.add_argument("--paragraph-plan", action="store_true", help="Require Outline-authored paragraph plans and scope exclusions; requires --word-length")
-    parser.add_argument("--compact-outline", action="store_true", help="First-pass scope selection: at most 8 chapters, 2 arguments per chapter and 3 initial shared research gaps; requires --word-length")
+    parser.add_argument("--compact-outline", action="store_true", help="First-pass scope selection with band-dependent guidance; requirements and evidence take priority over suggested counts; requires --word-length")
     parser.add_argument("--writer-task-cards", action="store_true", help="Require selected claims/facts and exact bounded source passages in Writer input; requires --compact-outline")
     parser.add_argument("--no-length-revision", action="store_true", help="Stop on a length-only failure without compression; native content review remains")
     parser.add_argument("--writer-submission-limit", action="store_true", help="Check chapter length before save; at most one complete resubmission; requires --word-length")
     parser.add_argument("--writer-submission-tolerance-percent", type=int, help="Chapter saving tolerance (0-5); requires --writer-submission-limit; whole-report range unchanged")
     args = parser.parse_args()
+    band_contract = None
+    if args.length_band is not None:
+        if any(
+            (
+                args.word_length is not None,
+                args.writer_target_percent is not None,
+                args.paragraph_plan,
+                args.compact_outline,
+                args.writer_task_cards,
+                args.no_length_revision,
+                args.writer_submission_limit,
+                args.writer_submission_tolerance_percent is not None,
+            )
+        ):
+            parser.error("--length-band cannot combine with manual length flags")
+        from deerflow.sp.report.length import contract_for_band
+
+        band_contract = contract_for_band(args.length_band)
     if args.writer_target_percent is not None and args.word_length is None:
         parser.error("--writer-target-percent requires --word-length")
     if args.paragraph_plan and args.word_length is None:
@@ -224,7 +243,7 @@ def main():
         parser.error("--writer-submission-limit requires --word-length")
     if args.writer_submission_tolerance_percent is not None and not args.writer_submission_limit:
         parser.error("--writer-submission-tolerance-percent requires --writer-submission-limit")
-    length_contract = None
+    length_contract = band_contract
     if args.word_length is not None:
         from deerflow.sp.report.length import normalize_contract
 

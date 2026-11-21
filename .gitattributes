@@ -41,3 +41,6 @@ Makefile text eol=lf
 *.mov binary
 *.woff binary
 *.woff2 binary
+
+# Keep historical snapshot checksums across checkout.
+deliveries/** -text
