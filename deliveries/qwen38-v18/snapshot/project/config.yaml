@@ -1,0 +1,234 @@
+config_version: 20
+log_level: info
+logging:
+  enhance:
+    enabled: false
+    format: text
+token_usage:
+  enabled: true
+token_budget:
+  enabled: false
+  max_tokens: 200000
+  max_input_tokens: null
+  max_output_tokens: null
+  warn_threshold: 0.8
+  hard_stop_threshold: 1.0
+max_recursion_limit: 1000
+models:
+- name: qwen3.8-27b-local
+  display_name: Qwen3.8-27B (local 8075)
+  use: qwen_adapter:QwenSPChatModel
+  model: qwen3.8-27b
+  base_url: http://127.0.0.1:8075/v1
+  api_key: EMPTY
+  timeout: 1800.0
+  max_retries: 0
+  max_tokens: 8192
+  stream_usage: true
+  supports_thinking: true
+  supports_vision: false
+  when_thinking_enabled:
+    extra_body:
+      chat_template_kwargs:
+        enable_thinking: true
+  when_thinking_disabled:
+    extra_body:
+      chat_template_kwargs:
+        enable_thinking: false
+- name: qwen3.8-27b-outline-low
+  display_name: Qwen3.8-27B Outline low
+  use: qwen_adapter:QwenSPChatModel
+  model: qwen3.8-27b
+  base_url: http://127.0.0.1:8075/v1
+  api_key: EMPTY
+  timeout: 1800.0
+  max_retries: 0
+  max_tokens: 8192
+  stream_usage: true
+  supports_thinking: true
+  supports_vision: false
+  when_thinking_enabled: &id001
+    extra_body:
+      chat_template_kwargs:
+        enable_thinking: true
+  when_thinking_disabled: &id002
+    extra_body:
+      chat_template_kwargs:
+        enable_thinking: false
+  supports_reasoning_effort: true
+  reasoning_effort: low
+- name: qwen3.8-27b-research-low
+  display_name: Qwen3.8-27B research low
+  use: qwen_adapter:QwenSPChatModel
+  model: qwen3.8-27b
+  base_url: http://127.0.0.1:8075/v1
+  api_key: EMPTY
+  timeout: 1800.0
+  max_retries: 0
+  max_tokens: 8192
+  stream_usage: true
+  supports_thinking: true
+  supports_vision: false
+  when_thinking_enabled: *id001
+  when_thinking_disabled: *id002
+  supports_reasoning_effort: true
+  reasoning_effort: low
+tool_groups:
+- name: web
+- name: file:read
+- name: file:write
+- name: bash
+tools:
+- name: web_search
+  group: web
+  use: deerflow.community.deepseek_tools.tools:web_search_tool
+  max_results: 10
+  api_key: $LLM_API_KEY
+  timeout: 30
+- name: web_fetch
+  group: web
+  use: deerflow.community.deepseek_tools.tools:web_fetch_tool
+  timeout: 30
+  api_key: $LLM_API_KEY
+- name: image_search
+  group: web
+  use: deerflow.community.image_search.tools:image_search_tool
+  max_results: 5
+- name: ls
+  group: file:read
+  use: deerflow.sandbox.tools:ls_tool
+- name: read_file
+  group: file:read
+  use: deerflow.sandbox.tools:read_file_tool
+- name: glob
+  group: file:read
+  use: deerflow.sandbox.tools:glob_tool
+  max_results: 200
+- name: grep
+  group: file:read
+  use: deerflow.sandbox.tools:grep_tool
+  max_results: 100
+- name: write_file
+  group: file:write
+  use: deerflow.sandbox.tools:write_file_tool
+- name: str_replace
+  group: file:write
+  use: deerflow.sandbox.tools:str_replace_tool
+- name: bash
+  group: bash
+  use: deerflow.sandbox.tools:bash_tool
+tool_search:
+  enabled: false
+tool_output:
+  enabled: true
+  externalize_min_chars: 12000
+  preview_head_chars: 2000
+  preview_tail_chars: 1000
+  fallback_max_chars: 30000
+  fallback_head_chars: 8000
+  fallback_tail_chars: 3000
+  storage_subdir: .tool-results
+  exempt_tools:
+  - read_file
+  - read_file_tool
+suggestions:
+  enabled: true
+input_polish:
+  enabled: true
+  max_chars: 4000
+  model_name: null
+loop_detection:
+  enabled: true
+  warn_threshold: 3
+  hard_limit: 5
+  window_size: 20
+  max_tracked_threads: 100
+  tool_freq_warn: 30
+  tool_freq_hard_limit: 50
+read_before_write:
+  enabled: true
+safety_finish_reason:
+  enabled: true
+uploads:
+  max_files: 10
+  max_file_size: 52428800
+  max_total_size: 104857600
+  auto_convert_documents: false
+  pdf_converter: auto
+sandbox:
+  use: deerflow.sandbox.local:LocalSandboxProvider
+  allow_host_bash: false
+  bash_output_max_chars: 20000
+  read_file_output_max_chars: 50000
+  ls_output_max_chars: 20000
+  bash_command_timeout: 120
+skills:
+  container_path: /mnt/skills
+skill_scan:
+  enabled: true
+title:
+  enabled: true
+  max_words: 6
+  max_chars: 60
+  model_name: null
+summarization:
+  enabled: true
+  model_name: null
+  trigger:
+  - type: tokens
+    value: 32000
+  keep:
+    type: messages
+    value: 10
+  trim_tokens_to_summarize: 15564
+  summary_prompt: null
+  skill_file_read_tool_names:
+  - read_file
+  - read
+  - view
+  - cat
+memory:
+  enabled: true
+  storage_path: memory.json
+  debounce_seconds: 30
+  model_name: null
+  max_facts: 100
+  fact_confidence_threshold: 0.7
+  injection_enabled: true
+  max_injection_tokens: 2000
+  token_counting: tiktoken
+  guaranteed_categories:
+  - correction
+  guaranteed_token_budget: 500
+  staleness_review_enabled: true
+  staleness_age_days: 90
+  staleness_min_candidates: 3
+  staleness_max_removals_per_cycle: 10
+  staleness_protected_categories:
+  - correction
+agents_api:
+  enabled: false
+skill_evolution:
+  enabled: false
+  moderation_model_name: null
+database:
+  backend: sqlite
+  sqlite_dir: /data2/pkuiti/zmy/codex-relay-work/qwen38-newcase-v18-20261119/local-storage/db
+run_events:
+  backend: memory
+  max_trace_content: 10240
+  track_token_usage: true
+scheduler:
+  enabled: false
+  poll_interval_seconds: 5
+  lease_seconds: 120
+  max_concurrent_runs: 3
+  min_once_delay_seconds: 60
+subagents:
+  agents:
+    sp-outline:
+      model: qwen3.8-27b-outline-low
+    sp-researcher:
+      model: qwen3.8-27b-research-low
+  report_outline_evidence_action: true
+  report_outline_followup_actions: true
