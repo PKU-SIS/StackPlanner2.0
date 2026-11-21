@@ -1,0 +1,184 @@
+"""One final transport for a bound CLAUSE audit; original host inputs stay intact."""
+
+import copy
+import json
+import os
+import subprocess
+import sys
+import textwrap
+from dataclasses import asdict
+from pathlib import Path
+
+import pytest
+from dcc_harness.data import PublicTask
+from dcc_harness.datasets.clause import prepare_task
+
+from deerflow.sp.subagents import SPSubagentTask
+from deerflow.sp.subagents.dr2_adapter import render_sp_subagent_prompt
+
+LEGACY_MARKERS = (
+    "The reporter must write /mnt/user-data/outputs/clause_answer-<action_id>.json",
+    "immediately return the internal SP specialist envelope",
+    "set artifact_content to null and artifact_metadata.created_paths",
+    "The required deliverable is a UTF-8 .json file",
+)
+
+
+def bound_task():
+    original = prepare_task(PublicTask(benchmark="clause", prompt="Review the complete contract. Preserve every supported issue."))
+    public = {
+        "delivery_mode": "artifact",
+        "output_parse_mode": "json",
+        "output_schema": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"text": {"type": "string"}, "explanation": {"type": "string"}},
+                "required": ["text", "explanation"],
+                "additionalProperties": False,
+            },
+        },
+        "source_requirements": {"audit_agent": "reporter", "files": [{"path": "/mnt/user-data/uploads/document.txt", "total_lines": 1}], "document_ids": []},
+        "original_issue": original,
+        "original_request": original,
+    }
+    return SPSubagentTask(action_id="audit", subagent_type="reporter", task=original, description="Whole-document audit", context_refs={"task_contract": public}, metadata={"skill_names": ["clause"]})
+
+
+def test_bound_clause_renderer_unifies_only_known_transport_in_model_visible_copy():
+    task = bound_task()
+    before = copy.deepcopy(task)
+    rendered = render_sp_subagent_prompt(task)
+    for marker in LEGACY_MARKERS:
+        assert marker not in rendered
+    assert "complete raw JSON array" in rendered
+    assert "optional draft" in rendered
+    assert "Read it using file tools; review the entire document" in rendered
+    assert "Preserve every supported issue." in rendered
+    assert task == before
+    assert all(marker in task.task for marker in LEGACY_MARKERS)
+
+
+@pytest.mark.parametrize("damage", ["unbound", "different_shape", "different_role", "different_skill", "invalid_skill_selection", "different_source", "inline"])
+def test_unbound_and_other_tasks_keep_their_original_transport(damage):
+    task = bound_task()
+    if damage == "unbound":
+        task.context_refs = {}
+    elif damage == "different_shape":
+        task.context_refs["task_contract"]["output_schema"] = {"type": "object"}
+    elif damage == "different_role":
+        task.subagent_type = "researcher"
+    elif damage == "different_skill":
+        task.metadata["skill_names"] = ["other"]
+    elif damage == "invalid_skill_selection":
+        task.metadata["skill_names"] = 1
+    elif damage == "different_source":
+        task.context_refs["task_contract"]["source_requirements"]["files"][0]["path"] = "/mnt/user-data/uploads/other.txt"
+    else:
+        task.context_refs["task_contract"]["delivery_mode"] = "inline"
+    rendered = render_sp_subagent_prompt(task)
+    assert all(marker in rendered for marker in LEGACY_MARKERS)
+
+
+def test_source_artifact_bodies_and_unknown_user_wording_are_never_rewritten():
+    task = bound_task()
+    original = task.task
+    task.context_refs["artifact_bodies"] = {"items": [{"body": original}]}
+    task.expected_output = "A user-authored custom file instruction: preserve this exact text."
+    value = render_sp_subagent_prompt(task)
+    payload = json.loads(value.split("<sp-subagent-task>\n", 1)[1].split("\n</sp-subagent-task>", 1)[0])
+    assert payload["context_refs"]["artifact_bodies"]["items"][0]["body"] == original
+    assert payload["expected_output"] == task.expected_output
+
+
+def test_unknown_similar_instruction_block_is_not_partially_removed():
+    task = bound_task()
+    task.task = task.task.replace("is required by native artifact ownership checks", "is requested by the caller")
+    value = render_sp_subagent_prompt(task)
+    payload = json.loads(value.split("<sp-subagent-task>\n", 1)[1].split("\n</sp-subagent-task>", 1)[0])
+    assert payload["task"] == task.task
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asynchronous):
+    # A fresh process imports the real executor, bypassing conftest's lightweight
+    # executor mock. The actual middleware chain and Vllm HTTP serialization run.
+    task = bound_task()
+    fixture = tmp_path / "task.json"
+    fixture.write_text(json.dumps(asdict(task)))
+    script = textwrap.dedent(
+        """
+        import asyncio, json, os, pathlib
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import httpx
+        from langchain_core.messages import AIMessage, ToolMessage
+        from deerflow.config.app_config import AppConfig, set_app_config
+        from deerflow.models.vllm_provider import VllmChatModel
+        from deerflow.runtime.user_context import set_current_user
+        from deerflow.sp.runtime import DR2SPExecutorProvider
+        from deerflow.sp.subagents import SPSubagentTask
+        from deerflow.sp.subagents.dr2_adapter import render_sp_subagent_prompt
+
+        native = pathlib.Path(os.environ['FIXTURE_NATIVE_ROOT'])
+        task = SPSubagentTask(**json.loads(pathlib.Path(os.environ['FIXTURE_TASK']).read_text()))
+        source = 'Payment is due on 1 January.'
+        final = json.dumps([{'text':source, 'explanation':'A source-only fixture.'}])
+        app = AppConfig.model_validate({
+            'models':[{'name':'fixture','use':'deerflow.models.vllm_provider:VllmChatModel','model':'fixture',
+                       'api_key':'fixture','base_url':'http://fixture.invalid/v1','context_window':73728}],
+            'sandbox':{'use':'deerflow.sandbox.local:LocalSandboxProvider'},
+            'skills':{'path':str(native/'configs/stackplanner_skills/clause'),
+                      'use':'deerflow.skills.storage.local_skill_storage:LocalSkillStorage'},
+            'summarization':{'enabled':True},'memory':{'enabled':False}})
+        set_app_config(app)
+        set_current_user(SimpleNamespace(id='fixture'))
+        context={'thread_id':'fixture','run_id':'fixture','user_id':'fixture'}
+        provider=DR2SPExecutorProvider(app_config=app,parent_model='fixture',runnable_config={'configurable':{}},available_skill_names=frozenset({'clause'}),user_id='fixture')
+        executor=provider({'sp_non_interactive':True},SimpleNamespace(context=context,stream_writer=None)).adapter._executor_factory(task)
+        requests=[]
+        def endpoint(request):
+            requests.append(json.loads(request.content))
+            return httpx.Response(200,json={'id':'fixture','object':'chat.completion','created':0,'model':'fixture','choices':[{'index':0,'message':{'role':'assistant','content':final},'finish_reason':'stop'}]})
+        transport=httpx.MockTransport(endpoint)
+        sync=httpx.Client(transport=transport)
+        ac=httpx.AsyncClient(transport=transport)
+        model=VllmChatModel(model='fixture',api_key='fixture',base_url='http://fixture.invalid/v1',http_client=sync,http_async_client=ac,max_retries=0)
+        async def initial():
+            state,tools,deferred=await executor._build_initial_state(render_sp_subagent_prompt(task))
+            state['messages'].extend([AIMessage(content='',tool_calls=[{'name':'read_file','id':'read','args':{'path':'/mnt/user-data/uploads/document.txt'}}]),ToolMessage(content=source,name='read_file',tool_call_id='read')])
+            return state,tools,deferred
+        with (
+            patch('deerflow.subagents.executor.create_chat_model',return_value=model),
+            patch('deerflow.models.create_chat_model',return_value=model),
+            patch('deerflow.agents.middlewares.summarization_middleware.create_chat_model',return_value=model),
+        ):
+            state,tools,deferred=asyncio.run(initial())
+            graph=executor._create_agent(tools,deferred_setup=deferred)
+            result=asyncio.run(graph.ainvoke(state,context=context)) if os.environ['FIXTURE_ASYNC']=='1' else graph.invoke(state,context=context)
+        assert result['messages'][-1].content==final
+        assert len(executor._runtime_middlewares)>=20
+        for request in requests:
+            rendered=json.dumps(request['messages'])
+            for marker in json.loads(os.environ['FIXTURE_LEGACY_MARKERS']):
+                assert marker not in rendered, marker
+            assert 'complete raw JSON array' in rendered
+        pathlib.Path(os.environ['FIXTURE_WIRE']).write_text(json.dumps(requests))
+        asyncio.run(ac.aclose())
+        sync.close()
+        """
+    )
+    native = Path(__file__).resolve().parents[2]
+    env = {
+        **os.environ,
+        "DEER_FLOW_HOME": str(tmp_path / "runtime"),
+        "DEER_FLOW_PROJECT_ROOT": str(native),
+        "FIXTURE_NATIVE_ROOT": str(native),
+        "FIXTURE_TASK": str(fixture),
+        "FIXTURE_ASYNC": "1" if asynchronous else "0",
+        "FIXTURE_WIRE": str(tmp_path / "wire.json"),
+        "FIXTURE_LEGACY_MARKERS": json.dumps(LEGACY_MARKERS),
+    }
+    completed = subprocess.run([sys.executable, "-c", script], env=env, text=True, capture_output=True, timeout=90)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert json.loads((tmp_path / "wire.json").read_text())

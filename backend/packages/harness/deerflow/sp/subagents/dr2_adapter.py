@@ -176,6 +176,8 @@ def public_schema_delivery_instruction(task: SPSubagentTask) -> str | None:
 
 def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
     """Render a structured SP task for a DR2 subagent prompt."""
+    from deerflow.sp.clause_delivery import align_clause_delivery_payload
+
     task.validate_protocol()
     payload = {
         "protocol": task.protocol_payload(),
@@ -189,6 +191,15 @@ def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
         "metadata": task.metadata,
     }
     schema_instruction = public_schema_delivery_instruction(task)
+    # Render a detached view: the original immutable host contract and source
+    # artifacts retain their bytes. Only the known obsolete CLAUSE delivery
+    # control block is aligned with the already-bound public success transport.
+    payload = align_clause_delivery_payload(
+        _json_safe(payload),
+        contract=task.context_refs.get("task_contract"),
+        skill_names=task.metadata.get("skill_names"),
+        auditor_role=task.subagent_type,
+    )
     output_instructions = (
         [schema_instruction]
         if schema_instruction is not None
@@ -204,7 +215,7 @@ def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
     return "\n".join(
         [
             "<sp-subagent-task>",
-            json.dumps(_json_safe(payload), ensure_ascii=False, sort_keys=True, indent=2),
+            json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2),
             "</sp-subagent-task>",
             "",
             "Complete the task using the tools available to this DR2 subagent.",

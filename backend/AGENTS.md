@@ -1537,3 +1537,16 @@ file ownership and registration priority, and source/partial/stop gates remain
 independent. Tests: test_sp_public_final_delivery.py covers real sync/async native
 review graphs, unchanged old files, malformed old files, exact final-byte
 persistence, receipt controls and incomplete source evidence.
+
+For an already-bound CLAUSE public-array Reporter with the validated clause
+Skill, align the exact known legacy prepare_task file/envelope control block in
+render_sp_subagent_prompt's detached model-facing fields with the raw-array
+success transport. Cover both protocol.objective/task and original_issue (or
+original_request) in the displayed task contract. File tools remain available
+for source reads and optional drafts, followed by the complete current corrected
+raw final. Do not mutate the host task/immutable contract, source artifact bodies,
+findings, acceptance, review budgets or scoring. Do not heuristically rewrite
+unknown similar user wording. Unbound, non-CLAUSE and other-role tasks preserve
+their instructions. Tests: test_sp_clause_delivery_prompt.py checks exact-block
+scope, unchanged source/host state, controls and sync/async real SubagentExecutor
+builders through Vllm HTTP serialization.

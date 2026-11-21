@@ -767,3 +767,11 @@ the current-action artifact. Earlier optional files remain on disk and cannot
 replace the reviewed final value. A receipt still uses the real written file;
 source, schema, execution-stop and partial-status checks retain their ordinary
 behavior. The host does not edit findings or overwrite the optional file.
+
+For a Reporter with the validated CLAUSE Skill and public array schema, native
+task rendering replaces the known legacy mandatory-file/success-envelope
+instruction block with that same raw-array final transport. Files can still be
+used for source inspection and optional drafts; the final message carries the
+complete current corrected array. This changes only a detached model-facing
+instruction view. The host's original task contract, source artifacts, ordinary
+tasks and other output schemas keep their existing content and behavior.
