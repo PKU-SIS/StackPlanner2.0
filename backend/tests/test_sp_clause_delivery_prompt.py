@@ -25,7 +25,9 @@ LEGACY_MARKERS = (
 
 
 def bound_task():
-    original = prepare_task(PublicTask(benchmark="clause", prompt="Review the complete contract. Preserve every supported issue."))
+    # Pin the recorded legacy harness control text. Upstream dataset prompt
+    # changes must not silently change the regression input being exercised.
+    original = (Path(__file__).parent / "fixtures/clause_legacy_public_delivery.txt").read_text()
     public = {
         "delivery_mode": "artifact",
         "output_parse_mode": "json",
@@ -97,6 +99,28 @@ def test_unknown_similar_instruction_block_is_not_partially_removed():
     value = render_sp_subagent_prompt(task)
     payload = json.loads(value.split("<sp-subagent-task>\n", 1)[1].split("\n</sp-subagent-task>", 1)[0])
     assert payload["task"] == task.task
+
+
+@pytest.mark.parametrize("bound", [False, True])
+def test_current_dataset_prepare_task_keeps_its_independent_prompt_behavior(bound):
+    original = prepare_task(PublicTask(benchmark="clause", prompt="Review every supported issue."))
+    task = bound_task()
+    task.task = original
+    task.context_refs["task_contract"]["original_issue"] = original
+    task.context_refs["task_contract"]["original_request"] = original
+    if not bound:
+        task.metadata["skill_names"] = []
+    before = copy.deepcopy(task)
+    rendered = render_sp_subagent_prompt(task)
+    payload = json.loads(rendered.split("<sp-subagent-task>\n", 1)[1].split("\n</sp-subagent-task>", 1)[0])
+    if bound and all(marker in original for marker in LEGACY_MARKERS):
+        assert all(marker not in payload["task"] for marker in LEGACY_MARKERS)
+    else:
+        assert payload["task"] == original
+        assert payload["protocol"]["objective"] == original
+        assert payload["context_refs"]["task_contract"]["original_issue"] == original
+        assert payload["context_refs"]["task_contract"]["original_request"] == original
+    assert task == before
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
