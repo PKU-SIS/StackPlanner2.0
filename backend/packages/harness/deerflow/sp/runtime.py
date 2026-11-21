@@ -528,6 +528,9 @@ class DR2SPExecutorProvider:
             from deerflow.sp.evidence_quotes import emit_quote_review_events
 
             emit_quote_review_events(raw_result, writer)
+            from deerflow.sp.semantic_review import emit_semantic_review_events
+
+            emit_semantic_review_events(raw_result, writer)
 
         adapter = DR2SubagentExecutorAdapter(
             executor_factory,

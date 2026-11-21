@@ -30,7 +30,12 @@ _ISSUE_MESSAGES = {
 
 def clause_quote_review_enabled(contract: Mapping[str, Any], skill_names: Sequence[str] | None, auditor_role: str | None) -> bool:
     """Use the validated Skill selection and public shape, never private labels."""
-    if os.environ.get("SP_CLAUSE_QUOTE_REVIEW") != "1" or auditor_role != "reporter" or "clause" not in (skill_names or []):
+    return os.environ.get("SP_CLAUSE_QUOTE_REVIEW") == "1" and clause_public_audit_scope(contract, skill_names, auditor_role)
+
+
+def clause_public_audit_scope(contract: Mapping[str, Any], skill_names: Sequence[str] | None, auditor_role: str | None) -> bool:
+    """Recognize the validated public CLAUSE audit contract independently of flags."""
+    if auditor_role != "reporter" or "clause" not in (skill_names or []):
         return False
     if contract.get("delivery_mode") != "artifact" or contract.get("output_parse_mode", "json") != "json":
         return False
@@ -183,13 +188,17 @@ def _annotate_review(latest, findings, messages, contract, *, scope, captured_so
         info["reason"] = unavailable
     if unmatched:
         info["issues"] = [{"index": index, "reason": _quote_issue_reason(findings[index]["text"], normalized_source)} for index in unmatched]
-    candidate = latest.model_copy(update={"id": latest.id or str(uuid.uuid4()), "additional_kwargs": {**extra, _REVIEW: info}})
+    return _annotate_message(latest, _REVIEW, info, captured_sources)
+
+
+def _annotate_message(latest, key, info, captured_sources=None):
+    candidate = latest.model_copy(update={"id": latest.id or str(uuid.uuid4()), "additional_kwargs": {**latest.additional_kwargs, key: info}})
     # Native streaming captures a turn once by ID, before after_model updates.
     # Persist only this host diagnostic in its matching saved metadata; never
     # modify candidate content, tool results, status, labels or artifact bytes.
     for saved in captured_sources or []:
         if isinstance(saved, dict) and latest.id and saved.get("type") == latest.type and saved.get("id") == latest.id and saved.get("content") == latest.content:
-            saved["additional_kwargs"] = {**(saved.get("additional_kwargs") or {}), _REVIEW: info}
+            saved["additional_kwargs"] = {**(saved.get("additional_kwargs") or {}), key: info}
     return candidate
 
 
@@ -241,21 +250,21 @@ def quote_write_review_update(state: Mapping[str, Any], contract: Mapping[str, A
     return {"messages": [candidate]} if candidate is not None else None
 
 
-def quote_review_update(state: Mapping[str, Any], contract: Mapping[str, Any], *, scope: str, captured_sources: list | None = None) -> dict[str, Any] | None:
-    """Review an unchanged final value or an actually written file receipt."""
+def _public_review_candidate(state: Mapping[str, Any], contract: Mapping[str, Any], captured_sources: list | None = None):
+    """Find an unchanged ordinary public final, preserving native stop gates."""
     messages = state.get("messages") or []
     latest = messages[-1] if messages else None
     if not isinstance(latest, AIMessage) or latest.tool_calls or latest.invalid_tool_calls or model_response_stop_reason(messages):
         return None
     extra = latest.additional_kwargs
-    if _REVIEW in extra or any(extra.get(key) for key in ("error_type", "hide_from_ui", "tool_calls", "function_call", "subagent_stop_reason", "safety_termination")):
+    if any(extra.get(key) for key in ("error_type", "hide_from_ui", "tool_calls", "function_call", "subagent_stop_reason", "safety_termination")):
         return None
     if latest.response_metadata.get("finish_reason") in {"tool_calls", "function_call", "content_filter", "safety"} or (extra.get("stackplanner") or {}).get("status") in {"incomplete", "recovery_required", "action_capped", "blocked"}:
         return None
     text = message_to_text(latest)
     if not text.strip() or "[FORCED STOP]" in text or "[TOKEN BUDGET EXCEEDED]" in text:
         return None
-    kind = "raw_final"
+    kind, write_message = "raw_final", None
     if output_contract_gaps({"sp_task_contract": contract}, text):
         try:
             envelope = json.loads(text)
@@ -269,14 +278,23 @@ def quote_review_update(state: Mapping[str, Any], contract: Mapping[str, Any], *
         paths = metadata.get("created_paths")
         written = _written_candidate([*messages, *(captured_sources or [])], contract, selected_paths=paths) if isinstance(paths, list) and paths else None
         if written is not None:
-            text, kind = written[0], "file_receipt"
+            text, kind, write_message = written[0], "file_receipt", written[1]
         else:
             body = envelope.get("artifact_content")
             text = body if isinstance(body, str) else json.dumps(body, ensure_ascii=False)
             if output_contract_gaps({"sp_task_contract": contract}, text):
                 return None
             kind = "artifact_content"
-    candidate = _annotate_review(latest, json.loads(text), messages, contract, scope=scope, captured_sources=captured_sources, candidate_kind=kind)
+    return latest, text, kind, write_message
+
+
+def quote_review_update(state: Mapping[str, Any], contract: Mapping[str, Any], *, scope: str, captured_sources: list | None = None) -> dict[str, Any] | None:
+    """Review an unchanged final value or an actually written file receipt."""
+    found = _public_review_candidate(state, contract, captured_sources)
+    if found is None:
+        return None
+    latest, text, kind, _ = found
+    candidate = _annotate_review(latest, json.loads(text), state.get("messages") or [], contract, scope=scope, captured_sources=captured_sources, candidate_kind=kind)
     if candidate is None:
         return None
     return {"messages": [candidate], **({"jump_to": "model"} if candidate.additional_kwargs[_REVIEW]["feedback"] else {})}

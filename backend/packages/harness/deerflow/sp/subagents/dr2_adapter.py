@@ -1257,6 +1257,12 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
     quote_diagnostics = collect_quote_review_diagnostics(ai_messages if isinstance(ai_messages, list) else [], scope=task.action_id if task is not None else None)
     if quote_diagnostics:
         artifact_metadata["clause_quote_review"] = quote_diagnostics
+    from deerflow.sp.semantic_review import collect_semantic_review_diagnostics
+
+    artifact_metadata.pop("clause_semantic_review", None)
+    semantic_diagnostics = collect_semantic_review_diagnostics(ai_messages if isinstance(ai_messages, list) else [], scope=task.action_id if task is not None else None, finalize=True)
+    if semantic_diagnostics:
+        artifact_metadata["clause_semantic_review"] = semantic_diagnostics
 
     return SPSubagentResult(
         status=status,

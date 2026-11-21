@@ -170,15 +170,25 @@ class PublicArtifactFormatRepairMiddleware(AgentMiddleware):
         from deerflow.sp.evidence_quotes import clause_quote_review_enabled
 
         self.quote_review_enabled = clause_quote_review_enabled(contract, skill_names, auditor_role)
+        from deerflow.sp.semantic_review import clause_semantic_review_enabled
+
+        self.semantic_review_enabled = clause_semantic_review_enabled(contract, skill_names, auditor_role)
         self.captured_sources = captured_sources
 
     def before_model(self, state, runtime):
-        if not self.quote_review_enabled:
+        if not self.quote_review_enabled and not self.semantic_review_enabled:
             return None
         from deerflow.sp.evidence_quotes import quote_write_review_update
+        from deerflow.sp.semantic_review import review_update_requests_semantic_pass, semantic_review_pending, semantic_write_review_update, state_with_review_update
 
         captured = self.captured_sources() if self.captured_sources is not None else None
-        return quote_write_review_update(state, self.contract, scope=self.action_id or "native", captured_sources=captured)
+        update = semantic_write_review_update(state, self.contract, scope=self.action_id or "native", captured_sources=captured) if self.semantic_review_enabled else None
+        if review_update_requests_semantic_pass(update):
+            return update
+        reviewed = state_with_review_update(state, update) if update else state
+        if self.semantic_review_enabled and semantic_review_pending(reviewed, scope=self.action_id or "native", captured_sources=captured):
+            return update
+        return (quote_write_review_update(reviewed, self.contract, scope=self.action_id or "native", captured_sources=captured) if self.quote_review_enabled else None) or update
 
     async def abefore_model(self, state, runtime):
         return self.before_model(state, runtime)
@@ -198,12 +208,19 @@ class PublicArtifactFormatRepairMiddleware(AgentMiddleware):
             ):
                 return None
         update = public_format_repair_update(state, self.contract, scope=self.action_id)
-        if update is not None or not self.quote_review_enabled:
+        if update is not None or (not self.quote_review_enabled and not self.semantic_review_enabled):
             return update
         from deerflow.sp.evidence_quotes import quote_review_update
+        from deerflow.sp.semantic_review import review_update_requests_semantic_pass, semantic_review_pending, semantic_review_update, state_with_review_update
 
         captured = self.captured_sources() if self.captured_sources is not None else None
-        return quote_review_update(state, self.contract, scope=self.action_id or "native", captured_sources=captured)
+        update = semantic_review_update(state, self.contract, scope=self.action_id or "native", captured_sources=captured) if self.semantic_review_enabled else None
+        if review_update_requests_semantic_pass(update):
+            return update
+        reviewed = state_with_review_update(state, update) if update else state
+        if self.semantic_review_enabled and semantic_review_pending(reviewed, scope=self.action_id or "native", captured_sources=captured):
+            return update
+        return (quote_review_update(reviewed, self.contract, scope=self.action_id or "native", captured_sources=captured) if self.quote_review_enabled else None) or update
 
     @hook_config(can_jump_to=["model"])
     async def aafter_model(self, state, runtime):
@@ -211,12 +228,16 @@ class PublicArtifactFormatRepairMiddleware(AgentMiddleware):
 
     def wrap_model_call(self, request, handler):
         from deerflow.sp.evidence_quotes import augment_quote_review_request
+        from deerflow.sp.semantic_review import augment_semantic_review_request
 
         request = augment_public_format_request(request)
+        request = augment_semantic_review_request(request) if self.semantic_review_enabled else request
         return handler(augment_quote_review_request(request) if self.quote_review_enabled else request)
 
     async def awrap_model_call(self, request, handler):
         from deerflow.sp.evidence_quotes import augment_quote_review_request
+        from deerflow.sp.semantic_review import augment_semantic_review_request
 
         request = augment_public_format_request(request)
+        request = augment_semantic_review_request(request) if self.semantic_review_enabled else request
         return await handler(augment_quote_review_request(request) if self.quote_review_enabled else request)

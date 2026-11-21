@@ -738,3 +738,24 @@ latest user turn and removes the prelude from that request. The separate prelude
 is absent from the current task anchors, although Reporter may still receive it
 as compressed historical context capped at 2,400 characters. Sync/async CPU
 tests capture these HTTP and Reporter boundaries without external services.
+
+Optional CLAUSE semantic self-review is enabled separately with
+`SP_CLAUSE_SEMANTIC_REVIEW=1` in the native executor process and is off by default.
+It asks the same validated Reporter instance to review its first schema-qualified
+candidate once against the complete original public source: verify claimed
+internal relationships, merge genuine duplicates, exclude unsupported guesses,
+and revisit the whole document for omitted distinct findings. It retains every
+supported distinct finding without a count limit. The host supplies no labels or
+replacement passages and never deletes, rewrites or scores findings. Existing
+source, status, schema, budget and safety gates remain in force, as does Central's
+guard against repeating a completed Reporter delegation.
+
+Raw finals, artifact bodies and actual successful file writes share one semantic
+request per action. A real file review requires a model-executed complete rewrite;
+an unchanged old-file receipt is recorded as exhausted. Missing or conflicting
+complete original reads exhaust the review without claiming a source check.
+Optional quotation review then retains its separate maximum of two feedback
+requests. Content-free `clause_semantic_review` events and reserved result
+metadata record `requested`, `completed` or `exhausted`. `completed` means a
+subsequent eligible candidate arrived; it does not certify semantic correctness.
+Stopping without that candidate records exhaustion and does not change delivery.

@@ -1490,3 +1490,35 @@ Reporter through `thread_first_user_input`, with whitespace compressed and a
 provider HTTP serialization with the flag omitted, false and true, plus actual
 rendered Reporter task anchors and bounded historical guidance. These are
 behavioral regression tests and do not change native production semantics.
+
+`sp/semantic_review.py` adds an independently opt-in
+`SP_CLAUSE_SEMANTIC_REVIEW=1` pass inside the already-installed
+`PublicArtifactFormatRepairMiddleware`. Default is disabled. Share the existing
+validated CLAUSE/Reporter/public array/single-source scope and unchanged ordinary
+candidate/stop guards with quotation review. Run format correction first, one
+semantic request next, then the existing independent two-request quotation
+budget. Preserve the completed-Reporter Central tool restriction. Do not add a
+second delegation, inference judge, gold lookup, category routing, finding cap,
+host filtering or answer replacement.
+
+Host message annotations share one semantic budget per action across raw finals,
+artifact_content, successful complete write_file and backed file receipts.
+Parallel tool batches must anchor feedback after their last result without
+changing any tool content. Actual file candidates retain internal write-call
+lineage; an old receipt cannot claim a reviewed rewrite. Source reconstruction
+uses paired complete successful original read_file ranges, including captured
+native messages. Unavailable/conflicting source emits exhausted with attempt=0,
+without a model request. A subsequent eligible candidate emits completed with
+attempt=1; this is protocol completion, never a semantic correctness judgment.
+Format recovery, reads and writes cannot reopen the once-per-action request.
+
+`collect_semantic_review_diagnostics(..., finalize=True)` exports only status,
+scope, attempt, candidate_kind, candidate_items and an enumerated reason. If a
+requested review ends without a subsequent eligible candidate, append exhausted
+with no_qualified_candidate_after_request. Normalization discards model-authored
+artifact_metadata.clause_semantic_review and fills it only from host annotations;
+the native raw-result observer emits matching content-free
+type=clause_semantic_review events. Telemetry never changes acceptance, content
+or status. Tests: test_sp_clause_semantic_review.py includes actual sync/async
+native graphs, provider HTTP serialization, format/quote ordering, executed file
+rewrites, source failures, reserved telemetry and default-disabled behavior.
