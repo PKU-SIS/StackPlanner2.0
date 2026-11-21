@@ -1,0 +1,311 @@
+{
+  "name": "band20000-case34-outline-selected",
+  "case_id": 34,
+  "target_words": 20000,
+  "query_sha256": "58dcf28babdd27ea9cbce5c6cb523ec9a3697fa8dc77c5426f60ca25bc0e93ee",
+  "status": "candidate",
+  "words": 17829,
+  "deviation": -2171,
+  "deviation_percent": -10.85,
+  "within_5_percent": false,
+  "within_10_percent": false,
+  "formal_delivered": false,
+  "review": {
+    "action_id": "spact_sp-fixed-c0-review-r1",
+    "base_digest": "3f3f71fbbb30180f69b2702405943173e9f6ac6e36f6433ae3b9c8c226571db3",
+    "candidate_id": "c1",
+    "candidate_sha256": "da3b4ebde759a7135da39fdbffd69d7d2ad9714a83dfd204d28eff49035c9978",
+    "covered_requirement_ids": [
+      "req1",
+      "req2",
+      "req3",
+      "req4",
+      "req5"
+    ],
+    "created_at": "2026-11-17T04:24:52+00:00",
+    "edits": [],
+    "findings": [
+      {
+        "draft_ids": [
+          "d4"
+        ],
+        "kind": "coverage",
+        "message": "表 1 标题称“七类低阻路线”，实际列出十行（因把纯金接触拆为 vdW In/Au、epi-Au、ALB 三条，并加入晶态 Sb 外延）。数据与区分均属必需，建议仅将表题措辞与行数对齐，避免读者误判覆盖面。",
+        "node_ids": [
+          "n8"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d4",
+          "d9"
+        ],
+        "kind": "consistency",
+        "message": "n8 区分三条纯金路线（vdW ~3 000 Ω·µm、epi-Au 358 Ω·µm、ALB-Au 70 Ω·µm），而 n16 边界段只提两条（约 3.3 kΩ·µm 与 70 Ω·µm）。结论不遗漏必需内容，但建议在结论中一并说明 epi-Au，以免与正文口径不一致。",
+        "node_ids": [
+          "n8",
+          "n16"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d1",
+          "d3",
+          "d6",
+          "d8"
+        ],
+        "kind": "duplication",
+        "message": "量子极限 26/36/51 三种约定在开篇、第二支柱、可测量章与方向二反复出现，完整论述已在 n6；其余处可压缩为一句引用，属精简建议而非内容缺失。",
+        "node_ids": [
+          "n2",
+          "n6",
+          "n11",
+          "n14"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d6"
+        ],
+        "kind": "structure",
+        "message": "n11 正文以二级标题“## 可测量量：四个可标定的耦合代理”另起，且章内混用粗体小标题，与全文编号层级不一致；仅影响排版观感。",
+        "node_ids": [
+          "n11"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [],
+        "kind": "evidence",
+        "message": "整篇估计 17 829 词，略低于 18 000 下界（in_estimated_range=false）。按首轮长度政策仅记录，不因长度单独请求改写或压缩。",
+        "node_ids": [],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [],
+        "kind": "other",
+        "message": "Explicit report length constraint: whole-document estimated Word count 17829 is short (required 18000–22000, target 20000). This is a versioned estimate, NOT a measured Microsoft Word count. Preserve requirements/evidence; revise affected nodes using the existing bounded content-revision path. For a long report remove repetition, not required evidence; for a short report add substantive missing analysis, not filler. Do not truncate the export. Node estimates (largest first): [{'node_id': 'n8', 'estimated_words': 2447}, {'node_id': 'n2', 'estimated_words': 2199}, {'node_id': 'n11', 'estimated_words': 2198}, {'node_id': 'n6', 'estimated_words': 2018}, {'node_id': 'n13', 'estimated_words': 1802}, {'node_id': 'n14', 'estimated_words': 1735}, {'node_id': 'n4', 'estimated_words': 1724}, {'node_id': 'n9', 'estimated_words': 1724}, {'node_id': 'n16', 'estimated_words': 1131}]",
+        "node_ids": [
+          "n8",
+          "n2",
+          "n11",
+          "n6",
+          "n13",
+          "n14",
+          "n4",
+          "n9",
+          "n16"
+        ],
+        "severity": "blocking"
+      }
+    ],
+    "host_length_finding": {
+      "draft_ids": [],
+      "kind": "other",
+      "message": "Explicit report length constraint: whole-document estimated Word count 17829 is short (required 18000–22000, target 20000). This is a versioned estimate, NOT a measured Microsoft Word count. Preserve requirements/evidence; revise affected nodes using the existing bounded content-revision path. For a long report remove repetition, not required evidence; for a short report add substantive missing analysis, not filler. Do not truncate the export. Node estimates (largest first): [{'node_id': 'n8', 'estimated_words': 2447}, {'node_id': 'n2', 'estimated_words': 2199}, {'node_id': 'n11', 'estimated_words': 2198}, {'node_id': 'n6', 'estimated_words': 2018}, {'node_id': 'n13', 'estimated_words': 1802}, {'node_id': 'n14', 'estimated_words': 1735}, {'node_id': 'n4', 'estimated_words': 1724}, {'node_id': 'n9', 'estimated_words': 1724}, {'node_id': 'n16', 'estimated_words': 1131}]",
+      "node_ids": [
+        "n8",
+        "n2",
+        "n11",
+        "n6",
+        "n13",
+        "n14",
+        "n4",
+        "n9",
+        "n16"
+      ],
+      "severity": "blocking"
+    },
+    "inputs_digest": "735c593be928094a899e90fc64970f05cd880208dd8080e9700cd00b4f8ca261",
+    "length": {
+      "body_words": 17339,
+      "candidate_sha256": "da3b4ebde759a7135da39fdbffd69d7d2ad9714a83dfd204d28eff49035c9978",
+      "counter_version": "mixed-word-estimate-v1",
+      "direction": "short",
+      "estimated_words": 17829,
+      "in_estimated_range": false,
+      "max_words": 22000,
+      "measured_word_count": null,
+      "min_words": 18000,
+      "nodes": [
+        {
+          "estimated_words": 2199,
+          "node_id": "n2"
+        },
+        {
+          "estimated_words": 1724,
+          "node_id": "n4"
+        },
+        {
+          "estimated_words": 2018,
+          "node_id": "n6"
+        },
+        {
+          "estimated_words": 2447,
+          "node_id": "n8"
+        },
+        {
+          "estimated_words": 1724,
+          "node_id": "n9"
+        },
+        {
+          "estimated_words": 2198,
+          "node_id": "n11"
+        },
+        {
+          "estimated_words": 1802,
+          "node_id": "n13"
+        },
+        {
+          "estimated_words": 1735,
+          "node_id": "n14"
+        },
+        {
+          "estimated_words": 1131,
+          "node_id": "n16"
+        }
+      ],
+      "reference_words": 488,
+      "rendered_sha256": "3278b0cae0fab9053e96b6a5ff3b4ff13d26451549474755135586053ffdbee5",
+      "scope": "whole_document",
+      "target_words": 20000,
+      "word_verified": false
+    },
+    "length_auto_revision": false,
+    "length_only_blocking": true,
+    "outcome": "revise",
+    "path": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-20k-fourcases-20261117/case34/runs/band20000-case34-outline-selected/runtime/users/full-eval/threads/full-34/user-data/outputs/report/r1/review/rv1.json",
+    "review_id": "rv1",
+    "reviewed_candidate_sha256": "da3b4ebde759a7135da39fdbffd69d7d2ad9714a83dfd204d28eff49035c9978",
+    "status": "issues",
+    "tree_version": 2,
+    "virtual_path": "/mnt/user-data/outputs/report/r1/review/rv1.json"
+  },
+  "blocking_findings": [
+    {
+      "draft_ids": [],
+      "kind": "other",
+      "message": "Explicit report length constraint: whole-document estimated Word count 17829 is short (required 18000–22000, target 20000). This is a versioned estimate, NOT a measured Microsoft Word count. Preserve requirements/evidence; revise affected nodes using the existing bounded content-revision path. For a long report remove repetition, not required evidence; for a short report add substantive missing analysis, not filler. Do not truncate the export. Node estimates (largest first): [{'node_id': 'n8', 'estimated_words': 2447}, {'node_id': 'n2', 'estimated_words': 2199}, {'node_id': 'n11', 'estimated_words': 2198}, {'node_id': 'n6', 'estimated_words': 2018}, {'node_id': 'n13', 'estimated_words': 1802}, {'node_id': 'n14', 'estimated_words': 1735}, {'node_id': 'n4', 'estimated_words': 1724}, {'node_id': 'n9', 'estimated_words': 1724}, {'node_id': 'n16', 'estimated_words': 1131}]",
+      "node_ids": [
+        "n8",
+        "n2",
+        "n11",
+        "n6",
+        "n13",
+        "n14",
+        "n4",
+        "n9",
+        "n16"
+      ],
+      "severity": "blocking"
+    }
+  ],
+  "report_sha256": "3278b0cae0fab9053e96b6a5ff3b4ff13d26451549474755135586053ffdbee5",
+  "generation_tokens": 4028200,
+  "tokens_include_cached_input": true,
+  "outline": {
+    "writable_nodes": 9,
+    "total_arguments": 43,
+    "selected_body_target_words": 10200,
+    "body_max_sum": 11080,
+    "tree_version": 2,
+    "tree_sha256": "8884413111e3d3b2a6ca701cf6ca1267d29b5d006ce858638378297884296f32",
+    "chapters": [
+      {
+        "node_id": "n2",
+        "title": "从并列策略清单到可通约的参数空间",
+        "arguments": 5,
+        "target_words": 1100,
+        "max_words": 1200
+      },
+      {
+        "node_id": "n4",
+        "title": "线性钉扎模型：势垒项的统一外壳及其解释边界",
+        "arguments": 4,
+        "target_words": 1250,
+        "max_words": 1350
+      },
+      {
+        "node_id": "n6",
+        "title": "隧穿—耦合项：vdW 间隙、界面态密度与量子极限标尺",
+        "arguments": 4,
+        "target_words": 1250,
+        "max_words": 1350
+      },
+      {
+        "node_id": "n8",
+        "title": "七条低阻路线的统一重述：各自在压低哪一项、付出什么代价",
+        "arguments": 8,
+        "target_words": 1450,
+        "max_words": 1560
+      },
+      {
+        "node_id": "n9",
+        "title": "“耦合窗口”判据：统一框架真实存在于何种形式、还缺什么",
+        "arguments": 6,
+        "target_words": 1200,
+        "max_words": 1300
+      },
+      {
+        "node_id": "n11",
+        "title": "可测量清单与可证伪判据；现有证据等级到哪里为止",
+        "arguments": 4,
+        "target_words": 1150,
+        "max_words": 1250
+      },
+      {
+        "node_id": "n13",
+        "title": "方向一：从“选金属”转向“设计耦合窗口”——简并化、相干键合与热预算",
+        "arguments": 4,
+        "target_words": 1100,
+        "max_words": 1200
+      },
+      {
+        "node_id": "n14",
+        "title": "方向二：可制造的缩放界面与评价标准化",
+        "arguments": 4,
+        "target_words": 1000,
+        "max_words": 1090
+      },
+      {
+        "node_id": "n16",
+        "title": "结论：一个可用的统一答案，及它尚未回答的问题",
+        "arguments": 4,
+        "target_words": 700,
+        "max_words": 780
+      }
+    ]
+  },
+  "ledger_phase": null,
+  "writer_recovery": null,
+  "candidate_count": 1,
+  "length_contract": {
+    "compact_outline": true,
+    "counter_version": "mixed-word-estimate-v1",
+    "enabled": true,
+    "heading_reserve_words": 300,
+    "length_auto_revision": false,
+    "max_words": 22000,
+    "measurement_mode": "estimate",
+    "min_words": 18000,
+    "outline_budget_selection": true,
+    "reference_reserve_words": 1000,
+    "safety_margin_words": 500,
+    "scope": "whole_document",
+    "target_words": 20000,
+    "writer_task_cards": true
+  },
+  "race_tokens": 67763,
+  "race_status": "completed",
+  "race_scores": {
+    "comprehensiveness": 0.5436337625178826,
+    "insight": 0.5900621118012421,
+    "instruction_following": 0.5515239477503628,
+    "readability": 0.5320970042796006,
+    "overall_score": 0.5626390908281653
+  },
+  "race_overall_percent": 56.26390908281653
+}

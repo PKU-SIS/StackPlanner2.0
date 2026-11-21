@@ -1,0 +1,315 @@
+{
+  "name": "band30000-case6-outline-selected",
+  "case_id": 6,
+  "target_words": 30000,
+  "query_sha256": "ccf01b97821d51f27c2da4743118df65de7f76cc6960720ff1f4f3177b474c78",
+  "status": "candidate",
+  "words": 26655,
+  "deviation": -3345,
+  "deviation_percent": -11.15,
+  "within_5_percent": false,
+  "within_10_percent": false,
+  "formal_delivered": false,
+  "review": {
+    "action_id": "spact_sp-fixed-c0-review-r1",
+    "base_digest": "6bb77dfae1eff86742f7ef1fd59a9b17b7166dad1e9bef0fd83e89c2f07ef814",
+    "candidate_id": "c1",
+    "candidate_sha256": "196dc19d0701281a9882079c9b90bc58d3bd5eb03e4728aa7b4603721aacef25",
+    "covered_requirement_ids": [
+      "req1",
+      "req2",
+      "req3",
+      "req4",
+      "req5",
+      "req6",
+      "req7"
+    ],
+    "created_at": "2026-11-17T01:46:40+00:00",
+    "edits": [],
+    "findings": [
+      {
+        "draft_ids": [
+          "d7"
+        ],
+        "kind": "coverage",
+        "message": "Duplicate verbose citation labels appear alongside the canonical marker (e.g. '分层派立场[第S6号文献][S6]', '[第S223号文献][S223]', '[第S183号文献][S183]', '[第S171号文献][S171]'). Source identity is preserved and correct; only the redundant inline label is untidy. Formatting only, not a content omission.",
+        "node_ids": [
+          "n4"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d8",
+          "d3"
+        ],
+        "kind": "coverage",
+        "message": "Team dimension is thin for secondary samples: Sunday Robotics (financing and team not given), Neura Robotics and Humanoid (no founder/headcount or explicit non-disclosure statement), 傅利叶 (headcount/founders absent). Each route's main representative companies do cover all five dimensions; these are appended/second-tier samples, so this is advisory depth rather than a missing required answer.",
+        "node_ids": [
+          "n6",
+          "n5"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d5"
+        ],
+        "kind": "consistency",
+        "message": "One garbled phrase: '宇树招股书显示科研与教育占其人均机器人营收的74%' should read as the buyer-mix share of humanoid sales; the figure itself (74% / 8-9% industrial / 3-4% real operation) matches the cited evidence elsewhere.",
+        "node_ids": [
+          "n8"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d1",
+          "d2",
+          "d6",
+          "d7",
+          "d3",
+          "d8",
+          "d4",
+          "d5"
+        ],
+        "kind": "structure",
+        "message": "Estimated whole-document length 26,655 words is below the 27,000 minimum (in_estimated_range=false). Recorded as advisory under the first-pass length policy; no compression or expansion request is raised, and the host owns the range check.",
+        "node_ids": [
+          "n1",
+          "n2",
+          "n3",
+          "n4",
+          "n5",
+          "n6",
+          "n7",
+          "n8"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d2",
+          "d6",
+          "d7",
+          "d8"
+        ],
+        "kind": "coverage",
+        "message": "Some cross-chapter material recurs (route taxonomy restated in the scenario section, cost/BOM figures repeated in the comparison chapter). Repetition supports readability and stays within the fixed acceptance bar; noted for future consolidation only.",
+        "node_ids": [
+          "n2",
+          "n3",
+          "n4",
+          "n6"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [],
+        "kind": "other",
+        "message": "Explicit report length constraint: whole-document estimated Word count 26655 is short (required 27000–33000, target 30000). This is a versioned estimate, NOT a measured Microsoft Word count. Preserve requirements/evidence; revise affected nodes using the existing bounded content-revision path. For a long report remove repetition, not required evidence; for a short report add substantive missing analysis, not filler. Do not truncate the export. Node estimates (largest first): [{'node_id': 'n3', 'estimated_words': 4409}, {'node_id': 'n2', 'estimated_words': 3931}, {'node_id': 'n4', 'estimated_words': 3773}, {'node_id': 'n6', 'estimated_words': 3624}, {'node_id': 'n5', 'estimated_words': 3547}, {'node_id': 'n7', 'estimated_words': 3289}, {'node_id': 'n8', 'estimated_words': 1575}, {'node_id': 'n1', 'estimated_words': 1282}]",
+        "node_ids": [
+          "n3",
+          "n2",
+          "n4",
+          "n6",
+          "n5",
+          "n7",
+          "n8",
+          "n1"
+        ],
+        "severity": "blocking"
+      }
+    ],
+    "host_length_finding": {
+      "draft_ids": [],
+      "kind": "other",
+      "message": "Explicit report length constraint: whole-document estimated Word count 26655 is short (required 27000–33000, target 30000). This is a versioned estimate, NOT a measured Microsoft Word count. Preserve requirements/evidence; revise affected nodes using the existing bounded content-revision path. For a long report remove repetition, not required evidence; for a short report add substantive missing analysis, not filler. Do not truncate the export. Node estimates (largest first): [{'node_id': 'n3', 'estimated_words': 4409}, {'node_id': 'n2', 'estimated_words': 3931}, {'node_id': 'n4', 'estimated_words': 3773}, {'node_id': 'n6', 'estimated_words': 3624}, {'node_id': 'n5', 'estimated_words': 3547}, {'node_id': 'n7', 'estimated_words': 3289}, {'node_id': 'n8', 'estimated_words': 1575}, {'node_id': 'n1', 'estimated_words': 1282}]",
+      "node_ids": [
+        "n3",
+        "n2",
+        "n4",
+        "n6",
+        "n5",
+        "n7",
+        "n8",
+        "n1"
+      ],
+      "severity": "blocking"
+    },
+    "inputs_digest": "efeb93ac0f155f15706926030aae7ffe7b78815ee9f88bcf59e283b942499888",
+    "length": {
+      "body_words": 25662,
+      "candidate_sha256": "196dc19d0701281a9882079c9b90bc58d3bd5eb03e4728aa7b4603721aacef25",
+      "counter_version": "mixed-word-estimate-v1",
+      "direction": "short",
+      "estimated_words": 26655,
+      "in_estimated_range": false,
+      "max_words": 33000,
+      "measured_word_count": null,
+      "min_words": 27000,
+      "nodes": [
+        {
+          "estimated_words": 1282,
+          "node_id": "n1"
+        },
+        {
+          "estimated_words": 3931,
+          "node_id": "n2"
+        },
+        {
+          "estimated_words": 4409,
+          "node_id": "n3"
+        },
+        {
+          "estimated_words": 3773,
+          "node_id": "n4"
+        },
+        {
+          "estimated_words": 3547,
+          "node_id": "n5"
+        },
+        {
+          "estimated_words": 3624,
+          "node_id": "n6"
+        },
+        {
+          "estimated_words": 3289,
+          "node_id": "n7"
+        },
+        {
+          "estimated_words": 1575,
+          "node_id": "n8"
+        }
+      ],
+      "reference_words": 991,
+      "rendered_sha256": "34bdf185b8250eed393aa7c18aeff2fb9d2513e55c0499c4ff5fb67a3ce0dcf0",
+      "scope": "whole_document",
+      "target_words": 30000,
+      "word_verified": false
+    },
+    "length_auto_revision": false,
+    "length_only_blocking": true,
+    "outcome": "revise",
+    "path": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-threecases-20261117/case6/runs/band30000-case6-outline-selected/runtime/users/full-eval/threads/full-6/user-data/outputs/report/r1/review/rv1.json",
+    "review_id": "rv1",
+    "reviewed_candidate_sha256": "196dc19d0701281a9882079c9b90bc58d3bd5eb03e4728aa7b4603721aacef25",
+    "status": "issues",
+    "tree_version": 2,
+    "virtual_path": "/mnt/user-data/outputs/report/r1/review/rv1.json"
+  },
+  "blocking_findings": [
+    {
+      "draft_ids": [],
+      "kind": "other",
+      "message": "Explicit report length constraint: whole-document estimated Word count 26655 is short (required 27000–33000, target 30000). This is a versioned estimate, NOT a measured Microsoft Word count. Preserve requirements/evidence; revise affected nodes using the existing bounded content-revision path. For a long report remove repetition, not required evidence; for a short report add substantive missing analysis, not filler. Do not truncate the export. Node estimates (largest first): [{'node_id': 'n3', 'estimated_words': 4409}, {'node_id': 'n2', 'estimated_words': 3931}, {'node_id': 'n4', 'estimated_words': 3773}, {'node_id': 'n6', 'estimated_words': 3624}, {'node_id': 'n5', 'estimated_words': 3547}, {'node_id': 'n7', 'estimated_words': 3289}, {'node_id': 'n8', 'estimated_words': 1575}, {'node_id': 'n1', 'estimated_words': 1282}]",
+      "node_ids": [
+        "n3",
+        "n2",
+        "n4",
+        "n6",
+        "n5",
+        "n7",
+        "n8",
+        "n1"
+      ],
+      "severity": "blocking"
+    }
+  ],
+  "report_sha256": "34bdf185b8250eed393aa7c18aeff2fb9d2513e55c0499c4ff5fb67a3ce0dcf0",
+  "generation_tokens": 4884736,
+  "tokens_include_cached_input": true,
+  "outline": {
+    "writable_nodes": 8,
+    "total_arguments": 38,
+    "selected_body_target_words": 15800,
+    "body_max_sum": 16450,
+    "tree_version": 2,
+    "tree_sha256": "47c08590403373190fda98874031bab542dd6235dbe0bf82d3a1d26436ec0675",
+    "chapters": [
+      {
+        "node_id": "n1",
+        "title": "引言：报告问题、时间基线与信息口径",
+        "arguments": 4,
+        "target_words": 600,
+        "max_words": 650
+      },
+      {
+        "node_id": "n2",
+        "title": "技术路线谱系：从VLA默认件到三条架构路线与WAM范式之争",
+        "arguments": 6,
+        "target_words": 2300,
+        "max_words": 2450
+      },
+      {
+        "node_id": "n3",
+        "title": "分层/双系统与全栈自研派：Figure AI、Tesla Optimus、智元机器人、宇树科技",
+        "arguments": 5,
+        "target_words": 2700,
+        "max_words": 2800
+      },
+      {
+        "node_id": "n4",
+        "title": "端到端单一通用大脑派：Skild AI、Physical Intelligence、它石智航、自变量机器人",
+        "arguments": 5,
+        "target_words": 2300,
+        "max_words": 2400
+      },
+      {
+        "node_id": "n5",
+        "title": "工业与场景深耕派：Boston Dynamics、Agility Robotics、Apptronik、优必选（附傅利叶）",
+        "arguments": 5,
+        "target_words": 2400,
+        "max_words": 2450
+      },
+      {
+        "node_id": "n6",
+        "title": "家用消费、场景倒推与非中美区域：1X、Sunday、中国场景派与欧洲/日本/韩国路径",
+        "arguments": 5,
+        "target_words": 2500,
+        "max_words": 2550
+      },
+      {
+        "node_id": "n7",
+        "title": "横向对比：量产交付水位、成本经济性、商业模式与资本地图",
+        "arguments": 5,
+        "target_words": 2100,
+        "max_words": 2200
+      },
+      {
+        "node_id": "n8",
+        "title": "结论：路线未收敛条件下的判断框架与风险清单",
+        "arguments": 3,
+        "target_words": 900,
+        "max_words": 950
+      }
+    ]
+  },
+  "ledger_phase": null,
+  "length_contract": {
+    "compact_outline": true,
+    "counter_version": "mixed-word-estimate-v1",
+    "enabled": true,
+    "heading_reserve_words": 300,
+    "length_auto_revision": false,
+    "max_words": 33000,
+    "measurement_mode": "estimate",
+    "min_words": 27000,
+    "outline_budget_selection": true,
+    "reference_reserve_words": 1000,
+    "safety_margin_words": 500,
+    "scope": "whole_document",
+    "target_words": 30000,
+    "writer_task_cards": true
+  },
+  "race_tokens": 83664,
+  "race_status": "completed",
+  "race_overall_percent": 58.542881579970455,
+  "race_scores": {
+    "comprehensiveness": 0.5968503937007874,
+    "insight": 0.5873261205564142,
+    "instruction_following": 0.5900621118012421,
+    "readability": 0.558282208588957,
+    "overall_score": 0.5854288157997045
+  }
+}

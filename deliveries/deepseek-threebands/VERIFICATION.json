@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-17T07:10:44.049979+00:00",
+  "passed": true,
+  "profiles": 3,
+  "archived_main_runtime_files": 1550,
+  "historical_runtime_variants": 2,
+  "historical_runtime_reconstruction_verified": true,
+  "reports": 14,
+  "report_and_race_source_hashes_verified": true,
+  "generation_and_judge_token_totals_recomputed": true,
+  "no_new_paid_calls": true,
+  "original_experiments_not_modified": true
+}

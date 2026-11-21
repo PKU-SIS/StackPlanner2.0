@@ -1,0 +1,17 @@
+{
+  "band": 30000,
+  "case_id": 33,
+  "label": "先进芯片工艺的金属薄膜沉积",
+  "words": 24624,
+  "race": 55.94110530819392,
+  "generation_tokens": 3914238,
+  "race_tokens": 77248,
+  "deviation_percent": -17.92,
+  "formal_delivered": false,
+  "notes": "普通单次生成",
+  "source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-newcase33-20261117",
+  "source_results_sha256": "b580b2676c2efe81e92fcf26d7978419e632cdd240db2626a779929818eed29d",
+  "report_sha256": "4bf8c85ef215aedf6b5f314d0948844bc9a7910db3d5c4aaf4e1e99136c539f0",
+  "report_source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-newcase33-20261117/runs/band30000-case33-outline-selected/evaluated-report.md",
+  "historical_runtime_variant": null
+}

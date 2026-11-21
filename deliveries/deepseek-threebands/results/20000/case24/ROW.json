@@ -1,0 +1,17 @@
+{
+  "band": 20000,
+  "case_id": 24,
+  "label": "自闭症学生课堂参与",
+  "words": 23985,
+  "race": 51.93356843596467,
+  "generation_tokens": 3467445,
+  "race_tokens": 68541,
+  "deviation_percent": 19.93,
+  "formal_delivered": false,
+  "notes": "入口修复后从头重跑；原失败11.44万Token另计",
+  "source": "/data2/pkuiti/zmy/codex-relay-work/autism-case24-20k-entry-fixed-rerun-20261117",
+  "source_results_sha256": "00cb57545f75d557f87caaea5323a4359605d97b3c7ee04ba987699d499edc27",
+  "report_sha256": "2ce8911980d59fe2dbbfd2bd62b75c08810be738b23192bc17302e27d29d48ec",
+  "report_source": "/data2/pkuiti/zmy/codex-relay-work/autism-case24-20k-entry-fixed-rerun-20261117/runs/band20000-case24-entry-fixed/evaluated-report.md",
+  "historical_runtime_variant": null
+}

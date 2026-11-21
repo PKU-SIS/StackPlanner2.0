@@ -1,0 +1,18 @@
+{
+  "id": 21,
+  "topic": "Education & Jobs",
+  "language": "zh",
+  "prompt": "现在AI这么热门，我最感兴趣的就是人工智能在教育领域应用现状，实际能落地的场景还有在教育领域所面临的挑战，再就是反过来教育对培养人工智能高尖端人才的支撑作用如何强化，学校都有怎样的对应的培养AI人才的体系。",
+  "report_length": {
+    "min_words": 27000,
+    "target_words": 30000,
+    "max_words": 33000,
+    "reference_reserve_words": 1000,
+    "heading_reserve_words": 300,
+    "safety_margin_words": 500,
+    "compact_outline": true,
+    "writer_task_cards": true,
+    "length_auto_revision": false,
+    "outline_budget_selection": true
+  }
+}

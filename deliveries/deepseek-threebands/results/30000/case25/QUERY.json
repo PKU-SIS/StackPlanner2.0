@@ -1,0 +1,18 @@
+{
+  "id": 25,
+  "topic": "Health",
+  "language": "zh",
+  "prompt": "请为我整合近几年有关“中性粒细胞在脑缺血急性期和慢性期的功能和发展变化”的研究成果。在此基础上预测中性粒细胞各个亚群如何和其他的细胞类型发生相互作用，最终如何导向不同的临床结局。最后，为我分析未来可能需要开展的工作。",
+  "report_length": {
+    "min_words": 27000,
+    "target_words": 30000,
+    "max_words": 33000,
+    "reference_reserve_words": 1000,
+    "heading_reserve_words": 300,
+    "safety_margin_words": 500,
+    "compact_outline": true,
+    "writer_task_cards": true,
+    "length_auto_revision": false,
+    "outline_budget_selection": true
+  }
+}

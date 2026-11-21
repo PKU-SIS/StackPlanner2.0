@@ -157,11 +157,7 @@ def _register_questions(
 
 def _registration_authorized(ledger: ReportLedger, item: Mapping[str, Any], unapplied: set[str]) -> bool:
     """Limit a continuation quota to its own target, and new targets to new input."""
-    input_ids = {
-        str(ref.get("input_id") or "")
-        for ref in item.get("requirement_refs") or []
-        if isinstance(ref, Mapping)
-    }
+    input_ids = {str(ref.get("input_id") or "") for ref in item.get("requirement_refs") or [] if isinstance(ref, Mapping)}
     if item.get("mode") == "continue":
         gap_id = str(item.get("continue_gap_id") or "")
         gap = ledger.gap(gap_id)

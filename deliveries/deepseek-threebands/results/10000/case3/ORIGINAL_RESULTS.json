@@ -1,0 +1,223 @@
+{
+  "name": "band10000-case3-outline-selected",
+  "case_id": 3,
+  "target_words": 10000,
+  "query_sha256": "6666c69b1a5b45db094853301d5aa3450fe83ffdc6d73849e0bca3706a2230ef",
+  "status": "candidate",
+  "words": 9181,
+  "deviation": -819,
+  "deviation_percent": -8.19,
+  "within_5_percent": false,
+  "within_10_percent": true,
+  "formal_delivered": true,
+  "review": {
+    "action_id": "spact_sp-fixed-c0-review-r1",
+    "base_digest": "9afb592e2dcafb3d189d63de1339da196e86754a5e1529a78b0c3ce6869bccc1",
+    "candidate_id": "c1",
+    "candidate_sha256": "367aa9cdfb92d72adafd1b51a447cc4058dab20e25842f341c024b556987df46",
+    "covered_requirement_ids": [
+      "req1",
+      "req2",
+      "req3"
+    ],
+    "created_at": "2026-11-17T06:29:46+00:00",
+    "edits": [],
+    "findings": [
+      {
+        "draft_ids": [
+          "d8"
+        ],
+        "kind": "duplication",
+        "message": "n11 在分档论证中复用了 n5/n7 已给出的收入结构占比（投行7.38%、资管4.41%）与1H26E前瞻增速（投行+27%、资管+28%），属跨章综合所需的对照引用，未超出必要范围，仅提示可再压缩重复数字。",
+        "node_ids": [
+          "n11"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d6"
+        ],
+        "kind": "structure",
+        "message": "银行与保险一章篇幅明显短于其他赛道章，但该章在计划中被定位为对照系，req2 的必答对象（投行、PE、固收）均已在 n5–n7 充分展开，故不构成覆盖缺口。",
+        "node_ids": [
+          "n8"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d7",
+          "d8"
+        ],
+        "kind": "evidence",
+        "message": "人才维度排序主要依据 CFA Institute 与招聘平台白皮书（S238）等平台大数据及媒体调查（S266、S140、S71），正文已在相应位置标注非官方统计属性，并以中证协收入结构与券商研究前瞻增速交叉佐证，引用层级披露充分。",
+        "node_ids": [
+          "n9",
+          "n11"
+        ],
+        "severity": "advisory"
+      }
+    ],
+    "host_length_finding": null,
+    "inputs_digest": "b35fcea68ba88ca111748b98b31847b694bf48650f8c0f80fb67a0923f89a661",
+    "length": {
+      "body_words": 8170,
+      "candidate_sha256": "367aa9cdfb92d72adafd1b51a447cc4058dab20e25842f341c024b556987df46",
+      "counter_version": "mixed-word-estimate-v1",
+      "direction": "within",
+      "estimated_words": 9181,
+      "in_estimated_range": true,
+      "max_words": 11000,
+      "measured_word_count": null,
+      "min_words": 9000,
+      "nodes": [
+        {
+          "estimated_words": 1073,
+          "node_id": "n2"
+        },
+        {
+          "estimated_words": 971,
+          "node_id": "n3"
+        },
+        {
+          "estimated_words": 999,
+          "node_id": "n5"
+        },
+        {
+          "estimated_words": 921,
+          "node_id": "n6"
+        },
+        {
+          "estimated_words": 1169,
+          "node_id": "n7"
+        },
+        {
+          "estimated_words": 840,
+          "node_id": "n8"
+        },
+        {
+          "estimated_words": 757,
+          "node_id": "n9"
+        },
+        {
+          "estimated_words": 1207,
+          "node_id": "n11"
+        }
+      ],
+      "reference_words": 1009,
+      "rendered_sha256": "23ad198448691f2fcea1649d9022358556abd10cf8c55bfd607881b90474649b",
+      "scope": "whole_document",
+      "target_words": 10000,
+      "word_verified": false
+    },
+    "length_auto_revision": false,
+    "length_only_blocking": false,
+    "outcome": "deliver",
+    "path": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-10k-fourcases-20261117/case3/runs/band10000-case3-outline-selected/runtime/users/full-eval/threads/full-3/user-data/outputs/report/r1/review/rv1.json",
+    "review_id": "rv1",
+    "reviewed_candidate_sha256": "367aa9cdfb92d72adafd1b51a447cc4058dab20e25842f341c024b556987df46",
+    "status": "ready",
+    "tree_version": 2,
+    "virtual_path": "/mnt/user-data/outputs/report/r1/review/rv1.json"
+  },
+  "blocking_findings": [],
+  "report_sha256": "23ad198448691f2fcea1649d9022358556abd10cf8c55bfd607881b90474649b",
+  "generation_tokens": 3759789,
+  "tokens_include_cached_input": true,
+  "outline": {
+    "writable_nodes": 8,
+    "total_arguments": 33,
+    "selected_body_target_words": 3500,
+    "body_max_sum": 3880,
+    "tree_version": 2,
+    "tree_sha256": "73af227f454b488f62a3ba9beee6f4c365b3e63fee965ce4d0dcda5cf0d12bfd",
+    "chapters": [
+      {
+        "node_id": "n2",
+        "title": "政策坐标：“金融强国”定调与结构改革主线",
+        "arguments": 3,
+        "target_words": 380,
+        "max_words": 420
+      },
+      {
+        "node_id": "n3",
+        "title": "融资结构拐点：直接融资占比的系统性抬升",
+        "arguments": 4,
+        "target_words": 460,
+        "max_words": 510
+      },
+      {
+        "node_id": "n5",
+        "title": "投行：弹性最大，但份额有限的高β条线",
+        "arguments": 4,
+        "target_words": 520,
+        "max_words": 580
+      },
+      {
+        "node_id": "n6",
+        "title": "PE/创投：回暖已成事实，机会仍是结构性的",
+        "arguments": 5,
+        "target_words": 470,
+        "max_words": 520
+      },
+      {
+        "node_id": "n7",
+        "title": "固收与大资管：确定性最高、以量补价",
+        "arguments": 4,
+        "target_words": 470,
+        "max_words": 520
+      },
+      {
+        "node_id": "n8",
+        "title": "银行与保险：旧模式承压，增量在中间业务与养老金融",
+        "arguments": 4,
+        "target_words": 360,
+        "max_words": 400
+      },
+      {
+        "node_id": "n9",
+        "title": "金融科技与AI：不是整体赛道，而是环节与能力",
+        "arguments": 4,
+        "target_words": 360,
+        "max_words": 400
+      },
+      {
+        "node_id": "n11",
+        "title": "分档结论：标准决定答案，能力比条线更重要",
+        "arguments": 5,
+        "target_words": 480,
+        "max_words": 530
+      }
+    ]
+  },
+  "ledger_phase": null,
+  "writer_recovery": null,
+  "candidate_count": 1,
+  "length_contract": {
+    "compact_outline": true,
+    "counter_version": "mixed-word-estimate-v1",
+    "enabled": true,
+    "heading_reserve_words": 300,
+    "length_auto_revision": false,
+    "max_words": 11000,
+    "measurement_mode": "estimate",
+    "min_words": 9000,
+    "outline_budget_selection": true,
+    "reference_reserve_words": 1000,
+    "safety_margin_words": 500,
+    "scope": "whole_document",
+    "target_words": 10000,
+    "writer_task_cards": true
+  },
+  "race_tokens": 37189,
+  "race_status": "completed",
+  "race_scores": {
+    "comprehensiveness": 0.49300155520995337,
+    "insight": 0.5694227769110765,
+    "instruction_following": 0.5238784370477568,
+    "readability": 0.5295902883156298,
+    "overall_score": 0.5348684008946901
+  },
+  "race_overall_percent": 53.48684008946901
+}

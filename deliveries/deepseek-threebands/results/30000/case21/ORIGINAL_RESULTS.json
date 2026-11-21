@@ -1,0 +1,261 @@
+{
+  "name": "band30000-case21-outline-selected",
+  "case_id": 21,
+  "target_words": 30000,
+  "query_sha256": "b3312148aae5f2dee56211d93fa310cb4cfe9a307e794baacb0b0e56750fc879",
+  "status": "candidate",
+  "words": 30729,
+  "deviation": 729,
+  "deviation_percent": 2.43,
+  "within_5_percent": true,
+  "within_10_percent": true,
+  "formal_delivered": true,
+  "review": {
+    "action_id": "spact_sp-fixed-c0-review-r1",
+    "base_digest": "6745771ce5993336c51d02c598682b73019a15eda5381ed3af802c4b789c01a8",
+    "candidate_id": "c1",
+    "candidate_sha256": "1e875f8f125f0475a96a24601e2365f32b22e802ebf17866cb3c73257f2a3fb6",
+    "covered_requirement_ids": [
+      "req1",
+      "req2",
+      "req3",
+      "req4",
+      "req5"
+    ],
+    "created_at": "2026-11-16T15:57:24+00:00",
+    "edits": [],
+    "findings": [
+      {
+        "draft_ids": [
+          "d1",
+          "d2",
+          "d3",
+          "d4",
+          "d5",
+          "d6",
+          "d7",
+          "d8"
+        ],
+        "kind": "coverage",
+        "message": "All five hard requirements have a substantive primary chapter: 应用现状→n2, 落地场景→n3/n4, 挑战→n5/n6, 人才支撑强化→n8, 培养体系→n7. No required part relies on placeholder wording; each chapter states scope limits beside the relevant data rather than deferring content.",
+        "node_ids": [
+          "n1",
+          "n2",
+          "n3",
+          "n4",
+          "n5",
+          "n6",
+          "n7",
+          "n8"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d4"
+        ],
+        "kind": "structure",
+        "message": "落地场景（二）uses level-2 headings for its internal subsections (从课程到全流程 / 公平场景 / 中国能测出什么 / 国际证据 / 配置而非技术本身), while sibling chapters use level-3 subheadings; the rendered hierarchy therefore flattens this chapter. Cosmetic only, not a content gap.",
+        "node_ids": [
+          "n4"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d4",
+          "d5"
+        ],
+        "kind": "duplication",
+        "message": "The 认知外包机制 and the 撤除AI后优势消失/反转 evidence (OECD, Bastani 48%/17%/127%) are developed twice: once as part of n4's effect boundary and again as n5's mechanism argument. Cross-reference once would read better, but both passages remain evidence-supported and consistent.",
+        "node_ids": [
+          "n4",
+          "n5"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d6",
+          "d8"
+        ],
+        "kind": "duplication",
+        "message": "The 师资 and 教材 statistics (88.12%/43.88%/59.64%, 41% 无固定教材, 46.04% 学段断层) appear in both n6 (as diagnosis) and n8 (as basis for priorities). Repetition is functional but noticeable.",
+        "node_ids": [
+          "n6",
+          "n8"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d3"
+        ],
+        "kind": "consistency",
+        "message": "The 课时 table's 高中「每两周1课时」is converted to 「约18—20课时/学年」in the interpretation. The conversion is a derived estimate rather than a sourced figure; it is signalled by 「折合/约」but could be labelled more explicitly as a calculation.",
+        "node_ids": [
+          "n3"
+        ],
+        "severity": "advisory"
+      }
+    ],
+    "host_length_finding": null,
+    "inputs_digest": "4796c4497405139ffba5f991505953e2608dbc1c182a468e9622951968577e92",
+    "length": {
+      "body_words": 29550,
+      "candidate_sha256": "1e875f8f125f0475a96a24601e2365f32b22e802ebf17866cb3c73257f2a3fb6",
+      "counter_version": "mixed-word-estimate-v1",
+      "direction": "within",
+      "estimated_words": 30729,
+      "in_estimated_range": true,
+      "max_words": 33000,
+      "measured_word_count": null,
+      "min_words": 27000,
+      "nodes": [
+        {
+          "estimated_words": 1117,
+          "node_id": "n1"
+        },
+        {
+          "estimated_words": 5256,
+          "node_id": "n2"
+        },
+        {
+          "estimated_words": 4026,
+          "node_id": "n3"
+        },
+        {
+          "estimated_words": 3488,
+          "node_id": "n4"
+        },
+        {
+          "estimated_words": 3336,
+          "node_id": "n5"
+        },
+        {
+          "estimated_words": 3029,
+          "node_id": "n6"
+        },
+        {
+          "estimated_words": 4347,
+          "node_id": "n7"
+        },
+        {
+          "estimated_words": 4689,
+          "node_id": "n8"
+        }
+      ],
+      "reference_words": 1177,
+      "rendered_sha256": "5bf3db3a9628d33c94e6e62f14e2e684a825a0d208af1046c124924dc8aa0fed",
+      "scope": "whole_document",
+      "target_words": 30000,
+      "word_verified": false
+    },
+    "length_auto_revision": false,
+    "length_only_blocking": false,
+    "outcome": "deliver",
+    "path": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-20261116/runs/band30000-case21-outline-selected/runtime/users/full-eval/threads/full-21/user-data/outputs/report/r1/review/rv1.json",
+    "review_id": "rv1",
+    "reviewed_candidate_sha256": "1e875f8f125f0475a96a24601e2365f32b22e802ebf17866cb3c73257f2a3fb6",
+    "status": "ready",
+    "tree_version": 2,
+    "virtual_path": "/mnt/user-data/outputs/report/r1/review/rv1.json"
+  },
+  "blocking_findings": [],
+  "report_sha256": "5bf3db3a9628d33c94e6e62f14e2e684a825a0d208af1046c124924dc8aa0fed",
+  "generation_tokens": 4966992,
+  "tokens_include_cached_input": true,
+  "outline": {
+    "writable_nodes": 8,
+    "total_arguments": 43,
+    "selected_body_target_words": 15000,
+    "body_max_sum": 16200,
+    "tree_version": 2,
+    "tree_sha256": "adbb64f02407b599f321e8428a1d975b9acdda0007a5f8b8b6ab4376b76eaa6d",
+    "chapters": [
+      {
+        "node_id": "n1",
+        "title": "导论：把\"AI+教育\"从热度问题变成可检验的四个问题",
+        "arguments": 4,
+        "target_words": 500,
+        "max_words": 650
+      },
+      {
+        "node_id": "n2",
+        "title": "制度化现状：从\"人工智能赋能教育行动\"到《\"人工智能+教育\"行动计划》",
+        "arguments": 5,
+        "target_words": 2000,
+        "max_words": 2200
+      },
+      {
+        "node_id": "n3",
+        "title": "落地场景（一）：课程化落地——中小学AI通识课与高校AI公共基础课",
+        "arguments": 6,
+        "target_words": 1900,
+        "max_words": 2050
+      },
+      {
+        "node_id": "n4",
+        "title": "落地场景（二）：教学全流程、治理与公平，以及\"能落地≠有效\"的实证边界",
+        "arguments": 5,
+        "target_words": 1900,
+        "max_words": 2050
+      },
+      {
+        "node_id": "n5",
+        "title": "挑战（一）：学习是否真的发生，以及学术诚信与内容可靠性",
+        "arguments": 6,
+        "target_words": 1800,
+        "max_words": 1950
+      },
+      {
+        "node_id": "n6",
+        "title": "挑战（二）：师资、教材与课程质量、资源不均与扩张风险",
+        "arguments": 5,
+        "target_words": 1800,
+        "max_words": 1950
+      },
+      {
+        "node_id": "n7",
+        "title": "学校的AI人才培养体系图谱：从通识、专业、交叉、拔尖到产教与研究生",
+        "arguments": 6,
+        "target_words": 2300,
+        "max_words": 2450
+      },
+      {
+        "node_id": "n8",
+        "title": "如何强化：从\"体系存在\"到\"支撑有力\"的优先次序与边界（含全文结论）",
+        "arguments": 6,
+        "target_words": 2800,
+        "max_words": 2900
+      }
+    ]
+  },
+  "ledger_phase": null,
+  "length_contract": {
+    "compact_outline": true,
+    "counter_version": "mixed-word-estimate-v1",
+    "enabled": true,
+    "heading_reserve_words": 300,
+    "length_auto_revision": false,
+    "max_words": 33000,
+    "measurement_mode": "estimate",
+    "min_words": 27000,
+    "outline_budget_selection": true,
+    "reference_reserve_words": 1000,
+    "safety_margin_words": 500,
+    "scope": "whole_document",
+    "target_words": 30000,
+    "writer_task_cards": true
+  },
+  "race_tokens": 78092,
+  "race_status": "completed",
+  "race_scores": {
+    "comprehensiveness": 0.5352941176470588,
+    "insight": 0.5701219512195123,
+    "instruction_following": 0.5375552282768777,
+    "readability": 0.5362537764350453,
+    "overall_score": 0.546010531183341
+  },
+  "race_overall_percent": 54.6010531183341
+}

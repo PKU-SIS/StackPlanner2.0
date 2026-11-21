@@ -1,0 +1,296 @@
+{
+  "name": "band30000-case25-outline-selected",
+  "case_id": 25,
+  "target_words": 30000,
+  "query_sha256": "4095defb60c18ca546781bc18df4e5645a87b7d50de45151426700bc5655b1f4",
+  "status": "candidate",
+  "words": 31175,
+  "deviation": 1175,
+  "deviation_percent": 3.92,
+  "within_5_percent": true,
+  "within_10_percent": true,
+  "formal_delivered": true,
+  "review": {
+    "action_id": "spact_sp-fixed-c0-review-r1",
+    "base_digest": "f02b99e3e9865993d419eaa1cf61489acf95fd2051f2d1e4c97c5ac7709a7fd4",
+    "candidate_id": "c1",
+    "candidate_sha256": "50142097d9fe14c7f404e567bb61a3a093250277b93a42b0dae76afa20daa3e0",
+    "covered_requirement_ids": [
+      "req1",
+      "req2",
+      "req3",
+      "req4",
+      "req5"
+    ],
+    "created_at": "2026-11-17T02:10:04+00:00",
+    "edits": [],
+    "findings": [
+      {
+        "draft_ids": [
+          "d1",
+          "d2",
+          "d3",
+          "d4",
+          "d5",
+          "d6",
+          "d7",
+          "d8",
+          "d9",
+          "d10",
+          "d11"
+        ],
+        "kind": "coverage",
+        "message": "All three user questions are answered with dedicated chapters: integration across hyperacute/acute/subacute/chronic phases, subset–cell interactions (brain-resident and circulating/peripheral), outcome pathways (END, hemorrhagic transformation, 90-day mRS, PSCI, post-stroke infection) and a prioritized future-work agenda. No blocking omission. 出血转化 is covered mainly through NLR association and the explicit negative rTEM/senescent result (S2, S90); adequate but the thinnest required outcome.",
+        "node_ids": [
+          "n2",
+          "n4",
+          "n5",
+          "n7",
+          "n10",
+          "n12",
+          "n13",
+          "n15",
+          "n17",
+          "n18"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d3",
+          "d5",
+          "d9",
+          "d10"
+        ],
+        "kind": "evidence",
+        "message": "A leftover literal requirement marker \"[req5]\" appears at the end of the n5 conclusion sentence. It is an editorial artifact, not a placeholder; removing it in a later pass would improve presentation without changing any claim.",
+        "node_ids": [
+          "n5",
+          "n8",
+          "n15",
+          "n17"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d3",
+          "d9",
+          "d11"
+        ],
+        "kind": "duplication",
+        "message": "The NETs–no-reflow–END chain and the CitH3/MPO-DNA odds ratios are restated in the acute-mechanism chapter, the prediction matrix and the conclusion. Repetition is interpretive in n15/n18, so no rewrite requested.",
+        "node_ids": [
+          "n5",
+          "n15",
+          "n18"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d4",
+          "d6"
+        ],
+        "kind": "structure",
+        "message": "Human-versus-murine labeling is consistently applied, but Neu*/Neut_* nomenclature density in n7 and n10 is high; considered acceptable given the user's request for subset-level integration.",
+        "node_ids": [
+          "n7",
+          "n10"
+        ],
+        "severity": "advisory"
+      }
+    ],
+    "host_length_finding": null,
+    "inputs_digest": "f841f5ef517f22d4a96916891a7d42a07f057029aa9429163974141c81356db8",
+    "length": {
+      "body_words": 30293,
+      "candidate_sha256": "50142097d9fe14c7f404e567bb61a3a093250277b93a42b0dae76afa20daa3e0",
+      "counter_version": "mixed-word-estimate-v1",
+      "direction": "within",
+      "estimated_words": 31175,
+      "in_estimated_range": true,
+      "max_words": 33000,
+      "measured_word_count": null,
+      "min_words": 27000,
+      "nodes": [
+        {
+          "estimated_words": 1373,
+          "node_id": "n2"
+        },
+        {
+          "estimated_words": 2507,
+          "node_id": "n4"
+        },
+        {
+          "estimated_words": 3279,
+          "node_id": "n5"
+        },
+        {
+          "estimated_words": 2329,
+          "node_id": "n7"
+        },
+        {
+          "estimated_words": 3266,
+          "node_id": "n8"
+        },
+        {
+          "estimated_words": 3227,
+          "node_id": "n10"
+        },
+        {
+          "estimated_words": 3088,
+          "node_id": "n12"
+        },
+        {
+          "estimated_words": 3039,
+          "node_id": "n13"
+        },
+        {
+          "estimated_words": 3239,
+          "node_id": "n15"
+        },
+        {
+          "estimated_words": 3488,
+          "node_id": "n17"
+        },
+        {
+          "estimated_words": 1013,
+          "node_id": "n18"
+        }
+      ],
+      "reference_words": 880,
+      "rendered_sha256": "ab8b1d1edcfd45eaa1c8b07547bea11962f56d4bd6e350103317bdd6580ed4b8",
+      "scope": "whole_document",
+      "target_words": 30000,
+      "word_verified": false
+    },
+    "length_auto_revision": false,
+    "length_only_blocking": false,
+    "outcome": "deliver",
+    "path": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-threecases-20261117/case25/runs/band30000-case25-outline-selected/runtime/users/full-eval/threads/full-25/user-data/outputs/report/r1/review/rv1.json",
+    "review_id": "rv1",
+    "reviewed_candidate_sha256": "50142097d9fe14c7f404e567bb61a3a093250277b93a42b0dae76afa20daa3e0",
+    "status": "ready",
+    "tree_version": 2,
+    "virtual_path": "/mnt/user-data/outputs/report/r1/review/rv1.json"
+  },
+  "blocking_findings": [],
+  "report_sha256": "ab8b1d1edcfd45eaa1c8b07547bea11962f56d4bd6e350103317bdd6580ed4b8",
+  "generation_tokens": 3905014,
+  "tokens_include_cached_input": true,
+  "outline": {
+    "writable_nodes": 11,
+    "total_arguments": 56,
+    "selected_body_target_words": 15000,
+    "body_max_sum": 15950,
+    "tree_version": 2,
+    "tree_sha256": "42cdc918c0415c16ca03b7954b4757f5b9e276961479087c55ef233a69325a3b",
+    "chapters": [
+      {
+        "node_id": "n2",
+        "title": "问题设定、时间轴分期与证据分层方法",
+        "arguments": 5,
+        "target_words": 600,
+        "max_words": 650
+      },
+      {
+        "node_id": "n4",
+        "title": "急性期的动员来源、浸润时序与“血管内先行”的空间次序",
+        "arguments": 5,
+        "target_words": 1500,
+        "max_words": 1600
+      },
+      {
+        "node_id": "n5",
+        "title": "急性期效应机制：内皮—BBB 多重打击、NETs 与微血管“无复流”",
+        "arguments": 5,
+        "target_words": 1500,
+        "max_words": 1600
+      },
+      {
+        "node_id": "n7",
+        "title": "N1/N2 范式的剩余解释力与单细胞亚群图谱的分类学困境",
+        "arguments": 5,
+        "target_words": 1600,
+        "max_words": 1700
+      },
+      {
+        "node_id": "n8",
+        "title": "人体可测亚群与分层标志：CD177 范式、循环表型与血栓内表型",
+        "arguments": 6,
+        "target_words": 1600,
+        "max_words": 1700
+      },
+      {
+        "node_id": "n10",
+        "title": "慢性期中性粒细胞的持续状态：系统三相反应、内皮门控与“数量非充分原因”",
+        "arguments": 5,
+        "target_words": 1600,
+        "max_words": 1700
+      },
+      {
+        "node_id": "n12",
+        "title": "与脑驻留细胞的互作：内皮门控、CD177 因果链、小胶质—星形胶质—神经元环路",
+        "arguments": 5,
+        "target_words": 1600,
+        "max_words": 1700
+      },
+      {
+        "node_id": "n13",
+        "title": "与循环及外周系统的互作：血小板、T 细胞与骨髓—脾—交感轴",
+        "arguments": 5,
+        "target_words": 1300,
+        "max_words": 1400
+      },
+      {
+        "node_id": "n15",
+        "title": "四类结局通路与“亚群—互作—结局”预测矩阵",
+        "arguments": 6,
+        "target_words": 1700,
+        "max_words": 1800
+      },
+      {
+        "node_id": "n17",
+        "title": "未来 3–5 年的优先研究议程：分类、因果验证与已进入人体的干预",
+        "arguments": 5,
+        "target_words": 1500,
+        "max_words": 1600
+      },
+      {
+        "node_id": "n18",
+        "title": "结论：双相时间轴、亚群假说与可立即使用的分层证据",
+        "arguments": 4,
+        "target_words": 500,
+        "max_words": 500
+      }
+    ]
+  },
+  "ledger_phase": null,
+  "length_contract": {
+    "compact_outline": true,
+    "counter_version": "mixed-word-estimate-v1",
+    "enabled": true,
+    "heading_reserve_words": 300,
+    "length_auto_revision": false,
+    "max_words": 33000,
+    "measurement_mode": "estimate",
+    "min_words": 27000,
+    "outline_budget_selection": true,
+    "reference_reserve_words": 1000,
+    "safety_margin_words": 500,
+    "scope": "whole_document",
+    "target_words": 30000,
+    "writer_task_cards": true
+  },
+  "race_tokens": 87962,
+  "race_status": "completed",
+  "race_scores": {
+    "comprehensiveness": 0.5635276532137519,
+    "insight": 0.578386605783866,
+    "instruction_following": 0.5580029368575624,
+    "readability": 0.5445402298850573,
+    "overall_score": 0.5655742597898759
+  },
+  "race_overall_percent": 56.55742597898759
+}

@@ -1,0 +1,282 @@
+{
+  "case_id": 30,
+  "status": "recovered_candidate",
+  "original_generation_tokens": 4050514,
+  "additional_generation_tokens": 548329,
+  "generation_tokens": 4598843,
+  "tokens_include_cached_input": true,
+  "formal_delivered": true,
+  "recovered": true,
+  "original_failure_record_preserved": true,
+  "original_eight_chapters": {
+    "n1": {
+      "file_unchanged": true,
+      "same_current_draft_id": true
+    },
+    "n2": {
+      "file_unchanged": true,
+      "same_current_draft_id": true
+    },
+    "n7": {
+      "file_unchanged": true,
+      "same_current_draft_id": true
+    },
+    "n4": {
+      "file_unchanged": true,
+      "same_current_draft_id": true
+    },
+    "n6": {
+      "file_unchanged": true,
+      "same_current_draft_id": true
+    },
+    "n3": {
+      "file_unchanged": true,
+      "same_current_draft_id": true
+    },
+    "n5": {
+      "file_unchanged": true,
+      "same_current_draft_id": true
+    },
+    "n8": {
+      "file_unchanged": true,
+      "same_current_draft_id": true
+    }
+  },
+  "budgets_unchanged": true,
+  "outline": {
+    "writable_nodes": 9,
+    "total_arguments": 41,
+    "selected_body_target_words": 15000
+  },
+  "writer_recovery": {
+    "action_id": "spact-writer-repair-ece76a7802bd6abb22bc",
+    "attempts": 1,
+    "failure_keys": [],
+    "missing_node_ids": [
+      "n9"
+    ],
+    "node_ids": [
+      "n9"
+    ],
+    "run_id": "full-30-recovery-0044ce193c38",
+    "status": "outline_repair_requested"
+  },
+  "candidate_count": 1,
+  "review": {
+    "action_id": "spact_sp-fixed-c0-review-r1",
+    "base_digest": "0bec5657035160ad6e9932660d0fbfe43049353a555b1eb01ff504e90da44754",
+    "candidate_id": "c1",
+    "candidate_sha256": "d4949a4fb0afc213ca7d293edefd044c8dbb84c4513ae0ccf236bf39098b3d4e",
+    "covered_requirement_ids": [
+      "req1",
+      "req2",
+      "req3",
+      "req4",
+      "req5",
+      "req6"
+    ],
+    "created_at": "2026-11-17T02:47:01+00:00",
+    "edits": [],
+    "findings": [
+      {
+        "draft_ids": [
+          "d1",
+          "d9"
+        ],
+        "kind": "duplication",
+        "message": "结论章（n9）再次陈述了导论（n1）已给出的“解构—判据—方法论—建构与制度化”四层链条表述；属于可接受的收束式呼应，未构成内容重复缺陷，无需修订。",
+        "node_ids": [
+          "n1",
+          "n9"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d6"
+        ],
+        "kind": "evidence",
+        "message": "规范章对文明联盟机制的判断主要依托单一二手研究（S86），对全球文明倡议的规范结构依托倡议自我阐释文本（S109）。候选已就地标注来源性质并限制效果推断，处理符合来源身份原则，仅为证据密度提示。",
+        "node_ids": [
+          "n7"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d3",
+          "d6"
+        ],
+        "kind": "structure",
+        "message": "章节篇幅分布不均（东方学章约4.7千词，规范章约2.9千词），与各维度理论负载差异相符；不影响必需要求的覆盖与深度，不作为修订理由。",
+        "node_ids": [
+          "n3",
+          "n7"
+        ],
+        "severity": "advisory"
+      }
+    ],
+    "host_length_finding": null,
+    "inputs_digest": "676db76339c6bc16a1834474b9bce2b111786df79c26c668ce76cdcb027dd729",
+    "length": {
+      "body_words": 30518,
+      "candidate_sha256": "d4949a4fb0afc213ca7d293edefd044c8dbb84c4513ae0ccf236bf39098b3d4e",
+      "counter_version": "mixed-word-estimate-v1",
+      "direction": "within",
+      "estimated_words": 31377,
+      "in_estimated_range": true,
+      "max_words": 33000,
+      "measured_word_count": null,
+      "min_words": 27000,
+      "nodes": [
+        {
+          "estimated_words": 1643,
+          "node_id": "n1"
+        },
+        {
+          "estimated_words": 3051,
+          "node_id": "n2"
+        },
+        {
+          "estimated_words": 4669,
+          "node_id": "n3"
+        },
+        {
+          "estimated_words": 3848,
+          "node_id": "n4"
+        },
+        {
+          "estimated_words": 4007,
+          "node_id": "n5"
+        },
+        {
+          "estimated_words": 4006,
+          "node_id": "n6"
+        },
+        {
+          "estimated_words": 2943,
+          "node_id": "n7"
+        },
+        {
+          "estimated_words": 4459,
+          "node_id": "n8"
+        },
+        {
+          "estimated_words": 1583,
+          "node_id": "n9"
+        }
+      ],
+      "reference_words": 857,
+      "rendered_sha256": "f9bd76a71ebe0eaa4271c71c11205dfc5e5faf50e0fcf9ba8dbc39b546238005",
+      "scope": "whole_document",
+      "target_words": 30000,
+      "word_verified": false
+    },
+    "length_auto_revision": false,
+    "length_only_blocking": false,
+    "outcome": "deliver",
+    "path": "/data2/pkuiti/zmy/codex-relay-work/global-south-continuation-20261117/runtime/users/full-eval/threads/full-30/user-data/outputs/report/r1/review/rv1.json",
+    "review_id": "rv1",
+    "reviewed_candidate_sha256": "d4949a4fb0afc213ca7d293edefd044c8dbb84c4513ae0ccf236bf39098b3d4e",
+    "status": "ready",
+    "tree_version": 3,
+    "virtual_path": "/mnt/user-data/outputs/report/r1/review/rv1.json"
+  },
+  "additional_tasks": [
+    {
+      "task_id": "spact-writer-repair-ece76a7802bd6abb22bc",
+      "role": "outline",
+      "usage": {
+        "input_tokens": 379685,
+        "output_tokens": 15200,
+        "total_tokens": 394885
+      }
+    },
+    {
+      "task_id": "spact_3bc28d8ae1f649f6aa00aa9d5472753c",
+      "role": "reporter",
+      "usage": {
+        "input_tokens": 42331,
+        "output_tokens": 2246,
+        "total_tokens": 44577
+      }
+    },
+    {
+      "task_id": "sp-fixed-c0-review-r1",
+      "role": "outline",
+      "usage": {
+        "input_tokens": 106520,
+        "output_tokens": 2347,
+        "total_tokens": 108867
+      }
+    }
+  ],
+  "words": 31377,
+  "deviation_percent": 4.59,
+  "within_10_percent": true,
+  "report_sha256": "f9bd76a71ebe0eaa4271c71c11205dfc5e5faf50e0fcf9ba8dbc39b546238005",
+  "length": {
+    "estimated_words": 31377,
+    "body_words": 30518,
+    "reference_words": 857,
+    "in_estimated_range": true,
+    "direction": "within",
+    "min_words": 27000,
+    "target_words": 30000,
+    "max_words": 33000,
+    "counter_version": "mixed-word-estimate-v1",
+    "scope": "whole_document",
+    "word_verified": false,
+    "measured_word_count": null,
+    "candidate_sha256": "d4949a4fb0afc213ca7d293edefd044c8dbb84c4513ae0ccf236bf39098b3d4e",
+    "rendered_sha256": "f9bd76a71ebe0eaa4271c71c11205dfc5e5faf50e0fcf9ba8dbc39b546238005",
+    "nodes": [
+      {
+        "node_id": "n1",
+        "estimated_words": 1643
+      },
+      {
+        "node_id": "n2",
+        "estimated_words": 3051
+      },
+      {
+        "node_id": "n3",
+        "estimated_words": 4669
+      },
+      {
+        "node_id": "n4",
+        "estimated_words": 3848
+      },
+      {
+        "node_id": "n5",
+        "estimated_words": 4007
+      },
+      {
+        "node_id": "n6",
+        "estimated_words": 4006
+      },
+      {
+        "node_id": "n7",
+        "estimated_words": 2943
+      },
+      {
+        "node_id": "n8",
+        "estimated_words": 4459
+      },
+      {
+        "node_id": "n9",
+        "estimated_words": 1583
+      }
+    ]
+  },
+  "race_tokens": 78867,
+  "race_status": "completed",
+  "race_overall_percent": 58.00937924225595,
+  "race_scores": {
+    "comprehensiveness": 0.5900621118012422,
+    "insight": 0.5919003115264797,
+    "instruction_following": 0.5775075987841946,
+    "readability": 0.5292307692307691,
+    "overall_score": 0.5800937924225595
+  }
+}

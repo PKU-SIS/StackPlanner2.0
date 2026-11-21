@@ -1,0 +1,17 @@
+{
+  "band": 30000,
+  "case_id": 35,
+  "label": "市政污水治理与效率",
+  "words": 33831,
+  "race": 60.4374809564283,
+  "generation_tokens": 4956127,
+  "race_tokens": 86180,
+  "deviation_percent": 12.77,
+  "formal_delivered": false,
+  "notes": "普通单次生成",
+  "source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-threecases-20261117/case35",
+  "source_results_sha256": "34e6740ad97d08aa0bd3b8e5f659ff06fb2369d38484c90acb03f02ea8d3b549",
+  "report_sha256": "e928ef5a2b5c3f995f5ad46c47a616c386e890838a071e611292afb68d0b7823",
+  "report_source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-threecases-20261117/case35/runs/band30000-case35-outline-selected/evaluated-report.md",
+  "historical_runtime_variant": "band30000-a11a9a0ae8ebded0"
+}

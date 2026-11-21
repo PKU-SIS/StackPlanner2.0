@@ -1,0 +1,294 @@
+{
+  "name": "band20000-case7-outline-selected",
+  "case_id": 7,
+  "target_words": 20000,
+  "query_sha256": "e82f4c47fbf440906a7bf3bf7ee17f64a852f3272670a80fa957d94dfe74e5e1",
+  "status": "candidate",
+  "words": 17058,
+  "deviation": -2942,
+  "deviation_percent": -14.71,
+  "within_5_percent": false,
+  "within_10_percent": false,
+  "formal_delivered": false,
+  "review": {
+    "action_id": "spact_sp-fixed-c0-review-r1",
+    "base_digest": "68e6f1d53478aa33d8a6f73ca99fdb75041c362ff1291b282811512fe6360c68",
+    "candidate_id": "c1",
+    "candidate_sha256": "fb13ef73c2c22c19a6a3023a5ade8b8fb5eb7fe001f05d5a0b5910c041f00a2c",
+    "covered_requirement_ids": [
+      "req1",
+      "req2",
+      "req3",
+      "req4",
+      "req5",
+      "req6"
+    ],
+    "created_at": "2026-11-17T04:00:49+00:00",
+    "edits": [],
+    "findings": [
+      {
+        "draft_ids": [
+          "d8"
+        ],
+        "kind": "structure",
+        "message": "第三章开头出现标题紧接又是一个三级标题（'直接冲击：…约千亿元级'之后立刻是'先把万亿与千亿分到两本账上'），使第一个小标题下无正文。内容并不缺失，只是层级冗余，建议后续合并为一个小标题。",
+        "node_ids": [
+          "n6"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d4"
+        ],
+        "kind": "consistency",
+        "message": "第四章使用脚注式标记[^S17][^S49]等并在章末列脚注，而非全篇一致的[S..]行内标签，这些偏移未进入citation_map；来源identity本身正确（S17/S49/S6/S94/S16/S126/S51均在目录中），属格式一致性建议。",
+        "node_ids": [
+          "n9"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d8",
+          "d6"
+        ],
+        "kind": "duplication",
+        "message": "第三章'直接冲击'与第六章'三档量级'重复陈述五税净减3067亿元、土地出让8.7→4.15万亿元、县级自给率38%等同组数字；结论章可更多承担综合与触发条件，减少复述。",
+        "node_ids": [
+          "n6",
+          "n13"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d8",
+          "d6"
+        ],
+        "kind": "consistency",
+        "message": "直接冲击占地方本级收入的比重在第三章表述为1%–3%、第六章表述为2%–3%（全链条约4%），区间口径不完全一致，可统一为同一区间并注明上下限来源。",
+        "node_ids": [
+          "n6",
+          "n13"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [],
+        "kind": "other",
+        "message": "长度估计约17058词，低于18000词下限（in_estimated_range=false）。按首轮长度政策仅记录为提示，不因长度单独要求改写；实际Word字数由宿主测量。",
+        "node_ids": [],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [],
+        "kind": "other",
+        "message": "Explicit report length constraint: whole-document estimated Word count 17058 is short (required 18000–22000, target 20000). This is a versioned estimate, NOT a measured Microsoft Word count. Preserve requirements/evidence; revise affected nodes using the existing bounded content-revision path. For a long report remove repetition, not required evidence; for a short report add substantive missing analysis, not filler. Do not truncate the export. Node estimates (largest first): [{'node_id': 'n11', 'estimated_words': 2610}, {'node_id': 'n1', 'estimated_words': 2543}, {'node_id': 'n6', 'estimated_words': 2256}, {'node_id': 'n3', 'estimated_words': 1889}, {'node_id': 'n7', 'estimated_words': 1826}, {'node_id': 'n9', 'estimated_words': 1727}, {'node_id': 'n13', 'estimated_words': 1578}, {'node_id': 'n4', 'estimated_words': 1436}]",
+        "node_ids": [
+          "n11",
+          "n1",
+          "n6",
+          "n3",
+          "n7",
+          "n9",
+          "n13",
+          "n4"
+        ],
+        "severity": "blocking"
+      }
+    ],
+    "host_length_finding": {
+      "draft_ids": [],
+      "kind": "other",
+      "message": "Explicit report length constraint: whole-document estimated Word count 17058 is short (required 18000–22000, target 20000). This is a versioned estimate, NOT a measured Microsoft Word count. Preserve requirements/evidence; revise affected nodes using the existing bounded content-revision path. For a long report remove repetition, not required evidence; for a short report add substantive missing analysis, not filler. Do not truncate the export. Node estimates (largest first): [{'node_id': 'n11', 'estimated_words': 2610}, {'node_id': 'n1', 'estimated_words': 2543}, {'node_id': 'n6', 'estimated_words': 2256}, {'node_id': 'n3', 'estimated_words': 1889}, {'node_id': 'n7', 'estimated_words': 1826}, {'node_id': 'n9', 'estimated_words': 1727}, {'node_id': 'n13', 'estimated_words': 1578}, {'node_id': 'n4', 'estimated_words': 1436}]",
+      "node_ids": [
+        "n11",
+        "n1",
+        "n6",
+        "n3",
+        "n7",
+        "n9",
+        "n13",
+        "n4"
+      ],
+      "severity": "blocking"
+    },
+    "inputs_digest": "97a08e5cc99ec0d223d0b6cc6bfc21ca1527354a5855574114ea50a65cf1f93e",
+    "length": {
+      "body_words": 16186,
+      "candidate_sha256": "fb13ef73c2c22c19a6a3023a5ade8b8fb5eb7fe001f05d5a0b5910c041f00a2c",
+      "counter_version": "mixed-word-estimate-v1",
+      "direction": "short",
+      "estimated_words": 17058,
+      "in_estimated_range": false,
+      "max_words": 22000,
+      "measured_word_count": null,
+      "min_words": 18000,
+      "nodes": [
+        {
+          "estimated_words": 2543,
+          "node_id": "n1"
+        },
+        {
+          "estimated_words": 1889,
+          "node_id": "n3"
+        },
+        {
+          "estimated_words": 1436,
+          "node_id": "n4"
+        },
+        {
+          "estimated_words": 2256,
+          "node_id": "n6"
+        },
+        {
+          "estimated_words": 1826,
+          "node_id": "n7"
+        },
+        {
+          "estimated_words": 1727,
+          "node_id": "n9"
+        },
+        {
+          "estimated_words": 2610,
+          "node_id": "n11"
+        },
+        {
+          "estimated_words": 1578,
+          "node_id": "n13"
+        }
+      ],
+      "reference_words": 870,
+      "rendered_sha256": "50902334e25ab0a8607f0f292f85256d4999d476b9fcd1739eaefe28a7b8fda1",
+      "scope": "whole_document",
+      "target_words": 20000,
+      "word_verified": false
+    },
+    "length_auto_revision": false,
+    "length_only_blocking": true,
+    "outcome": "revise",
+    "path": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-20k-fourcases-20261117/case7/runs/band20000-case7-outline-selected/runtime/users/full-eval/threads/full-7/user-data/outputs/report/r1/review/rv1.json",
+    "review_id": "rv1",
+    "reviewed_candidate_sha256": "fb13ef73c2c22c19a6a3023a5ade8b8fb5eb7fe001f05d5a0b5910c041f00a2c",
+    "status": "issues",
+    "tree_version": 2,
+    "virtual_path": "/mnt/user-data/outputs/report/r1/review/rv1.json"
+  },
+  "blocking_findings": [
+    {
+      "draft_ids": [],
+      "kind": "other",
+      "message": "Explicit report length constraint: whole-document estimated Word count 17058 is short (required 18000–22000, target 20000). This is a versioned estimate, NOT a measured Microsoft Word count. Preserve requirements/evidence; revise affected nodes using the existing bounded content-revision path. For a long report remove repetition, not required evidence; for a short report add substantive missing analysis, not filler. Do not truncate the export. Node estimates (largest first): [{'node_id': 'n11', 'estimated_words': 2610}, {'node_id': 'n1', 'estimated_words': 2543}, {'node_id': 'n6', 'estimated_words': 2256}, {'node_id': 'n3', 'estimated_words': 1889}, {'node_id': 'n7', 'estimated_words': 1826}, {'node_id': 'n9', 'estimated_words': 1727}, {'node_id': 'n13', 'estimated_words': 1578}, {'node_id': 'n4', 'estimated_words': 1436}]",
+      "node_ids": [
+        "n11",
+        "n1",
+        "n6",
+        "n3",
+        "n7",
+        "n9",
+        "n13",
+        "n4"
+      ],
+      "severity": "blocking"
+    }
+  ],
+  "report_sha256": "50902334e25ab0a8607f0f292f85256d4999d476b9fcd1739eaefe28a7b8fda1",
+  "generation_tokens": 4150471,
+  "tokens_include_cached_input": true,
+  "outline": {
+    "writable_nodes": 8,
+    "total_arguments": 28,
+    "selected_body_target_words": 10000,
+    "body_max_sum": 11250,
+    "tree_version": 2,
+    "tree_sha256": "293cd6924237795480ae68b8a90cd53c194604d68640784e1d171f3cd0219c65",
+    "chapters": [
+      {
+        "node_id": "n1",
+        "title": "一、口径先于结论：房地产进入地方财政的四条通道",
+        "arguments": 4,
+        "target_words": 1200,
+        "max_words": 1350
+      },
+      {
+        "node_id": "n3",
+        "title": "房地产相关税收：交易环节在跌，持有环节仍在增",
+        "arguments": 5,
+        "target_words": 1200,
+        "max_words": 1350
+      },
+      {
+        "node_id": "n4",
+        "title": "土地出让收入：四年少收约4.6万亿元，2026年二次加速",
+        "arguments": 3,
+        "target_words": 1200,
+        "max_words": 1350
+      },
+      {
+        "node_id": "n6",
+        "title": "直接冲击：税收与土地出让净收益传导合计约千亿元级",
+        "arguments": 4,
+        "target_words": 1500,
+        "max_words": 1700
+      },
+      {
+        "node_id": "n7",
+        "title": "间接冲击：跨账调入缺口、债务付息刚性与支出收缩才是主要压力",
+        "arguments": 3,
+        "target_words": 1500,
+        "max_words": 1700
+      },
+      {
+        "node_id": "n9",
+        "title": "全国平均掩盖分化：高依赖省份、经济大省与县级财政承压最重",
+        "arguments": 3,
+        "target_words": 1300,
+        "max_words": 1450
+      },
+      {
+        "node_id": "n11",
+        "title": "四类缓冲与一个结构性缺口：影响被延后而非消失",
+        "arguments": 3,
+        "target_words": 1200,
+        "max_words": 1350
+      },
+      {
+        "node_id": "n13",
+        "title": "三档量级、一个时序差与三条判断边界",
+        "arguments": 3,
+        "target_words": 900,
+        "max_words": 1000
+      }
+    ]
+  },
+  "ledger_phase": null,
+  "writer_recovery": null,
+  "candidate_count": 1,
+  "length_contract": {
+    "compact_outline": true,
+    "counter_version": "mixed-word-estimate-v1",
+    "enabled": true,
+    "heading_reserve_words": 300,
+    "length_auto_revision": false,
+    "max_words": 22000,
+    "measurement_mode": "estimate",
+    "min_words": 18000,
+    "outline_budget_selection": true,
+    "reference_reserve_words": 1000,
+    "safety_margin_words": 500,
+    "scope": "whole_document",
+    "target_words": 20000,
+    "writer_task_cards": true
+  },
+  "race_tokens": 49934,
+  "race_status": "completed",
+  "race_scores": {
+    "comprehensiveness": 0.5652173913043478,
+    "insight": 0.5714285714285713,
+    "instruction_following": 0.5578947368421052,
+    "readability": 0.54904831625183,
+    "overall_score": 0.5643021828307931
+  },
+  "race_overall_percent": 56.43021828307931
+}

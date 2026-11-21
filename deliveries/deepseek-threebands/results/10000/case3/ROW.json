@@ -1,0 +1,17 @@
+{
+  "band": 10000,
+  "case_id": 3,
+  "label": "中国金融细分领域前景",
+  "words": 9181,
+  "race": 53.48684008946901,
+  "generation_tokens": 3759789,
+  "race_tokens": 37189,
+  "deviation_percent": -8.19,
+  "formal_delivered": true,
+  "notes": "普通单次生成",
+  "source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-10k-fourcases-20261117/case3",
+  "source_results_sha256": "a7e067a0377b3fd6556a2ce3c9bbe99803ff41a72a3b26e60149af7ec3719572",
+  "report_sha256": "23ad198448691f2fcea1649d9022358556abd10cf8c55bfd607881b90474649b",
+  "report_source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-10k-fourcases-20261117/case3/runs/band10000-case3-outline-selected/evaluated-report.md",
+  "historical_runtime_variant": null
+}

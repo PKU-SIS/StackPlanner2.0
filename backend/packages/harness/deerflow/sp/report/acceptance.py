@@ -10,8 +10,8 @@ Important invariants:
 
 * the gate dispatches an action before the action completes; dispatch and
   completion are different states;
-* a technical failure keeps the same cycle and the same logical action so the
-  existing idempotency/action-budget path can recover it;
+* a technical failure keeps the same cycle; a rejected revision gets at most
+  one fresh repair action/file, then yields to the existing human-input path;
 * delivery is recognised only from the ledger's existing ``delivered`` record;
 * a new acceptance cycle starts only after the existing explicit
   ``user_decisions`` record (``apply_to_plan``) is written for the new input.
@@ -40,6 +40,7 @@ _ACCEPTANCE_DEFAULTS: dict[str, Any] = {
     "pending_action_id": None,
     "blocked_decision_count": None,
     "retry_kind": None,
+    "revision_repair_used": False,
 }
 
 
@@ -96,16 +97,8 @@ def _body_ready(ledger: ReportLedger) -> bool:
         tree_payload = json.loads(Path(str(tree.get("path") or "")).read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
         return False
-    current_nodes = {
-        str(item.get("node_id"))
-        for item in ledger.payload.get("drafts") or []
-        if isinstance(item, Mapping) and item.get("is_current") is True
-    }
-    writable = {
-        str(node.get("node_id"))
-        for node in tree_payload.get("nodes") or []
-        if isinstance(node, Mapping) and str(node.get("kind") or "") == "writable"
-    }
+    current_nodes = {str(item.get("node_id")) for item in ledger.payload.get("drafts") or [] if isinstance(item, Mapping) and item.get("is_current") is True}
+    writable = {str(node.get("node_id")) for node in tree_payload.get("nodes") or [] if isinstance(node, Mapping) and str(node.get("kind") or "") == "writable"}
     return bool(writable) and writable <= current_nodes
 
 
@@ -200,11 +193,9 @@ def _review_arguments(acceptance: Mapping[str, Any], action_id: str) -> dict[str
 
 def _revise_arguments(review: Mapping[str, Any], acceptance: Mapping[str, Any], action_id: str) -> dict[str, Any]:
     findings = review.get("findings") if isinstance(review.get("findings"), list) else []
-    blocking = [
-        dict(item)
-        for item in findings
-        if isinstance(item, Mapping) and str(item.get("severity") or "").strip().lower() == "blocking"
-    ]
+    if review.get("length_auto_revision") is False:
+        findings = [f for f in findings if f != review.get("host_length_finding")]
+    blocking = [dict(item) for item in findings if isinstance(item, Mapping) and str(item.get("severity") or "").strip().lower() == "blocking"]
     if not blocking:
         blocking = [dict(item) for item in findings if isinstance(item, Mapping)]
     round_number = int(acceptance.get("review_round") or 0)
@@ -215,8 +206,7 @@ def _revise_arguments(review: Mapping[str, Any], acceptance: Mapping[str, Any], 
             "Revise the accepted report tree only for the blocking findings from the harness minimum acceptance review. "
             "Preserve unaffected content; issue the existing new write requests for affected nodes. "
             "The complete blocking findings are below; the full review record is also in "
-            "context_refs.report_packet.current_review. Review findings: "
-            + json.dumps(blocking, ensure_ascii=False)
+            "context_refs.report_packet.current_review. Review findings: " + json.dumps(blocking, ensure_ascii=False)
         ),
         "reason": f"Harness one-round content revision after review round {round_number}",
         "stage": "planning",
@@ -232,15 +222,19 @@ def _revise_arguments(review: Mapping[str, Any], acceptance: Mapping[str, Any], 
     }
 
 
-def _ask_user_arguments(review: Mapping[str, Any] | None) -> dict[str, Any]:
+def _ask_user_arguments(review: Mapping[str, Any] | None, *, technical_revision_failure: bool = False) -> dict[str, Any]:
+    if isinstance(review, Mapping) and review.get("length_auto_revision") is False and review.get("length_only_blocking"):
+        return {"question": "首稿篇幅不在约定范围内，已按设置停止，未做自动字数返修。已保留候选和计量结果。", "reason": "First-pass length check failed; automatic length revision disabled", "stage": "verification"}
+    if technical_revision_failure:
+        return {
+            "question": "报告返修的技术验收在一次修复后仍未通过。已保留原始草稿、被拒绝的大纲及诊断记录。请选择稍后重试、调整范围或保留当前阶段稿。",
+            "reason": "Harness revision technical failure after one bounded repair",
+            "stage": "verification",
+        }
     findings = review.get("findings") if isinstance(review, Mapping) and isinstance(review.get("findings"), list) else []
     messages = [str(item.get("message") or "").strip() for item in findings if isinstance(item, Mapping)]
     messages = [item for item in messages if item]
-    question = (
-        "最低验收在完成一次自动内容返修后仍发现必要问题，是否接受当前结果、调整范围，或提供进一步材料？"
-        if not messages
-        else "最低验收仍发现必要问题：" + "；".join(messages[:3]) + "。是否接受当前结果、调整范围，或提供进一步材料？"
-    )
+    question = "最低验收在完成一次自动内容返修后仍发现必要问题，是否接受当前结果、调整范围，或提供进一步材料？" if not messages else "最低验收仍发现必要问题：" + "；".join(messages[:3]) + "。是否接受当前结果、调整范围，或提供进一步材料？"
     return {
         "question": question,
         "reason": "Harness minimum acceptance blocked after one content revision",
@@ -261,6 +255,11 @@ def _start_review(ledger: ReportLedger, acceptance: dict[str, Any]) -> AIMessage
 
 def _start_revision(ledger: ReportLedger, acceptance: dict[str, Any], review: Mapping[str, Any]) -> AIMessage:
     action_id = _base_action_id(acceptance, "revise")
+    if acceptance.get("retry_kind") == "revise":
+        if acceptance.get("revision_repair_used"):
+            return _block_for_user(ledger, acceptance, review)
+        acceptance["revision_repair_used"] = True
+        action_id += "-repair1"
     acceptance["status"] = "revise_requested"
     acceptance["retry_kind"] = None
     acceptance["pending_action_id"] = _expected_action_id(action_id)
@@ -286,7 +285,7 @@ def _block_for_user(ledger: ReportLedger, acceptance: dict[str, Any], review: Ma
     acceptance["pending_action_id"] = _expected_action_id(action_id)
     acceptance["retry_kind"] = None
     _save(ledger)
-    return _tool_call("sp_ask_human", _ask_user_arguments(review), action_id)
+    return _tool_call("sp_ask_human", _ask_user_arguments(review, technical_revision_failure=bool(acceptance.get("revision_repair_used")) and not bool(acceptance.get("content_revision_used"))), action_id)
 
 
 def _start_new_cycle(ledger: ReportLedger, acceptance: dict[str, Any]) -> None:
@@ -353,6 +352,8 @@ def next_acceptance_action(state: Mapping[str, Any]) -> AIMessage | None:
                 return None
             return _request_finish(ledger, acceptance, review)
         if review_status == "issues":
+            if review.get("length_auto_revision") is False and review.get("length_only_blocking"):
+                return None if status == "blocked_user" else _block_for_user(ledger, acceptance, review)
             if int(acceptance.get("review_count") or 0) >= 2 or bool(acceptance.get("content_revision_used")):
                 if status == "blocked_user":
                     return None

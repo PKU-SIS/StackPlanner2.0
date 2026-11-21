@@ -1,0 +1,14 @@
+{
+  "base_commit": "f8438738fb3c9cd30e3d746bb0c6e61a4e4acc74",
+  "branch": "zmy/ds-threebands-approved-20261117",
+  "model_calls": 0,
+  "method_changes": false,
+  "dependency_note": "Declare existing markdown-it-py>=4.0 dependency; copy archived dependency references.",
+  "historical_package_files_verified": 3047,
+  "root_runtime_hashes_verified": 517,
+  "profiles": [
+    10000,
+    20000,
+    30000
+  ]
+}

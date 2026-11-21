@@ -1,0 +1,367 @@
+{
+  "name": "band20000-case24-entry-fixed",
+  "case_id": 24,
+  "target_words": 20000,
+  "query_sha256": "7a55dd3afe955bb7ab398ad257c6242d15dd36c85f9efb352a1780175b5d5409",
+  "status": "candidate",
+  "words": 23985,
+  "deviation": 3985,
+  "deviation_percent": 19.93,
+  "within_5_percent": false,
+  "within_10_percent": false,
+  "formal_delivered": false,
+  "review": {
+    "action_id": "spact_sp-fixed-c0-review-r1",
+    "base_digest": "43fbeac862f7283dd205bd25295ef66416f334d3620ca90882e53e28b44c0775",
+    "candidate_id": "c1",
+    "candidate_sha256": "ca8b63d5d8b57e546d79bbd6bdb3401a3ad2517aa05b0c7509ef89286db352a2",
+    "covered_requirement_ids": [
+      "req1",
+      "req2",
+      "req3"
+    ],
+    "created_at": "2026-11-17T06:07:07+00:00",
+    "edits": [],
+    "findings": [
+      {
+        "draft_ids": [
+          "d1",
+          "d8",
+          "d9",
+          "d2",
+          "d3",
+          "d4",
+          "d5",
+          "d6",
+          "d7",
+          "d10"
+        ],
+        "kind": "coverage",
+        "message": "No blocking omission: req1 (participation definition, shared-shaping mechanism, environment-first implication) in ch.1; req2 (five strategy families with evidence strength, applicable populations and implementation points) in ch.3–7; req3 (three-layer sequencing, secondary-school conditions, evidence conflicts) in ch.10. No placeholder text such as 信息不足/待补充 replaces required content.",
+        "node_ids": [
+          "n1",
+          "n2",
+          "n3",
+          "n4",
+          "n5",
+          "n6",
+          "n7",
+          "n8",
+          "n9",
+          "n10"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d8"
+        ],
+        "kind": "consistency",
+        "message": "Malformed inline citation in n2: '...仍保持较高水平[S41—见随后的[S225]](S225)' mixes an internal cross-reference note and a Markdown link into the citation label; it should read [S225] like the rest of the body. Citation identity and the underlying claim are correct.",
+        "node_ids": [
+          "n2"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d1",
+          "d8",
+          "d9",
+          "d2",
+          "d3",
+          "d4",
+          "d5",
+          "d6",
+          "d7",
+          "d10"
+        ],
+        "kind": "consistency",
+        "message": "The 来源 list exposes internal material identifiers ('（material: m2, m4）') and truncated search-snippet titles instead of clean reference metadata; cosmetic, does not affect source identity.",
+        "node_ids": [
+          "n1",
+          "n2",
+          "n3",
+          "n4",
+          "n5",
+          "n6",
+          "n7",
+          "n8",
+          "n9",
+          "n10"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d8",
+          "d9",
+          "d4",
+          "d10"
+        ],
+        "kind": "duplication",
+        "message": "Maintenance/generalization caveats for visual schedules, self-management and single-case evidence are restated in ch.2, ch.3, ch.6 and ch.10; acceptable for emphasis but reducible.",
+        "node_ids": [
+          "n2",
+          "n3",
+          "n6",
+          "n10"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d9",
+          "d2",
+          "d4",
+          "d10"
+        ],
+        "kind": "other",
+        "message": "Estimated whole-document length 23985 words exceeds the 22000 maximum (n3 3420 vs node target 1350; n4 2843 vs 1250; n6 2429 vs 1300). Length-only concern recorded for the host measurement path; no compression is requested in this review.",
+        "node_ids": [
+          "n3",
+          "n4",
+          "n6",
+          "n10"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [],
+        "kind": "other",
+        "message": "Explicit report length constraint: whole-document estimated Word count 23985 is long (required 18000–22000, target 20000). This is a versioned estimate, NOT a measured Microsoft Word count. Preserve requirements/evidence; revise affected nodes using the existing bounded content-revision path. For a long report remove repetition, not required evidence; for a short report add substantive missing analysis, not filler. Do not truncate the export. Node estimates (largest first): [{'node_id': 'n3', 'estimated_words': 3420}, {'node_id': 'n4', 'estimated_words': 2843}, {'node_id': 'n2', 'estimated_words': 2660}, {'node_id': 'n6', 'estimated_words': 2429}, {'node_id': 'n10', 'estimated_words': 2380}, {'node_id': 'n7', 'estimated_words': 2230}, {'node_id': 'n5', 'estimated_words': 1874}, {'node_id': 'n1', 'estimated_words': 1812}, {'node_id': 'n9', 'estimated_words': 1703}, {'node_id': 'n8', 'estimated_words': 1364}]",
+        "node_ids": [
+          "n3",
+          "n4",
+          "n2",
+          "n6",
+          "n10",
+          "n7",
+          "n5",
+          "n1",
+          "n9",
+          "n8"
+        ],
+        "severity": "blocking"
+      }
+    ],
+    "host_length_finding": {
+      "draft_ids": [],
+      "kind": "other",
+      "message": "Explicit report length constraint: whole-document estimated Word count 23985 is long (required 18000–22000, target 20000). This is a versioned estimate, NOT a measured Microsoft Word count. Preserve requirements/evidence; revise affected nodes using the existing bounded content-revision path. For a long report remove repetition, not required evidence; for a short report add substantive missing analysis, not filler. Do not truncate the export. Node estimates (largest first): [{'node_id': 'n3', 'estimated_words': 3420}, {'node_id': 'n4', 'estimated_words': 2843}, {'node_id': 'n2', 'estimated_words': 2660}, {'node_id': 'n6', 'estimated_words': 2429}, {'node_id': 'n10', 'estimated_words': 2380}, {'node_id': 'n7', 'estimated_words': 2230}, {'node_id': 'n5', 'estimated_words': 1874}, {'node_id': 'n1', 'estimated_words': 1812}, {'node_id': 'n9', 'estimated_words': 1703}, {'node_id': 'n8', 'estimated_words': 1364}]",
+      "node_ids": [
+        "n3",
+        "n4",
+        "n2",
+        "n6",
+        "n10",
+        "n7",
+        "n5",
+        "n1",
+        "n9",
+        "n8"
+      ],
+      "severity": "blocking"
+    },
+    "inputs_digest": "c8e5f62e8b50f4b5232222e7c6843015454f804847909b1b066538e6c4c50543",
+    "length": {
+      "body_words": 23014,
+      "candidate_sha256": "ca8b63d5d8b57e546d79bbd6bdb3401a3ad2517aa05b0c7509ef89286db352a2",
+      "counter_version": "mixed-word-estimate-v1",
+      "direction": "long",
+      "estimated_words": 23985,
+      "in_estimated_range": false,
+      "max_words": 22000,
+      "measured_word_count": null,
+      "min_words": 18000,
+      "nodes": [
+        {
+          "estimated_words": 1812,
+          "node_id": "n1"
+        },
+        {
+          "estimated_words": 2660,
+          "node_id": "n2"
+        },
+        {
+          "estimated_words": 3420,
+          "node_id": "n3"
+        },
+        {
+          "estimated_words": 2843,
+          "node_id": "n4"
+        },
+        {
+          "estimated_words": 1874,
+          "node_id": "n5"
+        },
+        {
+          "estimated_words": 2429,
+          "node_id": "n6"
+        },
+        {
+          "estimated_words": 2230,
+          "node_id": "n7"
+        },
+        {
+          "estimated_words": 1364,
+          "node_id": "n8"
+        },
+        {
+          "estimated_words": 1703,
+          "node_id": "n9"
+        },
+        {
+          "estimated_words": 2380,
+          "node_id": "n10"
+        }
+      ],
+      "reference_words": 969,
+      "rendered_sha256": "2ce8911980d59fe2dbbfd2bd62b75c08810be738b23192bc17302e27d29d48ec",
+      "scope": "whole_document",
+      "target_words": 20000,
+      "word_verified": false
+    },
+    "length_auto_revision": false,
+    "length_only_blocking": true,
+    "outcome": "revise",
+    "path": "/data2/pkuiti/zmy/codex-relay-work/autism-case24-20k-entry-fixed-rerun-20261117/runs/band20000-case24-entry-fixed/runtime/users/full-eval/threads/full-24/user-data/outputs/report/r1/review/rv1.json",
+    "review_id": "rv1",
+    "reviewed_candidate_sha256": "ca8b63d5d8b57e546d79bbd6bdb3401a3ad2517aa05b0c7509ef89286db352a2",
+    "status": "issues",
+    "tree_version": 2,
+    "virtual_path": "/mnt/user-data/outputs/report/r1/review/rv1.json"
+  },
+  "blocking_findings": [
+    {
+      "draft_ids": [],
+      "kind": "other",
+      "message": "Explicit report length constraint: whole-document estimated Word count 23985 is long (required 18000–22000, target 20000). This is a versioned estimate, NOT a measured Microsoft Word count. Preserve requirements/evidence; revise affected nodes using the existing bounded content-revision path. For a long report remove repetition, not required evidence; for a short report add substantive missing analysis, not filler. Do not truncate the export. Node estimates (largest first): [{'node_id': 'n3', 'estimated_words': 3420}, {'node_id': 'n4', 'estimated_words': 2843}, {'node_id': 'n2', 'estimated_words': 2660}, {'node_id': 'n6', 'estimated_words': 2429}, {'node_id': 'n10', 'estimated_words': 2380}, {'node_id': 'n7', 'estimated_words': 2230}, {'node_id': 'n5', 'estimated_words': 1874}, {'node_id': 'n1', 'estimated_words': 1812}, {'node_id': 'n9', 'estimated_words': 1703}, {'node_id': 'n8', 'estimated_words': 1364}]",
+      "node_ids": [
+        "n3",
+        "n4",
+        "n2",
+        "n6",
+        "n10",
+        "n7",
+        "n5",
+        "n1",
+        "n9",
+        "n8"
+      ],
+      "severity": "blocking"
+    }
+  ],
+  "report_sha256": "2ce8911980d59fe2dbbfd2bd62b75c08810be738b23192bc17302e27d29d48ec",
+  "generation_tokens": 3467445,
+  "tokens_include_cached_input": true,
+  "outline": {
+    "writable_nodes": 10,
+    "total_arguments": 45,
+    "selected_body_target_words": 10800,
+    "body_max_sum": 11340,
+    "tree_version": 2,
+    "tree_sha256": "06043ee01addf72c03caab6c0af4fdce9a4de1b6f9cddda3a9dbacfc59519a4f",
+    "chapters": [
+      {
+        "node_id": "n1",
+        "title": "为什么“增强参与”必须先重新定义参与",
+        "arguments": 4,
+        "target_words": 850,
+        "max_words": 890
+      },
+      {
+        "node_id": "n2",
+        "title": "起点：基线评估、目标分解与本土可行性证据",
+        "arguments": 4,
+        "target_words": 950,
+        "max_words": 1000
+      },
+      {
+        "node_id": "n3",
+        "title": "先行性设计：环境安排、视觉结构，及感觉调整与功能性沟通的边界",
+        "arguments": 6,
+        "target_words": 1350,
+        "max_words": 1420
+      },
+      {
+        "node_id": "n4",
+        "title": "兴趣本位与动机激发：把兴趣接入学习目标",
+        "arguments": 5,
+        "target_words": 1250,
+        "max_words": 1310
+      },
+      {
+        "node_id": "n5",
+        "title": "教学互动节奏：嵌入学习机会、回应机会与等待时间",
+        "arguments": 4,
+        "target_words": 900,
+        "max_words": 945
+      },
+      {
+        "node_id": "n6",
+        "title": "自我管理与自我监控：量化证据最强的一组策略",
+        "arguments": 4,
+        "target_words": 1300,
+        "max_words": 1365
+      },
+      {
+        "node_id": "n7",
+        "title": "同伴中介与同伴支持系统：把支持结构放进班级",
+        "arguments": 4,
+        "target_words": 1150,
+        "max_words": 1210
+      },
+      {
+        "node_id": "n8",
+        "title": "师生关系与教师专业发展：被低估的远端杠杆",
+        "arguments": 3,
+        "target_words": 750,
+        "max_words": 790
+      },
+      {
+        "node_id": "n9",
+        "title": "神经多样性肯定与通用设计：重新定义“参与什么”",
+        "arguments": 5,
+        "target_words": 1050,
+        "max_words": 1100
+      },
+      {
+        "node_id": "n10",
+        "title": "如何在策略之间取舍与组合：三层决策、学段差异与证据边界",
+        "arguments": 6,
+        "target_words": 1250,
+        "max_words": 1310
+      }
+    ]
+  },
+  "ledger_phase": null,
+  "writer_recovery": null,
+  "candidate_count": 1,
+  "length_contract": {
+    "compact_outline": true,
+    "counter_version": "mixed-word-estimate-v1",
+    "enabled": true,
+    "heading_reserve_words": 300,
+    "length_auto_revision": false,
+    "max_words": 22000,
+    "measurement_mode": "estimate",
+    "min_words": 18000,
+    "outline_budget_selection": true,
+    "reference_reserve_words": 1000,
+    "safety_margin_words": 500,
+    "scope": "whole_document",
+    "target_words": 20000,
+    "writer_task_cards": true
+  },
+  "race_tokens": 68541,
+  "race_status": "completed",
+  "race_scores": {
+    "comprehensiveness": 0.4977777777777778,
+    "insight": 0.5751533742331288,
+    "instruction_following": 0.5084745762711864,
+    "readability": 0.4591194968553459,
+    "overall_score": 0.5193356843596467
+  },
+  "race_overall_percent": 51.93356843596467
+}

@@ -1,0 +1,17 @@
+{
+  "band": 20000,
+  "case_id": 34,
+  "label": "MoS₂接触电阻",
+  "words": 17829,
+  "race": 56.26390908281653,
+  "generation_tokens": 4028200,
+  "race_tokens": 67763,
+  "deviation_percent": -10.85,
+  "formal_delivered": false,
+  "notes": "普通单次生成",
+  "source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-20k-fourcases-20261117/case34",
+  "source_results_sha256": "c9f49070d70e45a943eab003311be65618196059be63e08bdd0f39fca4a6af2a",
+  "report_sha256": "3278b0cae0fab9053e96b6a5ff3b4ff13d26451549474755135586053ffdbee5",
+  "report_source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-20k-fourcases-20261117/case34/runs/band20000-case34-outline-selected/evaluated-report.md",
+  "historical_runtime_variant": "band20000-c79f7785632739f4"
+}

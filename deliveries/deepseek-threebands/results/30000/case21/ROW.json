@@ -1,0 +1,17 @@
+{
+  "band": 30000,
+  "case_id": 21,
+  "label": "AI在教育中的应用与人才培养",
+  "words": 30729,
+  "race": 54.6010531183341,
+  "generation_tokens": 4966992,
+  "race_tokens": 78092,
+  "deviation_percent": 2.43,
+  "formal_delivered": true,
+  "notes": "普通单次生成",
+  "source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-20261116",
+  "source_results_sha256": "7f511de2b9dd447f72dfbe897121ad17f0b73f81d7813fab3990230e3d680c9c",
+  "report_sha256": "5bf3db3a9628d33c94e6e62f14e2e684a825a0d208af1046c124924dc8aa0fed",
+  "report_source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-20261116/runs/band30000-case21-outline-selected/evaluated-report.md",
+  "historical_runtime_variant": "band30000-a11a9a0ae8ebded0"
+}

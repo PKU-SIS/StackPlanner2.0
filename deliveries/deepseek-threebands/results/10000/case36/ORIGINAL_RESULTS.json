@@ -1,0 +1,234 @@
+{
+  "name": "band10000-case36-outline-selected",
+  "case_id": 36,
+  "target_words": 10000,
+  "query_sha256": "cb09cdc513bce8ada5d3b31d63010196c0296972d935795fbe3401debabcaf74",
+  "status": "candidate",
+  "words": 9907,
+  "deviation": -93,
+  "deviation_percent": -0.93,
+  "within_5_percent": true,
+  "within_10_percent": true,
+  "formal_delivered": true,
+  "review": {
+    "action_id": "spact_sp-fixed-c0-review-r1",
+    "base_digest": "c06ab93f06b11074154854572400d14146bdfb9e1a53c7279d7761b52528fabd",
+    "candidate_id": "c1",
+    "candidate_sha256": "6c6bac251e113fb679c7ce79af7b8e46eb2f332fa8196f72b90ed513b6784984",
+    "covered_requirement_ids": [
+      "req1"
+    ],
+    "created_at": "2026-11-17T06:59:53+00:00",
+    "edits": [],
+    "findings": [
+      {
+        "draft_ids": [
+          "d5"
+        ],
+        "kind": "structure",
+        "message": "n2的节点标题以二级标题呈现后，正文又以同级“## 专机摊销模型…/## 企业侧的真实决策排序与心态/## 采用率与ROI分水岭”开头，形成“章节标题—再次同级标题”的层级错位；n6使用了三级标题，全文标题层级不统一。属排版与措辞层面，不影响必答内容覆盖，建议后续统一层级即可，无需为此单独返工。",
+        "node_ids": [
+          "n2"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d5",
+          "d6",
+          "d7",
+          "d8"
+        ],
+        "kind": "evidence",
+        "message": "若干净口、增材与中小企业单工序的量化收益（S157、S205、S187、S125、S57、S135、S142）多为设备商/集成商/行业媒体口径，报告已在正文与章末注明降权与不可外推，处理得当；仅记录来源等级提示，不构成阻断。",
+        "node_ids": [
+          "n2",
+          "n6",
+          "n7",
+          "n8"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d1"
+        ],
+        "kind": "consistency",
+        "message": "导语先给“四类不同性质的约束”，结尾归结为“三个可改变的量”（归族、换型时间、模块化），两者并列时未显式说明“三量对应第二、三、五章的可操作杠杆”，读者可能感到数字口径切换，属表述层面可微调。",
+        "node_ids": [
+          "n1"
+        ],
+        "severity": "advisory"
+      }
+    ],
+    "host_length_finding": null,
+    "inputs_digest": "2c3679360c5173e7acb03f5f2269f994fe8c23ef9db25d847dff986846a22568",
+    "length": {
+      "body_words": 9110,
+      "candidate_sha256": "6c6bac251e113fb679c7ce79af7b8e46eb2f332fa8196f72b90ed513b6784984",
+      "counter_version": "mixed-word-estimate-v1",
+      "direction": "within",
+      "estimated_words": 9907,
+      "in_estimated_range": true,
+      "max_words": 11000,
+      "measured_word_count": null,
+      "min_words": 9000,
+      "nodes": [
+        {
+          "estimated_words": 916,
+          "node_id": "n1"
+        },
+        {
+          "estimated_words": 1111,
+          "node_id": "n2"
+        },
+        {
+          "estimated_words": 1059,
+          "node_id": "n3"
+        },
+        {
+          "estimated_words": 1241,
+          "node_id": "n4"
+        },
+        {
+          "estimated_words": 1029,
+          "node_id": "n5"
+        },
+        {
+          "estimated_words": 1324,
+          "node_id": "n6"
+        },
+        {
+          "estimated_words": 852,
+          "node_id": "n7"
+        },
+        {
+          "estimated_words": 1363,
+          "node_id": "n8"
+        }
+      ],
+      "reference_words": 795,
+      "rendered_sha256": "a3639f241468126c0bebbe94b7bbe32afba501fd67594d069afcedd0b1807c0d",
+      "scope": "whole_document",
+      "target_words": 10000,
+      "word_verified": false
+    },
+    "length_auto_revision": false,
+    "length_only_blocking": false,
+    "outcome": "deliver",
+    "path": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-10k-fourcases-20261117/case36/runs/band10000-case36-outline-selected/runtime/users/full-eval/threads/full-36/user-data/outputs/report/r1/review/rv1.json",
+    "review_id": "rv1",
+    "reviewed_candidate_sha256": "6c6bac251e113fb679c7ce79af7b8e46eb2f332fa8196f72b90ed513b6784984",
+    "status": "ready",
+    "tree_version": 2,
+    "virtual_path": "/mnt/user-data/outputs/report/r1/review/rv1.json"
+  },
+  "blocking_findings": [],
+  "report_sha256": "a3639f241468126c0bebbe94b7bbe32afba501fd67594d069afcedd0b1807c0d",
+  "generation_tokens": 2875289,
+  "tokens_include_cached_input": true,
+  "outline": {
+    "writable_nodes": 8,
+    "total_arguments": 23,
+    "selected_body_target_words": 3500,
+    "body_max_sum": 4000,
+    "tree_version": 2,
+    "tree_sha256": "babd67457d4e0c293a95dc3e3bc3031da2f4970f767e29d6dcafb2791f33449f",
+    "chapters": [
+      {
+        "node_id": "n1",
+        "title": "核心判断：把“自动化难度”拆成四个不同性质的难题",
+        "arguments": 2,
+        "target_words": 400,
+        "max_words": 450
+      },
+      {
+        "node_id": "n2",
+        "title": "经济性约束：单件小批为什么是自动化最不经济的场景",
+        "arguments": 3,
+        "target_words": 480,
+        "max_words": 540
+      },
+      {
+        "node_id": "n3",
+        "title": "工艺物理约束：来料、装夹、变形与公差不配合机器",
+        "arguments": 3,
+        "target_words": 460,
+        "max_words": 520
+      },
+      {
+        "node_id": "n4",
+        "title": "默会知识约束：“手感”的三个不可直接编码部分",
+        "arguments": 3,
+        "target_words": 440,
+        "max_words": 500
+      },
+      {
+        "node_id": "n5",
+        "title": "换型与集成成本：每个新型号重新工程化，以及模块化的前置作用",
+        "arguments": 3,
+        "target_words": 420,
+        "max_words": 480
+      },
+      {
+        "node_id": "n6",
+        "title": "已被工程化突破的边界：三个一线闭环案例及其成立条件",
+        "arguments": 3,
+        "target_words": 480,
+        "max_words": 540
+      },
+      {
+        "node_id": "n7",
+        "title": "AI与具身智能改变的是哪一层难度",
+        "arguments": 3,
+        "target_words": 320,
+        "max_words": 370
+      },
+      {
+        "node_id": "n8",
+        "title": "难度判别清单、推进路径与降门槛替代方案",
+        "arguments": 3,
+        "target_words": 500,
+        "max_words": 600
+      }
+    ]
+  },
+  "ledger_phase": null,
+  "writer_recovery": null,
+  "candidate_count": 1,
+  "length_contract": {
+    "compact_outline": true,
+    "counter_version": "mixed-word-estimate-v1",
+    "enabled": true,
+    "heading_reserve_words": 300,
+    "length_auto_revision": false,
+    "max_words": 11000,
+    "measurement_mode": "estimate",
+    "min_words": 9000,
+    "outline_budget_selection": true,
+    "reference_reserve_words": 1000,
+    "safety_margin_words": 500,
+    "scope": "whole_document",
+    "target_words": 10000,
+    "writer_task_cards": true
+  },
+  "race_tokens": 41387,
+  "race_status": "completed",
+  "race_scores": {
+    "comprehensiveness": 0.5058651026392962,
+    "insight": 0.5433526011560694,
+    "instruction_following": 0.5241379310344828,
+    "readability": 0.5201729106628242,
+    "overall_score": 0.5256269976100665
+  },
+  "race_overall_percent": 52.56269976100665,
+  "generation_token_accounting": {
+    "counter_version": "central-plus-unique-native-attempt-v2",
+    "legacy_last_per_task_tokens": 2243921,
+    "corrected_tokens": 2875289,
+    "previously_overwritten_tokens": 631368,
+    "reason": "Native citation-result repair reuses outer task_id; deduplicate by (outer task_id, result_envelope.task_id), preserving both paid attempts.",
+    "attempt_count": 15,
+    "outer_task_count": 14
+  }
+}

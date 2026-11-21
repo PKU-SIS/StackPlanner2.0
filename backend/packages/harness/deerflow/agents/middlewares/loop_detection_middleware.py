@@ -54,16 +54,17 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import posixpath
 import threading
 from collections import OrderedDict, defaultdict
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, Any, override
 
 from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelCallResult, ModelRequest, ModelResponse
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.runtime import Runtime
 
 from deerflow.agents.middlewares._bounded_dict import BoundedDict
@@ -109,7 +110,26 @@ def _normalize_tool_call_args(raw_args: object) -> tuple[dict, str | None]:
     return {}, json.dumps(raw_args, sort_keys=True, default=str)
 
 
-def _stable_tool_key(name: str, args: dict, fallback_key: str | None) -> str:
+def _latest_read_version(state: Any, path: str) -> str | None:
+    """Return the latest read-before-write hash for *path*, when available.
+
+    A read of a file after it changed is progress even when its path and line
+    range match an earlier read. The stamped hash is already part of the
+    normal ToolMessage history and does not alter tool arguments or limits.
+    """
+    messages = state.get("messages", []) if isinstance(state, dict) else []
+    normalized_path = posixpath.normpath(path)
+    for message in reversed(messages):
+        if not isinstance(message, ToolMessage):
+            continue
+        mark = (message.additional_kwargs or {}).get("deerflow_read_mark")
+        if isinstance(mark, dict) and mark.get("path") == normalized_path:
+            value = mark.get("hash")
+            return value if isinstance(value, str) else None
+    return None
+
+
+def _stable_tool_key(name: str, args: dict, fallback_key: str | None, *, read_version: str | None = None) -> str:
     """Derive a stable key from salient args without overfitting to noise."""
     if name == "read_file" and fallback_key is None:
         path = args.get("path") or ""
@@ -131,7 +151,8 @@ def _stable_tool_key(name: str, args: dict, fallback_key: str | None) -> str:
         bucket_end = max(end_line, 1)
         bucket_start = (bucket_start - 1) // bucket_size
         bucket_end = (bucket_end - 1) // bucket_size
-        return f"{path}:{bucket_start}-{bucket_end}"
+        version = f":{read_version}" if read_version else ""
+        return f"{path}:{bucket_start}-{bucket_end}{version}"
 
     # write_file / str_replace are content-sensitive: same path may be updated
     # with different payloads during iteration. Using only salient fields (path)
@@ -152,7 +173,7 @@ def _stable_tool_key(name: str, args: dict, fallback_key: str | None) -> str:
     return json.dumps(args, sort_keys=True, default=str)
 
 
-def _hash_tool_calls(tool_calls: list[dict]) -> str:
+def _hash_tool_calls(tool_calls: list[dict], *, state: Any = None) -> str:
     """Deterministic hash of a set of tool calls (name + stable key).
 
     This is intended to be order-independent: the same multiset of tool calls
@@ -163,7 +184,9 @@ def _hash_tool_calls(tool_calls: list[dict]) -> str:
     for tc in tool_calls:
         name = tc.get("name", "")
         args, fallback_key = _normalize_tool_call_args(tc.get("args", {}))
-        key = _stable_tool_key(name, args, fallback_key)
+        path = str(args.get("path") or "") if name == "read_file" else ""
+        read_version = _latest_read_version(state, path) if path else None
+        key = _stable_tool_key(name, args, fallback_key, read_version=read_version)
 
         normalized.append(f"{name}:{key}")
 
@@ -402,7 +425,7 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
             return None, False
 
         thread_id = self._get_thread_id(runtime)
-        call_hash = _hash_tool_calls(tool_calls)
+        call_hash = _hash_tool_calls(tool_calls, state=state)
 
         with self._lock:
             # Touch / create entry (move to end for LRU)

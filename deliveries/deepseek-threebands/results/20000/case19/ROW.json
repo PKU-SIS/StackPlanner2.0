@@ -1,0 +1,17 @@
+{
+  "band": 20000,
+  "case_id": 19,
+  "label": "Prometheus高流失率",
+  "words": 20498,
+  "race": 53.34518468354074,
+  "generation_tokens": 3505743,
+  "race_tokens": 64936,
+  "deviation_percent": 2.49,
+  "formal_delivered": true,
+  "notes": "普通单次生成",
+  "source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-20k-fourcases-20261117/case19",
+  "source_results_sha256": "e04510731d64ea063e1aadaebb7513d5ab3f8b5b5dd53c2d5625135ed2054aa4",
+  "report_sha256": "ae01e1ff591ca3df18ce550695e9855d41a5f402c65d1b31a7a804d3ed693239",
+  "report_source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-20k-fourcases-20261117/case19/runs/band20000-case19-outline-selected/evaluated-report.md",
+  "historical_runtime_variant": "band20000-c79f7785632739f4"
+}

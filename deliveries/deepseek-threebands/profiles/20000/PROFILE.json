@@ -1,0 +1,33 @@
+{
+  "final_contract": {
+    "min_words": 18000,
+    "target_words": 20000,
+    "max_words": 22000,
+    "reference_reserve_words": 1000,
+    "heading_reserve_words": 300,
+    "safety_margin_words": 500,
+    "compact_outline": true,
+    "writer_task_cards": true,
+    "length_auto_revision": false,
+    "outline_budget_selection": true
+  },
+  "body_range": {
+    "min_words": 8000,
+    "default_words": 9500,
+    "max_words": 11500,
+    "scope": "sum of writable node target_words, excluding reserves"
+  },
+  "model": {
+    "name": "deepseek-flash",
+    "model": "deepseek-flash",
+    "use": "deerflow.models.patched_deepseek:PatchedChatDeepSeek",
+    "api_base": "https://api.deepseek.com",
+    "max_tokens": 8192,
+    "supports_thinking": true
+  },
+  "runtime_hashes_source": "/data2/pkuiti/zmy/codex-relay-work/autism-case24-20k-entry-fixed-rerun-20261117/manifest.json",
+  "source_manifest_sha256": "c1855fc369ffb4a16d256891179f515a54e58821b76994a05f19cd9e6ee5f14c",
+  "source_file_count": 517,
+  "writer_model_unchanged": true,
+  "archive_is_actual_tested_source": true
+}

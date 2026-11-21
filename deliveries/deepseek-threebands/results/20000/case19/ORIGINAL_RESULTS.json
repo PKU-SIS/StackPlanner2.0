@@ -1,0 +1,236 @@
+{
+  "name": "band20000-case19-outline-selected",
+  "case_id": 19,
+  "target_words": 20000,
+  "query_sha256": "c54a6cc8a3a88c093f5ff2b9d8d77f030cc202313709968e7ee6ad09837d58a7",
+  "status": "candidate",
+  "words": 20498,
+  "deviation": 498,
+  "deviation_percent": 2.49,
+  "within_5_percent": true,
+  "within_10_percent": true,
+  "formal_delivered": true,
+  "review": {
+    "action_id": "spact_sp-fixed-c0-review-r1",
+    "base_digest": "e92d6dd36b4d0c9933ca7c871c88ed7482824ae0247f49f7ad13fb257dfcdaff",
+    "candidate_id": "c1",
+    "candidate_sha256": "6607c56b902d422750aeb9e9e7a17973bd5c21ded2404ca6bfbf4438b3dabad7",
+    "covered_requirement_ids": [
+      "req1",
+      "req2",
+      "req3"
+    ],
+    "created_at": "2026-11-17T04:12:05+00:00",
+    "edits": [],
+    "findings": [
+      {
+        "draft_ids": [
+          "d6"
+        ],
+        "kind": "coverage",
+        "message": "结论章在给出落地顺序时重述了前文的部分机制与样本削减数字（如 10s→30s 的样本量影响、Cloudflare 的 CI 校验形态），属轻度重复，不影响验收。",
+        "node_ids": [
+          "n13"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d6"
+        ],
+        "kind": "consistency",
+        "message": "n13 中一处写作 '[S18, S109]'，其余位置采用 '[S18][S109]' 形式，引用标注格式不统一；源标识本身正确，无需修订轮次。",
+        "node_ids": [
+          "n13"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d8",
+          "d5",
+          "d9"
+        ],
+        "kind": "structure",
+        "message": "护栏/限额语义、ARMS 收敛粒度与 CI 校验等内容在治理章与厂商章各出现一次；视角不同（做法 vs 产品实现），可保留，仅记录。",
+        "node_ids": [
+          "n9",
+          "n10",
+          "n12"
+        ],
+        "severity": "advisory"
+      }
+    ],
+    "host_length_finding": null,
+    "inputs_digest": "e8dffba954d7b69578131df59370882787e3a7c524157eaae0d3b2d67c5f2ce1",
+    "length": {
+      "body_words": 20151,
+      "candidate_sha256": "6607c56b902d422750aeb9e9e7a17973bd5c21ded2404ca6bfbf4438b3dabad7",
+      "counter_version": "mixed-word-estimate-v1",
+      "direction": "within",
+      "estimated_words": 20498,
+      "in_estimated_range": true,
+      "max_words": 22000,
+      "measured_word_count": null,
+      "min_words": 18000,
+      "nodes": [
+        {
+          "estimated_words": 1233,
+          "node_id": "n2"
+        },
+        {
+          "estimated_words": 2019,
+          "node_id": "n3"
+        },
+        {
+          "estimated_words": 1625,
+          "node_id": "n5"
+        },
+        {
+          "estimated_words": 2020,
+          "node_id": "n6"
+        },
+        {
+          "estimated_words": 2687,
+          "node_id": "n8"
+        },
+        {
+          "estimated_words": 2254,
+          "node_id": "n9"
+        },
+        {
+          "estimated_words": 3071,
+          "node_id": "n10"
+        },
+        {
+          "estimated_words": 3500,
+          "node_id": "n12"
+        },
+        {
+          "estimated_words": 1454,
+          "node_id": "n13"
+        }
+      ],
+      "reference_words": 345,
+      "rendered_sha256": "ae01e1ff591ca3df18ce550695e9855d41a5f402c65d1b31a7a804d3ed693239",
+      "scope": "whole_document",
+      "target_words": 20000,
+      "word_verified": false
+    },
+    "length_auto_revision": false,
+    "length_only_blocking": false,
+    "outcome": "deliver",
+    "path": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-20k-fourcases-20261117/case19/runs/band20000-case19-outline-selected/runtime/users/full-eval/threads/full-19/user-data/outputs/report/r1/review/rv1.json",
+    "review_id": "rv1",
+    "reviewed_candidate_sha256": "6607c56b902d422750aeb9e9e7a17973bd5c21ded2404ca6bfbf4438b3dabad7",
+    "status": "ready",
+    "tree_version": 2,
+    "virtual_path": "/mnt/user-data/outputs/report/r1/review/rv1.json"
+  },
+  "blocking_findings": [],
+  "report_sha256": "ae01e1ff591ca3df18ce550695e9855d41a5f402c65d1b31a7a804d3ed693239",
+  "generation_tokens": 3505743,
+  "tokens_include_cached_input": true,
+  "outline": {
+    "writable_nodes": 9,
+    "total_arguments": 48,
+    "selected_body_target_words": 10400,
+    "body_max_sum": 11450,
+    "tree_version": 2,
+    "tree_sha256": "cb00afb2f7e638824a258273fae177a8b5f32782f986195bfb59a753d53eed7a",
+    "chapters": [
+      {
+        "node_id": "n2",
+        "title": "churn 与高基数是两个轴：为什么高流失率要单独治理",
+        "arguments": 5,
+        "target_words": 700,
+        "max_words": 800
+      },
+      {
+        "node_id": "n3",
+        "title": "churn 为什么特别贵：head block、memSeries 与按时间触发的清理",
+        "arguments": 5,
+        "target_words": 1300,
+        "max_words": 1450
+      },
+      {
+        "node_id": "n5",
+        "title": "监控系统自己先崩：内存、OOM、查询与重启",
+        "arguments": 5,
+        "target_words": 1100,
+        "max_words": 1200
+      },
+      {
+        "node_id": "n6",
+        "title": "账单、限流副作用与观测盲区：容易被忽略的三类代价",
+        "arguments": 5,
+        "target_words": 1000,
+        "max_words": 1100
+      },
+      {
+        "node_id": "n8",
+        "title": "先把 churn 变成可观测、可预算的数字：度量、归因与容量预算",
+        "arguments": 6,
+        "target_words": 1200,
+        "max_words": 1300
+      },
+      {
+        "node_id": "n9",
+        "title": "治理上篇：源头指标设计、采集侧收敛、硬护栏与预聚合",
+        "arguments": 5,
+        "target_words": 1500,
+        "max_words": 1650
+      },
+      {
+        "node_id": "n10",
+        "title": "治理下篇：架构层扩展与组织流程，让治理不随规模反弹",
+        "arguments": 5,
+        "target_words": 1200,
+        "max_words": 1300
+      },
+      {
+        "node_id": "n12",
+        "title": "七家厂商与服务的能力盘点与横向对比：覆盖了症状，尚未覆盖根因",
+        "arguments": 8,
+        "target_words": 1700,
+        "max_words": 1850
+      },
+      {
+        "node_id": "n13",
+        "title": "五、结论：分层落地路线图与必须自建的能力",
+        "arguments": 4,
+        "target_words": 700,
+        "max_words": 800
+      }
+    ]
+  },
+  "ledger_phase": null,
+  "writer_recovery": null,
+  "candidate_count": 1,
+  "length_contract": {
+    "compact_outline": true,
+    "counter_version": "mixed-word-estimate-v1",
+    "enabled": true,
+    "heading_reserve_words": 300,
+    "length_auto_revision": false,
+    "max_words": 22000,
+    "measurement_mode": "estimate",
+    "min_words": 18000,
+    "outline_budget_selection": true,
+    "reference_reserve_words": 1000,
+    "safety_margin_words": 500,
+    "scope": "whole_document",
+    "target_words": 20000,
+    "writer_task_cards": true
+  },
+  "race_tokens": 64936,
+  "race_status": "completed",
+  "race_scores": {
+    "comprehensiveness": 0.5317348377997179,
+    "insight": 0.5444126074498566,
+    "instruction_following": 0.5172413793103449,
+    "readability": 0.5322128851540616,
+    "overall_score": 0.5334518468354074
+  },
+  "race_overall_percent": 53.34518468354074
+}

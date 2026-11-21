@@ -1,0 +1,9 @@
+三个档位的已测快照与结果
+
+先看REPORT.md。profiles目录分别保存1万/2万/3万档最近实际测试源码，不在归档时补改代码。1万与2万快照含显式report_length入口修复；3万快照来自case33，含缺章兜底、尚未应用后来新增的入口修复。1万恢复归档简洁Writer提示；2万保留其测试时Writer提示，3万保留3万专用提示。不能将三档视为逐字相同源码。
+
+PROFILE.json保存篇幅合同、正文推荐预算、模型设置及来源。ORIGINAL_MANIFEST.json和RUNTIME_HASHES.json用于核验来源；runner为实际运行脚本，它仍引用原实验环境的路径，迁移时需配置对应原仓库、依赖与凭据。代码快照包含当时冻结的backend/scripts、harness、tests、skills和query数据，原项目Gateway/frontend等未包含；不是独立部署包。backend/pyproject.toml及uv.lock附作依赖参考，不执行安装或新实验。
+
+历史数据引用多个修复阶段。historical-runtime-variants保存相对主快照的运行源码覆盖文件、删除列表及完整runtime SHA，可还原较早测试的实际运行源码；原始测试记录均未覆盖。RESULTS.json列出逐题源码差异、报告SHA、原始数据路径与哈希。
+
+包内不含模型凭据、运行时私有状态、事件日志或检查点。本文汇总仅做离线核验，没有新增生成、评分或付费重跑。

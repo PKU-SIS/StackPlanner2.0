@@ -662,11 +662,24 @@ class SubagentExecutor:
             from deerflow.agents.middlewares.invalid_tool_call_repair_middleware import InvalidToolCallRepairMiddleware
 
             self._tool_argument_repair_middleware = InvalidToolCallRepairMiddleware(
-                budget=app_config.subagents.get_token_budget_for(self.config.name), output_limit=self.max_tokens_per_step or 32768,
-                tool_limit=_subagent_tool_loop_limits(self.config.max_turns, self.config.tool_call_limit or _SUBAGENT_TOOL_LOOP_HARD_CAP)[1], aborted=self._parent_aborted,
+                budget=app_config.subagents.get_token_budget_for(self.config.name),
+                output_limit=self.max_tokens_per_step or 32768,
+                tool_limit=_subagent_tool_loop_limits(self.config.max_turns, self.config.tool_call_limit or _SUBAGENT_TOOL_LOOP_HARD_CAP)[1],
+                aborted=self._parent_aborted,
                 bound_source_correction=self.config.bound_outline_source_correction,
             )
             middlewares.insert(0, self._tool_argument_repair_middleware)
+        if self.config.report_writer_length is not None:
+            from deerflow.sp.report.writer_length import ReportWriterLengthMiddleware
+
+            middlewares.insert(
+                0,
+                ReportWriterLengthMiddleware(
+                    binding=self.config.report_writer_length,
+                    output_limit=self.max_tokens_per_step or 32768,
+                    aborted=self._parent_aborted,
+                ),
+            )
         # Collect every guard middleware that exposes ``consume_stop_reason``
         # (TokenBudgetMiddleware, LoopDetectionMiddleware) so _aexecute can read
         # each after the run and surface whichever cap fired. Duck-typed

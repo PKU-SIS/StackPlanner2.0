@@ -1,0 +1,17 @@
+{
+  "band": 10000,
+  "case_id": 36,
+  "label": "单件小批制造自动化",
+  "words": 9907,
+  "race": 52.56269976100665,
+  "generation_tokens": 2875289,
+  "race_tokens": 41387,
+  "deviation_percent": -0.93,
+  "formal_delivered": true,
+  "notes": "补研引用校验失败记录保留；Token已按原生attempt复核",
+  "source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-10k-fourcases-20261117/case36",
+  "source_results_sha256": "e71be8cec06929f62df0d624fa35783a6fede6998e4685aa6772bc1082d21457",
+  "report_sha256": "a3639f241468126c0bebbe94b7bbe32afba501fd67594d069afcedd0b1807c0d",
+  "report_source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-10k-fourcases-20261117/case36/runs/band10000-case36-outline-selected/evaluated-report.md",
+  "historical_runtime_variant": null
+}

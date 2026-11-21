@@ -1,3 +1,5 @@
+> 本分支：`zmy/ds-threebands-approved-20261117`。最初敲定的 DeepSeek 1万／2万／3万三档，未混入千问 v18 或后来的 DS 回归修改。 使用说明及已有成绩见 [deliveries/deepseek-threebands/BRANCH.md](deliveries/deepseek-threebands/BRANCH.md)。
+
 # StackPlanner 2.0 (SP2.0)
 
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](./backend/pyproject.toml)

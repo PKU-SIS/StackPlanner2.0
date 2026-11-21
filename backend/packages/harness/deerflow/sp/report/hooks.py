@@ -72,6 +72,13 @@ and gap changes. Do not delegate integrate_review; the Harness fixed-acceptance
 gate owns that review. The gate uses only ready/revise; local-edit re-review
 loops are retired. sp_finish is allowed only for the current ready final and is
 blocked by any unfinished research/write/feedback/gap/input state.
+
+A write request marked `technical_failed` is unresolved work, never evidence
+that the report is complete or merely waiting on a running Writer. Use the
+ledger's `next_action` and exact failed node to ask Outline for a bounded
+repair/new write request. If the failure cannot be repaired in this run, use
+sp_ask_human to explain the failed section and request a decision. Never end
+with a plain-text waiting message while a write request is `technical_failed`.
 </report-control>
 """.strip()
 
@@ -211,9 +218,7 @@ def _copy_rejected_outline_to_delivery(
         if char_count != len(text):
             raise ReportValidationError("retained outline candidate size does not match its recorded size")
     if delivery_path.exists():
-        raise ReportValidationError(
-            "current Outline delivery path already exists; refusing to overwrite progress with an older candidate"
-        )
+        raise ReportValidationError("current Outline delivery path already exists; refusing to overwrite progress with an older candidate")
     delivery_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = delivery_path.with_name(f".{delivery_path.name}.{action.action_id}.tmp")
     try:
@@ -261,9 +266,18 @@ def start_report(context: HandlerContext, action: SPAction) -> dict[str, Any]:
                 }
             )
         request_text = "\n\n".join(["# Report request", "", *sections]).strip()
+        from deerflow.sp.report.length import normalize_contract
+
+        supplied_lengths = [m.additional_kwargs["report_length"] for m in messages if "report_length" in m.additional_kwargs]
+        action_length = normalize_contract(action.metadata.get("report_length"))
+        length_contract = normalize_contract(supplied_lengths[-1]) if supplied_lengths else action_length
+        if supplied_lengths and "report_length" in action.metadata and action_length != length_contract:
+            raise ReportValidationError("start action report_length conflicts with the explicit user contract")
         report_id = report_store.allocate_report_id(outputs_path)
         paths = report_store.ReportPaths(outputs_path, report_id)
         ledger = ReportLedger.create(paths, request_text=request_text, inputs=inputs)
+        if length_contract is not None:
+            ledger.payload["length_contract"] = length_contract
         ledger.register_run(context.run_id)
         ledger.save()
         report_store.write_json_atomic(report_store.pointer_path(outputs_path), {"report_id": report_id})
@@ -473,15 +487,9 @@ def prepare_delegation(
             raise ReportValidationError("report_task must be plan, revise, or integrate_review")
         origin = str(task_metadata.get("report_acceptance_origin") or action.metadata.get("report_acceptance_origin") or "")
         if report_task == "integrate_review" and origin != "harness":
-            raise ReportValidationError(
-                "integration review is harness-owned; Central must not delegate integrate_review"
-            )
+            raise ReportValidationError("integration review is harness-owned; Central must not delegate integrate_review")
         if origin == "harness":
-            claimed_action_id = str(
-                task_metadata.get("report_acceptance_action_id")
-                or action.metadata.get("report_acceptance_action_id")
-                or ""
-            )
+            claimed_action_id = str(task_metadata.get("report_acceptance_action_id") or action.metadata.get("report_acceptance_action_id") or "")
             from deerflow.sp.report import acceptance as report_acceptance
 
             pending_action_id = str(report_acceptance.acceptance_state(ledger).get("pending_action_id") or "")
@@ -504,10 +512,7 @@ def prepare_delegation(
                 "before appending. Do not try to fit a large tree into one response. Return "
                 "artifact_content=null and this path in artifact_metadata."
             )
-            structured = report_task == "revise" and any(
-                gap.get("status") == "awaiting_outline" and ledger.has_returned_research(str(gap.get("gap_id") or ""))
-                for gap in ledger.gaps()
-            )
+            structured = report_task == "revise" and any(gap.get("status") == "awaiting_outline" and ledger.has_returned_research(str(gap.get("gap_id") or "")) for gap in ledger.gaps())
             task_metadata["report_outline_structured"] = structured
             if structured:
                 instruction = (
@@ -541,10 +546,7 @@ def prepare_delegation(
                 if copied:
                     instruction += " The current delivery contains a byte-for-byte copy of the retained rejected candidate."
                 elif candidate_virtual:
-                    instruction += (
-                        f" Recovery basis: read report_packet.rejected_outline.virtual_path ({candidate_virtual}) "
-                        "and write the corrected tree only to this independent delivery path."
-                    )
+                    instruction += f" Recovery basis: read report_packet.rejected_outline.virtual_path ({candidate_virtual}) and write the corrected tree only to this independent delivery path."
                 instruction += (
                     " Use report_packet.tree as the complete accepted baseline when present; the rejected "
                     "candidate is retained progress, not a new complete scope. Read the current delivery tail "
@@ -599,6 +601,9 @@ def configure_report_subagent(
     if role == "reporter":
         raise ReportValidationError("reporter must be bound as a writer delegation with report_write_key")
     paths = report_store.ReportPaths(report.outputs_path, report.report_id)  # type: ignore[arg-type]
+    length_contract = (ReportLedger.load(paths).payload.get("length_contract") or {}) if role in {"outline", "writer"} else {}
+    length_enabled = role in {"outline", "writer"} and bool(length_contract)
+    compact_outline = bool(length_contract.get("compact_outline")) or (role == "researcher" and task.context_refs.get("report_packet", {}).get("compact_outline") is True)
     tools_by_name = {str(getattr(tool, "name", "")): tool for tool in available_tools}
     if role in {"outline", "researcher"} and not task.metadata.get("report_summary_repair") and not task.metadata.get("report_supplement_repair"):
         from deerflow.sp.report.read_material import build_read_material_tool
@@ -631,11 +636,30 @@ def configure_report_subagent(
             submit_tool = build_submit_outline_tool(paths=paths, delivery_path=Path(str(task.metadata.get("outline_delivery_path") or _outline_delivery_path(paths, task.action_id))), normalize_sources=structured)
             selected.append(submit_tool)
             available_tools = [*available_tools, submit_tool]
+            if length_enabled:
+                from deerflow.sp.report.submit_outline import build_patch_outline_budget_tool
+
+                patch_tool = build_patch_outline_budget_tool(paths=paths, delivery_path=Path(str(task.metadata.get("outline_delivery_path") or _outline_delivery_path(paths, task.action_id))))
+                selected.append(patch_tool)
+                available_tools = [*available_tools, patch_tool]
         prompt = REPORT_INTEGRATE_REVIEW_PROMPT if report_task == "integrate_review" else REPORT_OUTLINE_PROMPT
+        if length_enabled:
+            from deerflow.sp.report.prompts import REPORT_COMPACT_OUTLINE_PROMPT, REPORT_LENGTH_PROMPT
+
+            prompt = _join_prompt(prompt, REPORT_COMPACT_OUTLINE_PROMPT if compact_outline else REPORT_LENGTH_PROMPT)
+            if length_contract.get("outline_budget_selection") and report_task != "integrate_review":
+                from deerflow.sp.report.prompts import REPORT_OUTLINE_BUDGET_SELECTION_PROMPT
+
+                prompt = _join_prompt(prompt, REPORT_OUTLINE_BUDGET_SELECTION_PROMPT)
+            if report_task == "integrate_review" and length_contract.get("length_auto_revision") is False:
+                prompt = _join_prompt(
+                    prompt,
+                    "FIRST-PASS LENGTH POLICY: keep the original content-review criteria. Record length concerns as advisory only. Do not request compression or rewrites solely for length; the host measures the range and stops a length-only failure. Required-content blockers still follow the native content-revision path.",
+                )
         disallowed_tools = list(subagent_config.disallowed_tools or [])
         if report_task == "integrate_review":
             disallowed_tools = list(dict.fromkeys([*disallowed_tools, "write_file"]))
-        elif structured:
+        elif structured or compact_outline:
             selected = [tool for tool in selected if getattr(tool, "name", None) != "write_file"]
             disallowed_tools = list(dict.fromkeys([*disallowed_tools, "write_file"]))
         elif "write_file" in disallowed_tools:
@@ -645,7 +669,7 @@ def configure_report_subagent(
             system_prompt=_join_prompt(subagent_config.system_prompt, prompt),
             tools=[str(getattr(tool, "name", "")) for tool in selected],
             disallowed_tools=disallowed_tools,
-            skills=["report-outline"],
+            skills=["report-outline", *(["report-word-budget"] if length_enabled else [])],
             max_turns=max(REPORT_SUBAGENT_MAX_TURNS, subagent_config.max_turns),
         )
         if report_task != "integrate_review":
@@ -654,11 +678,13 @@ def configure_report_subagent(
                 max_turns=max(350, config.max_turns),
                 tool_call_limit=50,
                 finalize_after_tool_calls=30,
-                finalize_keep_tools=["report_submit_outline", "read_file", "report_register_research_request", "report_save_user_material"] + ([] if structured else ["write_file"]),
+                finalize_keep_tools=["report_submit_outline", "read_file", "report_register_research_request", "report_save_user_material"] + ([] if structured or compact_outline else ["write_file"]),
                 finalize_token_fraction=0.5,
                 repair_invalid_tool_calls=True,
                 bound_outline_source_correction=structured,
             )
+            if length_enabled:
+                config = replace(config, finalize_keep_tools=[*config.finalize_keep_tools, "report_patch_outline_budget"])
         extra_tools = [tool for tool in (register_tool, user_material_tool) if tool is not None]
         return config, [*available_tools, *extra_tools], role
 
@@ -666,9 +692,59 @@ def configure_report_subagent(
         if "write_file" not in tools_by_name:
             raise ReportValidationError("report Writer requires a configured write_file tool")
         selected = [tools_by_name[name] for name in [*REPORT_READ_TOOLS, "write_file"] if name in tools_by_name]
+        writer_prompt = REPORT_WRITER_PROMPT
+        if length_enabled:
+            from deerflow.sp.report.length import build_measure_draft_tool
+            from deerflow.sp.report.prompts import REPORT_COMPACT_WRITER_PROMPT, REPORT_LENGTH_PROMPT
+
+            # Lower generation targets use automatic host completion counting.
+            # Exclude optional model checks in this explicitly scoped mode.
+            if not compact_outline and not task.context_refs.get("report_packet", {}).get("length", {}).get("generation"):
+                measure_tool = build_measure_draft_tool(
+                    paths=paths, node_id=str(task.metadata.get("report_node_id") or ""), write_key=str(task.metadata.get("report_write_key") or ""), draft_id=str(task.metadata.get("report_draft_id") or ""), action_id=task.action_id
+                )
+                selected.append(measure_tool)
+                available_tools = [*available_tools, measure_tool]
+            writer_prompt = _join_prompt(writer_prompt, REPORT_COMPACT_WRITER_PROMPT if compact_outline else REPORT_LENGTH_PROMPT)
+            length_packet = task.context_refs.get("report_packet", {}).get("length", {})
+            if (length_packet.get("contract") or {}).get("writer_submission_limit"):
+                writer_prompt = _join_prompt(
+                    writer_prompt,
+                    "SUBMISSION LIMIT MODE: write_file checks the entire chapter before saving it. "
+                    "Submit a complete body with append=false. An overlong proposal is not saved. "
+                    "If rejected, use the returned actual count to submit one complete concise replacement, "
+                    "aiming at target_words rather than the maximum. This single resubmission is an "
+                    "explicit exception to the routine no-node-rewrite guidance. "
+                    "The configured writer_submission_tolerance_percent "
+                    "is a host saving tolerance, not a larger writing target. "
+                    "Two proposals total; "
+                    "no fragments, no truncation, and no success claim without a successful save.",
+                )
+            assigned = length_packet.get("generation") or length_packet.get("node")
+            if not isinstance(assigned, Mapping):
+                raise ReportValidationError("budgeted Writer requires its host-assigned chapter length")
+            from deerflow.sp.report.length import COUNTER_VERSION, node_budget
+
+            assigned = node_budget({"node_id": task.metadata.get("report_node_id"), "constraints": assigned})
+            chapter_constraints = task.context_refs.get("report_packet", {}).get("basis", {}).get("node_spec", {}).get("constraints", {})
+            plan_fields = {key: chapter_constraints[key] for key in ("paragraph_plan", "scope_exclusions") if key in chapter_constraints}
+            writer_prompt = _join_prompt(
+                writer_prompt,
+                "<assigned-chapter-length>\n"
+                + json.dumps(
+                    {"node_id": task.metadata.get("report_node_id"), **assigned, **plan_fields, "scope": "chapter_body", "counter_version": COUNTER_VERSION, "complete_draft_required": True, "truncate_allowed": False},
+                    ensure_ascii=False,
+                )
+                + "\n</assigned-chapter-length>\n"
+                "Plan a complete chapter within these numbers before writing. Use concise language, "
+                "reserve space for the conclusion and required qualifications, and save a finished body. "
+                "The maximum is the chapter's content limit, not a point where generation should be cut off. "
+                "When paragraph_plan exists, write one paragraph per item, fit its purpose and budget, "
+                "omit scope_exclusions and keep the conclusion complete. Do not output the plan or a claimed word count.",
+            )
         config = replace(
             subagent_config,
-            system_prompt=REPORT_WRITER_PROMPT,
+            system_prompt=writer_prompt,
             loop_warning_instruction=(
                 "[REPORT WRITER DELIVERY] Stop exploring: do not search, grep, list directories or read more evidence. "
                 "Use the evidence already collected to finish only your assigned node body. "
@@ -677,7 +753,17 @@ def configure_report_subagent(
                 "Keep the existing call, token and time budgets; this instruction grants no retries or extra budget."
             ),
             tools=[str(getattr(tool, "name", "")) for tool in selected],
-            skills=["report-node-writing"],
+            skills=["report-node-writing", *(["report-word-budget"] if length_enabled else [])],
+            report_writer_length={
+                "outputs_path": str(paths.outputs_path),
+                "report_id": paths.report_id,
+                "node_id": str(task.metadata.get("report_node_id") or ""),
+                "write_key": str(task.metadata.get("report_write_key") or ""),
+                "draft_id": str(task.metadata.get("report_draft_id") or ""),
+                "action_id": task.action_id,
+            }
+            if length_enabled
+            else None,
             max_turns=max(350, subagent_config.max_turns),
             tool_call_limit=50,
         )
@@ -726,9 +812,14 @@ def configure_report_subagent(
     research_prompt = REPORT_RESEARCH_PROMPT
     if supplement:
         research_prompt = REPORT_RESEARCH_PROMPT.split("- Return one detailed, theme-organized research synthesis", 1)[0] + "\n" + OUTPUT_INSTRUCTION + "\n</report-research-mode>"
+    scoped_research_prompt = REPORT_PRE_RESEARCH_PROMPT if markdown else _join_prompt(subagent_config.system_prompt, research_prompt)
+    if compact_outline:
+        from deerflow.sp.report.prompts import REPORT_COMPACT_RESEARCH_PROMPT
+
+        scoped_research_prompt = _join_prompt(scoped_research_prompt, REPORT_COMPACT_RESEARCH_PROMPT)
     config = replace(
         subagent_config,
-        system_prompt=REPORT_PRE_RESEARCH_PROMPT if markdown else _join_prompt(subagent_config.system_prompt, research_prompt),
+        system_prompt=scoped_research_prompt,
         tools=[str(getattr(tool, "name", "")) for tool in selected],
         skills=["report-research"],
         output_format="markdown" if markdown or supplement else subagent_config.output_format,
@@ -1050,6 +1141,8 @@ def _finalize_integration_review(
         "created_at": utc_now_iso(),
         "artifact_id": artifact.metadata.artifact_id,
     }
+    if review.get("length") is not None:
+        final_record["length"] = review["length"]
     report_store.write_json_atomic(ledger.paths.final_manifest(version), final_record)
     final_reports.append(final_record)
     ledger.payload["final_reports"] = final_reports
@@ -1151,6 +1244,19 @@ def _accept_integrate_review_locked(
     except ReportValidationError as exc:
         return _rejection(action, context, f"Integration review rejected: {exc}", reason="stale_review_inputs")
     review_body = parsed["review"]
+    from deerflow.sp.report.length import candidate_length, length_finding
+
+    length_measurement = candidate_length(ledger, candidate)
+    host_length_finding = None
+    original_content_blocking = any(f.get("severity") == "blocking" for f in review_body["findings"])
+    if length_measurement is not None:
+        finding = length_finding(length_measurement)
+        if finding is not None:
+            host_length_finding = finding
+            review_body["findings"].append(finding)
+            review_body["status"] = "issues"
+            review_body["outcome"] = "revise"
+            review_body["edits"] = []
     if str(task.metadata.get("report_acceptance_origin") or action.metadata.get("report_acceptance_origin") or "") == "harness" and review_body["outcome"] == "edit":
         return _rejection(
             action,
@@ -1176,6 +1282,11 @@ def _accept_integrate_review_locked(
         "action_id": action.action_id,
         "created_at": utc_now_iso(),
     }
+    if length_measurement is not None:
+        review_record["length"] = length_measurement
+        review_record["length_auto_revision"] = (ledger.payload.get("length_contract") or {}).get("length_auto_revision", True)
+        review_record["host_length_finding"] = host_length_finding
+        review_record["length_only_blocking"] = host_length_finding is not None and not original_content_blocking
     try:
         if review_body["edits"]:
             new_candidate = report_assembly.apply_edits(ledger, review_body["edits"])
@@ -1496,10 +1607,7 @@ def _accept_writer_locked(
         if not content.strip():
             raise ReportValidationError("Writer draft is empty")
         if _writer_repeats_node_title(content, basis):
-            error = (
-                "Writer draft repeats the Outline-owned node title; the host generates that heading. "
-                "Write only the node body without the node title."
-            )
+            error = "Writer draft repeats the Outline-owned node title; the host generates that heading. Write only the node body without the node title."
             report_writing.fail_writer_attempt(ledger, key=key, action_id=action.action_id, error=error)
             ledger.save()
             return _rejection(
@@ -1651,27 +1759,17 @@ def _outline_delivery_text(task: SPSubagentTask) -> str | None:
 def _outline_payload(result: SPSubagentResult, task: SPSubagentTask) -> tuple[dict[str, Any], str | None]:
     metadata = result.artifact_metadata if isinstance(result.artifact_metadata, Mapping) else {}
     file_text = _outline_delivery_text(task)
-    declared_file = (
-        str(metadata.get("delivery_mode") or "").strip().lower() == "file"
-        or bool(metadata.get("tree_path"))
-        or bool(metadata.get("created_paths"))
-    )
+    declared_file = str(metadata.get("delivery_mode") or "").strip().lower() == "file" or bool(metadata.get("tree_path")) or bool(metadata.get("created_paths"))
     required_file = bool(task.metadata.get("outline_delivery_required"))
     if required_file and file_text is None:
         if result.artifact_content:
-            raise ReportValidationError(
-                "Outline retry requires file delivery, but the response returned inline content and no host-assigned delivery file was created"
-            )
-        raise ReportValidationError(
-            "Outline retry requires file delivery, but no host-assigned delivery file was created"
-        )
+            raise ReportValidationError("Outline retry requires file delivery, but the response returned inline content and no host-assigned delivery file was created")
+        raise ReportValidationError("Outline retry requires file delivery, but no host-assigned delivery file was created")
     if required_file and file_text is not None and not file_text.strip():
         raise ReportValidationError("Outline delivery file is empty; no complete tree was written")
     if declared_file:
         if file_text is None:
-            raise ReportValidationError(
-                "Outline declared file delivery but did not create the host-assigned tree file"
-            )
+            raise ReportValidationError("Outline declared file delivery but did not create the host-assigned tree file")
         return report_tree.parse_tree_payload(file_text), file_text
     if file_text is not None and (required_file or not result.artifact_content):
         return report_tree.parse_tree_payload(file_text), file_text
@@ -1705,10 +1803,7 @@ def _accept_outline_locked(
             source_kind = "result"
         completion_status = str(result.completion_status or result.artifact_metadata.get("completion_status") or "partial").strip().lower()
         error = (
-            "Outline technical abort before acceptance: "
-            f"stop_reason={execution_stop}, finish_reason={result.finish_reason or 'none'}, "
-            f"completion_status={completion_status}; no tree, write request, or planning "
-            "disposition was committed."
+            f"Outline technical abort before acceptance: stop_reason={execution_stop}, finish_reason={result.finish_reason or 'none'}, completion_status={completion_status}; no tree, write request, or planning disposition was committed."
         )
         if execution_stop == "token_capped":
             error += (
@@ -1728,11 +1823,7 @@ def _accept_outline_locked(
             error += f" rejected_candidate: {rejected['virtual_path']}"
         else:
             diagnostic = str(source_text or "").strip()[:500]
-            error += (
-                " No tree candidate was produced; the diagnostic text is retained in this event only. "
-                "Do not treat it as a tree to repair; retry the planning work from the requirements "
-                "and accepted baseline."
-            )
+            error += " No tree candidate was produced; the diagnostic text is retained in this event only. Do not treat it as a tree to repair; retry the planning work from the requirements and accepted baseline."
             if diagnostic:
                 error += f" Diagnostic: {diagnostic}"
         if (
@@ -1772,17 +1863,14 @@ def _accept_outline_locked(
             # The original stop reason remains recorded on the accepted tree.
             source_text = _outline_delivery_text(task)
             if source_text is None:
-                raise ReportValidationError(
-                    "token-capped Outline recovery requires the current delegation's host-assigned tree file"
-                )
+                raise ReportValidationError("token-capped Outline recovery requires the current delegation's host-assigned tree file")
             payload = report_tree.parse_tree_payload(source_text)
         else:
             payload, source_text = _outline_payload(result, task)
         if payload.get("citation_map"):
-            raise ReportValidationError(
-                "citation_map is not supported; use canonical [S<n>] citation markers in node constraints and drafts"
-            )
+            raise ReportValidationError("citation_map is not supported; use canonical [S<n>] citation markers in node constraints and drafts")
         tree = report_tree.validate_tree_with_diagnostics(payload, working)
+        tree.pop("budget_patch_base", None)
         if recover_delivered_file:
             tree = dict(tree)
             tree["accepted_with_stop_reason"] = execution_stop
@@ -1792,20 +1880,11 @@ def _accept_outline_locked(
             active = [
                 str(gap.get("gap_id"))
                 for gap in working.gaps()
-                if (
-                    str(gap.get("status") or "") in {"awaiting_outline", "in_flight"}
-                    or (
-                        str(gap.get("status") or "") == "open"
-                        and working.has_returned_research(str(gap.get("gap_id") or ""))
-                    )
-                )
+                if (str(gap.get("status") or "") in {"awaiting_outline", "in_flight"} or (str(gap.get("status") or "") == "open" and working.has_returned_research(str(gap.get("gap_id") or ""))))
                 and int(gap.get("additional_rounds") or 0) <= 0
             ]
             if active:
-                raise ReportValidationError(
-                    "fixed research round has returned; final Outline must resolve, mark optional targets not_needed, "
-                    "or leave a hard requirement awaiting_user. Active gaps remain: " + ", ".join(sorted(active))
-                )
+                raise ReportValidationError("fixed research round has returned; final Outline must resolve, mark optional targets not_needed, or leave a hard requirement awaiting_user. Active gaps remain: " + ", ".join(sorted(active)))
         fingerprints = report_tree.node_fingerprints(tree)
         feedback_disposed = report_writing.apply_feedback_dispositions(working, tree)
         draft_disposed = report_writing.apply_draft_dispositions(working, tree, fingerprints)
@@ -1875,27 +1954,15 @@ def _accept_outline_locked(
             detail += "\nstop_reason=token_capped means the report Outline cumulative token budget was exhausted."
         if recover_delivered_file:
             detail += (
-                "\nThe current delegation's delivery file was checked as recovery progress but "
-                "failed strict tree validation; no tree was accepted. Retry only this same Outline "
-                "with the accepted baseline and the rejected candidate path."
+                "\nThe current delegation's delivery file was checked as recovery progress but failed strict tree validation; no tree was accepted. Retry only this same Outline with the accepted baseline and the rejected candidate path."
             )
         if result.finish_reason == "length":
             if rejected:
-                detail += (
-                    "\nfinish_reason=length: output was truncated; the partial candidate was retained at "
-                    f"{rejected['virtual_path']}."
-                )
+                detail += f"\nfinish_reason=length: output was truncated; the partial candidate was retained at {rejected['virtual_path']}."
             else:
-                detail += (
-                    "\nfinish_reason=length: output was truncated before a candidate was formed; "
-                    "no candidate was retained."
-                )
+                detail += "\nfinish_reason=length: output was truncated before a candidate was formed; no candidate was retained."
         if rejected:
-            detail += (
-                f"\nrejected_candidate: {rejected['virtual_path']}"
-                "\nRead the rejected candidate and correct that same tree; do not replace the schema, "
-                "drop planned nodes, or move evidence preparation to Writer."
-            )
+            detail += f"\nrejected_candidate: {rejected['virtual_path']}\nRead the rejected candidate and correct that same tree; do not replace the schema, drop planned nodes, or move evidence preparation to Writer."
         else:
             detail += "\nNo tree candidate was available; no candidate was retained."
         state_update = {"sp_active_delegate_id": None}
@@ -2244,12 +2311,7 @@ def _infer_missing_gap_attempts(
         if research_executions:
             material_ids: list[str] = []
             if len(gap_ids) == 1:
-                material_ids = [
-                    str(material.get("material_id"))
-                    for material in ledger.materials()
-                    if str(material.get("action_id") or "") == action_id
-                    and gap_id in {str(value) for value in material.get("gap_ids") or []}
-                ]
+                material_ids = [str(material.get("material_id")) for material in ledger.materials() if str(material.get("action_id") or "") == action_id and gap_id in {str(value) for value in material.get("gap_ids") or []}]
             note = (
                 "Host recorded research tool execution but the result did not declare gap_attempts. "
                 "No effective round is charged under the existing definition; saved materials and "
@@ -2761,18 +2823,11 @@ def report_delegate_dispatch_error(
             return "Report writing is owned by the ledger-driven pipeline. Do not dispatch Writer calls from Central; handle Outline feedback or missing write requests instead."
 
     if role == "researcher":
-        if any(
-            item["role"] in {"outline", "reporter"} and item["order"] < current_order
-            for item in calls
-        ):
+        if any(item["role"] in {"outline", "reporter"} and item["order"] < current_order for item in calls):
             return "Report roles are not mixed in one batch: dispatch the research batch and the Outline/Writer phase separately."
         gap_ids = list(current["gaps"])
         if not gap_ids:
-            prior_researchers = [
-                item
-                for item in calls
-                if item["role"] == "researcher" and item["call_id"] != tool_call_id and item["order"] < current_order
-            ]
+            prior_researchers = [item for item in calls if item["role"] == "researcher" and item["call_id"] != tool_call_id and item["order"] < current_order]
             if prior_researchers:
                 return "Report research delegation is missing report_gap_ids; only one research call can be dispatched without gap identity."
             return None
@@ -2803,10 +2858,7 @@ def report_delegate_dispatch_error(
             if str(gap.get("status") or "") != "open":
                 return f"Report research delegation blocked: gap {gap_id} is {gap.get('status')}; only open gaps can be dispatched."
             if ledger.has_returned_research(gap_id) and int(gap.get("additional_rounds") or 0) <= 0:
-                return (
-                    f"Report research delegation blocked: gap {gap_id} already returned in the fixed round; "
-                    "a user-authorized continuation is required before another attempt."
-                )
+                return f"Report research delegation blocked: gap {gap_id} already returned in the fixed round; a user-authorized continuation is required before another attempt."
         return None
 
     # Outline and Writer are single report calls in a batch and wait for any
@@ -2827,17 +2879,8 @@ def report_delegate_dispatch_error(
         return "Report Outline delegation blocked: a Writer delegation is still running; wait for it to finish before revising the tree."
     tree = ledger.payload.get("tree")
     tree_version = int(tree.get("version")) if isinstance(tree, Mapping) and tree.get("version") is not None else None
-    open_unattempted = [
-        str(gap.get("gap_id"))
-        for gap in ledger.gaps()
-        if str(gap.get("status") or "") == "open" and not _gap_attempted_for_current_tree(gap, ledger)
-    ]
-    if (
-        role == "outline"
-        and tree_version is not None
-        and open_unattempted
-        and not _outline_revision_has_external_cause(state, ledger)
-    ):
+    open_unattempted = [str(gap.get("gap_id")) for gap in ledger.gaps() if str(gap.get("status") or "") == "open" and not _gap_attempted_for_current_tree(gap, ledger)]
+    if role == "outline" and tree_version is not None and open_unattempted and not _outline_revision_has_external_cause(state, ledger):
         return "Report Outline delegation blocked: gap(s) " + ", ".join(sorted(open_unattempted)) + " have not been attempted in this research round; dispatch the remaining selected research batch before central judgment."
     if role == "reporter":
         awaiting = [str(gap.get("gap_id")) for gap in ledger.gaps() if str(gap.get("status") or "") == "awaiting_outline"]
@@ -2860,13 +2903,16 @@ def report_delegate_is_serial(
     run_id: str | None = None,
 ) -> bool:
     """Backward-compatible boolean wrapper for the report dispatch gate."""
-    return report_delegate_dispatch_error(
-        state,
-        tool_call_id,
-        payload=payload,
-        payload_builder=payload_builder,
-        run_id=run_id,
-    ) is None
+    return (
+        report_delegate_dispatch_error(
+            state,
+            tool_call_id,
+            payload=payload,
+            payload_builder=payload_builder,
+            run_id=run_id,
+        )
+        is None
+    )
 
 
 def gap_dispatch_summary(ledger: ReportLedger) -> dict[str, Any]:

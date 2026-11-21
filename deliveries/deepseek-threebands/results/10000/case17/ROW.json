@@ -1,0 +1,17 @@
+{
+  "band": 10000,
+  "case_id": 17,
+  "label": "低代码／无代码平台",
+  "words": 9866,
+  "race": 53.895959979736574,
+  "generation_tokens": 3041814,
+  "race_tokens": 39708,
+  "deviation_percent": -1.34,
+  "formal_delivered": true,
+  "notes": "普通单次生成",
+  "source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-10k-fourcases-20261117/case17",
+  "source_results_sha256": "a9e29b9132db8b1d33dfdfacd84ad3a868d2e01977c8e2bddb9d495e9dbaaf76",
+  "report_sha256": "161fd7773ae6503b32bdde5a9732b1b05b471edd03f5dc2897e66e56721153e5",
+  "report_source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-10k-fourcases-20261117/case17/runs/band10000-case17-outline-selected/evaluated-report.md",
+  "historical_runtime_variant": null
+}

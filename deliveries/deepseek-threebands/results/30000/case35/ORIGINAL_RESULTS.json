@@ -1,0 +1,326 @@
+{
+  "name": "band30000-case35-outline-selected",
+  "case_id": 35,
+  "target_words": 30000,
+  "query_sha256": "d92179a1915790e8b1f0eb78b3a52d8add4842afd14bccfca75acedbc45dfae6",
+  "status": "candidate",
+  "words": 33831,
+  "deviation": 3831,
+  "deviation_percent": 12.77,
+  "within_5_percent": false,
+  "within_10_percent": false,
+  "formal_delivered": false,
+  "review": {
+    "action_id": "spact_sp-fixed-c0-review-r1",
+    "base_digest": "d5836233ad2a32dba9608c856127dbb93798666ad7f0d34d3c967fb6d5950812",
+    "candidate_id": "c1",
+    "candidate_sha256": "1b8f6d0530886467d262190fc749738fb15371694c6815cfa3788b479da82ac7",
+    "covered_requirement_ids": [
+      "req1",
+      "req2",
+      "req3",
+      "req4",
+      "req5"
+    ],
+    "created_at": "2026-11-17T02:23:29+00:00",
+    "edits": [],
+    "findings": [
+      {
+        "draft_ids": [
+          "d6",
+          "d1",
+          "d2",
+          "d3",
+          "d4"
+        ],
+        "kind": "coverage",
+        "message": "核心诊断与方案（核拨机制病灶、制度接口、计价结算与考核、责任唯一化路径）论证充分且带可定位引注，req1、req2 无明显缺口。",
+        "node_ids": [
+          "n2",
+          "n4",
+          "n6",
+          "n7",
+          "n9"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d7"
+        ],
+        "kind": "coverage",
+        "message": "req3 的建设、改造、运维、应急四段成本均已给出量级与资金机制；应急部分以“预备费＋作业单价＋装备清单”替代全国支出总额，属机制设计而非内容空缺。",
+        "node_ids": [
+          "n11"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d5"
+        ],
+        "kind": "coverage",
+        "message": "req4 的联排联调、截流倍数与调蓄容积反算、厂池耦合、统一主体与联合付费公式均已覆盖，并与付费公式三层接口衔接。",
+        "node_ids": [
+          "n13"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d8"
+        ],
+        "kind": "coverage",
+        "message": "req5 的成本回归价格、雨水成本显性化、存量合同过渡、资源化增信与四步实施顺序齐备；结尾已如实标注中央层面定额核拨文件与排水防涝年度应急支出总额未取得直接依据，属限定说明而非占位符。",
+        "node_ids": [
+          "n15"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d6",
+          "d1",
+          "d2",
+          "d3",
+          "d4",
+          "d7",
+          "d5",
+          "d8"
+        ],
+        "kind": "other",
+        "message": "整篇估算 33831 词，略高于 33000 上限（body 31979，reference 1850）。本轮按首轮长度政策仅作提示，不据此要求压缩或重写，由宿主长度校验决定。",
+        "node_ids": [
+          "n2",
+          "n4",
+          "n6",
+          "n7",
+          "n9",
+          "n11",
+          "n13",
+          "n15"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d2",
+          "d5"
+        ],
+        "kind": "duplication",
+        "message": "芜湖“基准值＋目标值/每分扣费21万至182万元”参数在计价参数与雨污协同付费接口两处重复出现，属跨章呼应，可保留但可精简其中一处。",
+        "node_ids": [
+          "n6",
+          "n13"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [],
+        "kind": "other",
+        "message": "Explicit report length constraint: whole-document estimated Word count 33831 is long (required 27000–33000, target 30000). This is a versioned estimate, NOT a measured Microsoft Word count. Preserve requirements/evidence; revise affected nodes using the existing bounded content-revision path. For a long report remove repetition, not required evidence; for a short report add substantive missing analysis, not filler. Do not truncate the export. Node estimates (largest first): [{'node_id': 'n11', 'estimated_words': 4621}, {'node_id': 'n15', 'estimated_words': 4602}, {'node_id': 'n6', 'estimated_words': 4079}, {'node_id': 'n13', 'estimated_words': 4025}, {'node_id': 'n9', 'estimated_words': 3833}, {'node_id': 'n2', 'estimated_words': 3742}, {'node_id': 'n4', 'estimated_words': 3512}, {'node_id': 'n7', 'estimated_words': 3184}]",
+        "node_ids": [
+          "n11",
+          "n15",
+          "n6",
+          "n13",
+          "n9",
+          "n2",
+          "n4",
+          "n7"
+        ],
+        "severity": "blocking"
+      }
+    ],
+    "host_length_finding": {
+      "draft_ids": [],
+      "kind": "other",
+      "message": "Explicit report length constraint: whole-document estimated Word count 33831 is long (required 27000–33000, target 30000). This is a versioned estimate, NOT a measured Microsoft Word count. Preserve requirements/evidence; revise affected nodes using the existing bounded content-revision path. For a long report remove repetition, not required evidence; for a short report add substantive missing analysis, not filler. Do not truncate the export. Node estimates (largest first): [{'node_id': 'n11', 'estimated_words': 4621}, {'node_id': 'n15', 'estimated_words': 4602}, {'node_id': 'n6', 'estimated_words': 4079}, {'node_id': 'n13', 'estimated_words': 4025}, {'node_id': 'n9', 'estimated_words': 3833}, {'node_id': 'n2', 'estimated_words': 3742}, {'node_id': 'n4', 'estimated_words': 3512}, {'node_id': 'n7', 'estimated_words': 3184}]",
+      "node_ids": [
+        "n11",
+        "n15",
+        "n6",
+        "n13",
+        "n9",
+        "n2",
+        "n4",
+        "n7"
+      ],
+      "severity": "blocking"
+    },
+    "inputs_digest": "0b1cf2bc86cd69017ed29413e57d93206d250d86edc2177d89d37a7f1598c020",
+    "length": {
+      "body_words": 31979,
+      "candidate_sha256": "1b8f6d0530886467d262190fc749738fb15371694c6815cfa3788b479da82ac7",
+      "counter_version": "mixed-word-estimate-v1",
+      "direction": "long",
+      "estimated_words": 33831,
+      "in_estimated_range": false,
+      "max_words": 33000,
+      "measured_word_count": null,
+      "min_words": 27000,
+      "nodes": [
+        {
+          "estimated_words": 3742,
+          "node_id": "n2"
+        },
+        {
+          "estimated_words": 3512,
+          "node_id": "n4"
+        },
+        {
+          "estimated_words": 4079,
+          "node_id": "n6"
+        },
+        {
+          "estimated_words": 3184,
+          "node_id": "n7"
+        },
+        {
+          "estimated_words": 3833,
+          "node_id": "n9"
+        },
+        {
+          "estimated_words": 4621,
+          "node_id": "n11"
+        },
+        {
+          "estimated_words": 4025,
+          "node_id": "n13"
+        },
+        {
+          "estimated_words": 4602,
+          "node_id": "n15"
+        }
+      ],
+      "reference_words": 1850,
+      "rendered_sha256": "e928ef5a2b5c3f995f5ad46c47a616c386e890838a071e611292afb68d0b7823",
+      "scope": "whole_document",
+      "target_words": 30000,
+      "word_verified": false
+    },
+    "length_auto_revision": false,
+    "length_only_blocking": true,
+    "outcome": "revise",
+    "path": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-threecases-20261117/case35/runs/band30000-case35-outline-selected/runtime/users/full-eval/threads/full-35/user-data/outputs/report/r1/review/rv1.json",
+    "review_id": "rv1",
+    "reviewed_candidate_sha256": "1b8f6d0530886467d262190fc749738fb15371694c6815cfa3788b479da82ac7",
+    "status": "issues",
+    "tree_version": 2,
+    "virtual_path": "/mnt/user-data/outputs/report/r1/review/rv1.json"
+  },
+  "blocking_findings": [
+    {
+      "draft_ids": [],
+      "kind": "other",
+      "message": "Explicit report length constraint: whole-document estimated Word count 33831 is long (required 27000–33000, target 30000). This is a versioned estimate, NOT a measured Microsoft Word count. Preserve requirements/evidence; revise affected nodes using the existing bounded content-revision path. For a long report remove repetition, not required evidence; for a short report add substantive missing analysis, not filler. Do not truncate the export. Node estimates (largest first): [{'node_id': 'n11', 'estimated_words': 4621}, {'node_id': 'n15', 'estimated_words': 4602}, {'node_id': 'n6', 'estimated_words': 4079}, {'node_id': 'n13', 'estimated_words': 4025}, {'node_id': 'n9', 'estimated_words': 3833}, {'node_id': 'n2', 'estimated_words': 3742}, {'node_id': 'n4', 'estimated_words': 3512}, {'node_id': 'n7', 'estimated_words': 3184}]",
+      "node_ids": [
+        "n11",
+        "n15",
+        "n6",
+        "n13",
+        "n9",
+        "n2",
+        "n4",
+        "n7"
+      ],
+      "severity": "blocking"
+    }
+  ],
+  "report_sha256": "e928ef5a2b5c3f995f5ad46c47a616c386e890838a071e611292afb68d0b7823",
+  "generation_tokens": 4956127,
+  "tokens_include_cached_input": true,
+  "outline": {
+    "writable_nodes": 8,
+    "total_arguments": 44,
+    "selected_body_target_words": 15000,
+    "body_max_sum": 16450,
+    "tree_version": 2,
+    "tree_sha256": "29867f4944eeb6cb4e0e3f45e4bd3aeb97a507a5dd5888ce3443a8209e400b5d",
+    "chapters": [
+      {
+        "node_id": "n2",
+        "title": "核拨制的四重机制病灶与规模—效能背离",
+        "arguments": 6,
+        "target_words": 1900,
+        "max_words": 2100
+      },
+      {
+        "node_id": "n4",
+        "title": "不缺授权、缺连接件：从“核拨”转向“契约”的制度接口与方案骨架",
+        "arguments": 5,
+        "target_words": 1700,
+        "max_words": 1850
+      },
+      {
+        "node_id": "n6",
+        "title": "服务费计价与结算规则：三模块成本、绩效模式选择与“月度预付＋年度结算”",
+        "arguments": 6,
+        "target_words": 1950,
+        "max_words": 2150
+      },
+      {
+        "node_id": "n7",
+        "title": "指标体系、厂网联动考核与数据支撑条件",
+        "arguments": 5,
+        "target_words": 1650,
+        "max_words": 1800
+      },
+      {
+        "node_id": "n9",
+        "title": "三条可复制路径：市级排水公司、打包委托与管网特许经营",
+        "arguments": 5,
+        "target_words": 1950,
+        "max_words": 2150
+      },
+      {
+        "node_id": "n11",
+        "title": "同一本账管全生命周期：建设改造单价、运维定额与应急资金机制",
+        "arguments": 6,
+        "target_words": 2200,
+        "max_words": 2400
+      },
+      {
+        "node_id": "n13",
+        "title": "厂网河（湖）一体、联排联调与溢流控制：把协同写进同一个付费公式",
+        "arguments": 5,
+        "target_words": 1850,
+        "max_words": 2050
+      },
+      {
+        "node_id": "n15",
+        "title": "让成本回归价格：动态调价、雨水成本显性化、资源化反哺与分阶段实施路线",
+        "arguments": 6,
+        "target_words": 1800,
+        "max_words": 1950
+      }
+    ]
+  },
+  "ledger_phase": null,
+  "length_contract": {
+    "compact_outline": true,
+    "counter_version": "mixed-word-estimate-v1",
+    "enabled": true,
+    "heading_reserve_words": 300,
+    "length_auto_revision": false,
+    "max_words": 33000,
+    "measurement_mode": "estimate",
+    "min_words": 27000,
+    "outline_budget_selection": true,
+    "reference_reserve_words": 1000,
+    "safety_margin_words": 500,
+    "scope": "whole_document",
+    "target_words": 30000,
+    "writer_task_cards": true
+  },
+  "race_tokens": 86180,
+  "race_status": "completed",
+  "race_scores": {
+    "comprehensiveness": 0.6140065146579804,
+    "insight": 0.6229508196721312,
+    "instruction_following": 0.59375,
+    "readability": 0.5614307931570761,
+    "overall_score": 0.604374809564283
+  },
+  "race_overall_percent": 60.4374809564283
+}

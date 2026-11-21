@@ -1,0 +1,223 @@
+{
+  "name": "band10000-case27-outline-selected",
+  "case_id": 27,
+  "target_words": 10000,
+  "query_sha256": "4453ae465c389abc4411a18f055c41dbc72ebf3b657820737441c09b6c638544",
+  "status": "candidate",
+  "words": 10635,
+  "deviation": 635,
+  "deviation_percent": 6.35,
+  "within_5_percent": false,
+  "within_10_percent": true,
+  "formal_delivered": true,
+  "review": {
+    "action_id": "spact_sp-fixed-c0-review-r1",
+    "base_digest": "71b1eeab14764f401bb6b5f1f39b86ab262e4a9a4179674be6cf15bb1ce5f481",
+    "candidate_id": "c1",
+    "candidate_sha256": "46cdc756bb7f68c9b8a1bd5c1b3c0489249ff6dd352ec70e1f08279d47b96f6a",
+    "covered_requirement_ids": [
+      "req1",
+      "req2",
+      "req3"
+    ],
+    "created_at": "2026-11-17T06:48:49+00:00",
+    "edits": [],
+    "findings": [
+      {
+        "draft_ids": [
+          "d3"
+        ],
+        "kind": "consistency",
+        "message": "n5 的三处引用标签写作 [**S8**]、[**S51**]、[**S5**]（加粗标记包住来源号），且 d3 在 packet citation_map 中没有对应条目，最终渲染时这些标签不会成为已注册的来源链接。来源身份仍可辨识，内容与结论未受影响，故仅作建议记录，不作为阻塞项。",
+        "node_ids": [
+          "n5"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d9",
+          "d4"
+        ],
+        "kind": "duplication",
+        "message": "结论章“位置清单”再次复述五档任务分层中的四类位置，与 n7 的分层表存在信息重叠；作为收束性清单可接受，但可在不改变结论的前提下压缩为一句排序判断并指向第三章表格。",
+        "node_ids": [
+          "n13",
+          "n7"
+        ],
+        "severity": "advisory"
+      }
+    ],
+    "host_length_finding": null,
+    "inputs_digest": "7cc3d62791d7d924adc457734233b300f0678a2094c154a166ba6627f36e8003",
+    "length": {
+      "body_words": 9824,
+      "candidate_sha256": "46cdc756bb7f68c9b8a1bd5c1b3c0489249ff6dd352ec70e1f08279d47b96f6a",
+      "counter_version": "mixed-word-estimate-v1",
+      "direction": "within",
+      "estimated_words": 10635,
+      "in_estimated_range": true,
+      "max_words": 11000,
+      "measured_word_count": null,
+      "min_words": 9000,
+      "nodes": [
+        {
+          "estimated_words": 811,
+          "node_id": "n2"
+        },
+        {
+          "estimated_words": 968,
+          "node_id": "n4"
+        },
+        {
+          "estimated_words": 1099,
+          "node_id": "n5"
+        },
+        {
+          "estimated_words": 1445,
+          "node_id": "n7"
+        },
+        {
+          "estimated_words": 1053,
+          "node_id": "n8"
+        },
+        {
+          "estimated_words": 1003,
+          "node_id": "n9"
+        },
+        {
+          "estimated_words": 910,
+          "node_id": "n11"
+        },
+        {
+          "estimated_words": 1484,
+          "node_id": "n12"
+        },
+        {
+          "estimated_words": 727,
+          "node_id": "n13"
+        }
+      ],
+      "reference_words": 809,
+      "rendered_sha256": "93eb461a2b6f1f37fb9656e7067b749543f38539fd140a8c5350bb53cfb2bd2a",
+      "scope": "whole_document",
+      "target_words": 10000,
+      "word_verified": false
+    },
+    "length_auto_revision": false,
+    "length_only_blocking": false,
+    "outcome": "deliver",
+    "path": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-10k-fourcases-20261117/case27/runs/band10000-case27-outline-selected/runtime/users/full-eval/threads/full-27/user-data/outputs/report/r1/review/rv1.json",
+    "review_id": "rv1",
+    "reviewed_candidate_sha256": "46cdc756bb7f68c9b8a1bd5c1b3c0489249ff6dd352ec70e1f08279d47b96f6a",
+    "status": "ready",
+    "tree_version": 2,
+    "virtual_path": "/mnt/user-data/outputs/report/r1/review/rv1.json"
+  },
+  "blocking_findings": [],
+  "report_sha256": "93eb461a2b6f1f37fb9656e7067b749543f38539fd140a8c5350bb53cfb2bd2a",
+  "generation_tokens": 4357244,
+  "tokens_include_cached_input": true,
+  "outline": {
+    "writable_nodes": 9,
+    "total_arguments": 28,
+    "selected_body_target_words": 3600,
+    "body_max_sum": 3990,
+    "tree_version": 2,
+    "tree_sha256": "6b49e3a199170925fb86e99ea131dcdc0da8d0623702ddff05d4471417e4c7a6",
+    "chapters": [
+      {
+        "node_id": "n2",
+        "title": "结合的实质是任务分工与最终责任归属",
+        "arguments": 3,
+        "target_words": 300,
+        "max_words": 330
+      },
+      {
+        "node_id": "n4",
+        "title": "AI在哪些任务上有可引用的获益证据，边界在哪里",
+        "arguments": 3,
+        "target_words": 430,
+        "max_words": 470
+      },
+      {
+        "node_id": "n5",
+        "title": "人类咨询师的不可替代职能与AI的系统性失败模式",
+        "arguments": 3,
+        "target_words": 380,
+        "max_words": 420
+      },
+      {
+        "node_id": "n7",
+        "title": "任务分层与阶梯照护：谁做什么、在什么条件下",
+        "arguments": 4,
+        "target_words": 540,
+        "max_words": 600
+      },
+      {
+        "node_id": "n8",
+        "title": "前门整合：AI做筛查分诊，人类做评估与治疗",
+        "arguments": 3,
+        "target_words": 450,
+        "max_words": 500
+      },
+      {
+        "node_id": "n9",
+        "title": "治疗关系内与会话之间：把AI作为“人工第三者”纳入临床工作",
+        "arguments": 3,
+        "target_words": 380,
+        "max_words": 420
+      },
+      {
+        "node_id": "n11",
+        "title": "危机识别的确定性覆盖与两类典型失败模式",
+        "arguments": 3,
+        "target_words": 430,
+        "max_words": 480
+      },
+      {
+        "node_id": "n12",
+        "title": "治理与制度条件：责任锚定、转介衔接与支付审批",
+        "arguments": 3,
+        "target_words": 420,
+        "max_words": 460
+      },
+      {
+        "node_id": "n13",
+        "title": "结论：可操作的整合清单与最重要的证据缺口",
+        "arguments": 3,
+        "target_words": 270,
+        "max_words": 310
+      }
+    ]
+  },
+  "ledger_phase": null,
+  "writer_recovery": null,
+  "candidate_count": 1,
+  "length_contract": {
+    "compact_outline": true,
+    "counter_version": "mixed-word-estimate-v1",
+    "enabled": true,
+    "heading_reserve_words": 300,
+    "length_auto_revision": false,
+    "max_words": 11000,
+    "measurement_mode": "estimate",
+    "min_words": 9000,
+    "outline_budget_selection": true,
+    "reference_reserve_words": 1000,
+    "safety_margin_words": 500,
+    "scope": "whole_document",
+    "target_words": 10000,
+    "writer_task_cards": true
+  },
+  "race_tokens": 42060,
+  "race_status": "completed",
+  "race_scores": {
+    "comprehensiveness": 0.5630769230769231,
+    "insight": 0.5788643533123028,
+    "instruction_following": 0.552437223042836,
+    "readability": 0.5200594353640416,
+    "overall_score": 0.5610501735951086
+  },
+  "race_overall_percent": 56.10501735951085
+}

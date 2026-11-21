@@ -1,0 +1,314 @@
+{
+  "name": "band30000-case33-outline-selected",
+  "case_id": 33,
+  "target_words": 30000,
+  "query_sha256": "67b918ddef6d21ce1db7d8cae02fed4a811783a4c5fdbe1406d10d049b038ebb",
+  "status": "candidate",
+  "words": 24624,
+  "deviation": -5376,
+  "deviation_percent": -17.92,
+  "within_5_percent": false,
+  "within_10_percent": false,
+  "formal_delivered": false,
+  "review": {
+    "action_id": "spact_sp-fixed-c0-review-r1",
+    "base_digest": "48911781132a774b22bfa294c7cc0f5bfcebcb35d1871326f31519a8cebd3509",
+    "candidate_id": "c1",
+    "candidate_sha256": "594f02973596bd33d707b78bf19020850b219ed9546cc675dcda07c49d3b949f",
+    "covered_requirement_ids": [
+      "req1",
+      "req2",
+      "req3",
+      "req4"
+    ],
+    "created_at": "2026-11-17T03:26:00+00:00",
+    "edits": [],
+    "findings": [
+      {
+        "draft_ids": [
+          "d1",
+          "d10"
+        ],
+        "kind": "coverage",
+        "message": "The opening conclusion section and the closing conclusion note repeat the same three-part answer (which devices, which metals, why). This is acceptable redundancy for a report of this length; no rewrite required.",
+        "node_ids": [
+          "n2",
+          "n16"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d1",
+          "d9"
+        ],
+        "kind": "duplication",
+        "message": "The four selection criteria are stated in n2 and re-explained in n15; n15 does add cross-chapter synthesis, so this is mild repetition rather than a blocking duplication.",
+        "node_ids": [
+          "n2",
+          "n15"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d1",
+          "d2",
+          "d3"
+        ],
+        "kind": "structure",
+        "message": "Heading levels in the assembled body mix nested sub-headings inside chapters, and the '结论速览' section uses an extra unnumbered sub-heading before the numbered sub-sections. Cosmetic only.",
+        "node_ids": [
+          "n2",
+          "n3",
+          "n4",
+          "n5"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [],
+        "kind": "other",
+        "message": "Estimated length 24624 words against a 27000-word floor (target 30000). Recorded as advisory only; the host owns the length gate and no length-only revision is requested.",
+        "node_ids": [],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [],
+        "kind": "other",
+        "message": "Explicit report length constraint: whole-document estimated Word count 24624 is short (required 27000–33000, target 30000). This is a versioned estimate, NOT a measured Microsoft Word count. Preserve requirements/evidence; revise affected nodes using the existing bounded content-revision path. For a long report remove repetition, not required evidence; for a short report add substantive missing analysis, not filler. Do not truncate the export. Node estimates (largest first): [{'node_id': 'n11', 'estimated_words': 3421}, {'node_id': 'n7', 'estimated_words': 2974}, {'node_id': 'n4', 'estimated_words': 2645}, {'node_id': 'n2', 'estimated_words': 2508}, {'node_id': 'n15', 'estimated_words': 2458}, {'node_id': 'n5', 'estimated_words': 2284}, {'node_id': 'n13', 'estimated_words': 2278}, {'node_id': 'n8', 'estimated_words': 2093}, {'node_id': 'n9', 'estimated_words': 2007}, {'node_id': 'n16', 'estimated_words': 1055}]",
+        "node_ids": [
+          "n11",
+          "n7",
+          "n4",
+          "n2",
+          "n15",
+          "n5",
+          "n13",
+          "n8",
+          "n9",
+          "n16"
+        ],
+        "severity": "blocking"
+      }
+    ],
+    "host_length_finding": {
+      "draft_ids": [],
+      "kind": "other",
+      "message": "Explicit report length constraint: whole-document estimated Word count 24624 is short (required 27000–33000, target 30000). This is a versioned estimate, NOT a measured Microsoft Word count. Preserve requirements/evidence; revise affected nodes using the existing bounded content-revision path. For a long report remove repetition, not required evidence; for a short report add substantive missing analysis, not filler. Do not truncate the export. Node estimates (largest first): [{'node_id': 'n11', 'estimated_words': 3421}, {'node_id': 'n7', 'estimated_words': 2974}, {'node_id': 'n4', 'estimated_words': 2645}, {'node_id': 'n2', 'estimated_words': 2508}, {'node_id': 'n15', 'estimated_words': 2458}, {'node_id': 'n5', 'estimated_words': 2284}, {'node_id': 'n13', 'estimated_words': 2278}, {'node_id': 'n8', 'estimated_words': 2093}, {'node_id': 'n9', 'estimated_words': 2007}, {'node_id': 'n16', 'estimated_words': 1055}]",
+      "node_ids": [
+        "n11",
+        "n7",
+        "n4",
+        "n2",
+        "n15",
+        "n5",
+        "n13",
+        "n8",
+        "n9",
+        "n16"
+      ],
+      "severity": "blocking"
+    },
+    "inputs_digest": "6fb58bd87d382070bbcc3d7d106383a4ec4c6586205b6e8d1b38984caf927e93",
+    "length": {
+      "body_words": 24109,
+      "candidate_sha256": "594f02973596bd33d707b78bf19020850b219ed9546cc675dcda07c49d3b949f",
+      "counter_version": "mixed-word-estimate-v1",
+      "direction": "short",
+      "estimated_words": 24624,
+      "in_estimated_range": false,
+      "max_words": 33000,
+      "measured_word_count": null,
+      "min_words": 27000,
+      "nodes": [
+        {
+          "estimated_words": 2508,
+          "node_id": "n2"
+        },
+        {
+          "estimated_words": 2645,
+          "node_id": "n4"
+        },
+        {
+          "estimated_words": 2284,
+          "node_id": "n5"
+        },
+        {
+          "estimated_words": 2974,
+          "node_id": "n7"
+        },
+        {
+          "estimated_words": 2093,
+          "node_id": "n8"
+        },
+        {
+          "estimated_words": 2007,
+          "node_id": "n9"
+        },
+        {
+          "estimated_words": 3421,
+          "node_id": "n11"
+        },
+        {
+          "estimated_words": 2278,
+          "node_id": "n13"
+        },
+        {
+          "estimated_words": 2458,
+          "node_id": "n15"
+        },
+        {
+          "estimated_words": 1055,
+          "node_id": "n16"
+        }
+      ],
+      "reference_words": 513,
+      "rendered_sha256": "4bf8c85ef215aedf6b5f314d0948844bc9a7910db3d5c4aaf4e1e99136c539f0",
+      "scope": "whole_document",
+      "target_words": 30000,
+      "word_verified": false
+    },
+    "length_auto_revision": false,
+    "length_only_blocking": true,
+    "outcome": "revise",
+    "path": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-newcase33-20261117/runs/band30000-case33-outline-selected/runtime/users/full-eval/threads/full-33/user-data/outputs/report/r1/review/rv1.json",
+    "review_id": "rv1",
+    "reviewed_candidate_sha256": "594f02973596bd33d707b78bf19020850b219ed9546cc675dcda07c49d3b949f",
+    "status": "issues",
+    "tree_version": 2,
+    "virtual_path": "/mnt/user-data/outputs/report/r1/review/rv1.json"
+  },
+  "blocking_findings": [
+    {
+      "draft_ids": [],
+      "kind": "other",
+      "message": "Explicit report length constraint: whole-document estimated Word count 24624 is short (required 27000–33000, target 30000). This is a versioned estimate, NOT a measured Microsoft Word count. Preserve requirements/evidence; revise affected nodes using the existing bounded content-revision path. For a long report remove repetition, not required evidence; for a short report add substantive missing analysis, not filler. Do not truncate the export. Node estimates (largest first): [{'node_id': 'n11', 'estimated_words': 3421}, {'node_id': 'n7', 'estimated_words': 2974}, {'node_id': 'n4', 'estimated_words': 2645}, {'node_id': 'n2', 'estimated_words': 2508}, {'node_id': 'n15', 'estimated_words': 2458}, {'node_id': 'n5', 'estimated_words': 2284}, {'node_id': 'n13', 'estimated_words': 2278}, {'node_id': 'n8', 'estimated_words': 2093}, {'node_id': 'n9', 'estimated_words': 2007}, {'node_id': 'n16', 'estimated_words': 1055}]",
+      "node_ids": [
+        "n11",
+        "n7",
+        "n4",
+        "n2",
+        "n15",
+        "n5",
+        "n13",
+        "n8",
+        "n9",
+        "n16"
+      ],
+      "severity": "blocking"
+    }
+  ],
+  "report_sha256": "4bf8c85ef215aedf6b5f314d0948844bc9a7910db3d5c4aaf4e1e99136c539f0",
+  "generation_tokens": 3914238,
+  "tokens_include_cached_input": true,
+  "outline": {
+    "writable_nodes": 10,
+    "total_arguments": 50,
+    "selected_body_target_words": 15600,
+    "body_max_sum": 16180,
+    "tree_version": 2,
+    "tree_sha256": "34cb5e90e437e8cda86c101cbf2f5d911503f6d8fcf9affba91269ad4da5c82b",
+    "chapters": [
+      {
+        "node_id": "n2",
+        "title": "设备清单核对与“设备—金属—工序”对应矩阵",
+        "arguments": 5,
+        "target_words": 1480,
+        "max_words": 1540
+      },
+      {
+        "node_id": "n4",
+        "title": "Cu 大马士革的阻挡层与种子层：为什么仍然由 PVD 承担",
+        "arguments": 5,
+        "target_words": 1820,
+        "max_words": 1880
+      },
+      {
+        "node_id": "n5",
+        "title": "超薄阻挡层、Co/Ru 衬里与半大马士革 Ru：CVD/ALD 的增量在哪里",
+        "arguments": 5,
+        "target_words": 1670,
+        "max_words": 1730
+      },
+      {
+        "node_id": "n7",
+        "title": "W 接触与填充：TiN 粘附层、成核层与 CVD/ALD 钨的分工",
+        "arguments": 6,
+        "target_words": 1820,
+        "max_words": 1880
+      },
+      {
+        "node_id": "n8",
+        "title": "Mo 接棒：为什么先进接触与存储字线必须转向 ALD 钼",
+        "arguments": 5,
+        "target_words": 1470,
+        "max_words": 1530
+      },
+      {
+        "node_id": "n9",
+        "title": "自对准硅化物源层：PVD 沉积 Ni(Pt) 再退火为何不可替代",
+        "arguments": 5,
+        "target_words": 1080,
+        "max_words": 1130
+      },
+      {
+        "node_id": "n11",
+        "title": "功函数层、偶极层与栅极填充：ALD 如何以厚度与成分精度实现多阈值",
+        "arguments": 5,
+        "target_words": 1900,
+        "max_words": 1960
+      },
+      {
+        "node_id": "n13",
+        "title": "电子束蒸发与分子束外延为何不进先进制程金属化工序",
+        "arguments": 6,
+        "target_words": 1950,
+        "max_words": 2010
+      },
+      {
+        "node_id": "n15",
+        "title": "四条判据如何决定金属—设备配对，并在 2nm 之后如何变化",
+        "arguments": 5,
+        "target_words": 1760,
+        "max_words": 1820
+      },
+      {
+        "node_id": "n16",
+        "title": "结论：三类设备与一条选择逻辑",
+        "arguments": 3,
+        "target_words": 650,
+        "max_words": 700
+      }
+    ]
+  },
+  "ledger_phase": null,
+  "writer_recovery": null,
+  "candidate_count": 1,
+  "length_contract": {
+    "compact_outline": true,
+    "counter_version": "mixed-word-estimate-v1",
+    "enabled": true,
+    "heading_reserve_words": 300,
+    "length_auto_revision": false,
+    "max_words": 33000,
+    "measurement_mode": "estimate",
+    "min_words": 27000,
+    "outline_budget_selection": true,
+    "reference_reserve_words": 1000,
+    "safety_margin_words": 500,
+    "scope": "whole_document",
+    "target_words": 30000,
+    "writer_task_cards": true
+  },
+  "race_tokens": 77248,
+  "race_status": "completed",
+  "race_scores": {
+    "comprehensiveness": 0.5563689604685212,
+    "insight": 0.5646359583952452,
+    "instruction_following": 0.56,
+    "readability": 0.5518248175182482,
+    "overall_score": 0.5594110530819392
+  },
+  "race_overall_percent": 55.94110530819392
+}

@@ -418,10 +418,7 @@ class ReportLedger:
                 raise ReportValidationError(f"gap {gap_id} is already closed")
             if self.has_returned_research(gap_id):
                 if int(gap.get("additional_rounds") or 0) <= 0:
-                    raise ReportValidationError(
-                        f"gap {gap_id} already returned in the current fixed round; "
-                        "only an explicit user-authorized continuation may dispatch another attempt"
-                    )
+                    raise ReportValidationError(f"gap {gap_id} already returned in the current fixed round; only an explicit user-authorized continuation may dispatch another attempt")
                 user_authorized.append(gap_id)
         now = utc_now_iso()
         tree = self.payload.get("tree")
@@ -689,13 +686,7 @@ class ReportLedger:
                 # A user decision may close the same gap before the tree's
                 # matching gap_outcome is applied. Repeating that same closure
                 # is idempotent; conflicting closures remain invalid.
-                if (
-                    gap.get("status") == "not_needed"
-                    and outcome == "not_needed"
-                    and prior.get("outcome") == "not_needed"
-                    and user_input_id
-                    and prior.get("user_input_id") == user_input_id
-                ):
+                if gap.get("status") == "not_needed" and outcome == "not_needed" and prior.get("outcome") == "not_needed" and user_input_id and prior.get("user_input_id") == user_input_id:
                     continue
                 raise ReportValidationError(f"gap {gap_id} is already closed (status={gap.get('status')})")
             by_gap[gap_id] = entry
@@ -869,14 +860,12 @@ class ReportLedger:
         return {
             "report_id": self.payload.get("report_id"),
             "status": self.payload.get("status"),
+            **({"length_contract": self.payload["length_contract"], "length_check": (review or {}).get("length")} if self.payload.get("length_contract") else {}),
             "tree_version": int(tree.get("version") or 0) if tree else 0,
             "gaps": open_gaps,
             "closed_gap_count": len(closed),
             "writes_pending": writing["writes_pending"],
-            "writer_pipeline": {
-                key: (self.payload.get("writer_pipeline") or {}).get(key)
-                for key in ("managed", "max_concurrent", "status", "last_run_id")
-            },
+            "writer_pipeline": {key: (self.payload.get("writer_pipeline") or {}).get(key) for key in ("managed", "max_concurrent", "status", "last_run_id")},
             "write_requests": writing["write_requests"],
             "current_drafts": writing["current_drafts"],
             "draft_review_due": writing["draft_review_due"],

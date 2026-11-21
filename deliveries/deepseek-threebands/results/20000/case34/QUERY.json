@@ -1,0 +1,18 @@
+{
+  "id": 34,
+  "topic": "Hardware",
+  "language": "zh",
+  "prompt": "在二维半导体的接触领域，科研人员为了降低接触电阻做了许多努力。以二硫化钼为例，半金属接触，纯金接触等均表现出非常小的接触电阻。但每种低电阻的接触往往有自己独特的理论解释，导致该领域一直没有一个明确的发展方向。这些降低接触电阻的方法是否有共通之处？是否有一个大一统的理论能够解释大多数降低接触电阻的方法？按照这个方法该领域将来的发展方向是什么呢？",
+  "report_length": {
+    "min_words": 18000,
+    "target_words": 20000,
+    "max_words": 22000,
+    "reference_reserve_words": 1000,
+    "heading_reserve_words": 300,
+    "safety_margin_words": 500,
+    "compact_outline": true,
+    "writer_task_cards": true,
+    "length_auto_revision": false,
+    "outline_budget_selection": true
+  }
+}

@@ -48,6 +48,8 @@ class SubagentConfig:
     finalize_token_fraction: float = 0.7
     repair_invalid_tool_calls: bool = False
     bound_outline_source_correction: bool = False
+    # Host-only report Writer identity; None leaves ordinary agents unchanged.
+    report_writer_length: dict[str, str] | None = None
     # Internal specialists are addressable by orchestration code through the
     # registry but are not advertised to, or callable from, the default lead
     # agent's generic task tool.

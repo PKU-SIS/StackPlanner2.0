@@ -1,0 +1,18 @@
+{
+  "id": 24,
+  "topic": "Education & Jobs",
+  "language": "zh",
+  "prompt": "如何增强自闭症学生课堂参与度？有哪些有效的策略可供选择？",
+  "report_length": {
+    "min_words": 18000,
+    "target_words": 20000,
+    "max_words": 22000,
+    "reference_reserve_words": 1000,
+    "heading_reserve_words": 300,
+    "safety_margin_words": 500,
+    "compact_outline": true,
+    "writer_task_cards": true,
+    "length_auto_revision": false,
+    "outline_budget_selection": true
+  }
+}

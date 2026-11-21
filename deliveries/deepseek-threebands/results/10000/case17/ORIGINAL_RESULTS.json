@@ -1,0 +1,237 @@
+{
+  "name": "band10000-case17-outline-selected",
+  "case_id": 17,
+  "target_words": 10000,
+  "query_sha256": "436da62b63a9ed0e94fc8a2c2ebe043775d7534c75564d9cc8027313db17be24",
+  "status": "candidate",
+  "words": 9866,
+  "deviation": -134,
+  "deviation_percent": -1.34,
+  "within_5_percent": true,
+  "within_10_percent": true,
+  "formal_delivered": true,
+  "review": {
+    "action_id": "spact_sp-fixed-c0-review-r1",
+    "base_digest": "437c7c1006dea8929b6872f27d498b8cdedf11f17114cf5874c977c3b44e15ea",
+    "candidate_id": "c1",
+    "candidate_sha256": "ae1e9144246f83c6a300f88644f84f6c2e5b9a1bb82ced4565c400d9652b6383",
+    "covered_requirement_ids": [
+      "req1",
+      "req2",
+      "req3",
+      "req4",
+      "req5",
+      "req6",
+      "req7",
+      "req8"
+    ],
+    "created_at": "2026-11-17T06:38:28+00:00",
+    "edits": [],
+    "findings": [
+      {
+        "draft_ids": [
+          "d4",
+          "d9"
+        ],
+        "kind": "duplication",
+        "message": "The 'build-stage savings vs. cost shifted downstream' judgement is stated in the introduction and restated almost verbatim in the conclusion. Acceptable as a recap; no change required.",
+        "node_ids": [
+          "n2",
+          "n14"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [
+          "d5",
+          "d8"
+        ],
+        "kind": "evidence",
+        "message": "Secondary Gartner figures (75% of new apps by end-2026, 80% disposable apps) are sometimes cited directly to source ids while the surrounding text is careful to label transcription level; a consistently explicit 'secondary transcription of Gartner' label would tighten attribution. Does not affect conclusions.",
+        "node_ids": [
+          "n4",
+          "n13"
+        ],
+        "severity": "advisory"
+      },
+      {
+        "draft_ids": [],
+        "kind": "format",
+        "message": "The reference list contains several very long tracking URLs; presentation only.",
+        "node_ids": [],
+        "severity": "advisory"
+      }
+    ],
+    "host_length_finding": null,
+    "inputs_digest": "8406194202b31c5dda9b13c6a476cdb69bb0ca5d39009c293246c50e34988741",
+    "length": {
+      "body_words": 9340,
+      "candidate_sha256": "ae1e9144246f83c6a300f88644f84f6c2e5b9a1bb82ced4565c400d9652b6383",
+      "counter_version": "mixed-word-estimate-v1",
+      "direction": "within",
+      "estimated_words": 9866,
+      "in_estimated_range": true,
+      "max_words": 11000,
+      "measured_word_count": null,
+      "min_words": 9000,
+      "nodes": [
+        {
+          "estimated_words": 607,
+          "node_id": "n2"
+        },
+        {
+          "estimated_words": 962,
+          "node_id": "n4"
+        },
+        {
+          "estimated_words": 1287,
+          "node_id": "n5"
+        },
+        {
+          "estimated_words": 1494,
+          "node_id": "n7"
+        },
+        {
+          "estimated_words": 1115,
+          "node_id": "n8"
+        },
+        {
+          "estimated_words": 925,
+          "node_id": "n10"
+        },
+        {
+          "estimated_words": 1062,
+          "node_id": "n11"
+        },
+        {
+          "estimated_words": 1053,
+          "node_id": "n13"
+        },
+        {
+          "estimated_words": 583,
+          "node_id": "n14"
+        }
+      ],
+      "reference_words": 524,
+      "rendered_sha256": "161fd7773ae6503b32bdde5a9732b1b05b471edd03f5dc2897e66e56721153e5",
+      "scope": "whole_document",
+      "target_words": 10000,
+      "word_verified": false
+    },
+    "length_auto_revision": false,
+    "length_only_blocking": false,
+    "outcome": "deliver",
+    "path": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-10k-fourcases-20261117/case17/runs/band10000-case17-outline-selected/runtime/users/full-eval/threads/full-17/user-data/outputs/report/r1/review/rv1.json",
+    "review_id": "rv1",
+    "reviewed_candidate_sha256": "ae1e9144246f83c6a300f88644f84f6c2e5b9a1bb82ced4565c400d9652b6383",
+    "status": "ready",
+    "tree_version": 2,
+    "virtual_path": "/mnt/user-data/outputs/report/r1/review/rv1.json"
+  },
+  "blocking_findings": [],
+  "report_sha256": "161fd7773ae6503b32bdde5a9732b1b05b471edd03f5dc2897e66e56721153e5",
+  "generation_tokens": 3041814,
+  "tokens_include_cached_input": true,
+  "outline": {
+    "writable_nodes": 9,
+    "total_arguments": 31,
+    "selected_body_target_words": 3800,
+    "body_max_sum": 3995,
+    "tree_version": 2,
+    "tree_sha256": "164dd2fa294d4503bdd06fb5b3ecd7ca597b90ec659feb50ac811f7bc6ea2a11",
+    "chapters": [
+      {
+        "node_id": "n2",
+        "title": "问题界定、分析框架与核心结论",
+        "arguments": 3,
+        "target_words": 240,
+        "max_words": 260
+      },
+      {
+        "node_id": "n4",
+        "title": "行业趋势与采用现状：增长真实，口径需分级",
+        "arguments": 3,
+        "target_words": 420,
+        "max_words": 445
+      },
+      {
+        "node_id": "n5",
+        "title": "开发效率的实测收益与测量边界",
+        "arguments": 3,
+        "target_words": 560,
+        "max_words": 590
+      },
+      {
+        "node_id": "n7",
+        "title": "维护成本与技术债：机制清楚，量化转向小样本与退出成本",
+        "arguments": 5,
+        "target_words": 640,
+        "max_words": 660
+      },
+      {
+        "node_id": "n8",
+        "title": "治理与影子 IT：收益能否兑现取决于组织能力",
+        "arguments": 3,
+        "target_words": 420,
+        "max_words": 445
+      },
+      {
+        "node_id": "n10",
+        "title": "开发者视角 vs 业务视角：分歧源于度量对象与时间尺度",
+        "arguments": 4,
+        "target_words": 440,
+        "max_words": 465
+      },
+      {
+        "node_id": "n11",
+        "title": "适用边界：分层与混合而非替代",
+        "arguments": 3,
+        "target_words": 440,
+        "max_words": 465
+      },
+      {
+        "node_id": "n13",
+        "title": "未来预测：吸收而非替换，应用变“一次性”重划问题",
+        "arguments": 4,
+        "target_words": 390,
+        "max_words": 400
+      },
+      {
+        "node_id": "n14",
+        "title": "结论：条件式回答与采用决策清单",
+        "arguments": 3,
+        "target_words": 250,
+        "max_words": 265
+      }
+    ]
+  },
+  "ledger_phase": null,
+  "writer_recovery": null,
+  "candidate_count": 1,
+  "length_contract": {
+    "compact_outline": true,
+    "counter_version": "mixed-word-estimate-v1",
+    "enabled": true,
+    "heading_reserve_words": 300,
+    "length_auto_revision": false,
+    "max_words": 11000,
+    "measurement_mode": "estimate",
+    "min_words": 9000,
+    "outline_budget_selection": true,
+    "reference_reserve_words": 1000,
+    "safety_margin_words": 500,
+    "scope": "whole_document",
+    "target_words": 10000,
+    "writer_task_cards": true
+  },
+  "race_tokens": 39708,
+  "race_status": "completed",
+  "race_scores": {
+    "comprehensiveness": 0.5166402535657686,
+    "insight": 0.5834683954619125,
+    "instruction_following": 0.5173978819969743,
+    "readability": 0.4992125984251969,
+    "overall_score": 0.5389595997973657
+  },
+  "race_overall_percent": 53.895959979736574
+}

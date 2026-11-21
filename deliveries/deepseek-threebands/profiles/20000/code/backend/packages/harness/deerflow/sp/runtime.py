@@ -1,0 +1,951 @@
+"""DR2 runtime factory for the StackPlanner orchestration graph."""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import re
+import threading
+import uuid
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
+from typing import Any
+
+from langchain_core.runnables import RunnableConfig
+from langgraph.runtime import Runtime
+
+from deerflow.config.app_config import AppConfig, get_app_config
+from deerflow.sp.agent_tools import (
+    DEFAULT_SP_ACTION_LIMIT,
+    SPAcknowledgementMiddleware,
+    SPActionBudgetMiddleware,
+    SPControlActionMiddleware,
+    SPFinishAvailabilityMiddleware,
+    SPTerminalActionMiddleware,
+    SPThinkLabelMiddleware,
+    build_sp_control_tools,
+)
+from deerflow.sp.central import CENTRAL_AGENT_ACTION_PROMPT
+from deerflow.sp.central.runtime_context import SPCentralRuntimeContext, build_sp_central_runtime_context
+from deerflow.sp.central_resilience import SPCentralResilienceMiddleware
+from deerflow.sp.memory.entry import utc_now_iso
+from deerflow.sp.subagents import (
+    A2A_PROGRESS_MESSAGE,
+    DR2SubagentExecutorAdapter,
+    SPSubagentExecutorProtocol,
+    SPSubagentResult,
+    SPSubagentStatus,
+    SPSubagentTask,
+)
+
+logger = logging.getLogger(__name__)
+
+STACKPLANNER_ASSISTANT_ID = "stackplanner"
+_NON_TOOL_OUTPUT_FORMAT_HINTS = frozenset(
+    {
+        "markdown",
+        "md",
+        "report",
+        "json",
+        "html",
+        "pdf",
+    }
+)
+_TOOL_NAME_ALIASES = {
+    "find": "glob",
+    "node": "bash",
+    "nodejs": "bash",
+    "pip": "bash",
+    "pip3": "bash",
+    "python": "bash",
+    "python3": "bash",
+    "pytest": "bash",
+    "rg": "grep",
+    "ripgrep": "grep",
+    "git": "bash",
+    "sh": "bash",
+    "shell": "bash",
+    "terminal": "bash",
+    "zsh": "bash",
+}
+_CODER_READ_ONLY_STAGE_TOOLS = frozenset({"read_file", "ls", "grep", "glob"})
+_NO_SKILL_SENTINELS = frozenset(
+    {
+        "none",
+        "no skill",
+        "no skills",
+        "n/a",
+        "na",
+        "null",
+        "无",
+        "无技能",
+    }
+)
+SP_SUBAGENT_REGISTRY_NAMES = {
+    "researcher": "sp-researcher",
+    "coder": "sp-coder",
+    "reporter": "sp-reporter",
+    "outline": "sp-outline",
+    "perception": "sp-perception",
+    "memory_recaller": "sp-memory-recaller",
+}
+
+# Report Outline is the only role that must serialize a whole planning tree.
+# Keep this override separate from the shared model default and from the
+# ordinary subagent_type-based output override.
+REPORT_OUTLINE_OUTPUT_MAX_TOKENS = 32768
+REPORT_OUTLINE_MAX_TOKENS_KEY = "report:outline"
+
+# Host credentials are never forwarded wholesale. This allowlist is consulted
+# only when Central explicitly selects the matching Skill for one delegation;
+# SubagentExecutor then independently verifies that the loaded Skill is public
+# and declares the secret before binding it to sandbox commands.
+_PLATFORM_SKILL_SECRET_ENV: dict[str, tuple[str, ...]] = {
+    "video-generation": ("MINIMAX_API_KEY",),
+}
+
+_VIDEO_GENERATION_INTENT = re.compile(
+    r"(?:"
+    r"(?:生成|制作|创建|做|合成|渲染).{0,24}(?:视频|短片|影片|动画)"
+    r"|(?:视频|短片|影片|动画).{0,24}(?:生成|制作|创建|合成|渲染)"
+    r"|(?:generate|create|make|produce|render).{0,48}\b(?:video|movie|animation|clip)\b"
+    r"|\b(?:video|movie|animation|clip)\b.{0,48}(?:generation|generator|create|make|render)"
+    r"|\b(?:minimax|hailuo)\b"
+    r")",
+    re.IGNORECASE | re.DOTALL,
+)
+_DIRECT_VIDEO_OUTPUT_INTENT = re.compile(
+    r"(?:"
+    r"(?:生成|制作|创建|做|合成|渲染).{0,32}(?:视频|短片|影片|动画)"
+    r"|(?:generate|create|make|produce|render).{0,64}\b(?:video|movie|animation|clip)\b"
+    r")",
+    re.IGNORECASE | re.DOTALL,
+)
+_CHART_VISUALIZATION_INTENT = re.compile(
+    r"(?:"
+    r"图表|折线图|曲线图|柱状图|条形图|饼图|散点图|面积图|雷达图|热力图|趋势图|"
+    r"箱线图|漏斗图|桑基图|词云|流程图|思维导图|数据可视化|可视化(?:数据|结果|趋势)?"
+    r"|\bchart(?:s)?\b|\bplot(?:s|ting)?\b|\bdata visualization\b|\bvisuali[sz](?:e|ation|ing)\b"
+    r"|\b(?:line|bar|column|pie|scatter|area|radar|boxplot|funnel|sankey) graph\b"
+    r")",
+    re.IGNORECASE | re.DOTALL,
+)
+
+FRESH_USER_TURN_PROMPT = """
+<fresh_user_turn>
+This is a new user turn after the previous run ended abnormally. Treat the current
+user message as authoritative and do not resume the previous unfinished report,
+delegation, search, or tool call unless the user explicitly asks to continue it.
+For greetings and simple questions, answer directly without web search, delegation,
+or repeated internal thinking.
+</fresh_user_turn>
+""".strip()
+
+
+def _runtime_config(config: RunnableConfig) -> dict[str, Any]:
+    merged = dict(config.get("configurable", {}) or {})
+    context = config.get("context", {}) or {}
+    if isinstance(context, Mapping):
+        merged.update(context)
+    return merged
+
+
+def _resolve_model_name(config: RunnableConfig, app_config: AppConfig, *, agent_model: str | None = None) -> str:
+    if not app_config.models:
+        raise ValueError("StackPlanner requires at least one configured chat model.")
+    runtime = _runtime_config(config)
+    requested = runtime.get("model_name") or runtime.get("model") or agent_model
+    if requested and app_config.get_model_config(str(requested)) is not None:
+        return str(requested)
+    if requested:
+        logger.warning("StackPlanner model %r is not configured; using %s", requested, app_config.models[0].name)
+    return app_config.models[0].name
+
+
+def _mapping(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _platform_skill_secrets_for_task(task: SPSubagentTask) -> dict[str, str]:
+    requested = task.metadata.get("skill_names")
+    if not isinstance(requested, list):
+        return {}
+    env_names = {env_name for skill_name in requested if isinstance(skill_name, str) for env_name in _PLATFORM_SKILL_SECRET_ENV.get(skill_name, ())}
+    return {name: value for name in env_names if (value := os.environ.get(name))}
+
+
+def _infer_task_skill_selection(
+    task: SPSubagentTask,
+    *,
+    available_skill_names: frozenset[str] | None,
+) -> None:
+    """Fill an omitted Skill selection for unambiguous platform capabilities.
+
+    Central remains free to choose Skills explicitly. This fallback only runs
+    when it omitted ``metadata.skill_names`` and the requested capability has a
+    configured, enabled platform Skill. Mutating the task here ensures the
+    executor policy, secret binding, and progress events all observe the same
+    validated selection.
+    """
+    if not available_skill_names:
+        return
+    text = "\n".join(part for part in (task.task, task.description, task.expected_output) if isinstance(part, str) and part.strip())
+    raw_selection = task.metadata.get("skill_names")
+    if "skill_names" not in task.metadata:
+        inferred: list[str] = []
+        if "video-generation" in available_skill_names and _VIDEO_GENERATION_INTENT.search(text):
+            inferred.append("video-generation")
+        if "chart-visualization" in available_skill_names and _CHART_VISUALIZATION_INTENT.search(text):
+            inferred.append("chart-visualization")
+        if inferred:
+            task.metadata["skill_names"] = inferred
+            logger.info("Auto-selected SP Skills %s for delegated task %s", inferred, task.action_id)
+        return
+
+    # ``find-skills`` is a discovery fallback, not an execution path. If
+    # Central asks it to discover video generation while the enabled platform
+    # catalog already contains that exact capability, route straight to it.
+    if raw_selection == ["find-skills"] and "video-generation" in available_skill_names and _DIRECT_VIDEO_OUTPUT_INTENT.search(text):
+        task.metadata["skill_names"] = ["video-generation"]
+        logger.info("Replaced redundant find-skills delegation with video-generation for task %s", task.action_id)
+        return
+    if raw_selection == ["find-skills"] and "chart-visualization" in available_skill_names and _CHART_VISUALIZATION_INTENT.search(text):
+        task.metadata["skill_names"] = ["chart-visualization"]
+        logger.info("Replaced redundant find-skills delegation with chart-visualization for task %s", task.action_id)
+
+
+def _task_stream_id(task: SPSubagentTask) -> str:
+    parent_tool_call_id = task.metadata.get("__sp_parent_tool_call_id")
+    return str(parent_tool_call_id) if parent_tool_call_id else task.action_id
+
+
+def _tool_execution_ok(tool_name: str, content: str) -> bool:
+    """Classify one observed tool result as host-observed success/failure.
+
+    Tool envelopes may carry a structured error while the transport itself
+    succeeded. A truthy/ok-looking transport result is not enough for research
+    evidence; inspect the envelope's explicit status fields.
+    """
+    text = str(content or "").strip()
+    if text.lower().startswith("error:"):
+        return False
+    if tool_name == "report_fetch_material":
+        try:
+            payload = json.loads(text)
+        except (json.JSONDecodeError, TypeError):
+            return False
+        return isinstance(payload, Mapping) and payload.get("saved") is True
+    if tool_name == "web_search":
+        try:
+            payload = json.loads(text)
+        except (json.JSONDecodeError, TypeError):
+            return True
+        if not isinstance(payload, Mapping):
+            return True
+        error = str(payload.get("error") or "").strip()
+        if error.lower() in {"web_search_unavailable", "web_search_attempts_exhausted"}:
+            return False
+        if error and error.lower() != "no results found":
+            return False
+        return True
+    # Do not interpret JSON payload fields for read_file and other data tools.
+    return True
+
+
+def _resolve_report_role_thinking(
+    report_role: str,
+    inherited: bool | None,
+    context: Mapping[str, Any],
+    configurable: Mapping[str, Any],
+) -> bool | None:
+    """Resolve thinking for one report role; Writer is explicit, others inherit."""
+    value = inherited
+    raw = context.get(f"sp_report_{report_role}_thinking_enabled", configurable.get(f"sp_report_{report_role}_thinking_enabled"))
+    if raw is not None:
+        value = raw.strip().lower() in {"1", "true", "yes", "on"} if isinstance(raw, str) else bool(raw)
+    if report_role == "writer":
+        value = False
+    return value
+
+
+def _apply_task_skill_policy(
+    subagent_config: Any,
+    task: SPSubagentTask,
+    *,
+    available_skill_names: frozenset[str] | None,
+):
+    """Apply the CentralAgent's requested Skill whitelist to one delegate."""
+    raw_skill_names = task.metadata.get("skill_names")
+    if raw_skill_names is None:
+        configured = subagent_config.skills
+        if configured is None or available_skill_names is None:
+            return subagent_config
+        filtered = [name for name in configured if name in available_skill_names]
+        return replace(subagent_config, skills=filtered) if filtered != configured else subagent_config
+
+    if not isinstance(raw_skill_names, list) or any(not isinstance(name, str) or not name.strip() for name in raw_skill_names):
+        raise ValueError("SP action metadata.skill_names must be a list of non-empty Skill names")
+    requested = list(dict.fromkeys(name.strip() for name in raw_skill_names if name.strip().lower() not in _NO_SKILL_SENTINELS))
+    if not requested:
+        # Small local models often serialize an omitted optional capability as
+        # ["none"]. Treat that as no override, not as an invented Skill.
+        task.metadata.pop("skill_names", None)
+        configured = subagent_config.skills
+        if configured is None or available_skill_names is None:
+            return subagent_config
+        filtered = [name for name in configured if name in available_skill_names]
+        return replace(subagent_config, skills=filtered) if filtered != configured else subagent_config
+    task.metadata["skill_names"] = requested
+    if available_skill_names is None:
+        raise ValueError("SP Skill catalog is unavailable; cannot validate metadata.skill_names")
+    unavailable = sorted(set(requested) - set(available_skill_names))
+    if unavailable:
+        # Central may describe ordinary repository work with generic labels
+        # such as ``code-inspection`` or ``unit-testing`` even when those are
+        # not installed Skills. Coder already has the repository tools and its
+        # role prompt; dropping only unknown optional labels keeps the task
+        # executable while recording the mismatch for debug/event consumers.
+        if task.subagent_type == "coder":
+            requested = [name for name in requested if name in available_skill_names]
+            task.metadata["skill_names"] = requested
+            task.metadata["ignored_skill_names"] = unavailable
+            logger.warning(
+                "Ignoring unavailable optional coder Skills %s for task %s",
+                unavailable,
+                task.action_id,
+            )
+            if not requested:
+                task.metadata.pop("skill_names", None)
+            return replace(subagent_config, skills=requested)
+        raise ValueError(f"SP action requested unavailable or disabled Skills: {unavailable}")
+    return replace(subagent_config, skills=requested)
+
+
+def _apply_task_tool_policy(
+    subagent_config: Any,
+    task: SPSubagentTask,
+    *,
+    available_tools: list[Any],
+):
+    """Apply a validated Central-requested Tool allowlist to one delegate."""
+    raw_tool_names = task.metadata.get("tool_names")
+    if raw_tool_names is None:
+        return subagent_config
+    if not isinstance(raw_tool_names, list) or any(not isinstance(name, str) or not name.strip() for name in raw_tool_names):
+        raise ValueError("SP action metadata.tool_names must be a list of non-empty Tool names")
+
+    requested = list(dict.fromkeys(_TOOL_NAME_ALIASES.get(name.strip().lower(), name.strip()) for name in raw_tool_names))
+    task.metadata["tool_names"] = requested
+    format_hints = {name for name in requested if name.lower() in _NON_TOOL_OUTPUT_FORMAT_HINTS}
+    if format_hints:
+        # Qwen occasionally places the requested output format in tool_names
+        # (for example ["markdown"]). Treat that as an absent allowlist so the
+        # role's safe defaults remain available; unknown executable-looking
+        # names still fail closed below.
+        logger.info(
+            "Ignoring non-Tool output format hints %s for delegated task %s",
+            sorted(format_hints),
+            task.action_id,
+        )
+        return subagent_config
+    available_names = {str(getattr(tool, "name", "")) for tool in available_tools}
+    denied = set(subagent_config.disallowed_tools or [])
+    role_allowlist = set(subagent_config.tools) if subagent_config.tools is not None else None
+
+    # Ordinary web research can externalize a large fetch result to
+    # .tool-results and explicitly ask the model to read it back.  Supply that
+    # read dependency only for the normal researcher path, and only when the
+    # role/user policy still allows read_file.  Report roles have their own
+    # host-bound read tool set.
+    is_report_role = bool(task.metadata.get("report_role"))
+    if (
+        not is_report_role
+        and task.subagent_type == "researcher"
+        and any(name in requested for name in ("web_fetch", "web_search"))
+        and "read_file" in available_names
+        and "read_file" not in denied
+        and (role_allowlist is None or "read_file" in role_allowlist)
+        and "read_file" not in requested
+    ):
+        requested.append("read_file")
+        task.metadata["tool_names"] = requested
+        task.allowed_tools = list(requested)
+
+    unavailable = sorted(set(requested) - available_names)
+    if unavailable:
+        raise ValueError(f"SP action requested unavailable Tools: {unavailable}")
+
+    forbidden = sorted(name for name in requested if name in denied or (role_allowlist is not None and name not in role_allowlist))
+    if forbidden:
+        raise ValueError(f"SP action requested Tools forbidden for {subagent_config.name}: {forbidden}")
+    return replace(subagent_config, tools=requested)
+
+
+def _apply_sp_stage_tool_policy(subagent_config: Any, task: SPSubagentTask):
+    """Keep read-only Coder stages from accidentally implementing the fix.
+
+    Prompt-only stage boundaries are too weak for tool-using models.  A Coder
+    perception task that edits source steals the mutation from the later
+    implementation stage, whose per-delegation verification then correctly
+    reports that it observed no source write.  Remove every mutation-capable
+    tool (including shell) from read-only perception/planning/research stages;
+    verification-only work retains bash because it must execute tests.
+    """
+
+    if task.subagent_type != "coder":
+        return subagent_config
+    if task.metadata.get("verification_only") is True:
+        return subagent_config
+    stage = str(task.metadata.get("stage") or "").strip().lower()
+    read_only_stage = stage in {"perception", "planning", "research"}
+    if task.metadata.get("requires_implementation") is not False and not read_only_stage:
+        return subagent_config
+    configured = subagent_config.tools
+    if configured is None:
+        return replace(
+            subagent_config,
+            tools=sorted(_CODER_READ_ONLY_STAGE_TOOLS),
+        )
+    return replace(
+        subagent_config,
+        tools=[name for name in configured if name in _CODER_READ_ONLY_STAGE_TOOLS],
+    )
+
+
+def app_config_for_report_outline(app_config: AppConfig, task: SPSubagentTask) -> AppConfig:
+    """Return a config copy with a report-outline-only budget override.
+
+    Ordinary Outline, Researcher, Reporter, the global subagent default and the
+    shared ``app_config`` are left untouched. The executor's existing
+    ``app_config.subagents.get_token_budget_for('sp-outline')`` path then picks
+    up the copy when it builds the real TokenBudgetMiddleware.
+    """
+    subagents = getattr(app_config, "subagents", None)
+    budget = getattr(subagents, "report_outline_token_budget", None)
+    if task.metadata.get("report_role") != "outline" or budget is None:
+        return app_config
+    from deerflow.config.subagents_config import SubagentOverrideConfig
+
+    subagents = app_config.subagents.model_copy(deep=True)
+    override = subagents.agents.get("sp-outline") or SubagentOverrideConfig()
+    subagents.agents = {
+        **subagents.agents,
+        "sp-outline": override.model_copy(update={"token_budget": budget}),
+    }
+    return app_config.model_copy(update={"subagents": subagents})
+
+
+def app_config_for_report_continuation(app_config: AppConfig, task: SPSubagentTask) -> AppConfig:
+    """A continuation uses only the original assignment's remaining total budget."""
+    remaining = task.metadata.get("report_delivery_remaining_tokens")
+    if task.metadata.get("report_role") != "researcher" or not task.metadata.get("report_output_continuation") or remaining is None:
+        return app_config
+    from deerflow.config.subagents_config import SubagentOverrideConfig
+    from deerflow.config.token_budget_config import TokenBudgetConfig
+
+    subagents = app_config.subagents.model_copy(deep=True)
+    original = subagents.get_token_budget_for("sp-researcher")
+    budget = TokenBudgetConfig(
+        **{
+            **original.model_dump(),
+            "enabled": True,
+            "max_tokens": int(remaining),
+            "hard_stop_threshold": 1.0,
+            "max_input_tokens": task.metadata.get("report_delivery_input_remaining"),
+            "max_output_tokens": task.metadata.get("report_delivery_output_remaining"),
+        }
+    )
+    override = subagents.agents.get("sp-researcher") or SubagentOverrideConfig()
+    subagents.agents = {**subagents.agents, "sp-researcher": override.model_copy(update={"token_budget": budget})}
+    return app_config.model_copy(update={"subagents": subagents})
+
+
+@dataclass(slots=True)
+class DR2SPExecutorProvider:
+    """Create DR2 SubagentExecutor instances bound to the active graph state."""
+
+    app_config: AppConfig
+    parent_model: str
+    runnable_config: RunnableConfig
+    available_skill_names: frozenset[str] | None = None
+    memory_agent_name: str | None = None
+    user_id: str | None = None
+    _tools: list[Any] | None = field(default=None, init=False, repr=False)
+    _tools_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+
+    def _available_tools(self) -> list[Any]:
+        if self._tools is None:
+            with self._tools_lock:
+                if self._tools is None:
+                    from deerflow.tools import get_available_tools
+
+                    self._tools = get_available_tools(
+                        model_name=self.parent_model,
+                        subagent_enabled=False,
+                        app_config=self.app_config,
+                    )
+        return self._tools
+
+    def __call__(self, state: Mapping[str, Any], runtime: Runtime) -> SPSubagentExecutorProtocol:
+        context = _mapping(getattr(runtime, "context", None))
+        metadata = _mapping(self.runnable_config.get("metadata"))
+        writer = getattr(runtime, "stream_writer", None)
+        journal = context.get("__run_journal")
+        parent_abort_event = context.get("__run_abort_event")
+        report_usage = getattr(journal, "record_external_llm_usage_records", None)
+
+        def executor_factory(task: SPSubagentTask):
+            from deerflow.subagents import SubagentExecutor, get_subagent_config
+
+            registry_name = SP_SUBAGENT_REGISTRY_NAMES.get(task.subagent_type)
+            subagent_config = get_subagent_config(registry_name, app_config=self.app_config) if registry_name else None
+            if subagent_config is None or not subagent_config.internal:
+                raise ValueError(f"Unknown StackPlanner subagent type: {task.subagent_type}")
+            configurable = _mapping(self.runnable_config.get("configurable"))
+            raw_timeout = configurable.get("sp_subagent_timeout_seconds")
+            try:
+                timeout_override = int(raw_timeout) if raw_timeout is not None else 0
+            except (TypeError, ValueError):
+                timeout_override = 0
+            if timeout_override > 0:
+                subagent_config = replace(subagent_config, timeout_seconds=timeout_override)
+            raw_thinking = context.get("sp_subagent_thinking_enabled", configurable.get("sp_subagent_thinking_enabled"))
+            subagent_thinking_enabled: bool | None = None
+            if raw_thinking is not None:
+                if isinstance(raw_thinking, str):
+                    subagent_thinking_enabled = raw_thinking.strip().lower() in {"1", "true", "yes", "on"}
+                else:
+                    subagent_thinking_enabled = bool(raw_thinking)
+            raw_max_tokens = context.get("sp_subagent_max_tokens", configurable.get("sp_subagent_max_tokens"))
+            try:
+                subagent_max_tokens = int(raw_max_tokens) if raw_max_tokens is not None else 0
+            except (TypeError, ValueError):
+                subagent_max_tokens = 0
+            global_max_tokens_explicit = subagent_max_tokens > 0
+            global_max_tokens_value = subagent_max_tokens
+            raw_role_max_tokens = context.get(
+                "sp_subagent_max_tokens_by_role",
+                configurable.get("sp_subagent_max_tokens_by_role"),
+            )
+            if isinstance(raw_role_max_tokens, Mapping):
+                raw_role_value = raw_role_max_tokens.get(task.subagent_type)
+                try:
+                    role_max_tokens = int(raw_role_value) if raw_role_value is not None else 0
+                except (TypeError, ValueError):
+                    role_max_tokens = 0
+                if role_max_tokens > 0:
+                    subagent_max_tokens = role_max_tokens
+            raw_protect_tests = context.get(
+                "sp_protect_test_files",
+                configurable.get("sp_protect_test_files"),
+            )
+            protect_test_files = raw_protect_tests.strip().lower() in {"1", "true", "yes", "on"} if isinstance(raw_protect_tests, str) else bool(raw_protect_tests)
+            report_role = str(task.metadata.get("report_role") or "")
+            if report_role == "outline":
+                # Report Outline precedence:
+                # report:outline > explicit global > report default 32768.
+                # The ordinary subagent_type map must not leak into report
+                # Outline, and the explicit global value must be restored after
+                # the ordinary role override above.
+                report_role_value = None
+                if isinstance(raw_role_max_tokens, Mapping):
+                    report_role_value = raw_role_max_tokens.get(REPORT_OUTLINE_MAX_TOKENS_KEY)
+                try:
+                    report_role_max_tokens = int(report_role_value) if report_role_value is not None else 0
+                except (TypeError, ValueError):
+                    report_role_max_tokens = 0
+                if report_role_max_tokens > 0:
+                    subagent_max_tokens = report_role_max_tokens
+                elif global_max_tokens_explicit:
+                    subagent_max_tokens = global_max_tokens_value
+                else:
+                    subagent_max_tokens = REPORT_OUTLINE_OUTPUT_MAX_TOKENS
+                task.metadata["max_tokens_per_step"] = subagent_max_tokens
+            available_tools = self._available_tools()
+            if report_role:
+                # Report roles receive a host-assembled tool/Skill/prompt set.
+                # Model-supplied skill/tool allowlists are not authoritative for
+                # these roles and must not be able to widen or mis-bind them.
+                from deerflow.sp.report import configure_report_subagent
+
+                subagent_config, available_tools, report_role = configure_report_subagent(
+                    task,
+                    state=state,
+                    available_tools=available_tools,
+                    subagent_config=subagent_config,
+                )
+            else:
+                _infer_task_skill_selection(
+                    task,
+                    available_skill_names=self.available_skill_names,
+                )
+                # The A2A request allowlist is authoritative for this delegation.
+                # It can only narrow the role defaults; it never grants Central a
+                # tool and never bypasses the role/disallowed-tool checks below.
+                if task.allowed_tools:
+                    task.metadata["tool_names"] = list(task.allowed_tools)
+                subagent_config = _apply_task_skill_policy(
+                    subagent_config,
+                    task,
+                    available_skill_names=self.available_skill_names,
+                )
+                subagent_config = _apply_task_tool_policy(
+                    subagent_config,
+                    task,
+                    available_tools=available_tools,
+                )
+                subagent_config = _apply_sp_stage_tool_policy(subagent_config, task)
+            if report_role:
+                subagent_thinking_enabled = _resolve_report_role_thinking(
+                    report_role,
+                    subagent_thinking_enabled,
+                    context,
+                    configurable,
+                )
+                # Record the actual role setting so real-provider verification
+                # can distinguish inherited settings from an explicit choice.
+                task.metadata["thinking_enabled"] = subagent_thinking_enabled
+            thread_id = str(context.get("thread_id") or task.thread_id or "") or None
+            run_id = str(context.get("run_id") or task.run_id or "") or None
+            stream_task_id = _task_stream_id(task)
+            skill_names = task.metadata.get("skill_names")
+            skill_step_offset = len(skill_names) if isinstance(skill_names, list) else 0
+
+            def observe_step(message: dict[str, Any], message_index: int) -> None:
+                if report_role and isinstance(message, dict) and message.get("type") == "tool":
+                    content = str(message.get("content") or "")
+                    tool_name = str(message.get("name") or "unknown")
+                    task.metadata.setdefault("_report_tool_executions", []).append(
+                        {
+                            "tool": tool_name,
+                            "ok": _tool_execution_ok(tool_name, content),
+                            "detail": content[:500],
+                        }
+                    )
+                if callable(writer):
+                    writer(
+                        {
+                            **_a2a_task_event(task, message_type=A2A_PROGRESS_MESSAGE),
+                            "type": "task_running",
+                            "task_id": stream_task_id,
+                            "message": message,
+                            "message_index": skill_step_offset + message_index,
+                            "subagent_type": task.subagent_type,
+                            "occurred_at": utc_now_iso(),
+                        }
+                    )
+
+            effective_app_config = app_config_for_report_outline(self.app_config, task)
+            effective_app_config = app_config_for_report_continuation(effective_app_config, task)
+            if report_role == "researcher":
+                task.metadata.setdefault("report_research_token_budget", effective_app_config.subagents.get_token_budget_for(subagent_config.name).model_dump())
+                if task.metadata.get("report_output_continuation"):
+                    limit = int(task.metadata["report_delivery_output_limit"])
+                    subagent_max_tokens = min(subagent_max_tokens, limit) if subagent_max_tokens > 0 else limit
+            return SubagentExecutor(
+                config=subagent_config,
+                tools=available_tools,
+                app_config=effective_app_config,
+                parent_model=self.parent_model,
+                sandbox_state=state.get("sandbox"),
+                thread_data=state.get("thread_data"),
+                thread_id=thread_id,
+                trace_id=str(metadata.get("trace_id") or uuid.uuid4().hex[:8]),
+                user_id=str(context.get("user_id") or self.user_id) if context.get("user_id") or self.user_id else None,
+                user_role=str(context.get("user_role")) if context.get("user_role") else None,
+                oauth_provider=str(context.get("oauth_provider")) if context.get("oauth_provider") else None,
+                oauth_id=str(context.get("oauth_id")) if context.get("oauth_id") else None,
+                run_id=run_id,
+                channel_user_id=str(context.get("channel_user_id")) if context.get("channel_user_id") else None,
+                deerflow_trace_id=str(context.get("deerflow_trace_id")) if context.get("deerflow_trace_id") else None,
+                memory_agent_name=self.memory_agent_name if task.subagent_type == "memory_recaller" else None,
+                user_scoped_skills=True,
+                step_observer=observe_step,
+                token_usage_observer=((lambda record: report_usage([record])) if callable(report_usage) else None),
+                force_isolated_loop=True,
+                platform_skill_secrets=_platform_skill_secrets_for_task(task),
+                parent_abort_event=parent_abort_event,
+                thinking_enabled=subagent_thinking_enabled,
+                max_tokens_per_step=subagent_max_tokens if subagent_max_tokens > 0 else None,
+                protect_test_files=protect_test_files,
+            )
+
+        def observe_raw_result(raw_result: Any) -> None:
+            usage_records = list(getattr(raw_result, "token_usage_records", None) or [])
+            if callable(report_usage) and usage_records:
+                report_usage(usage_records)
+
+        adapter = DR2SubagentExecutorAdapter(
+            executor_factory,
+            result_observer=observe_raw_result,
+        )
+        return _ProgressReportingExecutor(
+            adapter=adapter,
+            writer=writer,
+            task_preparer=lambda task: _infer_task_skill_selection(
+                task,
+                available_skill_names=self.available_skill_names,
+            ),
+        )
+
+
+@dataclass(slots=True)
+class _ProgressReportingExecutor:
+    adapter: DR2SubagentExecutorAdapter
+    writer: Any = None
+    task_preparer: Any = None
+
+    def execute(self, task: SPSubagentTask) -> SPSubagentResult:
+        if callable(self.task_preparer):
+            self.task_preparer(task)
+        task.validate_protocol()
+        task_id = _task_stream_id(task)
+        if callable(self.writer):
+            self.writer(
+                {
+                    **_a2a_task_event(task, message_type=A2A_PROGRESS_MESSAGE),
+                    "type": "task_started",
+                    "task_id": task_id,
+                    "description": task.task,
+                    "prompt": task.task,
+                    "subagent_type": task.subagent_type,
+                    "occurred_at": utc_now_iso(),
+                }
+            )
+            skill_names = task.metadata.get("skill_names")
+            if isinstance(skill_names, list):
+                for index, skill_name in enumerate(skill_names, start=1):
+                    if not isinstance(skill_name, str):
+                        continue
+                    # Represent Skill activation as a compact named step using
+                    # the existing subtask timeline protocol. No Skill body or
+                    # credential is included.
+                    self.writer(
+                        {
+                            **_a2a_task_event(task, message_type=A2A_PROGRESS_MESSAGE),
+                            "type": "task_running",
+                            "task_id": task_id,
+                            "message": {
+                                "type": "tool",
+                                "name": f"Skill: {skill_name}",
+                                "content": "Skill loaded",
+                            },
+                            "message_index": index,
+                            "subagent_type": task.subagent_type,
+                            "occurred_at": utc_now_iso(),
+                        }
+                    )
+        try:
+            result = self.adapter.execute(task)
+        except Exception as exc:
+            if callable(self.writer):
+                self.writer(
+                    {
+                        **_a2a_task_event(task, message_type="task_result"),
+                        "type": "task_failed",
+                        "task_id": task_id,
+                        "error": str(exc),
+                        "subagent_type": task.subagent_type,
+                        "occurred_at": utc_now_iso(),
+                    }
+                )
+            raise
+        report_executions = task.metadata.pop("_report_tool_executions", None)
+        if task.metadata.get("report_role"):
+            # This key is host-derived. Always overwrite any model-supplied
+            # value so model-declared execution records cannot create rounds.
+            result.artifact_metadata["host_tool_execution_records"] = list(report_executions or [])
+        if callable(self.writer):
+            if result.status == SPSubagentStatus.CANCELLED:
+                event_type = "task_cancelled"
+            elif result.status == SPSubagentStatus.TIMED_OUT:
+                event_type = "task_timed_out"
+            else:
+                event_type = "task_completed" if result.is_success else "task_failed"
+            self.writer(
+                {
+                    **_a2a_task_event(task, message_type="task_result"),
+                    "type": event_type,
+                    "task_id": task_id,
+                    "result": result.result,
+                    "error": result.error,
+                    "stop_reason": result.stop_reason,
+                    "subagent_type": task.subagent_type,
+                    "usage": _summarize_sp_usage(result.token_usage_records),
+                    "result_envelope": result.protocol_payload(task=task),
+                    "occurred_at": utc_now_iso(),
+                }
+            )
+        return result
+
+
+def _a2a_task_event(task: SPSubagentTask, *, message_type: str) -> dict[str, Any]:
+    """Common observable A2A fields for the child-agent timeline."""
+
+    payload = task.protocol_payload()
+    return {
+        "protocol_version": task.protocol_version,
+        "message_type": message_type,
+        "a2a_task_id": task.action_id,
+        "a2a_sender": task.sender,
+        "a2a_receiver": task.receiver or task.subagent_type,
+        "a2a_stage": payload.get("stage"),
+    }
+
+
+def _summarize_sp_usage(records: list[dict[str, Any]] | None) -> dict[str, int] | None:
+    """Compact per-call subagent usage for the persisted debug timeline."""
+
+    if not records:
+        return None
+    input_tokens = sum(int(record.get("input_tokens", 0) or 0) for record in records)
+    output_tokens = sum(int(record.get("output_tokens", 0) or 0) for record in records)
+    total_tokens = sum(int(record.get("total_tokens", 0) or 0) for record in records)
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens or input_tokens + output_tokens,
+    }
+
+
+def make_sp_agent(config: RunnableConfig, *, app_config: AppConfig | None = None):
+    """Build one SP CentralAgent using DeerFlow's native agent loop.
+
+    The CentralAgent is bound only to SP control actions. Ordinary DeerFlow
+    tools are supplied to delegated subagents by ``DR2SPExecutorProvider`` so
+    planning and execution remain separate at the model-schema boundary.
+    """
+    resolved_app_config = app_config or get_app_config()
+    runtime = _runtime_config(config)
+    from deerflow.runtime.user_context import get_effective_user_id
+
+    raw_user_id = runtime.get("user_id")
+    user_id = str(raw_user_id) if raw_user_id else get_effective_user_id()
+    raw_agent_name = runtime.get("sp_agent_name") or runtime.get("agent_name")
+    agent_name = str(raw_agent_name) if raw_agent_name else None
+    central_context: SPCentralRuntimeContext = build_sp_central_runtime_context(
+        resolved_app_config,
+        agent_name=agent_name,
+        user_id=user_id,
+    )
+    model_name = _resolve_model_name(
+        config,
+        resolved_app_config,
+        agent_model=central_context.agent_model,
+    )
+    model_config = resolved_app_config.get_model_config(model_name)
+    thinking_enabled = bool(runtime.get("thinking_enabled", True))
+    if model_config is not None and not model_config.supports_thinking:
+        thinking_enabled = False
+    try:
+        max_parallel_delegates = int(runtime.get("max_concurrent_subagents") or 3)
+    except (TypeError, ValueError):
+        max_parallel_delegates = 3
+    try:
+        max_central_actions = int(runtime.get("sp_max_actions") or DEFAULT_SP_ACTION_LIMIT)
+    except (TypeError, ValueError):
+        max_central_actions = DEFAULT_SP_ACTION_LIMIT
+    max_central_actions = max(2, min(max_central_actions, DEFAULT_SP_ACTION_LIMIT))
+    try:
+        report_max_actions = int(runtime.get("sp_report_max_actions") or 60)
+    except (TypeError, ValueError):
+        report_max_actions = 60
+    report_max_actions = max(max_central_actions, min(report_max_actions, 200))
+    metadata = dict(config.get("metadata") or {})
+    metadata.update(
+        {
+            "agent_name": STACKPLANNER_ASSISTANT_ID,
+            "model_name": model_name,
+            "thinking_enabled": thinking_enabled,
+            "orchestration_mode": STACKPLANNER_ASSISTANT_ID,
+            "central_tool_mode": "sp_actions_only",
+            "sp_agent_name": central_context.agent_name or "default",
+            "available_skills": sorted(central_context.available_skill_names) if central_context.available_skill_names is not None else None,
+        }
+    )
+    sp_config = dict(config)
+    configurable = dict(sp_config.get("configurable", {}) or {})
+    configurable.update(
+        {
+            "model_name": model_name,
+            "thinking_enabled": thinking_enabled,
+            "agent_name": central_context.agent_name,
+            "orchestration_mode": STACKPLANNER_ASSISTANT_ID,
+            # The CentralAgent delegates through sp_delegate; DeerFlow's native
+            # task/todo tools must not be injected by the reused lead factory.
+            "subagent_enabled": False,
+            "is_plan_mode": False,
+        }
+    )
+    sp_config["configurable"] = configurable
+    sp_config["metadata"] = metadata
+
+    executor_provider = DR2SPExecutorProvider(
+        app_config=resolved_app_config,
+        parent_model=model_name,
+        runnable_config=sp_config,
+        available_skill_names=central_context.available_skill_names,
+        memory_agent_name=central_context.agent_name,
+        user_id=user_id,
+    )
+    prompt_sections = [CENTRAL_AGENT_ACTION_PROMPT]
+    from deerflow.sp.report.prompts import REPORT_CENTRAL_PROMPT
+
+    prompt_sections.append(REPORT_CENTRAL_PROMPT)
+    prompt_sections.append(
+        f"<sp-delegation-limit>\nEmit at most {max_parallel_delegates} sibling sp_delegate calls in one model turn. If more work remains, inspect the first batch and delegate the next batch afterward.\n</sp-delegation-limit>"
+    )
+    if runtime.get("fresh_user_turn_after_terminal"):
+        prompt_sections.append(FRESH_USER_TURN_PROMPT)
+    if central_context.system_prompt_section:
+        prompt_sections.append(central_context.system_prompt_section)
+
+    from deerflow.agents.lead_agent.agent import _make_lead_agent
+    from deerflow.agents.middlewares.memory_middleware import MemoryMiddleware
+    from deerflow.agents.middlewares.subagent_limit_middleware import SubagentLimitMiddleware
+    from deerflow.sp.middlewares import TaskMemoryMiddleware
+    from deerflow.sp.prompt import PromptContextBuilder
+    from deerflow.sp.report.context import SPReportContextMiddleware
+
+    graph = _make_lead_agent(
+        sp_config,
+        app_config=resolved_app_config,
+        extra_tools=build_sp_control_tools(),
+        extra_middlewares=[
+            TaskMemoryMiddleware(context_builder=PromptContextBuilder(), inject_context=True),
+            # SP keeps long-term memory out of CentralAgent's prompt, but it
+            # must still persist stable user context after a completed run.
+            # This explicit write-only middleware reuses DeerFlow's scoped,
+            # debounced updater without exposing any ordinary memory tool to
+            # CentralAgent.
+            MemoryMiddleware(
+                agent_name=central_context.agent_name,
+                memory_config=getattr(resolved_app_config, "memory", None),
+            ),
+            SPCentralResilienceMiddleware(
+                initial_timeout_seconds=float(runtime.get("sp_central_timeout_seconds") or 90),
+                retry_timeout_seconds=float(runtime.get("sp_central_retry_timeout_seconds") or 60),
+                retry_max_tokens=int(runtime.get("sp_central_retry_max_tokens") or 2048),
+            ),
+            SPTerminalActionMiddleware(),
+            SPAcknowledgementMiddleware(),
+            SPFinishAvailabilityMiddleware(),
+            SPActionBudgetMiddleware(max_actions=max_central_actions, report_max_actions=report_max_actions),
+            SPControlActionMiddleware(executor_provider=executor_provider),
+            SPThinkLabelMiddleware(),
+            SPReportContextMiddleware(executor_provider=executor_provider, max_writers=max_parallel_delegates),
+            SubagentLimitMiddleware(
+                max_concurrent=max_parallel_delegates,
+                tool_names={"sp_delegate"},
+            ),
+        ],
+        prompt_prefix="\n\n".join(prompt_sections),
+        identity_name="StackPlanner 2.0",
+        include_base_tools=False,
+        include_base_prompt=False,
+        inject_long_term_memory=False,
+        control_plane_only=True,
+    )
+    graph.metadata = dict(metadata)
+    return graph

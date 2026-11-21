@@ -1,0 +1,18 @@
+{
+  "id": 35,
+  "topic": "Industrial",
+  "language": "zh",
+  "prompt": "市政污水收集和处理大部分城市采取的模式是核拨制，但这种机制造成了效率的不足，作为政府管理部门有何种操作性比较强的方案实现高效？（考虑排水系统建设，运营，维护，改造，应急等各方面的成本，同时考虑与雨水排洪排涝之间的协作关系，如何共同运作，降低成本，实现良性循环）",
+  "report_length": {
+    "min_words": 27000,
+    "target_words": 30000,
+    "max_words": 33000,
+    "reference_reserve_words": 1000,
+    "heading_reserve_words": 300,
+    "safety_margin_words": 500,
+    "compact_outline": true,
+    "writer_task_cards": true,
+    "length_auto_revision": false,
+    "outline_budget_selection": true
+  }
+}

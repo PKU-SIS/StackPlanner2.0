@@ -1,0 +1,17 @@
+{
+  "band": 20000,
+  "case_id": 7,
+  "label": "房地产与地方财政",
+  "words": 17058,
+  "race": 56.43021828307931,
+  "generation_tokens": 4150471,
+  "race_tokens": 49934,
+  "deviation_percent": -14.71,
+  "formal_delivered": false,
+  "notes": "普通单次生成",
+  "source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-20k-fourcases-20261117/case7",
+  "source_results_sha256": "03799a164c894face0a13733eacdc62e88dac79e5f03eee72e05b07e691e0910",
+  "report_sha256": "50902334e25ab0a8607f0f292f85256d4999d476b9fcd1739eaefe28a7b8fda1",
+  "report_source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-20k-fourcases-20261117/case7/runs/band20000-case7-outline-selected/evaluated-report.md",
+  "historical_runtime_variant": "band20000-c79f7785632739f4"
+}

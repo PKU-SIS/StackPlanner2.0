@@ -1,0 +1,18 @@
+{
+  "id": 6,
+  "topic": "Finance & Business",
+  "language": "zh",
+  "prompt": "请帮我整理下目前全球具身智能发展的技术路线，以及各个路线的代表性公司，需要包括这些公司的技术路径，产品进度，商业化进度，融资情况，团队情况",
+  "report_length": {
+    "min_words": 27000,
+    "target_words": 30000,
+    "max_words": 33000,
+    "reference_reserve_words": 1000,
+    "heading_reserve_words": 300,
+    "safety_margin_words": 500,
+    "compact_outline": true,
+    "writer_task_cards": true,
+    "length_auto_revision": false,
+    "outline_budget_selection": true
+  }
+}

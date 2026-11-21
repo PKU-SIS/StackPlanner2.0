@@ -1,0 +1,17 @@
+{
+  "band": 10000,
+  "case_id": 27,
+  "label": "AI与人工心理咨询结合",
+  "words": 10635,
+  "race": 56.10501735951085,
+  "generation_tokens": 4357244,
+  "race_tokens": 42060,
+  "deviation_percent": 6.35,
+  "formal_delivered": true,
+  "notes": "普通单次生成",
+  "source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-10k-fourcases-20261117/case27",
+  "source_results_sha256": "d7736f264d6c9c1292ab74882e5a8a471b4ec2142eee49acaad59053d0c3d433",
+  "report_sha256": "93eb461a2b6f1f37fb9656e7067b749543f38539fd140a8c5350bb53cfb2bd2a",
+  "report_source": "/data2/pkuiti/zmy/codex-relay-work/outline-self-budget-10k-fourcases-20261117/case27/runs/band10000-case27-outline-selected/evaluated-report.md",
+  "historical_runtime_variant": null
+}

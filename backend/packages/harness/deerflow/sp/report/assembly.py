@@ -275,6 +275,8 @@ def base_inputs_digest(ledger: ReportLedger) -> str:
         "drafts": _draft_binding(ledger, tree),
         "materials": materials,
     }
+    if ledger.payload.get("length_contract"):
+        payload["length_contract"] = ledger.payload["length_contract"]
     return _json_digest(payload)
 
 
@@ -488,6 +490,14 @@ def final_binding_error(ledger: ReportLedger) -> str | None:
         return "final report file is unreadable"
     if report_store.sha256_text(content) != str(final.get("sha256") or ""):
         return "final report content hash does not match the ledger"
+    if ledger.payload.get("length_contract"):
+        from deerflow.sp.report.length import candidate_length
+
+        measured = candidate_length(ledger, candidate)
+        if measured is None or not measured["in_estimated_range"] or final.get("length") != measured:
+            return "final report has no current passing estimated word-length check"
+        if measured["rendered_sha256"] != final.get("sha256"):
+            return "word-length check is bound to a different rendered report"
     return None
 
 
