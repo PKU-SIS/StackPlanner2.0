@@ -2,6 +2,7 @@
 
 from types import SimpleNamespace
 
+import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from deerflow.agents.middlewares.invalid_tool_call_repair_middleware import InvalidToolCallRepairMiddleware
@@ -125,3 +126,87 @@ def test_consolidation_source_feedback_allows_one_correction_then_closes_tools()
     ordinary = InvalidToolCallRepairMiddleware()
     ordinary.wrap_tool_call(request, lambda _: failure)
     assert not ordinary.used
+
+
+def empty_tree_reply(detail="tree.requirements must contain at least one original user requirement"):
+    import json
+
+    return ToolMessage(content=json.dumps({"saved": True, "validation_ok": False, "error": "invalid_outline_tree", "detail": detail}), tool_call_id="submit")
+
+
+@pytest.mark.parametrize("detail", ["tree.requirements must contain at least one original user requirement", "tree.nodes must contain at least one node"])
+@pytest.mark.parametrize("second_detail", ["tree.nodes must contain at least one node", "tree.nodes[n1] references unknown material: m999"])
+def test_consolidation_empty_tree_gets_one_submit_only_correction(detail, second_detail):
+    middleware = InvalidToolCallRepairMiddleware(bound_source_correction=True)
+    failure = empty_tree_reply(detail)
+    tool_request = SimpleNamespace(tool_call={"name": "report_submit_outline"})
+    assert middleware.wrap_tool_call(tool_request, lambda _: failure) is failure
+    request = Request(messages=[failure], tools=[SimpleNamespace(name="report_submit_outline"), SimpleNamespace(name="report_read_material")])
+    prepared = middleware.prepare_request(request)
+    assert [t.name for t in prepared.tools] == ["report_submit_outline"]
+    assert "accepted tree" in prepared.messages[0].content
+    assert "not consumed" in prepared.messages[0].content
+    assert "one additional" in prepared.messages[0].content
+    assert getattr(prepared, "tool_choice", None) == "required"
+    corrected = AIMessage(content="", tool_calls=[{"name": "report_submit_outline", "args": {"tree": {}}, "id": "corrected"}])
+    assert middleware.after_model({"messages": [corrected]}, None) is None
+    # Even a different validation error must end this one corrective attempt.
+    second_failure = empty_tree_reply(second_detail)
+    middleware.wrap_tool_call(tool_request, lambda _: second_failure)
+    assert middleware.prepare_request(request).tools == []
+    assert middleware.consume_stop_reason() == "tool_argument_repair_failed"
+    assert middleware.events[-1]["status"] == "empty_tree_correction_failed"
+
+
+def test_empty_tree_correction_success_closes_tools_without_failure():
+    middleware = InvalidToolCallRepairMiddleware(bound_source_correction=True)
+    tool_request = SimpleNamespace(tool_call={"name": "report_submit_outline"})
+    failure = empty_tree_reply()
+    middleware.wrap_tool_call(tool_request, lambda _: failure)
+    request = Request(messages=[failure], tools=[SimpleNamespace(name="report_submit_outline")])
+    middleware.prepare_request(request)
+    corrected = AIMessage(content="", tool_calls=[{"name": "report_submit_outline", "args": {"tree": {}}, "id": "corrected"}])
+    middleware.after_model({"messages": [corrected]}, None)
+    success = ToolMessage(content='{"validation_ok":true}', tool_call_id="corrected")
+    middleware.wrap_tool_call(tool_request, lambda _: success)
+    assert middleware.prepare_request(request).tools == []
+    assert middleware.consume_stop_reason() is None
+
+
+@pytest.mark.parametrize("reply", [AIMessage(content="done"), AIMessage(content="", tool_calls=[{"name": "report_read_material", "args": {}, "id": "read"}]), bad()])
+def test_empty_tree_correction_cannot_finish_or_use_other_tools_without_resubmission(reply):
+    middleware = InvalidToolCallRepairMiddleware(bound_source_correction=True)
+    failure = empty_tree_reply()
+    middleware.wrap_tool_call(SimpleNamespace(tool_call={"name": "report_submit_outline"}), lambda _: failure)
+    request = Request(messages=[failure], tools=[SimpleNamespace(name="report_submit_outline")])
+    middleware.prepare_request(request)
+    update = middleware.after_model({"messages": [reply]}, None)
+    assert not (update or {}).get("messages", [AIMessage(content="")])[0].tool_calls
+    assert middleware.prepare_request(request).tools == []
+    assert middleware.consume_stop_reason() == "tool_argument_repair_failed"
+
+
+def test_first_schema_error_stays_unchanged_outside_empty_consolidation_case():
+    for scoped, failure in [(False, empty_tree_reply()), (True, empty_tree_reply("relations must be objects"))]:
+        middleware = InvalidToolCallRepairMiddleware(bound_source_correction=scoped)
+        middleware.wrap_tool_call(SimpleNamespace(tool_call={"name": "report_submit_outline"}), lambda _: failure)
+        request = Request(messages=[failure], tools=[SimpleNamespace(name="report_read_material")])
+        assert middleware.prepare_request(request) is request
+        assert not middleware.events
+
+
+@pytest.mark.parametrize("guard", ["cancel", "budget", "tool_limit", "forced_stop"])
+def test_empty_tree_correction_respects_existing_limits(guard):
+    middleware = InvalidToolCallRepairMiddleware(
+        bound_source_correction=True,
+        aborted=lambda: guard == "cancel",
+        budget=TokenBudgetConfig(enabled=True, max_tokens=1000) if guard == "budget" else None,
+        tool_limit=1 if guard == "tool_limit" else 50,
+    )
+    failure = empty_tree_reply()
+    middleware.wrap_tool_call(SimpleNamespace(tool_call={"name": "report_submit_outline"}), lambda _: failure)
+    last = AIMessage(content="[TOKEN BUDGET EXCEEDED]" if guard == "forced_stop" else "")
+    request = Request(messages=[last, failure], tools=[SimpleNamespace(name="report_submit_outline")])
+    assert middleware.prepare_request(request).tools == []
+    assert middleware.consume_stop_reason() is None
+    assert middleware.events[-1]["status"] == "empty_tree_correction_skipped_guard"

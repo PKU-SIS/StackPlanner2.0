@@ -22,6 +22,15 @@ _SOURCE_FIX = (
     "No reads, searches or re-planning. Preserve nodes and useful content; never invent material IDs or line ranges. "
     "Submit one complete report_submit_outline call. A second identifier failure ends this correction; do not repeat it."
 )
+_EMPTY_TREE_FIX = (
+    "[HOST EMPTY TREE CORRECTION] The submitted tree has no requirements or nodes. That rejected placeholder was the original submission; "
+    "it has not consumed your correction opportunity. Make one additional report_submit_outline call NOW with the complete corrected tree, "
+    "using the complete accepted tree already supplied in report_packet and this conversation as the baseline. "
+    "Preserve its original requirements, node IDs, evidence, locators and gap outcomes; apply the assigned consolidation. "
+    "Do not submit a placeholder, re-plan, read materials, search or register research. "
+    "Return exactly one report_submit_outline call with the complete corrected tree. "
+    "Existing budgets and cancellation still apply. A failed correction ends this attempt; do not retry it."
+)
 _FINISH = "[HOST SUBMISSION ACK] No further tools are available. Return the compact normal file-delivery JSON envelope using the actual submission result. Do not re-plan or collect evidence."
 _SCHEMA_FIX = (
     "[HOST SUBMISSION VALIDATION] The JSON syntax was corrected, but the normal submission tool returned tree validation errors. "
@@ -47,6 +56,8 @@ class InvalidToolCallRepairMiddleware(AgentMiddleware):
         self.bound_source_correction = bound_source_correction
         self.source_corrections = 0
         self.source_fix = False
+        self.empty_tree_correction = False
+        self.empty_tree_pending = False
         self.used = False
         self.pending = False
         self.correcting = False
@@ -90,7 +101,17 @@ class InvalidToolCallRepairMiddleware(AgentMiddleware):
             return None
         if "FORCED STOP" in str(last.content) or "TOKEN BUDGET EXCEEDED" in str(last.content):
             self.correcting = False
+            if self.empty_tree_pending:
+                self.empty_tree_pending = self.schema_fix = False
+                self.finish_only = True
             self.events.append({"status": "stopped_existing_guard"})
+            return None
+        if self.empty_tree_pending:
+            self.empty_tree_pending = self.schema_fix = False
+            self.finish_only = True
+            if last.invalid_tool_calls or len(last.tool_calls) != 1 or last.tool_calls[0]["name"] != "report_submit_outline":
+                return self._failed_reply(last, "invalid_empty_tree_correction")
+            self.events.append({"status": "empty_tree_correction_generated"})
             return None
         if self.correcting:
             self.correcting = False
@@ -142,6 +163,13 @@ class InvalidToolCallRepairMiddleware(AgentMiddleware):
     def prepare_request(self, request):
         if not self.used:
             return request
+        if self.empty_tree_pending:
+            last = next((item for item in reversed(request.messages) if isinstance(item, AIMessage)), AIMessage(content=""))
+            stopped = "FORCED STOP" in str(last.content) or "TOKEN BUDGET EXCEEDED" in str(last.content)
+            if self.aborted() or stopped or not self._budget_allows(request.messages, last):
+                self.empty_tree_pending = self.schema_fix = False
+                self.finish_only = True
+                self.events.append({"status": "empty_tree_correction_skipped_guard"})
         messages = []
         for message in request.messages:
             if isinstance(message, AIMessage) and message.invalid_tool_calls and not message.tool_calls:
@@ -152,7 +180,7 @@ class InvalidToolCallRepairMiddleware(AgentMiddleware):
                 extra = {key: value for key, value in message.additional_kwargs.items() if key not in {"tool_calls", "function_call"}}
                 message = message.model_copy(update={"content": "[Unexecuted invalid tool arguments]\n" + raw, "invalid_tool_calls": [], "additional_kwargs": extra})
             messages.append(message)
-        instruction = _REPAIR if self.pending else _SOURCE_FIX if self.source_fix else _SCHEMA_FIX if self.schema_fix else _FINISH
+        instruction = _EMPTY_TREE_FIX if self.empty_tree_pending else _REPAIR if self.pending else _SOURCE_FIX if self.source_fix else _SCHEMA_FIX if self.schema_fix else _FINISH
         if messages and isinstance(messages[0], SystemMessage):
             messages[0] = messages[0].model_copy(update={"content": str(messages[0].content) + "\n\n" + instruction})
         else:
@@ -161,6 +189,8 @@ class InvalidToolCallRepairMiddleware(AgentMiddleware):
         if self.pending:
             self.pending = False
             self.correcting = True
+        if self.empty_tree_pending and tools:
+            return request.override(messages=messages, tools=tools, tool_choice="required")
         return request.override(messages=messages, tools=tools)
 
     def wrap_model_call(self, request, handler):
@@ -175,6 +205,27 @@ class InvalidToolCallRepairMiddleware(AgentMiddleware):
         try:
             payload = json.loads(response.content)
         except (ValueError, TypeError, AttributeError):
+            if self.empty_tree_correction:
+                self.failed = self.finish_only = True
+                self.empty_tree_pending = self.source_fix = self.schema_fix = self.pending = False
+                self.events.append({"status": "empty_tree_correction_failed"})
+            return response
+        if self.empty_tree_correction:
+            valid = isinstance(payload, dict) and payload.get("validation_ok") is True
+            self.failed = not valid
+            self.finish_only = True
+            self.empty_tree_pending = self.source_fix = self.schema_fix = self.pending = False
+            self.events.append({"status": "submission_validated" if valid else "empty_tree_correction_failed"})
+            return response
+        empty_tree = (
+            isinstance(payload, dict)
+            and payload.get("error") == "invalid_outline_tree"
+            and any(marker in str(payload.get("detail", "")) for marker in ("tree.requirements must contain at least one original user requirement", "tree.nodes must contain at least one node"))
+        )
+        if self.bound_source_correction and empty_tree:
+            self.used = self.empty_tree_correction = self.empty_tree_pending = self.schema_fix = True
+            self.source_fix = self.pending = self.finish_only = False
+            self.events.append({"status": "empty_tree_correction_requested"})
             return response
         if self.bound_source_correction and isinstance(payload, dict) and payload.get("validation_ok") is True:
             self.used = self.finish_only = True

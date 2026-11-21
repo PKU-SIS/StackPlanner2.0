@@ -1029,3 +1029,5 @@ Report source extraction and final numbering share recognition of `[S11]` and Ma
 Chat history supports recovered subtask attempts without triggering a React render loop, and successful retries clear stale failure messages.
 
 Report chats show a chapter-writing pipeline after the first Writer is dispatched, with pending, active and completed chapters, including Writers dispatched directly by the host. The view uses the report ledger for reload recovery and existing task events for live details.
+
+During report Outline consolidation, an empty requirements/nodes submission gets one bounded corrective submission in the same delegation. The original rejected placeholder does not consume this opportunity; that corrective turn requires the single submission tool. A failed correction returns to existing error handling without resetting budgets, cancellation or validation.
