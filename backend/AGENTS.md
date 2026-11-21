@@ -1522,3 +1522,18 @@ type=clause_semantic_review events. Telemetry never changes acceptance, content
 or status. Tests: test_sp_clause_semantic_review.py includes actual sync/async
 native graphs, provider HTTP serialization, format/quote ordering, executed file
 rewrites, source failures, reserved telemetry and default-disabled behavior.
+
+
+Successful public-schema delivery selects the actual final assistant value,
+including after an optional write_file or a conflicting artifact_content
+property. normalize_dr2_subagent_result must retain those exact original bytes
+and remove earlier created_paths only from the selected delivery metadata;
+created_path_evidence still records the real executed writes. The ordinary
+DelegateHandler fallback validates and persists that value at a new current-action
+artifact path, leaving earlier optional files untouched. Do not select a raw
+candidate from a receipt, unmatched final, pending tool call, invalid schema,
+provider/native stop, or an unrelated role/contract. File receipts retain native
+file ownership and registration priority, and source/partial/stop gates remain
+independent. Tests: test_sp_public_final_delivery.py covers real sync/async native
+review graphs, unchanged old files, malformed old files, exact final-byte
+persistence, receipt controls and incomplete source evidence.

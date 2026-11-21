@@ -1079,10 +1079,16 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
     # threshold (including a legitimate empty array). Preserve only an actual
     # final audit/delivery response that independently satisfies the public schema;
     # never extract an answer from a receipt, tool result, or malformed wrapper.
-    if not textual_tool_intent and artifact_content is None and not recovered_created_paths and status == SPSubagentStatus.COMPLETED and not stop_reason and _is_public_schema_delivery(raw_result, ai_messages, task):
+    # The actual successful public final is also the candidate checked by the
+    # same-instance review middleware. Earlier optional files must not replace
+    # that value after review; persist it as a new native action artifact rather
+    # than writing through any existing model-created file path.
+    public_final = not textual_tool_intent and status == SPSubagentStatus.COMPLETED and not stop_reason and _is_public_schema_delivery(raw_result, ai_messages, task)
+    if public_final:
         artifact_content = raw_result
         artifact_type = artifact_type or _default_artifact_type(task.subagent_type)
         malformed_contract = False
+        recovered_created_paths = []
 
     if (
         not textual_tool_intent
@@ -1098,6 +1104,11 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
 
     if not isinstance(artifact_metadata, dict):
         artifact_metadata = {}
+    if public_final:
+        # File evidence still records real writes below, but these paths are not
+        # the selected delivery. Receipts and other non-final values keep their
+        # ordinary native file priority and ownership checks.
+        artifact_metadata.pop("created_paths", None)
     if task is not None and task.subagent_type == "researcher" and artifact_content is None:
         recovered_evidence = _recover_research_tool_evidence(ai_messages)
         if recovered_evidence is not None:
@@ -1106,7 +1117,8 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
             artifact_metadata["recovered_tool_evidence"] = True
 
     if artifact_content is not None and not is_memory_recaller:
-        artifact_content = _clean_artifact_content(artifact_content)
+        if not public_final:
+            artifact_content = _clean_artifact_content(artifact_content)
         if task is not None and task.subagent_type == "researcher":
             central_preview = _structured_evidence_preview(artifact_content)
             if central_preview is not None:

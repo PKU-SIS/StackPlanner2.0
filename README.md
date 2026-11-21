@@ -759,3 +759,11 @@ requests. Content-free `clause_semantic_review` events and reserved result
 metadata record `requested`, `completed` or `exhausted`. `completed` means a
 subsequent eligible candidate arrived; it does not certify semantic correctness.
 Stopping without that candidate records exhaustion and does not change delivery.
+
+
+When a public-schema auditor returns a successful, actual raw final value after
+an optional file write, the native host persists that final value unchanged as
+the current-action artifact. Earlier optional files remain on disk and cannot
+replace the reviewed final value. A receipt still uses the real written file;
+source, schema, execution-stop and partial-status checks retain their ordinary
+behavior. The host does not edit findings or overwrite the optional file.
