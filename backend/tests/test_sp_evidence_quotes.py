@@ -149,6 +149,92 @@ def test_feedback_is_bounded_and_exhaustion_preserves_all_original_findings(monk
     assert check.after_model({"messages": messages}, None) is None
 
 
+@pytest.mark.parametrize(
+    "quote,reason",
+    [
+        ('"Payment is due on 2 January."', "unmatched_outer_wrapper"),
+        ("“Payment is due on 2 January.”", "unmatched_outer_wrapper"),
+        ("[L12] Payment is due on 2 January.", "unmatched_line_prefix"),
+        ("L12: Payment is due on 2 January.", "unmatched_line_prefix"),
+        ("Payment is due on 3 January.", "not_verbatim_source"),
+    ],
+)
+def test_source_only_reasons_identify_distortion_without_replacing_text(monkeypatch, quote, reason):
+    from deerflow.sp.evidence_quotes import collect_quote_review_diagnostics
+
+    check = middleware(monkeypatch)
+    original = answer(quote)
+    candidate = check.after_model({"messages": [*reads(), AIMessage(content=original)]}, None)["messages"][0]
+    assert candidate.content == original
+    assert candidate.additional_kwargs["sp_clause_quote_review"]["issues"] == [{"index": 0, "reason": reason}]
+    assert collect_quote_review_diagnostics([candidate])[0]["issues"] == [{"index": 0, "reason": reason}]
+
+
+def test_source_supported_literal_quotes_are_not_classified_as_an_extra_wrapper(monkeypatch):
+    source = 'The receipt states "Payment is due on 2 January."'
+    check = middleware(monkeypatch)
+    check.contract = contract(source)
+    original = answer('"Payment is due on 2 January."')
+    update = check.after_model({"messages": [*reads(source), AIMessage(content=original)]}, None)
+    assert "jump_to" not in update
+    assert update["messages"][0].content == original
+    assert update["messages"][0].additional_kwargs["sp_clause_quote_review"]["unmatched_indices"] == []
+
+
+def test_exported_issue_reasons_remain_content_free_and_belong_to_flagged_indices(monkeypatch):
+    from deerflow.sp.evidence_quotes import collect_quote_review_diagnostics
+
+    check = middleware(monkeypatch)
+    candidate = check.after_model({"messages": [*reads(), AIMessage(content=answer('"Payment is due on 2 January."'))]}, None)["messages"][0]
+    candidate.additional_kwargs["sp_clause_quote_review"]["issues"].extend(
+        [
+            {"index": 0, "reason": "source text must not be exported"},
+            {"index": 1, "reason": "not_verbatim_source"},
+            {"index": True, "reason": "not_verbatim_source"},
+            {"index": 0, "reason": ["not_verbatim_source"]},
+        ]
+    )
+    assert collect_quote_review_diagnostics([candidate])[0]["issues"] == [{"index": 0, "reason": "unmatched_outer_wrapper"}]
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_actual_native_requests_keep_specific_feedback_after_an_ignored_wrapper_review(monkeypatch, asynchronous):
+    from langchain.agents import create_agent
+    from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+    from pydantic import PrivateAttr
+
+    from deerflow.agents.thread_state import ThreadState
+
+    class Model(FakeMessagesListChatModel):
+        _seen: list = PrivateAttr(default_factory=list)
+
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            self._seen.append(list(messages))
+            return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+
+    original = answer('"Payment is due on 2 January."')
+    final = answer("Payment is due on 2 January.")
+    model = Model(responses=[AIMessage(content=original), AIMessage(content=original), AIMessage(content=final)])
+    graph = create_agent(model=model, tools=[], middleware=[middleware(monkeypatch)], state_schema=ThreadState)
+    state = {"messages": [HumanMessage(content="Audit the complete public contract."), *reads()]}
+    result = asyncio.run(graph.ainvoke(state)) if asynchronous else graph.invoke(state)
+
+    assert len(model._seen) == 3
+    for attempt, request in enumerate(model._seen[1:], 1):
+        note = request[-1]
+        assert note.name == "sp_clause_quote_review_feedback"
+        assert f"{attempt}/2" in note.content
+        assert "finding 0: unmatched_outer_wrapper" in note.content
+        assert SOURCE in [message.content for message in request]
+        assert original in [message.content for message in request]
+        assert final not in [message.content for message in request]
+    assert result["messages"][-1].content == final
+    assert not any(isinstance(message, HumanMessage) and message.name == "sp_clause_quote_review_feedback" for message in result["messages"])
+
+
 @pytest.mark.parametrize("asynchronous", [False, True])
 @pytest.mark.parametrize("format_first", [False, True])
 def test_actual_native_graph_retries_quotes_with_original_context_and_transient_feedback(monkeypatch, asynchronous, format_first):

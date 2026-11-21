@@ -721,3 +721,8 @@ cannot supply it. These diagnostics do not affect acceptance or official scores.
 Central's new-conversation memory preflight requires the recall tool to be
 currently bound. Required public-source audit, recovery and delivery workflows
 take priority and continue without an inserted memory preflight.
+
+Optional CLAUSE quotation feedback gives each already-unmatched finding a short
+source-only reason: an unsupported outer quotation wrapper, a line label, or
+non-verbatim text. It supplies no replacement passages and retains the same
+two-review budget, source checks and support for noncontiguous source sentences.

@@ -20,6 +20,12 @@ _FEEDBACK = "sp_clause_quote_review_feedback"
 _SOURCE = "/mnt/user-data/uploads/document.txt"
 _MAX_REVIEWS = 2
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?。！？])(?:[\"'’”\)\]]*)(?=\s+|$)")
+_LINE_PREFIX = re.compile(r"^(?:\[(?:L|line\s*)?\d+(?:-\d+)?\]|L\d+(?:-\d+)?:|\d+\s*\|)\s*", re.IGNORECASE)
+_ISSUE_MESSAGES = {
+    "unmatched_outer_wrapper": "The text adds surrounding quotation marks not supported by the source. JSON string delimiters do not belong inside text.",
+    "unmatched_line_prefix": "The text adds a line-number prefix not supported by the source. Tool display labels are not document text.",
+    "not_verbatim_source": "The text does not match the original source, even allowing whitespace differences and separately quoted source sentences.",
+}
 
 
 def clause_quote_review_enabled(contract: Mapping[str, Any], skill_names: Sequence[str] | None, auditor_role: str | None) -> bool:
@@ -129,6 +135,31 @@ def _supported_quote(quote: str, original: str) -> bool:
     return bool(pieces) and all(piece in original for piece in pieces)
 
 
+def _quote_issue_reason(quote: str, original: str) -> str:
+    """Explain an already-unmatched quote using only the observed public source."""
+    text = quote.strip()
+    if len(text) > 1 and (text[0], text[-1]) in {('"', '"'), ("“", "”"), ("'", "'"), ("‘", "’")} and _supported_quote(text[1:-1], original):
+        return "unmatched_outer_wrapper"
+    prefix = _LINE_PREFIX.match(text)
+    if prefix is not None and _supported_quote(text[prefix.end() :], original):
+        return "unmatched_line_prefix"
+    return "not_verbatim_source"
+
+
+def _validated_issues(info: Mapping[str, Any]) -> list[dict]:
+    issues, indices = info.get("issues"), info.get("unmatched_indices")
+    if not isinstance(issues, list) or not isinstance(indices, list):
+        return []
+    validated = []
+    for issue in issues:
+        if not isinstance(issue, Mapping):
+            continue
+        index, reason = issue.get("index"), issue.get("reason")
+        if isinstance(index, int) and not isinstance(index, bool) and index in indices and isinstance(reason, str) and reason in _ISSUE_MESSAGES:
+            validated.append({"index": index, "reason": reason})
+    return validated
+
+
 def _annotate_review(latest, findings, messages, contract, *, scope, captured_sources, candidate_kind):
     extra = latest.additional_kwargs
     if _REVIEW in extra:
@@ -150,6 +181,8 @@ def _annotate_review(latest, findings, messages, contract, *, scope, captured_so
     }
     if unavailable:
         info["reason"] = unavailable
+    if unmatched:
+        info["issues"] = [{"index": index, "reason": _quote_issue_reason(findings[index]["text"], normalized_source)} for index in unmatched]
     candidate = latest.model_copy(update={"id": latest.id or str(uuid.uuid4()), "additional_kwargs": {**extra, _REVIEW: info}})
     # Native streaming captures a turn once by ID, before after_model updates.
     # Persist only this host diagnostic in its matching saved metadata; never
@@ -266,6 +299,8 @@ def collect_quote_review_diagnostics(messages: list, *, scope: str | None = None
             diagnostic["candidate_kind"] = info["candidate_kind"]
         if info.get("reason") in {"conflicting_original_reads", "complete_original_read_unavailable"}:
             diagnostic["reason"] = info["reason"]
+        if isinstance(info.get("issues"), list):
+            diagnostic["issues"] = _validated_issues(info)
         if diagnostic not in diagnostics:
             diagnostics.append(diagnostic)
     return diagnostics
@@ -293,29 +328,32 @@ def augment_quote_review_request(request):
                 break
     if not isinstance(info, Mapping) or not info.get("feedback"):
         return request
+    reasons = {issue["index"]: issue["reason"] for issue in _validated_issues(info)}
+    flagged = [(index, reasons.get(index, "not_verbatim_source")) for index in info["unmatched_indices"]]
+    issue_lines = "\n".join(f"- finding {index}: {reason}" for index, reason in flagged)
+    reason_lines = "\n".join(f"{reason}: {_ISSUE_MESSAGES[reason]}" for reason in dict.fromkeys(reason for _, reason in flagged))
     note = HumanMessage(
         name=_FEEDBACK,
         additional_kwargs={"hide_from_ui": True},
         content=(
             "<clause-quote-review>\n"
-            f"Public-source quotation review {info['attempt']}/{_MAX_REVIEWS}: text fields at zero-based finding indices {info['unmatched_indices']} could not be matched to the complete original document, "
-            "even allowing whitespace differences and separately quoted sentences from different locations. This is a conservative diagnostic, not an official score or a verdict that the finding is false. "
-            "Review each flagged quotation against /mnt/user-data/uploads/document.txt with the allowed native read tools and original source context. "
-            "For each supported distinct finding, quote its exact original complete sentences/passages; preserve spelling, values and punctuation. "
-            "Reopen the original with read_file to verify flagged spans. Preserve OCR word-internal spaces, broken words and character fragments exactly; do not reconstruct a more fluent version. "
-            "Do not add decorative literal quotation marks around text: JSON string delimiters are serialization, not extra quotation marks belonging inside the text value. "
-            "Noncontiguous complete sentences from the same document are permitted. Do not paraphrase quotations, infer another contract version, or turn summaries/OCR repairs into source text. "
-            "Reconsider whether the explanation is supported by an internal relationship, without inventing defects or imposing a count. "
-            "The host has not selected replacement spans or removed findings. Do not drop a supported finding merely to satisfy this diagnostic or replace unfinished work with an empty array. "
-            "If the diagnostic appears mistaken, verify the original and retain the supported quotation. "
+            f"Public-source quotation review {info['attempt']}/{_MAX_REVIEWS}. Verify these zero-based finding indices against the original read_file evidence:\n"
+            + issue_lines
+            + "\n"
+            + reason_lines
+            + "\nUse the original read_file evidence for /mnt/user-data/uploads/document.txt already in this audit. "
+            "If read_file is currently bound, reopen flagged passages as needed. "
+            "Copy complete original sentences/passages, preserving spelling, punctuation and internal whitespace, including OCR fragments. "
+            "Do not paraphrase or add quotation wrappers or line labels absent from the source. Noncontiguous/reordered complete source sentences are allowed. "
+            "This source-fidelity diagnostic is not an official score or a verdict that a finding is false. Verify its explanation against the same document; "
+            "retain every supported distinct finding without imposing a count or using an empty array to conceal unfinished work. "
+            "If the diagnostic is mistaken, verify and retain the supported quotation. "
             + (
-                "This review concerns an actually executed file write. If revising that file delivery, call native write_file again with append=false "
-                "and the complete revised array at the same current-action output path, and verify it with real tools. "
-                "A receipt, promise, or different inline array does not rewrite the existing file. Do not claim a write without executing it. "
+                "For this actual file delivery, execute write_file again with append=false and the complete revised array at the same current-action path, then verify it. A receipt or different inline array does not rewrite that file. "
                 if info.get("candidate_kind") in {"write_file", "file_receipt"}
                 else "Return your complete raw public JSON array, with all supported distinct findings and correctly escaped original quotations. "
             )
-            + "If the substantive audit is incomplete, use the ordinary honest partial/blocked envelope with concrete gaps. All native source, schema, token, turn and safety gates still apply.\n"
+            + "The host has not supplied replacement text or changed findings. If the audit is incomplete, use the ordinary partial/blocked envelope with concrete gaps. Native gates and budgets still apply.\n"
             "</clause-quote-review>"
         ),
     )

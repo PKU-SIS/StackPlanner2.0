@@ -1465,3 +1465,11 @@ to required public-source audit, recovery and delivery workflows. Keep ordinary
 new-conversation recall required when available; do not insert it after an audit
 has begun. The audit-only binding and existing completion gates are unchanged.
 Sync/async request coverage: `tests/test_sp_memory_preflight_availability.py`.
+
+CLAUSE quote-review diagnostics may include `issues: [{index, reason}]` for
+already-unmatched indices. Reasons are restricted to `unmatched_outer_wrapper`,
+`unmatched_line_prefix`, and `not_verbatim_source`; classification reads only
+the original observed public source. The first two require that the source
+supports the text without that decoration. Keep feedback transient and export
+only the reason whitelist, never replacement spans or arbitrary diagnostic text.
+Native graph tests verify both feedback requests after an ignored first review.
