@@ -353,7 +353,7 @@ def test_visible_native_prefetch_and_saved_candidate_diagnostics(monkeypatch):
 
 @pytest.mark.parametrize("asynchronous", [False, True])
 @pytest.mark.parametrize("structured", [False, True])
-def test_successful_write_tool_gets_review_in_same_specialist_before_real_rewrite(monkeypatch, tmp_path, asynchronous, structured):
+def test_successful_final_file_receipt_gets_review_before_real_rewrite(monkeypatch, tmp_path, asynchronous, structured):
     from langchain.agents import create_agent
     from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
     from langchain_core.tools import tool
@@ -391,20 +391,23 @@ def test_successful_write_tool_gets_review_in_same_specialist_before_real_rewrit
         args = {"path": path, "append": False, **({"json_content": json.loads(body)} if structured else {"content": body})}
         return AIMessage(content="", tool_calls=[{"name": "write_file", "id": call_id, "args": args}])
 
-    model = Model(responses=[call(first, "write-bad"), call(final, "write-fixed"), AIMessage(content=receipt)])
+    model = Model(responses=[call(first, "write-bad"), AIMessage(content=receipt), call(final, "write-fixed"), AIMessage(content=receipt)])
     graph = create_agent(model=model, tools=[write_file], middleware=[middleware(monkeypatch)], state_schema=ThreadState)
     state = {"messages": [HumanMessage(content="Audit and deliver the actual file."), *reads()]}
     result = asyncio.run(graph.ainvoke(state)) if asynchronous else graph.invoke(state)
     assert len(writes) == 2
     assert json.loads(writes[0]) == json.loads(first)
     assert json.loads((tmp_path / "answer.json").read_text()) == json.loads(final)
-    assert model._seen[1][-1].name == "sp_clause_quote_review_feedback"
-    assert "write_file" in model._seen[1][-1].content
-    assert SOURCE in [message.content for message in model._seen[1]]
+    assert model._seen[1][-1].name == "write_file"
+    assert model._seen[2][-1].name == "sp_clause_quote_review_feedback"
+    assert "write_file" in model._seen[2][-1].content
+    assert SOURCE in [message.content for message in model._seen[2]]
     assert result["messages"][-1].content == receipt
-    marked_tools = [message for message in result["messages"] if isinstance(message, ToolMessage) and "sp_clause_quote_review" in message.additional_kwargs]
-    assert marked_tools[0].additional_kwargs["sp_clause_quote_review"]["unmatched_indices"] == [0]
-    assert marked_tools[-1].additional_kwargs["sp_clause_quote_review"]["unmatched_indices"] == []
+    assert not any(isinstance(message, ToolMessage) and "sp_clause_quote_review" in message.additional_kwargs for message in result["messages"])
+    marked_finals = [message for message in result["messages"] if isinstance(message, AIMessage) and "sp_clause_quote_review" in message.additional_kwargs]
+    assert marked_finals[0].additional_kwargs["sp_clause_quote_review"]["candidate_kind"] == "file_receipt"
+    assert marked_finals[0].additional_kwargs["sp_clause_quote_review"]["unmatched_indices"] == [0]
+    assert marked_finals[-1].additional_kwargs["sp_clause_quote_review"]["unmatched_indices"] == []
 
 
 def test_file_receipt_with_actual_successful_write_is_reviewed_without_reading_disk(monkeypatch):
@@ -471,7 +474,7 @@ def test_write_review_never_certifies_an_unexecuted_partial_or_changed_candidate
     assert check.before_model({"messages": messages}, None) is None
 
 
-def test_file_and_raw_final_reviews_share_the_same_two_attempt_budget(monkeypatch):
+def test_final_file_receipt_and_raw_reviews_share_the_same_two_attempt_budget(monkeypatch):
     check = middleware(monkeypatch)
     path = "/mnt/user-data/outputs/clause_answer-audit.json"
     original = answer("Invented sentence.")
@@ -480,9 +483,13 @@ def test_file_and_raw_final_reviews_share_the_same_two_attempt_budget(monkeypatc
         AIMessage(content="", tool_calls=[{"name": "write_file", "id": "write", "args": {"path": path, "content": original}}]),
         ToolMessage(content="File written successfully.", name="write_file", tool_call_id="write", id="written"),
     ]
-    first = check.before_model({"messages": messages}, None)
+    assert check.before_model({"messages": messages}, None) is None
+    receipt = json.dumps({"artifact_content": None, "artifact_metadata": {"completion_status": "complete", "created_paths": [path]}})
+    messages.append(AIMessage(content=receipt, id="final-receipt"))
+    first = check.after_model({"messages": messages}, None)
     messages[-1] = first["messages"][0]
     assert messages[-1].additional_kwargs["sp_clause_quote_review"]["attempt"] == 1
+    assert messages[-1].additional_kwargs["sp_clause_quote_review"]["candidate_kind"] == "file_receipt"
     messages.append(AIMessage(content=original, id="raw-final"))
     second = check.after_model({"messages": messages}, None)
     assert second["jump_to"] == "model"

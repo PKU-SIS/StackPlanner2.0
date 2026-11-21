@@ -704,12 +704,13 @@ can miss altered combinations around abbreviations and is not proof of audit
 quality. It is disabled by default; enabling it changes execution and requires
 a new run rather than resuming or rewriting saved predictions.
 
-Quotation review also inspects a complete array passed to an actually successful
-native `write_file` call before the next ordinary specialist turn, and recognizes
-file receipts backed by those real writes. It supports string `content` and
-structured `json_content`; appends, changed snapshots, failed/unpaired writes and
-ambiguous receipts cannot certify a candidate. The same two-review budget covers
-file and direct-final paths. A file correction requires another model-executed
+Quotation feedback applies to actual final candidates. Optional draft
+`write_file` calls do not trigger it or consume its two-review budget. A final
+file receipt still inspects the complete array from its backed successful native
+write, and explicit final `artifact_content` remains supported. Both string
+`content` and structured `json_content` are supported; appends, changed snapshots,
+failed/unpaired writes and ambiguous receipts cannot certify a candidate. The
+same two-review budget covers all final delivery forms. A file correction requires another model-executed
 write; an inline array or a receipt does not rewrite it. Feedback explicitly
 preserves OCR word-internal spaces/fragments and forbids decorative quote marks.
 On specialist completion, native custom events expose
@@ -717,6 +718,7 @@ On specialist completion, native custom events expose
 The same trusted diagnostic list is available in normalized
 `SPSubagentResult.artifact_metadata.clause_quote_review`; model metadata claims
 cannot supply it. These diagnostics do not affect acceptance or official scores.
+The independent semantic review of optional drafts retains its existing behavior.
 
 Central's new-conversation memory preflight requires the recall tool to be
 currently bound. Required public-source audit, recovery and delivery workflows

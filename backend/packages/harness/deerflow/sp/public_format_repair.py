@@ -176,19 +176,15 @@ class PublicArtifactFormatRepairMiddleware(AgentMiddleware):
         self.captured_sources = captured_sources
 
     def before_model(self, state, runtime):
-        if not self.quote_review_enabled and not self.semantic_review_enabled:
+        # A write_file result is an optional draft under the bound CLAUSE raw
+        # final protocol. Keep quote feedback for after_model's actual final
+        # candidate (including supported final file/envelope deliveries).
+        if not self.semantic_review_enabled:
             return None
-        from deerflow.sp.evidence_quotes import quote_write_review_update
-        from deerflow.sp.semantic_review import review_update_requests_semantic_pass, semantic_review_pending, semantic_write_review_update, state_with_review_update
+        from deerflow.sp.semantic_review import semantic_write_review_update
 
         captured = self.captured_sources() if self.captured_sources is not None else None
-        update = semantic_write_review_update(state, self.contract, scope=self.action_id or "native", captured_sources=captured) if self.semantic_review_enabled else None
-        if review_update_requests_semantic_pass(update):
-            return update
-        reviewed = state_with_review_update(state, update) if update else state
-        if self.semantic_review_enabled and semantic_review_pending(reviewed, scope=self.action_id or "native", captured_sources=captured):
-            return update
-        return (quote_write_review_update(reviewed, self.contract, scope=self.action_id or "native", captured_sources=captured) if self.quote_review_enabled else None) or update
+        return semantic_write_review_update(state, self.contract, scope=self.action_id or "native", captured_sources=captured)
 
     async def abefore_model(self, state, runtime):
         return self.before_model(state, runtime)

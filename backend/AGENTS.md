@@ -1442,9 +1442,12 @@ Review prompts are transient. Exhaustion keeps the original result and diagnosti
 native status/schema/source/stop gates remain authoritative. Tests:
 `tests/test_sp_evidence_quotes.py` and `tests/test_sp_public_format_repair.py`.
 
-The opt-in check includes successful native `write_file` complete-array arguments
-before the next ordinary model turn, plus backed file receipts and explicit
-artifact_content finals. Inspect only paired original tool messages, reuse native
+Under the bound CLAUSE raw-final success transport, optional `write_file`
+drafts do not trigger or consume quote feedback before the next model turn.
+Reserve the existing two requests for eligible after_model final candidates,
+including backed file receipts and explicit artifact_content finals. A final
+file receipt still inspects successful native complete-array write arguments.
+The independent before_model semantic draft pass is unchanged. Inspect only paired original tool messages, reuse native
 write-success evidence, and never reread files on the host. A later append,
 replacement or failed mutation invalidates the old candidate snapshot. File and
 direct-final candidates share the same two-review scope/counter, including across
@@ -1458,7 +1461,10 @@ list. The outer raw-result observer emits `clause_quote_review` custom events wi
 action_id and diagnostic on specialist completion; no document, prediction or gold
 text is included. This avoids relying on already-emitted step snapshots or final
 Central messages. CPU graph tests cover format then quote feedback with original
-source context, real tool execution/rewrite, bounded shared attempts and metadata.
+source context, real tool execution/rewrite, bounded shared final attempts and metadata.
+`tests/test_sp_quote_final_budget.py` covers raw/draft/raw and two-draft/raw
+sequences, sync/async native graphs, final receipts/envelopes, unavailable source
+and non-CLAUSE controls. Never add draft attempts to the final quote counter.
 
 Memory-preflight prompts must follow the actual request's bound tools and defer
 to required public-source audit, recovery and delivery workflows. Keep ordinary
