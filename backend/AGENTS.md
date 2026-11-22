@@ -41,3 +41,13 @@ report ID and turn ID; native new cycles retain it. This prevents copied fixed
 review/Finish IDs from replaying an older turn. Reports without the namespace
 retain their original fixed action IDs and budgets. See
 `../docs/research-report/MULTITURN_REHEARSAL_20261122.md` for artifacts and limits.
+
+Pilot preparation uses `scripts/report_multiturn_preflight.py` and
+`scripts/report_pilot_audit.py` from the repo root. The builder and verifier deny
+network connections and have no execute/start option. They use only public
+projections and dummy SDK serialization credentials, never copied `.env` values.
+The observer is experiment-scoped; do not wire it into default first-run paths.
+Reconcile actual HTTP inventory separately from callbacks before declaring cost
+complete; include direct Search/Fetch and background memory model calls.
+For readonly follow-ups, inspect tree/source/material snapshot views with bounded
+line ranges; a direct Central answer is archived as response_only, not delivery.

@@ -1050,3 +1050,9 @@ chain, including cancellation, duplicate requests and a fresh-source retry. It
 found and fixed cross-turn acceptance-action replay. See
 [the continuous rehearsal results](docs/research-report/MULTITURN_REHEARSAL_20261122.md).
 This does not enable model API experiments or establish factual report quality.
+
+An API-disabled single-case pilot preparation tool now freezes public configuration,
+role request shapes, code/Skill/SDK checksums, and proposed outer limits. Numeric
+audit helpers preserve missing usage and inflight exposure. See
+[the preflight and semantic-review notes](docs/research-report/multiturn-pilot-preparation-20261122/PLAN.md).
+Budget confirmation, live transport installation and API execution remain separate gates.

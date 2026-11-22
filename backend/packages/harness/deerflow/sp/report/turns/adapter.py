@@ -236,6 +236,20 @@ def finalize_run(state, runtime, *, cancelled=False, error=None):
                 store.archive_resolution_failure(
                     message_id=_message_id(message), raw_query=str(message.content), base_version_id=head["turn_id"], diagnostic={"error": str(error) if error else "Resolver did not prepare a turn", "cancelled": cancelled}
                 )
+            elif error is None and not cancelled:
+                from langchain_core.messages import AIMessage
+
+                from deerflow.utils.messages import message_to_text
+
+                report = native.load_report_context(state)
+                messages = list(state.get("messages") or [])
+                position = next((i for i in range(len(messages) - 1, -1, -1) if messages[i] is message), None)
+                final = next((m for m in reversed(messages[position + 1 :]) if isinstance(m, AIMessage) and not m.tool_calls and message_to_text(m).strip()), None) if position is not None else None
+                if report.status == "delivered" and report.report_id == head["report_id"] and final is not None and not final.additional_kwargs.get("deerflow_error_fallback"):
+                    # Observed response-only outcome, not a classifier or a new delivery.
+                    turn = store.reuse(head["turn_id"], message_id=_message_id(message), raw_query=message_to_text(message), response=message_to_text(final), mode="read_only")
+                    turn.update(response_only=True, native_delivery_created=False, user_intent_fulfilment="not_programmatically_verified")
+                    store._record(turn)
         return
     store = ReportTurnStore(native.outputs_path_from_state(state), **binding["owner"])
     diagnostic = {"error": str(error) if error else "Run ended without native delivery", "last_handler_result": state.get("sp_last_handler_result"), "run_id": binding.get("run_id"), "usage": state.get("sp_usage")}

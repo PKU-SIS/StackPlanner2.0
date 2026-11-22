@@ -121,3 +121,9 @@ PYTHONPATH="$PWD/backend/packages/harness:$PWD/backend" \
 
 连续七轮原生链路、取消/重复/重试与逐轮独立恢复的最新证据见
 [MULTITURN_REHEARSAL_20261122.md](MULTITURN_REHEARSAL_20261122.md)。
+
+API前离线准备及只读来源接口补齐见
+[multiturn-pilot-preparation-20261122/PLAN.md](multiturn-pilot-preparation-20261122/PLAN.md)。
+版本检查支持 `tree`、`sources`、`material:<id>` 的有界快照行读取；
+中枢直接回答可由既有结束钩子记录response_only，原生交付标记为false。
+此档案不表示程序已经判断其满足了用户改稿意图。

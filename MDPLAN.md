@@ -224,3 +224,12 @@ P5 的“准备题面/预期”子项已离线完成，但模型配置、预算�
 全文估算 9764–9801，原生一万档门槛保持；provider 调用和网络连接尝试均为 0，事实质量未评估。
 证据见 [MULTITURN_REHEARSAL_20261122.md](docs/research-report/MULTITURN_REHEARSAL_20261122.md)。
 P5 真实模型实验及 P6 合并部署仍未执行。
+
+## 14. 单题七轮 API 前离线预检
+
+补充公开配置/九项工具/角色请求形态、226个源码与Skill文件、实际SDK环境的冻结与核验工具。
+费用、token、时限和停止规则为外层草案；预算未选择时为null，API授权始终关闭。
+独立数值审计覆盖Central、GitAgent和原生角色，保留缺失/冲突用量及未知费用，要求HTTP清单独立对账。
+来源问答增加封存树、目录、材料原文行视图；中枢直接回答也独立response_only存档，不强制新增GitAgent步骤。
+广域1073项和预检17项通过；没有运行API实验、RACE/FACT、合并或部署。
+见 [单题预检与语义复核](docs/research-report/multiturn-pilot-preparation-20261122/PLAN.md)。

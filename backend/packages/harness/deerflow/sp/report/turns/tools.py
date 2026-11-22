@@ -26,8 +26,8 @@ def build_tools(store, message):
         return None
 
     @tool("report_inspect_version")
-    def inspect(version_id: str | None = None, view: str = "requirements") -> str:
-        """Read accepted report history. Views: requirements, manifest, report, draft:<node_id>."""
+    def inspect(version_id: str | None = None, view: str = "requirements", start_line: int = 1, end_line: int | None = None) -> str:
+        """Read accepted snapshots: requirements, manifest, report, draft:<node_id>, tree, sources, material:<material_id>. Material views accept original source line ranges."""
         if version_id is None:
             return json.dumps(store.inspect(), ensure_ascii=False)
         if version_id not in store.index()["versions"]:
@@ -40,6 +40,38 @@ def build_tools(store, message):
         elif view != "requirements":
             directory = store.directory(version_id) / "artifacts"
             ledger = native.read_json(directory / "ledger.json")
+            if view == "sources":
+                result["sources"] = [{k: row.get(k) for k in ("source_id", "url", "title")} for row in ledger.get("sources", [])]
+                result["materials"] = [{k: row.get(k) for k in ("material_id", "source_id", "sha256", "lines", "title")} for row in ledger.get("materials", [])]
+                return json.dumps(result, ensure_ascii=False)
+            if view == "tree" or view.startswith("material:"):
+                ref = ledger.get("tree") if view == "tree" else next((m for m in ledger.get("materials", []) if m.get("material_id") == view.removeprefix("material:")), None)
+                if not ref:
+                    raise ReportValidationError("unknown snapshot material/view")
+                relative = Path(ref["path"]).relative_to(manifest["origin_directory"]).as_posix()
+                if relative not in manifest["files"]:
+                    raise ReportValidationError("snapshot material/view is not bound")
+                saved = directory / relative
+                if view == "tree":
+                    result["tree"] = native.read_json(saved)
+                    return json.dumps(result, ensure_ascii=False)
+                lines = native.read_text(saved).splitlines()
+                end = min(len(lines), start_line + 119) if end_line is None else end_line
+                if type(start_line) is not int or type(end) is not int or start_line < 1 or end < start_line or end > len(lines) or end - start_line >= 800:
+                    raise ReportValidationError("invalid saved material line range")
+                content = "\n".join(lines[start_line - 1 : end])
+                if len(content) > 50000:
+                    raise ReportValidationError("saved material excerpt too large; request fewer lines")
+                result.update(
+                    content=content,
+                    material_id=ref["material_id"],
+                    source_id=ref["source_id"],
+                    material_sha256=ref["sha256"],
+                    lines=[start_line, end],
+                    total_lines=len(lines),
+                    source=next(({k: source.get(k) for k in ("source_id", "url", "title")} for source in ledger.get("sources", []) if source.get("source_id") == ref["source_id"]), None),
+                )
+                return json.dumps(result, ensure_ascii=False)
             ref = ledger.get("final_report") if view == "report" else next((d for d in ledger["drafts"] if d.get("is_current") and view == "draft:" + d["node_id"]), None)
             if not ref:
                 raise ReportValidationError("unknown snapshot view")
