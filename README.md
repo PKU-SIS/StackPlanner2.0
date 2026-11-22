@@ -1056,3 +1056,9 @@ role request shapes, code/Skill/SDK checksums, and proposed outer limits. Numeri
 audit helpers preserve missing usage and inflight exposure. See
 [the preflight and semantic-review notes](docs/research-report/multiturn-pilot-preparation-20261122/PLAN.md).
 Budget confirmation, live transport installation and API execution remain separate gates.
+
+The pilot's numeric accounting is now connected to an experiment-only offline
+worker: real SDK/native-executor callbacks reconcile with mocked HTTP receipts,
+including background memory calls, reservations and an external timeout/cancel
+supervisor. Real network transports remain disabled. See
+[the worker wiring checks](docs/research-report/multiturn-pilot-preparation-20261122/WORKER_OFFLINE.md).

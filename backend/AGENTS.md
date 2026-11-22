@@ -51,3 +51,13 @@ Reconcile actual HTTP inventory separately from callbacks before declaring cost
 complete; include direct Search/Fetch and background memory model calls.
 For readonly follow-ups, inspect tree/source/material snapshot views with bounded
 line ranges; a direct Central answer is archived as response_only, not delivery.
+
+The experiment-only `scripts/report_pilot_worker.py` now installs send-time
+reservations, source-bound sync/async/SSE receipts, native callback observers and
+background-memory drainage. `run_turn` wraps the existing caller graph and keeps
+case-wide limits; it never selects agents or publishes reports. Only effective
+HTTPX MockTransport mounts are admitted; the spawn supervisor denies sockets
+until child exit, retains numeric journals and enforces outer deadlines/cancel.
+No production imports or live API launcher are added. The provider input-context
+ceiling remains unverified/null in preflight. See the pilot preparation
+`WORKER_OFFLINE.md` for validation and the remaining real-API boundary.

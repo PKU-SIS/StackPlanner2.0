@@ -209,6 +209,7 @@ def frozen_engine(root):
     names += [
         "scripts/report_multiturn_preflight.py",
         "scripts/report_pilot_audit.py",
+        "scripts/report_pilot_worker.py",
         "scripts/validate_report_multiturn_cases.py",
     ]
     return {name: digest(root / name) for name in sorted(set(names))}
@@ -378,6 +379,8 @@ def build_packet(root, destination, *, budget_cny=None):
         "native_retry_policy_changed": False,
         "unknown_usage_or_transport_outcome": "stop_and_keep_reservation",
         "account_billing_currency_confirmed": False,
+        "provider_input_context_ceiling_tokens": None,
+        "provider_input_context_ceiling_verified": False,
     }
     rates = {
         "currency": "CNY",
@@ -415,7 +418,8 @@ def build_packet(root, destination, *, budget_cny=None):
             "explicit API execution authorization",
             "confirmed cost ceiling and account currency",
             "current rate/model-version review",
-            "actual-worker HTTP reservation and callback reconciliation installation",
+            "live worker admission review after offline transport wiring",
+            "verified provider input-context ceiling for reservations",
         ],
     }
     destination.mkdir(parents=True)

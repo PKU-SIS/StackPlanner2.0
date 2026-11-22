@@ -2,7 +2,8 @@
 
 本轮完成配置/代码/Skill/依赖快照、数值审计适配及验收预期复核。模型服务 API 未调用。
 预检命令只有构建与核验，没有 `--start` 或执行入口；`api_experiments_authorized=false`。
-真实 worker 的 HTTP 预留、请求清单对账及回调安装仍是独立启动门，当前不能宣称 API 已就绪。
+HTTP预留、独立收据对账、后台记忆与进程外停止现已用真实SDK/执行器和假HTTP完成离线接线；
+详见 [worker接线验证](WORKER_OFFLINE.md)。真实传输仍被拒绝，不能宣称真实API已就绪。
 
 ## 冻结对象与配置
 
@@ -72,10 +73,10 @@ Native SDK/中间件的内置重试实现不修改，但每次实际尝试均要
 3. `PilotUsageAudit`：按 source_run_id 去重，冲突停机；按角色/轮次列明用量。缓存与 reasoning 都是已有输入/输出的子集，不能再加一遍。
 4. `BudgetGuard`：并发安全的发起前预留和按实际结果结算；未知结果不释放额度，不能在事后清空费用。
 
-真实 worker 仍必须在网络层逐次记录脱敏 HTTP 身份/状态、对应 logical source ID，并安装发起前预留。
+新增离线worker已在HTTPX send层逐次记录脱敏身份/状态、对应logical source ID，并安装发起前预留。
 不能直接拿测试中的模拟 HTTP 清单当真实收据。`reconcile_model_requests` 未核对独立清单时，billing_complete为false、总费用为null。
 后台记忆回调/HTTP也需安装并等待结束/对账；未知或未归属收费请求停止该例，不隐藏在总数中。
-当前只有适配接口及真实执行器的离线 wiring 测试，没有在任何真实 API worker 上安装或运行。
+当前接线已覆盖真实SDK、原生执行器和后台Timer，但传输全部为MockTransport；没有调用提供方API。
 
 ## 本轮接口补齐
 
@@ -98,7 +99,7 @@ PYTHONPATH="$PWD/backend/packages/harness:$PWD/backend" \
   --output .deer-flow/pilot-preflight/20261122-v4 --verify
 ```
 
-最终包在新 checkout 的 `.deer-flow/pilot-preflight/20261122-v4`，中间包保留；大块文件使用既有忽略规则，不提交凭据或运行数据。
+上一阶段包为 `.deer-flow/pilot-preflight/20261122-v4`；新增接线后的包位置和SHA见 `WORKER_RESULT.json`，旧包保留；大块文件使用既有忽略规则，不提交凭据或运行数据。
 冻结请求/验收材料字节未变。[逐轮语义复核](SEMANTIC_REVIEW.md)仅验收侧使用。
-离线广域回归1073项通过；最终预检17项通过。真实模型理解、事实质量、API worker接线及账单未进行实测。
+离线广域回归1073项通过；最终预检17项通过。真实模型理解、事实质量、真实提供方传输及账单未进行实测；离线worker结果见上述新增记录。
 没有推送、合并、部署或重启旧 Demo。

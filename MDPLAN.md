@@ -233,3 +233,13 @@ P5 真实模型实验及 P6 合并部署仍未执行。
 来源问答增加封存树、目录、材料原文行视图；中枢直接回答也独立response_only存档，不强制新增GitAgent步骤。
 广域1073项和预检17项通过；没有运行API实验、RACE/FACT、合并或部署。
 见 [单题预检与语义复核](docs/research-report/multiturn-pilot-preparation-20261122/PLAN.md)。
+
+## 15. 实验 worker 数值接线（仅离线）
+
+补齐HTTPX逐次发起前预留、同步/异步/SSE收据、callback source对账、原生角色与后台记忆Timer归属。
+run_turn包装原图，轮间排空记忆，整例限额/计数不重置；不增加模型路由、不接管报告发布。
+父进程监督单调时钟时限和取消，终止后排空并保留预留/结算日志；不自动重启。
+只允许MockTransport，监督子进程到退出均禁用socket，不加载凭据或启动真实API。
+输入上下文预留上界、账户币种与费用授权仍待真实启动前确认；没有把离线成功当账单/事实成绩。
+证据见 [worker离线接线](docs/research-report/multiturn-pilot-preparation-20261122/WORKER_OFFLINE.md)。
+P5真实模型实验、P6合并部署保持未执行。
