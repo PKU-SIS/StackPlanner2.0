@@ -1,0 +1,857 @@
+{
+  "recorded_at_utc": "2026-11-22T10:13:29.502851+00:00",
+  "implementation_parent_commit": "7eb7125c0c2a7ec1b0ea7eff677f838dcedeb4a5",
+  "scope": "Scripted model outputs and fixture retrieval; actual Central graph, SubagentExecutor, ToolNode, report gates and filesystem snapshots.",
+  "facts_evaluated": false,
+  "real_model_semantics_evaluated": false,
+  "provider_calls": 0,
+  "network_connect_attempts": 0,
+  "regression": {
+    "passed": 1056,
+    "duration_seconds": 50.98,
+    "output_file": "MULTITURN_REHEARSAL_TEST_RUN_20261122.txt"
+  },
+  "archive": {
+    "path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/offline-rehearsals/20261122-full-dialogue/artifacts.tar.gz",
+    "sha256": "73e7165a35123d65dc0bff62549ed38233f0ca24c43a7761e9ab68bd90763c80",
+    "bytes": 17189971,
+    "includes_attempts": [
+      "/tmp/sp2-multiturn-rehearsal-attempt1",
+      "/tmp/sp2-multiturn-rehearsal-attempt2",
+      "/tmp/sp2-multiturn-rehearsal-attempt3",
+      "/tmp/sp2-multiturn-rehearsal-attempt4",
+      "/tmp/sp2-multiturn-rehearsal-verified-20261122",
+      "/tmp/sp2-multiturn-rehearsal-final-20261122",
+      "/tmp/sp2-multiturn-rehearsal-freeze-20261122"
+    ]
+  },
+  "scenarios": {
+    "cancel-duplicate-retry": {
+      "artifact_directory": "/tmp/sp2-multiturn-rehearsal-freeze-20261122/cancel-duplicate-retry",
+      "case_id": "library-rag",
+      "successful_turns": 7,
+      "accepted_generation_turns": [
+        1,
+        2,
+        3,
+        4,
+        7
+      ],
+      "provider_calls": 0,
+      "network_connect_attempts": 0,
+      "facts_evaluated": false,
+      "evaluator_hints_in_model_inputs": false,
+      "semantics": "scripted outputs, not independent model requirement resolution",
+      "rounds": [
+        {
+          "user_turn": 1,
+          "source_message_id": "library-rag.t1",
+          "dialogue_turn_id": null,
+          "base_user_turn": null,
+          "accepted_head_user_turn": 1,
+          "active_user_turn": 1,
+          "native_delivered": true,
+          "roles": [
+            "memory_recaller",
+            "researcher",
+            "outline",
+            "researcher",
+            "outline",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "outline"
+          ],
+          "native_length_ok": true,
+          "elapsed_seconds": 1.5110128722153604,
+          "old_version_sha_unchanged": true,
+          "review_action_id": "spact_sp-fixed-c0-review-r1",
+          "delivery_action_id": "spact_sp-fixed-c0-finish-r1-rv1",
+          "estimated_words": 9800,
+          "restorable": true,
+          "restored_report_id": "r2",
+          "directory": "/tmp/sp2-multiturn-rehearsal-freeze-20261122/cancel-duplicate-retry/standalone-restores/r1/report/r2",
+          "native_report_id": "r1",
+          "tree_version": 2,
+          "final_report_version": 1,
+          "native_delivery_run_id": "r1-normal",
+          "canonical_drafts": {
+            "n_intro": {
+              "draft_id": "d1",
+              "sha256": "068b66eaee59d4d1a307aa9414a6ca7f453be457cc391d3f8ba9bb21523759e0"
+            },
+            "n_ops": {
+              "draft_id": "d2",
+              "sha256": "8978e1ee89be3b06c14877c46725c9b4e407a734787e91a53c29860a3b4d6640"
+            },
+            "n_privacy": {
+              "draft_id": "d3",
+              "sha256": "b245b4f3147dec2d1236d6f867cabf6d585940b8afa688ce6fca46522228a6dd"
+            },
+            "n_route": {
+              "draft_id": "d4",
+              "sha256": "9480e94c4060bdb23b8f936a569d2800791ad2992a47976638bb379d46737be3"
+            }
+          }
+        },
+        {
+          "user_turn": 2,
+          "source_message_id": "library-rag.t2",
+          "dialogue_turn_id": "t0002",
+          "base_user_turn": 1,
+          "accepted_head_user_turn": 2,
+          "active_user_turn": 2,
+          "native_delivered": true,
+          "roles": [
+            "git_agent",
+            "outline",
+            "writer",
+            "outline"
+          ],
+          "native_length_ok": true,
+          "elapsed_seconds": 1.0636999579146504,
+          "old_version_sha_unchanged": true,
+          "review_action_id": "spact_sp-fixed-r2-t0002-c0-review-r1",
+          "delivery_action_id": "spact_sp-fixed-r2-t0002-c0-finish-r1-rv2",
+          "estimated_words": 9778,
+          "canonical_changes": {
+            "added_nodes": [],
+            "changed_nodes": [
+              "n_ops"
+            ],
+            "factual_correctness_verified": false,
+            "kept_nodes": [
+              "n_intro",
+              "n_privacy",
+              "n_route"
+            ],
+            "removed_nodes": [],
+            "scope": "canonical node bytes; final citation display and assembly may change"
+          },
+          "restorable": true,
+          "restored_report_id": "r3",
+          "directory": "/tmp/sp2-multiturn-rehearsal-freeze-20261122/cancel-duplicate-retry/standalone-restores/r2/report/r3",
+          "native_report_id": "r2",
+          "tree_version": 3,
+          "final_report_version": 2,
+          "native_delivery_run_id": "r2-normal",
+          "canonical_drafts": {
+            "n_intro": {
+              "draft_id": "d1",
+              "sha256": "068b66eaee59d4d1a307aa9414a6ca7f453be457cc391d3f8ba9bb21523759e0"
+            },
+            "n_privacy": {
+              "draft_id": "d3",
+              "sha256": "b245b4f3147dec2d1236d6f867cabf6d585940b8afa688ce6fca46522228a6dd"
+            },
+            "n_route": {
+              "draft_id": "d4",
+              "sha256": "9480e94c4060bdb23b8f936a569d2800791ad2992a47976638bb379d46737be3"
+            },
+            "n_ops": {
+              "draft_id": "d5",
+              "sha256": "b676af2af761fa421ae06ed75f4dc28febea998c2f9022fd1a824ca9bfea5389"
+            }
+          }
+        },
+        {
+          "user_turn": 3,
+          "source_message_id": "library-rag.t3.retry",
+          "dialogue_turn_id": "t0004",
+          "base_user_turn": 2,
+          "accepted_head_user_turn": 3,
+          "active_user_turn": 3,
+          "native_delivered": true,
+          "roles": [
+            "git_agent",
+            "outline",
+            "writer",
+            "outline"
+          ],
+          "native_length_ok": true,
+          "elapsed_seconds": 1.0835353420116007,
+          "old_version_sha_unchanged": true,
+          "review_action_id": "spact_sp-fixed-r4-t0004-c0-review-r1",
+          "delivery_action_id": "spact_sp-fixed-r4-t0004-c0-finish-r1-rv3",
+          "estimated_words": 9764,
+          "canonical_changes": {
+            "added_nodes": [],
+            "changed_nodes": [
+              "n_privacy"
+            ],
+            "factual_correctness_verified": false,
+            "kept_nodes": [
+              "n_intro",
+              "n_route",
+              "n_ops"
+            ],
+            "removed_nodes": [],
+            "scope": "canonical node bytes; final citation display and assembly may change"
+          },
+          "restorable": true,
+          "restored_report_id": "r5",
+          "directory": "/tmp/sp2-multiturn-rehearsal-freeze-20261122/cancel-duplicate-retry/standalone-restores/r3/report/r5",
+          "native_report_id": "r4",
+          "tree_version": 4,
+          "final_report_version": 3,
+          "native_delivery_run_id": "r3-retry",
+          "canonical_drafts": {
+            "n_intro": {
+              "draft_id": "d1",
+              "sha256": "068b66eaee59d4d1a307aa9414a6ca7f453be457cc391d3f8ba9bb21523759e0"
+            },
+            "n_route": {
+              "draft_id": "d4",
+              "sha256": "9480e94c4060bdb23b8f936a569d2800791ad2992a47976638bb379d46737be3"
+            },
+            "n_ops": {
+              "draft_id": "d5",
+              "sha256": "b676af2af761fa421ae06ed75f4dc28febea998c2f9022fd1a824ca9bfea5389"
+            },
+            "n_privacy": {
+              "draft_id": "d6",
+              "sha256": "9014565ab3ed4e9d9154d4926b83645ced5f1d942866526a337adb20fbb23d2b"
+            }
+          }
+        },
+        {
+          "user_turn": 4,
+          "source_message_id": "library-rag.t4",
+          "dialogue_turn_id": "t0005",
+          "base_user_turn": 1,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 4,
+          "native_delivered": true,
+          "roles": [
+            "git_agent",
+            "outline",
+            "writer",
+            "outline"
+          ],
+          "native_length_ok": true,
+          "elapsed_seconds": 1.065920616965741,
+          "old_version_sha_unchanged": true,
+          "review_action_id": "spact_sp-fixed-r5-t0005-c0-review-r1",
+          "delivery_action_id": "spact_sp-fixed-r5-t0005-c0-finish-r1-rv2",
+          "estimated_words": 9786,
+          "canonical_changes": {
+            "added_nodes": [],
+            "changed_nodes": [
+              "n_privacy"
+            ],
+            "factual_correctness_verified": false,
+            "kept_nodes": [
+              "n_intro",
+              "n_ops",
+              "n_route"
+            ],
+            "removed_nodes": [],
+            "scope": "canonical node bytes; final citation display and assembly may change"
+          },
+          "restorable": true,
+          "restored_report_id": "r6",
+          "directory": "/tmp/sp2-multiturn-rehearsal-freeze-20261122/cancel-duplicate-retry/standalone-restores/r4/report/r6",
+          "native_report_id": "r5",
+          "tree_version": 3,
+          "final_report_version": 2,
+          "native_delivery_run_id": "r4-normal",
+          "canonical_drafts": {
+            "n_intro": {
+              "draft_id": "d1",
+              "sha256": "068b66eaee59d4d1a307aa9414a6ca7f453be457cc391d3f8ba9bb21523759e0"
+            },
+            "n_ops": {
+              "draft_id": "d2",
+              "sha256": "8978e1ee89be3b06c14877c46725c9b4e407a734787e91a53c29860a3b4d6640"
+            },
+            "n_route": {
+              "draft_id": "d4",
+              "sha256": "9480e94c4060bdb23b8f936a569d2800791ad2992a47976638bb379d46737be3"
+            },
+            "n_privacy": {
+              "draft_id": "d5",
+              "sha256": "9014565ab3ed4e9d9154d4926b83645ced5f1d942866526a337adb20fbb23d2b"
+            }
+          }
+        },
+        {
+          "user_turn": 5,
+          "source_message_id": "library-rag.t5",
+          "dialogue_turn_id": "t0006",
+          "base_user_turn": 4,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 4,
+          "native_delivered": false,
+          "roles": [
+            "git_agent"
+          ],
+          "native_length_ok": null,
+          "elapsed_seconds": 0.2546950182877481,
+          "old_version_sha_unchanged": true,
+          "restorable": true,
+          "restored_report_id": "r6",
+          "directory": "/tmp/sp2-multiturn-rehearsal-freeze-20261122/cancel-duplicate-retry/standalone-restores/r5/report/r6",
+          "native_report_id": "r5",
+          "tree_version": 3,
+          "final_report_version": 2,
+          "native_delivery_run_id": "r4-normal",
+          "canonical_drafts": {
+            "n_intro": {
+              "draft_id": "d1",
+              "sha256": "068b66eaee59d4d1a307aa9414a6ca7f453be457cc391d3f8ba9bb21523759e0"
+            },
+            "n_ops": {
+              "draft_id": "d2",
+              "sha256": "8978e1ee89be3b06c14877c46725c9b4e407a734787e91a53c29860a3b4d6640"
+            },
+            "n_route": {
+              "draft_id": "d4",
+              "sha256": "9480e94c4060bdb23b8f936a569d2800791ad2992a47976638bb379d46737be3"
+            },
+            "n_privacy": {
+              "draft_id": "d5",
+              "sha256": "9014565ab3ed4e9d9154d4926b83645ced5f1d942866526a337adb20fbb23d2b"
+            }
+          }
+        },
+        {
+          "user_turn": 6,
+          "source_message_id": "library-rag.t6",
+          "dialogue_turn_id": "t0007",
+          "base_user_turn": 2,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 2,
+          "native_delivered": false,
+          "roles": [
+            "git_agent"
+          ],
+          "native_length_ok": null,
+          "elapsed_seconds": 0.26083723781630397,
+          "old_version_sha_unchanged": true,
+          "restorable": true,
+          "restored_report_id": "r3",
+          "directory": "/tmp/sp2-multiturn-rehearsal-freeze-20261122/cancel-duplicate-retry/standalone-restores/r6/report/r3",
+          "native_report_id": "r2",
+          "tree_version": 3,
+          "final_report_version": 2,
+          "native_delivery_run_id": "r2-normal",
+          "canonical_drafts": {
+            "n_intro": {
+              "draft_id": "d1",
+              "sha256": "068b66eaee59d4d1a307aa9414a6ca7f453be457cc391d3f8ba9bb21523759e0"
+            },
+            "n_privacy": {
+              "draft_id": "d3",
+              "sha256": "b245b4f3147dec2d1236d6f867cabf6d585940b8afa688ce6fca46522228a6dd"
+            },
+            "n_route": {
+              "draft_id": "d4",
+              "sha256": "9480e94c4060bdb23b8f936a569d2800791ad2992a47976638bb379d46737be3"
+            },
+            "n_ops": {
+              "draft_id": "d5",
+              "sha256": "b676af2af761fa421ae06ed75f4dc28febea998c2f9022fd1a824ca9bfea5389"
+            }
+          }
+        },
+        {
+          "user_turn": 7,
+          "source_message_id": "library-rag.t7",
+          "dialogue_turn_id": "t0008",
+          "base_user_turn": 2,
+          "accepted_head_user_turn": 7,
+          "active_user_turn": 7,
+          "native_delivered": true,
+          "roles": [
+            "git_agent",
+            "outline",
+            "writer",
+            "outline"
+          ],
+          "native_length_ok": true,
+          "elapsed_seconds": 1.1543802041560411,
+          "old_version_sha_unchanged": true,
+          "review_action_id": "spact_sp-fixed-r6-t0008-c0-review-r1",
+          "delivery_action_id": "spact_sp-fixed-r6-t0008-c0-finish-r1-rv3",
+          "estimated_words": 9801,
+          "canonical_changes": {
+            "added_nodes": [],
+            "changed_nodes": [
+              "n_ops"
+            ],
+            "factual_correctness_verified": false,
+            "kept_nodes": [
+              "n_intro",
+              "n_privacy",
+              "n_route"
+            ],
+            "removed_nodes": [],
+            "scope": "canonical node bytes; final citation display and assembly may change"
+          },
+          "restorable": true,
+          "restored_report_id": "r7",
+          "directory": "/tmp/sp2-multiturn-rehearsal-freeze-20261122/cancel-duplicate-retry/standalone-restores/r7/report/r7",
+          "native_report_id": "r6",
+          "tree_version": 4,
+          "final_report_version": 3,
+          "native_delivery_run_id": "r7-normal",
+          "canonical_drafts": {
+            "n_intro": {
+              "draft_id": "d1",
+              "sha256": "068b66eaee59d4d1a307aa9414a6ca7f453be457cc391d3f8ba9bb21523759e0"
+            },
+            "n_privacy": {
+              "draft_id": "d3",
+              "sha256": "b245b4f3147dec2d1236d6f867cabf6d585940b8afa688ce6fca46522228a6dd"
+            },
+            "n_route": {
+              "draft_id": "d4",
+              "sha256": "9480e94c4060bdb23b8f936a569d2800791ad2992a47976638bb379d46737be3"
+            },
+            "n_ops": {
+              "draft_id": "d6",
+              "sha256": "2396fdd389f414e22003cc430c40db510fd38e7c5ba9eefc560e976d23a94f7e"
+            }
+          }
+        }
+      ],
+      "cancelled_attempt_preserved": true,
+      "duplicate_did_not_fork_or_write": true,
+      "retry_used_new_source_message": true,
+      "delegations_by_role": {
+        "memory_recaller": 1,
+        "researcher": 2,
+        "outline": 12,
+        "writer": 9,
+        "git_agent": 7
+      },
+      "model_requests_by_role": {
+        "memory_recaller": 1,
+        "researcher": 4,
+        "central": 18,
+        "outline": 20,
+        "writer": 16,
+        "git_agent": 14
+      },
+      "provider_usage": null
+    },
+    "seven-turn": {
+      "artifact_directory": "/tmp/sp2-multiturn-rehearsal-freeze-20261122/seven-turn",
+      "case_id": "library-rag",
+      "successful_turns": 7,
+      "accepted_generation_turns": [
+        1,
+        2,
+        3,
+        4,
+        7
+      ],
+      "provider_calls": 0,
+      "network_connect_attempts": 0,
+      "facts_evaluated": false,
+      "evaluator_hints_in_model_inputs": false,
+      "semantics": "scripted outputs, not independent model requirement resolution",
+      "rounds": [
+        {
+          "user_turn": 1,
+          "source_message_id": "library-rag.t1",
+          "dialogue_turn_id": null,
+          "base_user_turn": null,
+          "accepted_head_user_turn": 1,
+          "active_user_turn": 1,
+          "native_delivered": true,
+          "roles": [
+            "memory_recaller",
+            "researcher",
+            "outline",
+            "researcher",
+            "outline",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "outline"
+          ],
+          "native_length_ok": true,
+          "elapsed_seconds": 1.3817385560832918,
+          "old_version_sha_unchanged": true,
+          "review_action_id": "spact_sp-fixed-c0-review-r1",
+          "delivery_action_id": "spact_sp-fixed-c0-finish-r1-rv1",
+          "estimated_words": 9800,
+          "restorable": true,
+          "restored_report_id": "r2",
+          "directory": "/tmp/sp2-multiturn-rehearsal-freeze-20261122/seven-turn/standalone-restores/r1/report/r2",
+          "native_report_id": "r1",
+          "tree_version": 2,
+          "final_report_version": 1,
+          "native_delivery_run_id": "r1-normal",
+          "canonical_drafts": {
+            "n_intro": {
+              "draft_id": "d1",
+              "sha256": "068b66eaee59d4d1a307aa9414a6ca7f453be457cc391d3f8ba9bb21523759e0"
+            },
+            "n_privacy": {
+              "draft_id": "d3",
+              "sha256": "b245b4f3147dec2d1236d6f867cabf6d585940b8afa688ce6fca46522228a6dd"
+            },
+            "n_ops": {
+              "draft_id": "d2",
+              "sha256": "8978e1ee89be3b06c14877c46725c9b4e407a734787e91a53c29860a3b4d6640"
+            },
+            "n_route": {
+              "draft_id": "d4",
+              "sha256": "9480e94c4060bdb23b8f936a569d2800791ad2992a47976638bb379d46737be3"
+            }
+          }
+        },
+        {
+          "user_turn": 2,
+          "source_message_id": "library-rag.t2",
+          "dialogue_turn_id": "t0002",
+          "base_user_turn": 1,
+          "accepted_head_user_turn": 2,
+          "active_user_turn": 2,
+          "native_delivered": true,
+          "roles": [
+            "git_agent",
+            "outline",
+            "writer",
+            "outline"
+          ],
+          "native_length_ok": true,
+          "elapsed_seconds": 1.24032982904464,
+          "old_version_sha_unchanged": true,
+          "review_action_id": "spact_sp-fixed-r2-t0002-c0-review-r1",
+          "delivery_action_id": "spact_sp-fixed-r2-t0002-c0-finish-r1-rv2",
+          "estimated_words": 9778,
+          "canonical_changes": {
+            "added_nodes": [],
+            "changed_nodes": [
+              "n_ops"
+            ],
+            "factual_correctness_verified": false,
+            "kept_nodes": [
+              "n_intro",
+              "n_privacy",
+              "n_route"
+            ],
+            "removed_nodes": [],
+            "scope": "canonical node bytes; final citation display and assembly may change"
+          },
+          "restorable": true,
+          "restored_report_id": "r3",
+          "directory": "/tmp/sp2-multiturn-rehearsal-freeze-20261122/seven-turn/standalone-restores/r2/report/r3",
+          "native_report_id": "r2",
+          "tree_version": 3,
+          "final_report_version": 2,
+          "native_delivery_run_id": "r2-normal",
+          "canonical_drafts": {
+            "n_intro": {
+              "draft_id": "d1",
+              "sha256": "068b66eaee59d4d1a307aa9414a6ca7f453be457cc391d3f8ba9bb21523759e0"
+            },
+            "n_privacy": {
+              "draft_id": "d3",
+              "sha256": "b245b4f3147dec2d1236d6f867cabf6d585940b8afa688ce6fca46522228a6dd"
+            },
+            "n_route": {
+              "draft_id": "d4",
+              "sha256": "9480e94c4060bdb23b8f936a569d2800791ad2992a47976638bb379d46737be3"
+            },
+            "n_ops": {
+              "draft_id": "d5",
+              "sha256": "b676af2af761fa421ae06ed75f4dc28febea998c2f9022fd1a824ca9bfea5389"
+            }
+          }
+        },
+        {
+          "user_turn": 3,
+          "source_message_id": "library-rag.t3",
+          "dialogue_turn_id": "t0003",
+          "base_user_turn": 2,
+          "accepted_head_user_turn": 3,
+          "active_user_turn": 3,
+          "native_delivered": true,
+          "roles": [
+            "git_agent",
+            "outline",
+            "writer",
+            "outline"
+          ],
+          "native_length_ok": true,
+          "elapsed_seconds": 1.0674206586554646,
+          "old_version_sha_unchanged": true,
+          "review_action_id": "spact_sp-fixed-r3-t0003-c0-review-r1",
+          "delivery_action_id": "spact_sp-fixed-r3-t0003-c0-finish-r1-rv3",
+          "estimated_words": 9764,
+          "canonical_changes": {
+            "added_nodes": [],
+            "changed_nodes": [
+              "n_privacy"
+            ],
+            "factual_correctness_verified": false,
+            "kept_nodes": [
+              "n_intro",
+              "n_route",
+              "n_ops"
+            ],
+            "removed_nodes": [],
+            "scope": "canonical node bytes; final citation display and assembly may change"
+          },
+          "restorable": true,
+          "restored_report_id": "r4",
+          "directory": "/tmp/sp2-multiturn-rehearsal-freeze-20261122/seven-turn/standalone-restores/r3/report/r4",
+          "native_report_id": "r3",
+          "tree_version": 4,
+          "final_report_version": 3,
+          "native_delivery_run_id": "r3-normal",
+          "canonical_drafts": {
+            "n_intro": {
+              "draft_id": "d1",
+              "sha256": "068b66eaee59d4d1a307aa9414a6ca7f453be457cc391d3f8ba9bb21523759e0"
+            },
+            "n_route": {
+              "draft_id": "d4",
+              "sha256": "9480e94c4060bdb23b8f936a569d2800791ad2992a47976638bb379d46737be3"
+            },
+            "n_ops": {
+              "draft_id": "d5",
+              "sha256": "b676af2af761fa421ae06ed75f4dc28febea998c2f9022fd1a824ca9bfea5389"
+            },
+            "n_privacy": {
+              "draft_id": "d6",
+              "sha256": "9014565ab3ed4e9d9154d4926b83645ced5f1d942866526a337adb20fbb23d2b"
+            }
+          }
+        },
+        {
+          "user_turn": 4,
+          "source_message_id": "library-rag.t4",
+          "dialogue_turn_id": "t0004",
+          "base_user_turn": 1,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 4,
+          "native_delivered": true,
+          "roles": [
+            "git_agent",
+            "outline",
+            "writer",
+            "outline"
+          ],
+          "native_length_ok": true,
+          "elapsed_seconds": 1.06547184381634,
+          "old_version_sha_unchanged": true,
+          "review_action_id": "spact_sp-fixed-r4-t0004-c0-review-r1",
+          "delivery_action_id": "spact_sp-fixed-r4-t0004-c0-finish-r1-rv2",
+          "estimated_words": 9786,
+          "canonical_changes": {
+            "added_nodes": [],
+            "changed_nodes": [
+              "n_privacy"
+            ],
+            "factual_correctness_verified": false,
+            "kept_nodes": [
+              "n_intro",
+              "n_ops",
+              "n_route"
+            ],
+            "removed_nodes": [],
+            "scope": "canonical node bytes; final citation display and assembly may change"
+          },
+          "restorable": true,
+          "restored_report_id": "r5",
+          "directory": "/tmp/sp2-multiturn-rehearsal-freeze-20261122/seven-turn/standalone-restores/r4/report/r5",
+          "native_report_id": "r4",
+          "tree_version": 3,
+          "final_report_version": 2,
+          "native_delivery_run_id": "r4-normal",
+          "canonical_drafts": {
+            "n_intro": {
+              "draft_id": "d1",
+              "sha256": "068b66eaee59d4d1a307aa9414a6ca7f453be457cc391d3f8ba9bb21523759e0"
+            },
+            "n_ops": {
+              "draft_id": "d2",
+              "sha256": "8978e1ee89be3b06c14877c46725c9b4e407a734787e91a53c29860a3b4d6640"
+            },
+            "n_route": {
+              "draft_id": "d4",
+              "sha256": "9480e94c4060bdb23b8f936a569d2800791ad2992a47976638bb379d46737be3"
+            },
+            "n_privacy": {
+              "draft_id": "d5",
+              "sha256": "9014565ab3ed4e9d9154d4926b83645ced5f1d942866526a337adb20fbb23d2b"
+            }
+          }
+        },
+        {
+          "user_turn": 5,
+          "source_message_id": "library-rag.t5",
+          "dialogue_turn_id": "t0005",
+          "base_user_turn": 4,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 4,
+          "native_delivered": false,
+          "roles": [
+            "git_agent"
+          ],
+          "native_length_ok": null,
+          "elapsed_seconds": 0.24251874163746834,
+          "old_version_sha_unchanged": true,
+          "restorable": true,
+          "restored_report_id": "r5",
+          "directory": "/tmp/sp2-multiturn-rehearsal-freeze-20261122/seven-turn/standalone-restores/r5/report/r5",
+          "native_report_id": "r4",
+          "tree_version": 3,
+          "final_report_version": 2,
+          "native_delivery_run_id": "r4-normal",
+          "canonical_drafts": {
+            "n_intro": {
+              "draft_id": "d1",
+              "sha256": "068b66eaee59d4d1a307aa9414a6ca7f453be457cc391d3f8ba9bb21523759e0"
+            },
+            "n_ops": {
+              "draft_id": "d2",
+              "sha256": "8978e1ee89be3b06c14877c46725c9b4e407a734787e91a53c29860a3b4d6640"
+            },
+            "n_route": {
+              "draft_id": "d4",
+              "sha256": "9480e94c4060bdb23b8f936a569d2800791ad2992a47976638bb379d46737be3"
+            },
+            "n_privacy": {
+              "draft_id": "d5",
+              "sha256": "9014565ab3ed4e9d9154d4926b83645ced5f1d942866526a337adb20fbb23d2b"
+            }
+          }
+        },
+        {
+          "user_turn": 6,
+          "source_message_id": "library-rag.t6",
+          "dialogue_turn_id": "t0006",
+          "base_user_turn": 2,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 2,
+          "native_delivered": false,
+          "roles": [
+            "git_agent"
+          ],
+          "native_length_ok": null,
+          "elapsed_seconds": 0.2554858070798218,
+          "old_version_sha_unchanged": true,
+          "restorable": true,
+          "restored_report_id": "r3",
+          "directory": "/tmp/sp2-multiturn-rehearsal-freeze-20261122/seven-turn/standalone-restores/r6/report/r3",
+          "native_report_id": "r2",
+          "tree_version": 3,
+          "final_report_version": 2,
+          "native_delivery_run_id": "r2-normal",
+          "canonical_drafts": {
+            "n_intro": {
+              "draft_id": "d1",
+              "sha256": "068b66eaee59d4d1a307aa9414a6ca7f453be457cc391d3f8ba9bb21523759e0"
+            },
+            "n_privacy": {
+              "draft_id": "d3",
+              "sha256": "b245b4f3147dec2d1236d6f867cabf6d585940b8afa688ce6fca46522228a6dd"
+            },
+            "n_route": {
+              "draft_id": "d4",
+              "sha256": "9480e94c4060bdb23b8f936a569d2800791ad2992a47976638bb379d46737be3"
+            },
+            "n_ops": {
+              "draft_id": "d5",
+              "sha256": "b676af2af761fa421ae06ed75f4dc28febea998c2f9022fd1a824ca9bfea5389"
+            }
+          }
+        },
+        {
+          "user_turn": 7,
+          "source_message_id": "library-rag.t7",
+          "dialogue_turn_id": "t0007",
+          "base_user_turn": 2,
+          "accepted_head_user_turn": 7,
+          "active_user_turn": 7,
+          "native_delivered": true,
+          "roles": [
+            "git_agent",
+            "outline",
+            "writer",
+            "outline"
+          ],
+          "native_length_ok": true,
+          "elapsed_seconds": 1.11666208691895,
+          "old_version_sha_unchanged": true,
+          "review_action_id": "spact_sp-fixed-r5-t0007-c0-review-r1",
+          "delivery_action_id": "spact_sp-fixed-r5-t0007-c0-finish-r1-rv3",
+          "estimated_words": 9801,
+          "canonical_changes": {
+            "added_nodes": [],
+            "changed_nodes": [
+              "n_ops"
+            ],
+            "factual_correctness_verified": false,
+            "kept_nodes": [
+              "n_intro",
+              "n_privacy",
+              "n_route"
+            ],
+            "removed_nodes": [],
+            "scope": "canonical node bytes; final citation display and assembly may change"
+          },
+          "restorable": true,
+          "restored_report_id": "r6",
+          "directory": "/tmp/sp2-multiturn-rehearsal-freeze-20261122/seven-turn/standalone-restores/r7/report/r6",
+          "native_report_id": "r5",
+          "tree_version": 4,
+          "final_report_version": 3,
+          "native_delivery_run_id": "r7-normal",
+          "canonical_drafts": {
+            "n_intro": {
+              "draft_id": "d1",
+              "sha256": "068b66eaee59d4d1a307aa9414a6ca7f453be457cc391d3f8ba9bb21523759e0"
+            },
+            "n_privacy": {
+              "draft_id": "d3",
+              "sha256": "b245b4f3147dec2d1236d6f867cabf6d585940b8afa688ce6fca46522228a6dd"
+            },
+            "n_route": {
+              "draft_id": "d4",
+              "sha256": "9480e94c4060bdb23b8f936a569d2800791ad2992a47976638bb379d46737be3"
+            },
+            "n_ops": {
+              "draft_id": "d6",
+              "sha256": "2396fdd389f414e22003cc430c40db510fd38e7c5ba9eefc560e976d23a94f7e"
+            }
+          }
+        }
+      ],
+      "cancelled_attempt_preserved": false,
+      "duplicate_did_not_fork_or_write": false,
+      "retry_used_new_source_message": false,
+      "delegations_by_role": {
+        "memory_recaller": 1,
+        "researcher": 2,
+        "outline": 11,
+        "writer": 8,
+        "git_agent": 6
+      },
+      "model_requests_by_role": {
+        "memory_recaller": 1,
+        "researcher": 4,
+        "central": 15,
+        "outline": 18,
+        "writer": 16,
+        "git_agent": 12
+      },
+      "provider_usage": null
+    }
+  },
+  "implementation_sha256": {
+    "backend/packages/harness/deerflow/sp/report/acceptance.py": "271b20b994450702c4a2d248d9551697b16de32fcf57c4e9da056361df1d7e5d",
+    "backend/packages/harness/deerflow/sp/report/turns/adapter.py": "c5d2c2bdf7ea160f18d3eaafd2dd7ff30188e46fdc60480c96bbcd8ebb9a1767",
+    "backend/tests/_report_multiturn_rehearsal.py": "2a94e06270582fa27fe5dc18ccb8764f802ab16480ef5d74297fcd8503f99dc8",
+    "backend/tests/test_sp_report_multiturn_rehearsal.py": "86dc6b3b36ede984b4d02eb6066aac38692b7da029626f193ef6cb9bef4b5f31"
+  },
+  "old_tracked_file_sha_unchanged": true
+}

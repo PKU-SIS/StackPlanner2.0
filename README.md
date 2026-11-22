@@ -1044,3 +1044,9 @@ protection, native HITL provenance and Central routing. Two seven-turn evaluatio
 fixtures are frozen with evaluator expectations kept out of model input. See
 [the review and next-stage protocol](docs/research-report/MULTITURN_REVIEW_20261122.md);
 no API experiments are enabled by these fixtures.
+
+A seven-turn scripted offline rehearsal now exercises the complete native report
+chain, including cancellation, duplicate requests and a fresh-source retry. It
+found and fixed cross-turn acceptance-action replay. See
+[the continuous rehearsal results](docs/research-report/MULTITURN_REHEARSAL_20261122.md).
+This does not enable model API experiments or establish factual report quality.

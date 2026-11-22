@@ -32,3 +32,12 @@ requirements/HITL provenance; its initial request is not a fully resolved curren
 requirement. Frozen offline experiment fixtures and their schema/SHA validator
 are described in `../docs/research-report/multiturn-evaluation-20261122/PLAN.md`.
 They do not authorize or launch API experiments.
+
+Continuous rehearsal lives in `tests/_report_multiturn_rehearsal.py` and
+`tests/test_sp_report_multiturn_rehearsal.py`. It drives the production graph and
+real executors with scripted models and network-denying fixture retrieval.
+A resumed dialogue copy must assign `acceptance.turn_namespace` from its native
+report ID and turn ID; native new cycles retain it. This prevents copied fixed
+review/Finish IDs from replaying an older turn. Reports without the namespace
+retain their original fixed action IDs and budgets. See
+`../docs/research-report/MULTITURN_REHEARSAL_20261122.md` for artifacts and limits.

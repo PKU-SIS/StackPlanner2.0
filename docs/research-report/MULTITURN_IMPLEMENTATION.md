@@ -67,6 +67,7 @@ outputs/report_dialogue/turns/tNNNN/
 旧树/旧草稿是基线材料，不自动变成当前用户要求。原生 Outline 必须将当前需求绑定到新的派生 input ID。
 
 `prepared`、`executing`、`accepted` 分开；executor completed 也不是 native delivery。
+多轮副本的固定验收动作使用 report/turn namespace，避免继承的旧动作 ID 重放；首轮动作 ID 保持原值。
 只有新 resume 的原生 delivered、final/review/hash/长度绑定有效、run/turn 匹配，并通过预期 head
 校验后才发布。原 delivery 不能充当本轮交付。发布索引写入中断可由同一 Finish 恢复，避免重新写作。
 发布的 `head` 指最近新接受版本；`active_version` 表示当前有效版本。ExactReuse 可以选择一个已接受旧版
@@ -117,3 +118,6 @@ PYTHONPATH="$PWD/backend/packages/harness:$PWD/backend" \
 `report_prepare_turn` 目前用于从已接受基线 ReuseAndPatch，不提供清空快照后跳过首轮协议的捷径。
 
 付费多轮实验、语义质量验收、合回主线、推送与部署均未执行。
+
+连续七轮原生链路、取消/重复/重试与逐轮独立恢复的最新证据见
+[MULTITURN_REHEARSAL_20261122.md](MULTITURN_REHEARSAL_20261122.md)。

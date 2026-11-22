@@ -129,7 +129,7 @@ def activate(store, turn, context):
             ]
             native.write_request(paths, text)
             ledger.payload["request"] = {"path": str(paths.request), "virtual_path": paths.virtual(paths.request), "sha256": native.sha256_text(text), "chars": len(text), "source": "resolved_query"}
-            ledger.payload["acceptance"] = {"status": "idle"}
+            ledger.payload["acceptance"] = {"status": "idle", "turn_namespace": f"{paths.report_id}-{turn['turn_id']}"}
             ledger.payload["outline_review_due"] = True
             ledger.payload["writer_pipeline"] = {"managed": False}
             ledger.save()

@@ -164,7 +164,9 @@ def _expected_action_id(action_id: str) -> str:
 def _base_action_id(acceptance: Mapping[str, Any], kind: str) -> str:
     cycle = int(acceptance.get("cycle_id") or 0)
     round_number = int(acceptance.get("review_round") or 0)
-    return f"sp-fixed-c{cycle}-{kind}-r{round_number}"
+    namespace = acceptance.get("turn_namespace")
+    prefix = f"{namespace}-" if namespace else ""
+    return f"sp-fixed-{prefix}c{cycle}-{kind}-r{round_number}"
 
 
 def _review_arguments(acceptance: Mapping[str, Any], action_id: str) -> dict[str, Any]:
@@ -292,6 +294,8 @@ def _start_new_cycle(ledger: ReportLedger, acceptance: dict[str, Any]) -> None:
     old_cycle = int(acceptance.get("cycle_id") or 0)
     reset = dict(_ACCEPTANCE_DEFAULTS)
     reset["cycle_id"] = old_cycle + 1
+    if acceptance.get("turn_namespace"):
+        reset["turn_namespace"] = acceptance["turn_namespace"]
     ledger.payload["acceptance"] = reset
     _save(ledger)
 
