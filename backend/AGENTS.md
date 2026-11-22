@@ -1593,6 +1593,17 @@ provider finish reasons, cancellation and all native budgets/acceptance gates.
 separate from the opt-in flag and never inferred from URL/model names. Unsupported
 providers, existing constraints and unverified source/context must retain the old
 path. No host JSON repair, finding selection or gold lookup is permitted.
+`syntax_repair_schema` copies the successful public schema and removes only the
+known CLAUSE `text.pattern == r"\S"` from the provider copy. XGrammar 0.1.25
+anchors that substring-search pattern to one serialized character and its pattern
+branch can admit invalid JSON escaping. Use the standard string grammar instead;
+do not normalize arbitrary patterns or alter the original contract/validator.
+The syntax projection permits empty/blank strings, which the original host schema
+must still reject after JSON decoding. Never equate grammar acceptance with a
+valid artifact or substantive completion. CPU regression coverage uses the real
+public contract, optional deployed XGrammar/local Qwen3 tokenizer, long-string
+prefix masks, correct escaped/multiline/Unicode JSON and invalid raw quote/newline
+rejection; set `SP_TEST_CLAUSE_GRAMMAR_TOKENIZER` to enable that compiler check.
 
 Content-free `clause_syntax_grammar` observer events distinguish applied,
 response_received and enumerated guard_skip, retaining both a response receipt and

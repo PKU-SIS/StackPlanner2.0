@@ -5,10 +5,13 @@ Mock HTTP verifies the actual native serializer, not deployed grammar support.
 
 import asyncio
 import json
+import os
 from copy import deepcopy
 
 import httpx
 import pytest
+from dcc_harness.data import InputFile, PublicTask
+from dcc_harness.preprocessing.output_contracts import public_output_contract
 from jsonschema import Draft202012Validator
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentMiddleware
@@ -31,12 +34,8 @@ PARTIAL = json.dumps({"summary": "The audit remains incomplete.", "artifact_cont
 
 
 def contract():
-    return {
-        "delivery_mode": "artifact",
-        "output_parse_mode": "json",
-        "output_schema": {"type": "array", "items": {"type": "object", "properties": {"text": {"type": "string"}, "explanation": {"type": "string"}}, "required": ["text", "explanation"], "additionalProperties": False}},
-        "source_requirements": {"audit_agent": "reporter", "files": [{"path": PATH, "total_lines": 2}], "document_ids": []},
-    }
+    # Use the actual public schema, including its nonblank substring pattern.
+    return public_output_contract(PublicTask(benchmark="clause", prompt="Audit the document.", files=(InputFile(name="document.txt", text=SOURCE),)))
 
 
 def reads():
@@ -126,8 +125,13 @@ def run_http(monkeypatch, responses, *, asynchronous=False, backend="sglang", da
         gate = SyntaxGrammarRequestGate(captured, contract=public, skill_names=skills, auditor_role=role, scope="audit")
         check = PublicArtifactFormatRepairMiddleware(public, action_id="audit", auditor_role=role, skill_names=skills, captured_sources=lambda: captured, syntax_gate=gate)
         visibility = SourcePrefetchVisibilityMiddleware(
-            captured, contract=public, settings=SourcePrefetchSettings(tokenizer="fixture", context_tokens=65536, response_tokens=256),
-            auditor_role=role, skill_names=skills, syntax_scope="audit", syntax_gate=gate,
+            captured,
+            contract=public,
+            settings=SourcePrefetchSettings(tokenizer="fixture", context_tokens=65536, response_tokens=256),
+            auditor_role=role,
+            skill_names=skills,
+            syntax_scope="audit",
+            syntax_gate=gate,
         )
         return create_agent(model=model, tools=[read_file, write_file], middleware=[check, Capture(), visibility], state_schema=ThreadState)
 
@@ -352,11 +356,13 @@ def test_non_array_syntax_schema_mismatch_failure_or_capped_candidate_is_ineligi
     assert not any("response_format" in body for body in payloads)
 
 
-def test_union_keeps_original_success_schema_and_requires_real_failure_gaps():
+def test_union_preserves_public_validation_and_requires_real_failure_gaps():
     public = contract()
     original = deepcopy(public)
     schema = syntax_repair_schema(public)
-    assert schema["anyOf"][0] == public["output_schema"] and public == original
+    expected = deepcopy(public["output_schema"])
+    del expected["items"]["properties"]["text"]["pattern"]
+    assert schema["anyOf"][0] == expected and public == original
     validator = Draft202012Validator(schema)
     for value in [json.loads(GOOD), [], json.loads(PARTIAL)]:
         validator.validate(value)
@@ -365,6 +371,109 @@ def test_union_keeps_original_success_schema_and_requires_real_failure_gaps():
     validator.validate(draft)
     for value in [{"artifact_metadata": {"completion_status": "complete", "evidence_gaps": []}}, {"artifact_metadata": {"completion_status": "partial", "evidence_gaps": []}}]:
         assert list(validator.iter_errors(value))
+
+
+@pytest.mark.parametrize(
+    "text,valid",
+    [
+        ("", False),
+        (" \n\t\r\v\f", False),
+        ("\u00a0\u2003", False),
+        ("1", True),
+        ("§", True),
+        ("1a", True),
+        (SOURCE, True),
+        ("A complete sentence. " * 128, True),
+        ("Line one.\nLine two.", True),
+        ('The "Scope" includes C:\\source.', True),
+        ("中文条款。\n另一条款。", True),
+        ("\n Source passage. \t", True),
+        (r"\n\t", True),
+    ],
+)
+@pytest.mark.parametrize("ensure_ascii", [False, True])
+def test_provider_syntax_projection_keeps_host_nonblank_validation(text, valid, ensure_ascii):
+    public = contract()
+    before = deepcopy(public)
+    schema = syntax_repair_schema(public)
+    value = json.loads(json.dumps([{"text": text, "explanation": "Supported issue."}], ensure_ascii=ensure_ascii))
+    assert Draft202012Validator(public["output_schema"]).is_valid(value) is valid
+    assert Draft202012Validator(schema).is_valid(value)
+    assert public == before
+    schema["anyOf"][0]["items"]["properties"]["explanation"]["description"] = "Provider copy only."
+    assert public == before
+
+
+@pytest.mark.parametrize("pattern", [None, r"\S+", r"^\S$", r"[A-Z]+", r"[\s\S]*\S[\s\S]*"])
+def test_unknown_or_absent_text_patterns_remain_unchanged(pattern):
+    public = contract()
+    text = public["output_schema"]["items"]["properties"]["text"]
+    if pattern is None:
+        text.pop("pattern")
+    else:
+        text["pattern"] = pattern
+    public["output_schema"]["items"]["properties"]["explanation"]["pattern"] = r"\S"
+    before = deepcopy(public)
+    assert syntax_repair_schema(public)["anyOf"][0] == public["output_schema"]
+    assert public == before
+
+
+def test_optional_deployed_qwen_xgrammar_allows_long_text_continuation():
+    """CPU only; opt in with a local tokenizer and the service's XGrammar install."""
+    tokenizer_path = os.environ.get("SP_TEST_CLAUSE_GRAMMAR_TOKENIZER")
+    if not tokenizer_path:
+        pytest.skip("Set SP_TEST_CLAUSE_GRAMMAR_TOKENIZER for the deployed CPU compiler regression")
+    xgrammar = pytest.importorskip("xgrammar")
+    from transformers import AutoConfig, AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, local_files_only=True)
+    model_config = AutoConfig.from_pretrained(tokenizer_path, local_files_only=True)
+    assert model_config.model_type == "qwen3_moe"
+    stops = [tokenizer.eos_token_id]
+    info = xgrammar.TokenizerInfo.from_huggingface(tokenizer, vocab_size=model_config.vocab_size, stop_token_ids=stops)
+    compiler = xgrammar.GrammarCompiler(info, max_threads=2)
+    public = contract()
+    schema = syntax_repair_schema(public)
+    original = deepcopy(schema)
+    original["anyOf"][0] = deepcopy(public["output_schema"])
+    old_context = compiler.compile_json_schema(original, any_whitespace=True)
+    context = compiler.compile_json_schema(schema, any_whitespace=True)
+
+    def accepts_wire(compiled, wire):
+        matcher = xgrammar.GrammarMatcher(compiled)
+        return matcher.accept_string(wire) and matcher.accept_token(stops[0])
+
+    def accepts_complete(compiled, value, ensure_ascii=False):
+        return accepts_wire(compiled, json.dumps(value, ensure_ascii=ensure_ascii))
+
+    for text in ["1a", "The Agreement begins on the Effective Date.", SOURCE, "中文条款。\n另一条款。"]:
+        value = [{"text": text, "explanation": "Supported issue."}]
+        for ensure_ascii in (False, True):
+            assert not accepts_complete(old_context, value, ensure_ascii)
+            assert accepts_complete(context, value, ensure_ascii)
+        Draft202012Validator(public["output_schema"]).validate(value)
+    for invalid in ['[{"text":"The "Scope" applies.","explanation":"Issue."}]', '[{"text":"Line one.\nLine two.","explanation":"Issue."}]']:
+        with pytest.raises(json.JSONDecodeError):
+            json.loads(invalid)
+        assert not accepts_wire(context, invalid)
+    for prefix in ['[{"text":"1', '[{"text":"The Agreement']:
+        old = xgrammar.GrammarMatcher(old_context)
+        current = xgrammar.GrammarMatcher(context)
+        assert current.accept_string(prefix)
+        current_mask = xgrammar.allocate_token_bitmask(1, model_config.vocab_size)
+        current.fill_next_token_bitmask(current_mask)
+        continuation = tokenizer.encode(" source", add_special_tokens=False)[0]
+        assert (int(current_mask[0, continuation // 32]) >> (continuation % 32)) & 1
+        if old.accept_string(prefix):
+            old_mask = xgrammar.allocate_token_bitmask(1, model_config.vocab_size)
+            old.fill_next_token_bitmask(old_mask)
+            assert not (int(old_mask[0, continuation // 32]) >> (continuation % 32)) & 1
+    # The syntax projection deliberately allows empty/blank JSON strings. Only
+    # the unchanged host schema decides whether the decoded artifact is valid.
+    for text in ("", " ", "\n\t", "\u00a0\u2003"):
+        whitespace = [{"text": text, "explanation": "Supported issue."}]
+        assert accepts_complete(context, whitespace)
+        assert not Draft202012Validator(public["output_schema"]).is_valid(whitespace)
 
 
 def test_diagnostics_drop_untrusted_fields():

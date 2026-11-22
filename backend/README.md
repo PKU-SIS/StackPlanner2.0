@@ -567,6 +567,18 @@ phase retain their original shape. An `applied` event proves
 the request gate ran; it does not prove service-side grammar compatibility or
 answer correctness.
 
+The provider receives a syntax-only copy of the successful array schema. Only
+CLAUSE's known `text.pattern = \S` is omitted from that copy: XGrammar 0.1.25
+matches it against the entire serialized string, forcing one-character quotations.
+Its pattern branch also mishandles escaping; the standard JSON string grammar
+preserves valid escaping and allows complete original passages. Every other
+schema field is preserved. The original task/host schema is unchanged and still
+rejects empty or whitespace-only `text` after JSON decoding. Provider grammar
+acceptance is a wider language and never establishes native success. Unknown
+patterns are not rewritten. An optional CPU regression uses the deployed
+XGrammar and a local Qwen3 tokenizer; set `SP_TEST_CLAUSE_GRAMMAR_TOKENIZER` when
+running `tests/test_sp_clause_syntax_grammar.py`.
+
 When complete original evidence has been checked, quotation feedback distinguishes
 defects in that document from a missing mandatory source. It asks the model to
 preserve source characters, compare decoded `text` against the original native

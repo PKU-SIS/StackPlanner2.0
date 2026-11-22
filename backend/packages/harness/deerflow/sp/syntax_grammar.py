@@ -55,10 +55,18 @@ def syntax_candidate_enabled(contract, skill_names, auditor_role, candidate) -> 
 
 
 def syntax_repair_schema(contract) -> dict:
-    """Keep the exact public success shape and the existing honest failure exit."""
+    """Project public syntax for decoding; retain native host validation and exits."""
+    success_schema = deepcopy(contract["output_schema"])
+    text_schema = success_schema["items"]["properties"]["text"]
+    if text_schema.get("pattern") == r"\S":
+        # XGrammar anchors patterns on serialized characters, narrowing this
+        # public substring search to one character and mishandling JSON escapes.
+        # Its standard string grammar preserves JSON syntax; the original host
+        # schema still enforces nonblank text after decoding the model response.
+        del text_schema["pattern"]
     return {
         "anyOf": [
-            deepcopy(contract["output_schema"]),
+            success_schema,
             {
                 "type": "object",
                 "properties": {
