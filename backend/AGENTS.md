@@ -1626,3 +1626,10 @@ Keep real synthetic service probes aligned with the prepared run
 and `run_probe(enable_thinking=True)` explicitly enable it; the default remains
 false and the report records the actual boolean passed to the chat template.
 CPU HTTP/CLI tests verify propagation only, not deployed grammar enforcement.
+
+`source_character_fidelity_instruction` is prompt guidance only. Include it in
+checked CLAUSE quote feedback and syntax-final requests that have independently
+passed current-source verification. Source-internal fragments, punctuation and
+OCR defects are audit content, not by themselves a missing-evidence decision.
+Keep the matcher, schema, native acceptance and budgets unchanged; supply no
+replacement quotation and retain genuine mandatory-gap partial/blocked exits.

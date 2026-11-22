@@ -567,6 +567,12 @@ phase retain their original shape. An `applied` event proves
 the request gate ran; it does not prove service-side grammar compatibility or
 answer correctness.
 
+When complete original evidence has been checked, quotation feedback distinguishes
+defects in that document from a missing mandatory source. It asks the model to
+preserve source characters, compare decoded `text` against the original native
+read, and encode JSON once. It supplies no replacement quotation and retains
+partial/blocked delivery for genuinely unresolved mandatory requirements.
+
 Use the explicit synthetic real-service probe before a new protocol run; it does
 not touch production artifacts or choose a replacement answer:
 

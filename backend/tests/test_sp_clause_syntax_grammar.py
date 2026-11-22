@@ -158,6 +158,13 @@ def test_real_http_constrains_existing_format_semantic_and_quote_final_turns(mon
     assert not payloads[1].get("tools") and "tool_choice" not in payloads[1]
     assert {t["function"]["name"] for t in payloads[0]["tools"]} == {"read_file", "write_file"}
     assert all(not payloads[i].get("tools") for i in constrained)
+    for index in constrained:
+        note = payloads[index]["messages"][-1]
+        assert note["name"] == "sp_clause_syntax_final"
+        assert "Source defects are audit content" in note["content"]
+        assert "after exactly one JSON decode" in note["content"]
+        assert "genuinely unavailable or unresolved" in note["content"]
+        assert SOURCE not in note["content"]
     for body in payloads:
         assert body["temperature"] == 0.7 and body["top_p"] == 0.9 and body["max_completion_tokens"] == 256
         assert body["top_k"] == 23 and body["min_p"] == 0.1 and body["chat_template_kwargs"] == {"enable_thinking": False}
@@ -188,6 +195,7 @@ def test_native_partial_and_provider_length_bytes_exit_without_parse_exception_o
 def test_unproved_source_scope_or_context_uses_original_format_path(monkeypatch, damage):
     result, payloads, _, captured = run_http(monkeypatch, [BAD, GOOD], damage=damage)
     assert len(payloads) == 2 and not any("response_format" in body for body in payloads)
+    assert not any("Source defects are audit content" in str(message.get("content")) for body in payloads for message in body["messages"])
     assert result["messages"][-1].content == GOOD
     assert not any(d["status"] == "applied" for d in collect_syntax_grammar_diagnostics(captured))
 

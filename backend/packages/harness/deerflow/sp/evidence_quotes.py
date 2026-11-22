@@ -33,6 +33,18 @@ def clause_quote_review_enabled(contract: Mapping[str, Any], skill_names: Sequen
     return os.environ.get("SP_CLAUSE_QUOTE_REVIEW") == "1" and clause_public_audit_scope(contract, skill_names, auditor_role)
 
 
+def source_character_fidelity_instruction() -> str:
+    """Clarify source-vs-serialization defects without supplying quotation text."""
+    return (
+        "Source defects are audit content: fragments, grammatical or OCR defects, and unbalanced punctuation in a fully available original passage "
+        "do not by themselves establish that mandatory evidence is missing. "
+        "Do not repair or normalize source characters or punctuation when quoting. "
+        "Compare each quoted text passage, after exactly one JSON decode, character by character with the original read_file passage; "
+        "then JSON-encode the final answer exactly once. Do not copy extra escaping from prior serialized drafts. "
+        "If a required source or mandatory task requirement is genuinely unavailable or unresolved, retain honest partial/blocked status and identify that concrete gap. "
+    )
+
+
 def clause_public_audit_scope(contract: Mapping[str, Any], skill_names: Sequence[str] | None, auditor_role: str | None) -> bool:
     """Recognize the validated public CLAUSE audit contract independently of flags."""
     if auditor_role != "reporter" or "clause" not in (skill_names or []):
@@ -361,7 +373,8 @@ def augment_quote_review_request(request):
             + reason_lines
             + "\nUse the original read_file evidence for /mnt/user-data/uploads/document.txt already in this audit. "
             "If read_file is currently bound, reopen flagged passages as needed. "
-            "Copy complete original sentences/passages, preserving spelling, punctuation and internal whitespace, including OCR fragments. "
+            + (source_character_fidelity_instruction() if info.get("status") == "checked" else "")
+            + "Copy complete original sentences/passages, preserving spelling, punctuation and internal whitespace, including OCR fragments. "
             "Do not paraphrase or add quotation wrappers or line labels absent from the source. Noncontiguous/reordered complete source sentences are allowed. "
             "This source-fidelity diagnostic is not an official score or a verdict that a finding is false. Verify its explanation against the same document; "
             "retain every supported distinct finding without imposing a count or using an empty array to conceal unfinished work. "

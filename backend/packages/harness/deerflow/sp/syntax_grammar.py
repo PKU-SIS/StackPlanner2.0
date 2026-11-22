@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from jsonschema import Draft202012Validator, SchemaError, ValidationError
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from deerflow.sp.evidence_quotes import _annotate_message, _complete_original, _serialized, clause_public_audit_scope
+from deerflow.sp.evidence_quotes import _annotate_message, _complete_original, _serialized, clause_public_audit_scope, source_character_fidelity_instruction
 from deerflow.sp.output_contract import _has_external_ref
 from deerflow.subagents.status_contract import model_response_stop_reason
 from deerflow.utils.messages import message_to_text
@@ -254,7 +254,8 @@ class SyntaxGrammarRequestGate:
                 f"<syntax-only-final>\nThis is the existing native {nomination.phase} final turn, temporarily without tools. "
                 "The complete original public source remains visible in this exact request. Return the complete raw public JSON array with correct single-layer escaping. "
                 "Verify findings against that source; preserve every supported distinct finding and complete original quotation, not broken serialized fragments. "
-                "The grammar does not establish substantive completion or choose an answer. If the audit remains incomplete, return the ordinary native SP envelope with "
+                + source_character_fidelity_instruction()
+                + "The grammar does not establish substantive completion or choose an answer. If the audit remains incomplete, return the ordinary native SP envelope with "
                 'artifact_metadata.completion_status="partial" or "blocked" and concrete nonempty artifact_metadata.evidence_gaps. '
                 "Never conceal unfinished work using a default/empty success. All existing budgets and native acceptance/review gates apply.\n</syntax-only-final>"
             ),

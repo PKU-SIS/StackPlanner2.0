@@ -101,6 +101,9 @@ def test_incomplete_or_unreliable_source_is_unavailable_not_quote_error(monkeypa
     candidate = update["messages"][0]
     assert candidate.content == original
     assert candidate.additional_kwargs["sp_clause_quote_review"]["status"] == "unavailable"
+    request = SimpleNamespace(messages=[*source_messages, candidate])
+    unchanged = check.wrap_model_call(request, lambda current: current)
+    assert not any("Source defects are audit content" in str(message.content) for message in unchanged.messages)
 
 
 @pytest.mark.parametrize("damage", ["disabled", "skill", "role", "inline", "schema", "rag", "path"])
@@ -284,6 +287,12 @@ def test_native_quote_feedback_survives_openai_http_serialization(monkeypatch, a
         assert note["role"] == "user"
         assert f"{attempt}/2" in note["content"]
         assert "finding 0: unmatched_outer_wrapper" in note["content"]
+        assert "Source defects are audit content" in note["content"]
+        assert "Do not repair or normalize source characters or punctuation" in note["content"]
+        assert "after exactly one JSON decode" in note["content"]
+        assert "genuinely unavailable or unresolved" in note["content"]
+        assert "partial/blocked" in note["content"]
+        assert SOURCE not in note["content"]  # No host-supplied replacement quotation.
         assert any(message.get("content") == SOURCE for message in payload["messages"])
         assert any(message.get("content") == original for message in payload["messages"])
         assert "hide_from_ui" not in note
