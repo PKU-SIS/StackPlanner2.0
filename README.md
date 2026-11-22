@@ -800,6 +800,13 @@ Audit recovery presents prior auditors' gap statements as reported claims to
 recheck against the original task and current native evidence. Genuine unread or
 truncated sources and unfinished audits still require partial/blocked status.
 These instructions do not add reviews, change acceptance, or supply findings.
+Within the existing bound CLAUSE quotation review, `text` must contain original
+source evidence and `explanation` carries the auditor's analysis. Repeated
+mismatches ask the auditor to independently recheck the original source and
+correct its evidence or revise unsupported claims. Contract omissions and
+candidate quotation errors alone are distinct from missing required source;
+genuine unresolved requirements still retain partial/blocked status. The host
+supplies no replacement passages and changes no findings or failure schema.
 
 
 When native source prefetch is configured, the bound CLAUSE Reporter receives a

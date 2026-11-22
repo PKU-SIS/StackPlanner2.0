@@ -1481,6 +1481,19 @@ only the reason whitelist, never replacement spans or arbitrary diagnostic text.
 Native graph tests verify both feedback requests after an ignored first review.
 Mock HTTP tests exercise sync/async `VllmChatModel` serialization through that
 same native graph, retaining the source and both transient review requests.
+For this same strictly bound CLAUSE quote-feedback path, require original source
+evidence in text and the model's defect analysis in explanation. A repeated
+mismatch asks the model to independently recheck the claim/context, select its
+own supporting original evidence, or revise/withdraw a claim unsupported by its
+own source-based judgment. A supplied contract's omission or defective definition
+and a candidate quotation mismatch are not themselves missing required source or
+mandatory evidence gaps. Preserve actual unavailable required sources and other
+genuine unmet audit requirements as honest partial/blocked status. Do not provide
+replacement passages, label a finding false, or delete/edit candidate bytes on
+the host. Keep the failure schema, review counters and native acceptance unchanged.
+tests/test_sp_clause_syntax_grammar.py exercises repeated ignored paraphrases via
+real sync/async HTTP serialization, with the model's own correction, withdrawal,
+partial/blocked outcomes and missing-source/other-scope controls preserved.
 
 Initial public guidance is a distinct caller boundary from mid-run quote-review
 feedback. `TaskMemoryMiddleware` anchors only the latest visible user message in

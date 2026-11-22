@@ -196,6 +196,58 @@ def test_real_http_constrains_existing_format_semantic_and_quote_final_turns(mon
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("outcome", ["corrected_evidence", "withdrawn_claim", "partial", "blocked"])
+def test_repeated_paraphrase_feedback_reaches_real_http_and_preserves_the_models_own_decision(monkeypatch, asynchronous, outcome):
+    source = "The Pricing Annex sets the amount.\nThe Term is twelve months."
+    original = json.dumps([{"text": "The contract omits the pricing amount.", "explanation": "The referenced amount is not stated in the supplied contract."}])
+    if outcome == "corrected_evidence":
+        final = json.dumps([{"text": "The Pricing Annex sets the amount.", "explanation": "The referenced amount is not stated in the supplied contract."}])
+    elif outcome == "withdrawn_claim":
+        final = "[]"
+    else:
+        final = json.dumps({"artifact_content": None, "artifact_metadata": {"completion_status": outcome, "evidence_gaps": ["A mandatory execution requirement remains unresolved."]}})
+    result, payloads, _, captured = run_http(monkeypatch, [original, original, original, final], asynchronous=asynchronous, source_text=source, reviews=True)
+    assert len(payloads) == 4  # Existing one semantic and two quote turns only.
+    for attempt, payload in enumerate(payloads[2:], 1):
+        note = next(message for message in payload["messages"] if message.get("name") == "sp_clause_quote_review_feedback")
+        content = note["content"]
+        assert f"{attempt}/2" in content and "finding 0: not_verbatim_source" in content
+        assert "Put your defect analysis in `explanation`, not `text`" in content
+        assert "can be located verbatim in the original source" in content
+        assert "If a quotation remains unmatched across reviews" in content
+        assert "revise or withdraw that claim based on your own source-based judgment" in content
+        assert "An omission or defective definition in the supplied contract" in content
+        assert "not by itself a missing harness source" in content
+        assert "not a required evidence gap" in content
+        assert "actual required source access" in content and "honest partial/blocked" in content
+        assert source not in content and "The contract omits the pricing amount." not in content
+        assert any(message.get("role") == "tool" and message.get("content") == source for message in payload["messages"])
+        assert any(message.get("role") == "assistant" and message.get("content") == original for message in payload["messages"])
+        assert "hide_from_ui" not in note
+        assert payload["max_completion_tokens"] == 256 and payload["temperature"] == 0.7 and payload["top_p"] == 0.9
+    assert result["messages"][-1].content == final
+    assert [message.content for message in result["messages"] if isinstance(message, AIMessage) and not message.tool_calls] == [original, original, original, final]
+    assert source in [message["content"] for message in captured if message.get("type") == "tool"]
+    assert not any(message.name == "sp_clause_quote_review_feedback" for message in result["messages"])
+    diagnostics = collect_syntax_grammar_diagnostics(captured)
+    assert [event["phase"] for event in diagnostics if event["status"] == "applied"] == ["semantic", "quote", "quote"]
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("damage", ["missing", "role", "skill", "schema"])
+def test_candidate_source_guidance_stays_out_of_other_scopes_and_preserves_real_source_failure(monkeypatch, asynchronous, damage):
+    original = (
+        json.dumps({"artifact_content": None, "artifact_metadata": {"completion_status": "blocked", "evidence_gaps": ["The required original source could not be read."]}})
+        if damage == "missing"
+        else json.dumps([{"text": "The contract omits the pricing amount.", "explanation": "A synthetic candidate to trigger quote feedback only in the bound scope."}])
+    )
+    result, payloads, _, _ = run_http(monkeypatch, [original], asynchronous=asynchronous, damage=damage, reviews=True)
+    assert len(payloads) == 1
+    assert not any(message.get("name") == "sp_clause_quote_review_feedback" for message in payloads[0]["messages"])
+    assert result["messages"][-1].content == original
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
 @pytest.mark.parametrize("partial", [False, True])
 def test_current_cross_page_source_stays_visible_and_does_not_force_completion(monkeypatch, asynchronous, partial):
     source = "Public agreement.\nPayment must be made to\nPage 12\nExample Company within ten days.\nSigned below."
