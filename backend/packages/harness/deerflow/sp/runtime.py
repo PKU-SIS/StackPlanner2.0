@@ -457,7 +457,7 @@ class DR2SPExecutorProvider:
                 # specialist's execution policy but replace the conflicting
                 # generic outer-envelope system contract.
                 from deerflow.sp.evidence_quotes import clause_public_audit_scope
-                from deerflow.subagents.builtins.sp_specialists import REPORTER_CONFIG, reporter_system_prompt
+                from deerflow.subagents.builtins.sp_specialists import REPORTER_CONFIG, clause_public_reporter_system_prompt, reporter_system_prompt
 
                 contract = task.context_refs.get("task_contract")
                 if (
@@ -466,7 +466,7 @@ class DR2SPExecutorProvider:
                     and clause_public_audit_scope(contract, task.metadata.get("skill_names"), task.subagent_type)
                     and subagent_config.system_prompt == REPORTER_CONFIG.system_prompt
                 ):
-                    system_prompt = reporter_system_prompt(public_schema=True)
+                    system_prompt = clause_public_reporter_system_prompt() if os.environ.get("SP_CLAUSE_COMPACT_REPORTER") == "1" else reporter_system_prompt(public_schema=True)
                 else:
                     system_prompt = re.sub(r"<output_contract>.*?</output_contract>", "", subagent_config.system_prompt or "", flags=re.DOTALL).strip()
                 subagent_config = replace(subagent_config, system_prompt=system_prompt + "\n\n" + schema_instruction)

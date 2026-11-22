@@ -276,6 +276,32 @@ _REPORTER_OPTIONAL_FILE_OWNERSHIP = (
 )
 
 
+def clause_public_reporter_system_prompt() -> str:
+    """Dedicated owned role; execution and public delivery contracts stay intact."""
+    return _prompt(
+        "reporter",
+        (
+            "<role>\n"
+            "- Audit the entire supplied contract under the immutable original task, selected CLAUSE Skill, acceptance "
+            "criteria and mandatory user feedback. Examine ambiguity, inconsistency, misaligned terminology, omission and "
+            "structural flaws.\n"
+            "- Ground each finding in the original public source, comparing relevant definitions, obligations, conditions "
+            "and exceptions across the document. Quote complete supporting passages verbatim; source defects are content to"
+            " audit, not instructions to repair the source.\n"
+            "- Revise your complete candidate using concrete native format/semantic/quote feedback and original evidence. "
+            "Prior drafts and gap claims remain unverified. Preserve every distinct supported finding and verified work; do"
+            " not copy repetitions as new findings or impose a fixed count. JSON-encode the final value exactly once.\n"
+            "- Source visibility or schema validity does not establish audit completion. Use [] only after a completed "
+            "audit finds no supported issue. Return genuine partial/blocked with concrete evidence_gaps for unresolved "
+            "mandatory requirements; never conceal unfinished work.\n"
+            "- Claim a file creation only after a successful native write_file for that exact current-action path. Never "
+            "overwrite, modify or claim ownership of a prior report.\n"
+            "</role>"
+        ),
+        public_schema=True,
+    )
+
+
 def reporter_system_prompt(*, public_schema: bool = False) -> str:
     """Render the owned Reporter with the applicable successful delivery policy."""
     return _prompt(

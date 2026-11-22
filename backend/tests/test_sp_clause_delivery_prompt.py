@@ -178,7 +178,8 @@ def test_initial_completion_guidance_preserves_native_empty_and_missing_source_g
 
 @pytest.mark.parametrize("asynchronous", [False, True])
 @pytest.mark.parametrize("syntax_grammar", [False, True])
-def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asynchronous, syntax_grammar):
+@pytest.mark.parametrize("compact_reporter", [False, True])
+def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asynchronous, syntax_grammar, compact_reporter):
     # A fresh process imports the real executor, bypassing conftest's lightweight
     # executor mock. The actual middleware chain and Vllm HTTP serialization run.
     task = bound_task()
@@ -191,6 +192,7 @@ def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asy
         from unittest.mock import patch
         import httpx
         from langchain_core.messages import AIMessage, ToolMessage
+        from langchain_core.tools import tool
         from deerflow.config.app_config import AppConfig, set_app_config
         from deerflow.models.vllm_provider import VllmChatModel
         from deerflow.runtime.user_context import set_current_user
@@ -201,6 +203,9 @@ def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asy
         native = pathlib.Path(os.environ['FIXTURE_NATIVE_ROOT'])
         task = SPSubagentTask(**json.loads(pathlib.Path(os.environ['FIXTURE_TASK']).read_text()))
         syntax_grammar = os.environ['FIXTURE_SYNTAX_GRAMMAR'] == '1'
+        compact_reporter = os.environ['FIXTURE_COMPACT_REPORTER'] == '1'
+        os.environ['SP_CLAUSE_COMPACT_REPORTER'] = '1' if compact_reporter else '0'
+        os.environ['SP_CLAUSE_SOURCE_READY_NO_REREAD'] = '1' if compact_reporter else '0'
         for flag in ['SP_CLAUSE_SYNTAX_GRAMMAR', 'SP_CLAUSE_SEMANTIC_REVIEW', 'SP_CLAUSE_QUOTE_REVIEW']:
             os.environ[flag] = '1' if syntax_grammar else '0'
         source = 'Payment is due on 1 January.'
@@ -218,8 +223,21 @@ def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asy
         set_app_config(app)
         set_current_user(SimpleNamespace(id='fixture'))
         context={'thread_id':'fixture','run_id':'fixture','user_id':'fixture'}
-        prefetch = {'sp_source_prefetch_enabled':True,'sp_source_prefetch_tokenizer':'fixture','sp_source_prefetch_context_tokens':73728,'sp_source_prefetch_response_tokens':1024} if syntax_grammar else {}
+        prefetch = {'sp_source_prefetch_enabled':True,'sp_source_prefetch_tokenizer':'fixture','sp_source_prefetch_context_tokens':73728,'sp_source_prefetch_response_tokens':1024} if syntax_grammar or compact_reporter else {}
         provider=DR2SPExecutorProvider(app_config=app,parent_model='fixture',runnable_config={'configurable':prefetch},available_skill_names=frozenset({'clause'}),user_id='fixture')
+        @tool
+        def read_file(path: str) -> str:
+            'Read original source.'
+            raise AssertionError('The fixture already supplied the original source.')
+        @tool
+        def grep(pattern: str) -> str:
+            'Search original source.'
+            raise AssertionError('No additional source search should execute.')
+        @tool
+        def write_file(path: str, content: str) -> str:
+            'Write an optional working draft.'
+            raise AssertionError('The fixture returns its actual public final directly.')
+        provider._tools=[read_file,grep,write_file]
         executor=provider({'sp_non_interactive':True},SimpleNamespace(context=context,stream_writer=None)).adapter._executor_factory(task)
         requests=[]
         def endpoint(request):
@@ -250,6 +268,9 @@ def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asy
             assert len(requests)==4
             assert [i for i, request in enumerate(requests) if 'response_format' in request]==[1,2,3]
             assert all(not request.get('tools') for request in requests[1:])
+        if compact_reporter:
+            assert all(item['function']['name'] not in {'read_file','grep'} for item in requests[0].get('tools', []))
+            assert any(message.get('name')=='sp_clause_source_ready_no_reread' for message in requests[0]['messages'])
         assert len(executor._runtime_middlewares)>=20
         for request in requests:
             systems=[message['content'] for message in request['messages'] if message['role']=='system']
@@ -258,6 +279,11 @@ def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asy
                 assert all(marker not in system for system in systems), marker
             assert any('<public-schema-final-delivery>' in system for system in systems)
             assert any('partial' in system and 'blocked' in system for system in systems)
+            for marker in ['required_literal_tokens', 'required_boundary_adjustments', 'Markdown tables', 'H1 title', 'Chinese report', 'percentage-point']:
+                assert all((marker in system) == (not compact_reporter) for system in systems), marker
+            skill=(native/'configs/stackplanner_skills/clause/public/clause/SKILL.md').read_text().strip()
+            assert any('<skill name="clause">\\n'+skill+'\\n</skill>' in system for system in systems)
+            assert any('<execution_budget>' in system for system in systems)
             rendered=json.dumps(request['messages'])
             assert '<clause-audit-completion>' in rendered
             assert 'their presence alone does not make the audit incomplete' in rendered
@@ -280,6 +306,7 @@ def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asy
         "FIXTURE_TASK": str(fixture),
         "FIXTURE_ASYNC": "1" if asynchronous else "0",
         "FIXTURE_SYNTAX_GRAMMAR": "1" if syntax_grammar else "0",
+        "FIXTURE_COMPACT_REPORTER": "1" if compact_reporter else "0",
         "FIXTURE_WIRE": str(tmp_path / "wire.json"),
         "FIXTURE_LEGACY_MARKERS": json.dumps(LEGACY_MARKERS),
     }

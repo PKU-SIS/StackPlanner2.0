@@ -16,7 +16,7 @@ from jsonschema import Draft202012Validator
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
 
 from deerflow.agents.thread_state import ThreadState
@@ -42,7 +42,7 @@ def reads():
     return [AIMessage(content="", tool_calls=[{"name": "read_file", "id": "original-read", "args": {"path": PATH}}]), ToolMessage(content=SOURCE, name="read_file", tool_call_id="original-read")]
 
 
-def run_http(monkeypatch, responses, *, asynchronous=False, backend="sglang", damage=None, reviews=False, enabled=True, source_text=None, beyond_eof=False):
+def run_http(monkeypatch, responses, *, asynchronous=False, backend="sglang", damage=None, reviews=False, enabled=True, source_text=None, beyond_eof=False, system_prompt=None):
     monkeypatch.setenv("SP_CLAUSE_SYNTAX_GRAMMAR", "1" if enabled else "0")
     monkeypatch.setenv("SP_CLAUSE_SEMANTIC_REVIEW", "1" if reviews else "0")
     monkeypatch.setenv("SP_CLAUSE_QUOTE_REVIEW", "1" if reviews else "0")
@@ -145,7 +145,7 @@ def run_http(monkeypatch, responses, *, asynchronous=False, backend="sglang", da
         )
         return create_agent(model=model, tools=[read_file, write_file], middleware=[check, Capture(), visibility], state_schema=ThreadState)
 
-    state = {"messages": [HumanMessage(content="Audit the original document."), *source]}
+    state = {"messages": ([SystemMessage(content=system_prompt)] if system_prompt is not None else []) + [HumanMessage(content="Audit the original document."), *source]}
     transport = httpx.MockTransport(endpoint)
     if asynchronous:
 
@@ -824,4 +824,19 @@ def test_source_ready_preserves_native_completed_empty_or_real_partial_output(mo
     state, payloads, _, _ = run_http(monkeypatch, [final], enabled=False)
     assert state["messages"][-1].content == final
     assert len(payloads) == 1
+    assert [item["function"]["name"] for item in payloads[0]["tools"]] == ["write_file"]
+
+
+@pytest.mark.parametrize("final", ["[]", PARTIAL])
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_compact_source_ready_wire_preserves_legitimate_empty_or_partial_final(monkeypatch, final, asynchronous):
+    from deerflow.subagents.builtins.sp_specialists import clause_public_reporter_system_prompt
+
+    monkeypatch.setenv("SP_CLAUSE_COMPACT_REPORTER", "1")
+    monkeypatch.setenv("SP_CLAUSE_SOURCE_READY_NO_REREAD", "1")
+    prompt = clause_public_reporter_system_prompt()
+    state, payloads, _, _ = run_http(monkeypatch, [final], enabled=False, asynchronous=asynchronous, system_prompt=prompt)
+    assert state["messages"][-1].content == final
+    assert len(payloads) == 1
+    assert payloads[0]["messages"][0] == {"role": "system", "content": prompt}
     assert [item["function"]["name"] for item in payloads[0]["tools"]] == ["write_file"]
