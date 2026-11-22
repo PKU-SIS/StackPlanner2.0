@@ -436,3 +436,28 @@ def test_preflight_freezes_worker_and_leaves_context_ceiling_unconfirmed(tmp_pat
     assert packet["limits"]["provider_input_context_ceiling_tokens"] is None
     assert not packet["limits"]["provider_input_context_ceiling_verified"]
     assert packet["api_experiments_authorized"] is False
+
+
+def numeric_sdk_child(channel):
+    w = worker(emit=channel.send)
+    with w.installed():
+        result = model(w, lambda req: response()).invoke("fixture")
+        assert result.content == "fixture"
+    assert w.finalize()["usage"]["billing_complete"]
+
+
+def test_supervisor_and_actual_sdk_worker_preserve_real_numeric_events(tmp_path):
+    from decimal import Decimal
+
+    path = tmp_path / "events.jsonl"
+    result = supervise(numeric_sdk_child, path, suite_seconds=10)
+    assert result["worker_callable_completed"]
+    events = [json.loads(line) for line in path.read_text().splitlines()]
+    reservation = next(row for row in events if row.get("event") == "reservation")
+    settlement = next(row for row in events if row.get("event") == "settlement")
+    assert reservation["identity"] == settlement["identity"]
+    assert reservation["source_id"] and reservation["turn"] == 2
+    assert settlement["input_tokens"] == 100 and settlement["output_tokens"] == 20
+    assert Decimal(settlement["cost_cny"]) < Decimal(reservation["cost_cny"])
+    assert "fixture" not in path.read_text()
+    assert result["billing_complete"] is False  # supervisor never invents acceptance

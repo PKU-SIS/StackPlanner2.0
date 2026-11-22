@@ -1,0 +1,75 @@
+{
+  "scope": "offline worker wiring, never live provider validation",
+  "workspace": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn",
+  "branch": "feature/report-multiturn",
+  "upstream": "origin/sp2DeepResearch",
+  "baseline_sha": "f94e06612d363b6a46f3d4bf59b342f77b786729",
+  "worker_implementation_commit": "621ec6d30290a84403e8a326a07e70184b2e04fe",
+  "api_experiments_authorized": false,
+  "provider_calls": 0,
+  "credentials_loaded": false,
+  "transport": "actual HTTPX/SDK with effective MockTransport only; child sockets denied until process exit",
+  "packet": {
+    "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-preflight/20261122-v5",
+    "manifest_sha256": "63e8cdd3b3347a2cd7236cf3a1c1ec9ca2c4b9e925f379c5d9b06e79ba0a6174",
+    "verified": true,
+    "api_execution_ready": false,
+    "engine_files": 227
+  },
+  "limits": {
+    "max_cost_cny": null,
+    "account_billing_currency_confirmed": false,
+    "provider_input_context_ceiling_tokens": null,
+    "provider_input_context_ceiling_verified": false
+  },
+  "tests": {
+    "final_broad_passed": 1101,
+    "final_broad_seconds": 70.81,
+    "worker_tests_in_broad": 28,
+    "preflight_tests_in_broad": 17,
+    "separate_earlier_targeted_passed": 44,
+    "separate_earlier_targeted_seconds": 18.66,
+    "ruff_check": "passed",
+    "ruff_format": "passed",
+    "git_diff_check": "passed",
+    "counts_overlap": true
+  },
+  "diagnostics": {
+    "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-worker/20261122",
+    "manifest_sha256": "e42daeb10e0b90ecedf667b9b30761362c671e095a76a1a070ea948d1820fa9d",
+    "scenarios": {
+      "known-success": {
+        "billing_complete": true,
+        "pending_reservations": 0,
+        "stop_reason": null,
+        "sha256": "8b9b05ac848d87ed605e6f364c60dd1558c18bb4ac52afdaaea15b3e57ea236d"
+      },
+      "missing-stream-usage": {
+        "billing_complete": false,
+        "pending_reservations": 1,
+        "stop_reason": "unknown_http_outcome",
+        "sha256": "6ac1206b94f0d8a584a75a139348bf6bcef419d4e47060305b9079f329b829d6"
+      },
+      "unknown-transport": {
+        "billing_complete": false,
+        "pending_reservations": 1,
+        "stop_reason": "unknown_http_outcome",
+        "sha256": "f2d2d8aab664602faa5bfb46d10e983e54efdf610298994d57d117fef0317649"
+      }
+    }
+  },
+  "old_workspace": {
+    "read_only": true,
+    "original_four_tracked_sha_unchanged": true,
+    "head": "f8438738fb3c9cd30e3d746bb0c6e61a4e4acc74"
+  },
+  "remaining_real_api_gates": [
+    "explicit API execution authorization",
+    "confirmed cost ceiling and account currency",
+    "current rate/model-version review",
+    "live worker admission review after offline transport wiring",
+    "verified provider input-context ceiling for reservations"
+  ],
+  "native_delivery_or_factual_quality_measured_by_this_wiring_test": false,
+  "push_merge_deploy_service_restart": false
+}
