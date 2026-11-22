@@ -69,3 +69,15 @@ context. `OfflinePilotWorker.from_preflight` verifies and binds those limits; it
 still rejects live transports. Never equate budget approval with execution
 authorization. Decode compressed HTTP receipts independently from SDK decoder
 state; sync/async gzip SSE regression lives in `test_sp_report_pilot_admission.py`.
+
+The explicitly authorized pilot entry is `scripts/report_pilot_entry.py`. Its
+non-start mode only checks packet and redacted credential metadata. Actual
+execution requires `--start --billing-currency CNY`, a fresh isolated run path,
+and the user's separate execution authorization. Do not re-ask for the already
+approved 50 CNY budget. OfficialPilotWorker shares the offline accounting core,
+but admits only direct verified-TLS official transports with zero pool retries,
+no redirects, bound Authorization, and scoped official-IP sockets. The ordinary
+worker remains mock-only. Use native make_sp_agent/checkpoints and native
+acceptance; record failure without automatic paid restarts. Factory-only role
+probes do not cover native Researcher continuation's 65536-token override;
+accounting must reserve from each actual request. See the live-pilot record.

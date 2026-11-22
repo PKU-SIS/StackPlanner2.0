@@ -1,0 +1,86 @@
+{
+  "case_id": "library-rag",
+  "implementation_commit": "4bacf44",
+  "scope": "authorized real DeepSeek pilot; stopped at native first-turn HITL",
+  "run_directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261122-library-rag-01",
+  "artifact_manifest_sha256": "ce5020ca4dc7ba501ddbfc82c57bc05530958402785064b851252be55a308e0c",
+  "artifact_files": 248,
+  "api_experiments_authorized": true,
+  "account_cny_verified": true,
+  "attempted_user_turns": [
+    1
+  ],
+  "completed_native_deliveries": 0,
+  "followup_turns_executed": 0,
+  "automatic_paid_restarts": 0,
+  "native_status": "active",
+  "native_acceptance_status": "blocked_user",
+  "last_handler_type": "ASK_HUMAN",
+  "native_visible_stop_message": "首稿篇幅不在约定范围内，已按设置停止，未做自动字数返修。已保留候选和计量结果。",
+  "candidate": {
+    "candidate_id": "c1",
+    "path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261122-library-rag-01/runtime/users/report-pilot/threads/pilot-3a906ddf93d843e89218aa783b97c397/user-data/outputs/report/r1/assembly/c1.md",
+    "sha256": "5532a47fa5e88ca42af92513d4178b28058da5d80f2a3f1a7b2920148ab66a53",
+    "chars": 19780
+  },
+  "length": {
+    "estimated_words": 11423,
+    "body_words": 9926,
+    "min_words": 9000,
+    "max_words": 11000,
+    "in_estimated_range": false,
+    "counter_version": "mixed-word-estimate-v1",
+    "measured_word_count": null
+  },
+  "usage": {
+    "logical_model_calls": 83,
+    "http_tool_attempts": 23,
+    "direct_tool_successes": 23,
+    "input_tokens": 3643657,
+    "output_tokens": 113646,
+    "total_tokens": 3757303,
+    "cache_read_tokens_observed": 2825728,
+    "by_role": {
+      "memory_recaller": 1,
+      "researcher": 23,
+      "central": 3,
+      "outline": 15,
+      "writer": 41
+    },
+    "usage_complete": true,
+    "billing_complete": true,
+    "http_coverage_verified": true,
+    "anomalies": []
+  },
+  "cost": {
+    "basis": "verified peak-rate conservative upper estimate, not provider invoice",
+    "known_peak_cny": "2.77305512",
+    "reserved_cny": "0",
+    "pending": [],
+    "operating_limit_cny": "48",
+    "total_ceiling_cny": "50"
+  },
+  "supervisor": {
+    "stop_reason": "worker_returned",
+    "worker_terminated": true,
+    "worker_callable_completed": true,
+    "native_delivery_verified": false,
+    "billing_complete": false,
+    "automatic_restarts": 0,
+    "api_experiments_authorized": true
+  },
+  "supervisor_billing_flag_is_conservative_not_the_worker_reconciliation": true,
+  "tests": {
+    "entry_passed": 10,
+    "specialized_passed": 66,
+    "specialized_seconds": 22.73,
+    "broad_passed": 1122,
+    "broad_seconds": 72.93,
+    "counts_overlap": true
+  },
+  "multi_turn_quality_accepted": false,
+  "facts_evaluated": false,
+  "first_turn_native_gate_lowered": false,
+  "old_four_tracked_sha_unchanged": true,
+  "push_merge_deploy_service_restart": false
+}

@@ -1067,3 +1067,8 @@ The pilot now has a reviewed 50 CNY total budget sheet with a 48 CNY operating
 allowance, a verified public context bound and an offline worker binding. It
 continues to deny live API transports. See
 [the seven-turn experiment sheet](docs/research-report/multiturn-pilot-preparation-20261122/EXPERIMENT_SHEET_50CNY.md).
+
+An explicitly gated official DeepSeek pilot entry now wraps the native report
+graph with isolated checkpoints, shared accounting and restricted TLS transport.
+Its default precheck makes no model calls; actual execution requires separate
+user authorization. See [the live-pilot record](docs/research-report/MULTITURN_LIVE_PILOT_20261122.md).
