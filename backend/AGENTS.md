@@ -1655,3 +1655,25 @@ valid after a completed audit finds no supported issue. Preserve all native
 normalization, source-access, acceptance and status rules. Regression anchors:
 `test_sp_clause_delivery_prompt.py` exercises initial real executor/provider HTTP
 requests plus native empty-answer and unread-source/partial controls.
+
+`sp/capped_repetition.py` is default-disabled by
+`SP_CLAUSE_CAPPED_REPETITION_FEEDBACK`. Only the validated CLAUSE Reporter public
+array/source contract qualifies. The native normalizer requires exact equality
+of the raw result and captured final assistant content, actual provider
+`length`/`max_tokens`, no final tool calls and the same bytes retained as a text
+artifact without file-priority substitution. Counts live in the dedicated
+host-derived `SPSubagentResult.capped_output_repetition` field, never in parsed
+model artifact metadata. The delegate handler binds them to the actual written
+artifact in its existing observe entry; recovery verifies current run, action,
+artifact and unfinished status. Do not copy model claims into this field.
+The scanner inspects at most 131072 raw characters and 128 samples, reporting
+only high-variety 256-character fragments with eight non-overlapping repeats in
+outputs of at least 8192 characters. Offsets/counts describe raw strings, not
+findings or semantic duplicates. Preserve different issues sharing quotations.
+Only append this bounded observation to the already-existing recovery guidance;
+never repair/deduplicate an array, modify source/status/schema, alter canonical
+previews, add a model call or increase any budget. No signal/provenance and the
+disabled flag preserve the existing prompt. Regression anchor:
+`tests/test_sp_capped_repetition.py` exercises captured cap provenance, spoofed
+metadata, scope/no-signal controls and actual next-delegate artifact/byte/budget
+preservation with synthetic outputs and no service requests.

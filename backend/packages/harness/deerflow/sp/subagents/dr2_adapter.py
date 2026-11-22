@@ -1290,6 +1290,21 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
     if semantic_diagnostics:
         artifact_metadata["clause_semantic_review"] = semantic_diagnostics
 
+    from deerflow.sp.capped_repetition import DIAGNOSTIC_KEY, captured_capped_repetition
+
+    artifact_metadata.pop(DIAGNOSTIC_KEY, None)
+    repetition = None
+    if task is not None and stop_reason == "token_capped" and artifact_content == raw_result and not artifact_metadata.get("created_paths"):
+        repetition = captured_capped_repetition(
+            raw_result,
+            ai_messages,
+            contract=task.context_refs.get("task_contract"),
+            skill_names=task.metadata.get("skill_names"),
+            auditor_role=task.subagent_type,
+            run_id=task.run_id,
+            action_id=task.action_id,
+        )
+
     return SPSubagentResult(
         status=status,
         result=normalized_result,
@@ -1307,6 +1322,7 @@ def normalize_dr2_subagent_result(result: Any, *, task: SPSubagentTask | None = 
         tests=tests,
         source_access=collect_source_access(ai_messages if isinstance(ai_messages, list) else []),
         created_path_evidence={"action_id": task.action_id, "paths": _successful_output_writes(ai_messages)} if task is not None else None,
+        capped_output_repetition=repetition,
     )
 
 

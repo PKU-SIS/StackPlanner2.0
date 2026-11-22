@@ -163,8 +163,11 @@ def artifact_array_token_cap_instruction(state: Mapping[str, Any], *, stack: Any
         and previous.metadata.get("completion_status") in ("partial", "blocked")
         and (previous.metadata.get("stop_reason") or previous.metadata.get("subagent_stop_reason")) == "token_capped"
     )
+    from deerflow.sp.capped_repetition import capped_repetition_feedback
+
+    repetition_feedback = capped_repetition_feedback(previous, contract=contract, refs=report_refs, run_id=run_id)
     if not artifact_ids and (report_refs or not previous_capped):
-        return ""
+        return repetition_feedback
     return (
         "<public-array-token-cap-recovery>\n"
         "A native current-run Reporter delivery was token_capped and remains an unverified, noncanonical draft. "
@@ -179,4 +182,4 @@ def artifact_array_token_cap_instruction(state: Mapping[str, Any], *, stack: Any
         "Never truncate necessary evidence or omit a distinct supported issue to save tokens, invent findings, or replace unfinished work with an empty/default answer. "
         "If the substantive audit cannot be completed, preserve honest partial status and concrete evidence gaps.\n"
         "</public-array-token-cap-recovery>\n"
-    )
+    ) + repetition_feedback

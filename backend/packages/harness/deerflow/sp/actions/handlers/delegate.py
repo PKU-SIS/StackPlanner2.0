@@ -1074,6 +1074,16 @@ class DelegateHandler:
             if key in result.artifact_metadata
         }
         acceptance_metadata.update({key: task.metadata[key] for key in ("requires_implementation", "verification_only", "task_kind", "coder_task_kind") if key in task.metadata})
+        if (
+            result.capped_output_repetition is not None
+            and result.stop_reason == "token_capped"
+            and artifact_content is not None
+            and not registered_paths
+            and any(ref.get("artifact_id") == result_ref for ref in _all_artifact_refs(artifact_refs))
+        ):
+            from deerflow.sp.capped_repetition import DIAGNOSTIC_KEY
+
+            acceptance_metadata[DIAGNOSTIC_KEY] = {**result.capped_output_repetition, "artifact_id": result_ref}
         # Keep the handler/runtime task contract, not model-authored artifact
         # metadata, so bounded recovery can retain explicitly requested tools.
         for key in ("tool_names", "skill_names"):

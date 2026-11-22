@@ -628,3 +628,18 @@ whose chat template enables thinking. Omitting it preserves the existing false
 default. The corresponding `run_probe(enable_thinking=...)` setting reaches every
 service request and is recorded as `enable_thinking` in `report.json`; compare
 that setting with the prepared evaluation before interpreting service probes.
+
+`SP_CLAUSE_CAPPED_REPETITION_FEEDBACK=1` optionally adds a bounded raw-output
+repetition observation to an existing CLAUSE Reporter recovery; it is off by
+default. Declare this setting for a new run consistently in training/evaluation.
+It requires the actual final captured `length`/`max_tokens` response to match the
+unchanged capped text artifact. For outputs of at least 8192 characters, it
+inspects at most the first 131072 characters and 128 sampled 256-character
+fragments, reporting only a fragment with at least eight non-overlapping repeats.
+Whitespace and low-variety fragments are excluded. The next recovery receives
+only the fragment length, repeat count and first three raw character offsets,
+bound to the actual current artifact. These are not semantic finding counts:
+different supported issues may share one quotation and must remain distinct.
+The host neither deduplicates nor supplies quotations or replacement answers;
+original bytes, partial status, source/schema checks, calls and budgets remain
+unchanged. Missing provenance or no strong signal retains the ordinary prompt.

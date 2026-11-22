@@ -129,6 +129,8 @@ class SPSubagentResult:
     # Actual paired successful native writes from this executor/action only.
     # Never populate from model-authored artifact_metadata or result payloads.
     created_path_evidence: dict[str, Any] | None = None
+    # Actual captured capped-output observations, never model artifact metadata.
+    capped_output_repetition: dict[str, Any] | None = None
 
     def protocol_payload(self, *, task: SPSubagentTask | None = None) -> dict[str, Any]:
         """Return a compact result envelope; never include hidden reasoning."""
