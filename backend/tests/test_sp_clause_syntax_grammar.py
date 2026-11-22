@@ -42,7 +42,7 @@ def reads():
     return [AIMessage(content="", tool_calls=[{"name": "read_file", "id": "original-read", "args": {"path": PATH}}]), ToolMessage(content=SOURCE, name="read_file", tool_call_id="original-read")]
 
 
-def run_http(monkeypatch, responses, *, asynchronous=False, backend="sglang", damage=None, reviews=False, enabled=True, source_text=None):
+def run_http(monkeypatch, responses, *, asynchronous=False, backend="sglang", damage=None, reviews=False, enabled=True, source_text=None, beyond_eof=False):
     monkeypatch.setenv("SP_CLAUSE_SYNTAX_GRAMMAR", "1" if enabled else "0")
     monkeypatch.setenv("SP_CLAUSE_SEMANTIC_REVIEW", "1" if reviews else "0")
     monkeypatch.setenv("SP_CLAUSE_QUOTE_REVIEW", "1" if reviews else "0")
@@ -50,6 +50,14 @@ def run_http(monkeypatch, responses, *, asynchronous=False, backend="sglang", da
     source = reads()
     if source_text is not None:
         source[-1].content = source_text
+    if beyond_eof:
+        total = len(source[-1].content.splitlines())
+        source.extend(
+            [
+                AIMessage(content="", tool_calls=[{"name": "read_file", "id": "beyond-eof", "args": {"path": PATH, "start_line": total + 1, "end_line": total + 50}}]),
+                ToolMessage(content=f"(empty: requested range starts after end of file; total_lines={total})", name="read_file", tool_call_id="beyond-eof"),
+            ]
+        )
     captured = [m.model_dump() for m in source]
     public = contract() if source_text is None else public_output_contract(PublicTask(benchmark="clause", prompt="Audit the supplied document.", files=(InputFile(name="document.txt", text=source_text),)))
     role, skills = "reporter", ["clause"]
@@ -169,6 +177,9 @@ def test_real_http_constrains_existing_format_semantic_and_quote_final_turns(mon
         assert note["name"] == "sp_clause_syntax_final"
         assert "Source defects are audit content" in note["content"]
         assert "after exactly one JSON decode" in note["content"]
+        assert "physical source lines 1..2" in note["content"]
+        assert "line 3 is beyond EOF" in note["content"]
+        assert "candidate quotation" in note["content"] and "not a source-read failure" in note["content"]
         assert "genuinely unavailable or unresolved" in note["content"]
         assert SOURCE not in note["content"]
     for body in payloads:
@@ -190,7 +201,7 @@ def test_current_cross_page_source_stays_visible_and_does_not_force_completion(m
     source = "Public agreement.\nPayment must be made to\nPage 12\nExample Company within ten days.\nSigned below."
     candidate = json.dumps([{"text": source, "explanation": "A synthetic public-document finding."}])
     final = PARTIAL if partial else candidate
-    result, payloads, _, captured = run_http(monkeypatch, [candidate, final], asynchronous=asynchronous, reviews=True, source_text=source)
+    result, payloads, _, captured = run_http(monkeypatch, [candidate, final], asynchronous=asynchronous, reviews=True, source_text=source, beyond_eof=True)
     assert len(payloads) == 2  # Reuse the one existing semantic review turn.
     notes = {m.get("name"): m.get("content", "") for m in payloads[1]["messages"] if m.get("role") == "user"}
     for name in ("sp_clause_semantic_review_feedback", "sp_clause_syntax_final"):
@@ -201,8 +212,114 @@ def test_current_cross_page_source_stays_visible_and_does_not_force_completion(m
         assert source not in notes[name]  # No host-authored quotation or replacement answer.
     assert all(any(m.get("role") == "tool" and m.get("content") == source for m in body["messages"]) for body in payloads)
     assert not payloads[1].get("tools") and "response_format" in payloads[1]
+    assert "physical source lines 1..5" in notes["sp_clause_syntax_final"]
+    assert "line 6 is beyond EOF" in notes["sp_clause_syntax_final"]
+    assert "candidate quotation" in notes["sp_clause_syntax_final"] and "not a source-read failure" in notes["sp_clause_syntax_final"]
+    assert any(m.get("name") == "sp_clause_current_source_visibility" for m in payloads[0]["messages"])
     assert result["messages"][-1].content == final
     assert [(d["phase"], d["status"]) for d in collect_syntax_grammar_diagnostics(captured)] == [("semantic", "applied"), ("semantic", "response_received")]
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("partial", [False, True])
+def test_ordinary_http_exposes_only_current_source_transport_facts_with_real_eof(monkeypatch, asynchronous, partial):
+    source = "A long physical source line with many wrapped display lines. " * 100 + "\nPage 17\nThe sentence continues across this layout boundary."
+    candidate = json.dumps([{"text": source, "explanation": "A synthetic source-only finding."}])
+    final = PARTIAL if partial else candidate
+    result, payloads, _, _ = run_http(monkeypatch, [final], asynchronous=asynchronous, enabled=False, source_text=source, beyond_eof=True)
+    assert len(payloads) == 1 and "response_format" not in payloads[0]
+    assert {t["function"]["name"] for t in payloads[0]["tools"]} == {"read_file", "write_file"}
+    facts = [m for m in payloads[0]["messages"] if m.get("name") == "sp_clause_current_source_visibility"]
+    assert len(facts) == 1
+    note = facts[0]["content"]
+    assert PATH in note and "physical source lines 1..3" in note and "line 4 is beyond EOF" in note
+    assert "visual display lines" in note and "not a source-read failure" in note
+    assert "not substantive audit completion" in note and "partial/blocked" in note
+    assert source not in note and "synthetic source-only finding" not in note
+    assert any(m.get("role") == "tool" and m.get("content") == source for m in payloads[0]["messages"])
+    assert any(m.get("role") == "tool" and m.get("content") == "(empty: requested range starts after end of file; total_lines=3)" for m in payloads[0]["messages"])
+    assert result["messages"][-1].content == final
+
+
+@pytest.mark.parametrize(
+    "damage", ["missing", "changed", "args", "no_capture", "old_visibility", "truncated", "externalized", "failed", "empty", "partial_range", "eof_only", "conflict", "pending", "budget", "counter_error", "no_settings", "bad_skills"]
+)
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_current_source_fact_never_uses_uncertain_or_historical_proof(monkeypatch, damage, asynchronous):
+    monkeypatch.setenv("SP_CLAUSE_SYNTAX_GRAMMAR", "0")
+    source = reads()
+    source[-1].additional_kwargs.update(sp_host_source_prefetch=True, sp_host_source_prefetch_visible=True)
+    captured = [m.model_dump() for m in source]
+    if damage == "missing":
+        source = []
+    elif damage == "changed":
+        source[-1] = source[-1].model_copy(update={"content": SOURCE + " altered"})
+    elif damage == "args":
+        source[0] = AIMessage(content="", tool_calls=[{"name": "read_file", "id": "original-read", "args": {"path": PATH, "end_line": 1}}])
+    elif damage == "no_capture":
+        captured = []
+    elif damage == "old_visibility":
+        source = [HumanMessage(content="An old summary said every source was read.")]
+    elif damage in {"truncated", "externalized", "failed", "empty", "partial_range"}:
+        if damage == "truncated":
+            source[-1].content += " [truncated: source preview]"
+        elif damage == "externalized":
+            source[-1].content = "[Full read_file output saved to /mnt/user-data/outputs/source.txt]"
+        elif damage == "failed":
+            source[-1].status = "error"
+        elif damage == "empty":
+            source[-1].content = "(empty)"
+        else:
+            source[0] = AIMessage(content="", tool_calls=[{"name": "read_file", "id": "original-read", "args": {"path": PATH, "start_line": 1, "end_line": 1}}])
+            source[-1].content = SOURCE.splitlines()[0]
+        captured = [m.model_dump() for m in source]
+    elif damage == "eof_only":
+        source = [
+            AIMessage(content="", tool_calls=[{"name": "read_file", "id": "after-eof", "args": {"path": PATH, "start_line": 3, "end_line": 50}}]),
+            ToolMessage(content="(empty: requested range starts after end of file; total_lines=2)", name="read_file", tool_call_id="after-eof"),
+        ]
+        captured = [m.model_dump() for m in source]
+    elif damage == "conflict":
+        source.extend([AIMessage(content="", tool_calls=[{"name": "read_file", "id": "conflict", "args": {"path": PATH}}]), ToolMessage(content=SOURCE.replace("1 January", "2 January"), name="read_file", tool_call_id="conflict")])
+        captured = [m.model_dump() for m in source]
+    elif damage == "pending":
+        source.append(AIMessage(content="", tool_calls=[{"name": "read_file", "id": "pending", "args": {"path": PATH}}]))
+    counted = []
+
+    def counter(messages, *args):
+        counted.append(messages)
+        if damage == "counter_error":
+            raise RuntimeError("Tokenizer is unavailable")
+        return 100_000 if damage == "budget" else 20
+
+    monkeypatch.setattr("deerflow.sp.source_prefetch.count_source_prompt_tokens", counter)
+    request = ModelRequest(
+        model=VllmChatModel(model="fixture", api_key="fixture"),
+        messages=[HumanMessage(content="Audit original sources."), *source],
+        tools=[{"type": "function", "function": {"name": "read_file", "parameters": {"type": "object"}}}],
+        state={"sp_source_access": {"reads": {PATH: [[1, 2]]}}},
+    )
+    before = [m.model_dump() for m in request.messages]
+    visibility = SourcePrefetchVisibilityMiddleware(
+        captured,
+        contract=contract(),
+        settings=None if damage == "no_settings" else SourcePrefetchSettings(tokenizer="fixture", context_tokens=65536, response_tokens=256),
+        auditor_role="reporter",
+        skill_names=1 if damage == "bad_skills" else ["clause"],
+    )
+    if asynchronous:
+
+        async def handler(current):
+            return current
+
+        result = asyncio.run(visibility.awrap_model_call(request, handler))
+    else:
+        result = visibility.wrap_model_call(request, lambda current: current)
+    assert not any(m.name == "sp_clause_current_source_visibility" for m in result.messages)
+    assert [m.model_dump() for m in result.messages] == before
+    assert result.tools == request.tools
+    if damage in {"budget", "counter_error"}:
+        assert counted and any(m.name == "sp_clause_current_source_visibility" for m in counted[0])
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
@@ -223,6 +340,7 @@ def test_unproved_source_scope_or_context_uses_original_format_path(monkeypatch,
     result, payloads, _, captured = run_http(monkeypatch, [BAD, GOOD], damage=damage)
     assert len(payloads) == 2 and not any("response_format" in body for body in payloads)
     assert not any("Source defects are audit content" in str(message.get("content")) for body in payloads for message in body["messages"])
+    assert not any("HOST CURRENT PUBLIC-SOURCE TRANSPORT FACTS" in str(message.get("content")) for body in payloads for message in body["messages"])
     assert result["messages"][-1].content == GOOD
     assert not any(d["status"] == "applied" for d in collect_syntax_grammar_diagnostics(captured))
 
@@ -632,3 +750,43 @@ def test_probe_cli_passes_and_records_explicit_thinking_setting(monkeypatch, tmp
     probe.main()
     assert seen == [enable_thinking]
     assert json.loads((tmp_path / "report.json").read_text())["enable_thinking"] is enable_thinking
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("outside_error", [False, True])
+def test_fresh_composed_source_ranges_remain_proven_with_outside_eof_result(monkeypatch, asynchronous, outside_error):
+    monkeypatch.setenv("SP_CLAUSE_SYNTAX_GRAMMAR", "0")
+    monkeypatch.setattr("deerflow.sp.source_prefetch.count_source_prompt_tokens", lambda *a, **k: 20)
+    messages = [HumanMessage(content="Audit the supplied public source.")]
+    for number, body in enumerate(SOURCE.splitlines(), 1):
+        call_id = f"range-{number}"
+        messages.extend(
+            [
+                AIMessage(content="", tool_calls=[{"name": "read_file", "id": call_id, "args": {"path": PATH, "start_line": number, "end_line": number}}]),
+                ToolMessage(content=body, name="read_file", tool_call_id=call_id, additional_kwargs={"sp_host_source_prefetch": True, "sp_host_source_prefetch_visible": False}),
+            ]
+        )
+    messages.extend(
+        [
+            AIMessage(content="", tool_calls=[{"name": "read_file", "id": "outside", "args": {"path": PATH, "start_line": 3, "end_line": 100}}]),
+            ToolMessage(
+                content="Error: outside-range test failure" if outside_error else "(empty: requested range starts after end of file; total_lines=2)", name="read_file", tool_call_id="outside", status="error" if outside_error else "success"
+            ),
+        ]
+    )
+    captured = [m.model_dump() for m in messages]
+    request = ModelRequest(model=VllmChatModel(model="fixture", api_key="fixture"), messages=messages, tools=[{"type": "function", "function": {"name": "read_file", "parameters": {"type": "object"}}}], model_settings={"max_tokens": 256})
+    before = [m.model_dump() for m in messages]
+    visibility = SourcePrefetchVisibilityMiddleware(captured, contract=contract(), settings=SourcePrefetchSettings(tokenizer="fixture", context_tokens=65536, response_tokens=256), auditor_role="reporter", skill_names=["clause"])
+    if asynchronous:
+
+        async def handler(current):
+            return current
+
+        result = asyncio.run(visibility.awrap_model_call(request, handler))
+    else:
+        result = visibility.wrap_model_call(request, lambda current: current)
+    assert result.messages[-1].name == "sp_clause_current_source_visibility"
+    assert "physical source lines 1..2" in result.messages[-1].content
+    assert [m.model_dump() for m in result.messages[:-1]] == before
+    assert result.tools == request.tools and result.model_settings == request.model_settings

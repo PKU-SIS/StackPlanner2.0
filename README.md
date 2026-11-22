@@ -794,3 +794,12 @@ Audit recovery presents prior auditors' gap statements as reported claims to
 recheck against the original task and current native evidence. Genuine unread or
 truncated sources and unfinished audits still require partial/blocked status.
 These instructions do not add reviews, change acceptance, or supply findings.
+
+
+When native source prefetch is configured, the bound CLAUSE Reporter receives a
+short transport fact only after the current request's exact original tool pairs,
+complete required source ranges and context headroom are verified. It identifies
+physical source lines and EOF separately from visual wrapping and quotation
+mismatches. The fact does not certify the audit or repair a candidate. Tools,
+original evidence, partial/blocked status, acceptance and call budgets remain
+unchanged; existing syntax-final turns carry the same verified fact.

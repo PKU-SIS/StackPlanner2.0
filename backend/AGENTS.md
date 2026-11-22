@@ -1696,3 +1696,27 @@ HTTP tests in `test_sp_clause_syntax_grammar.py` preserve a synthetic cross-page
 source and either a model-owned public array or honest partial final with the
 same single semantic request. Initial/semantic prompt scope remains independently
 covered by their existing renderer/provider tests.
+
+
+`clause_current_source_visibility_note` shares `_exact_visible_source` and
+`_complete_original` authentication with syntax-final gating, independently of
+syntax opt-in. The innermost source-visibility middleware adds this transient
+CLAUSE-only transport note when native prefetch settings exist and the final
+request including the note fits the configured context/response budgets. Match
+current call IDs, exact args, successful original result bodies and full 1..N
+coverage against this executor's captured native pairs; never rely on a parent's
+ledger or an old visibility flag. A matching complete original can coexist with
+an out-of-range empty/error read beyond N; that read is not a missing required
+range. Missing, changed, conflicting, failed, truncated, externalized or incomplete
+proof cannot establish full visibility. The note reports physical source lines,
+visual wrapping and N+1 beyond the required original EOF; candidate-quote mismatch
+is separate from source transport failure and substantive audit completion.
+Keep tools, source bodies, statuses, acceptance and all call/review budgets
+unchanged, with no replacement quotations or automatic gap clearance.
+For nominated syntax turns, append the same authenticated fact inside the existing
+syntax-final note after tail validation; do not insert a new feedback name before
+nomination checks. The existing final token count includes it. CPU sync/async
+native HTTP and middleware controls in `test_sp_clause_syntax_grammar.py` cover
+long physical lines, composed ranges plus real EOF, ordinary/semantic/quote/format
+requests, genuine partial finals, unchanged tools/bodies/call counts, and invalid
+current proof or unavailable context budgets.

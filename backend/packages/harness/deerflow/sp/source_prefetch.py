@@ -87,13 +87,22 @@ class SourcePrefetchVisibilityMiddleware(AgentMiddleware):
     """Innermost model wrapper: summaries/previews do not count as full input."""
 
     def __init__(
-        self, captured: list[dict], *, contract: Mapping[str, Any] | None = None, settings: SourcePrefetchSettings | None = None,
-        auditor_role: str | None = None, thinking_enabled: bool | None = None, skill_names=None, syntax_scope=None, syntax_gate=None
+        self,
+        captured: list[dict],
+        *,
+        contract: Mapping[str, Any] | None = None,
+        settings: SourcePrefetchSettings | None = None,
+        auditor_role: str | None = None,
+        thinking_enabled: bool | None = None,
+        skill_names=None,
+        syntax_scope=None,
+        syntax_gate=None,
     ):
         self._captured = captured
         self._contract = contract
         self._settings = settings
         self._auditor_role = auditor_role
+        self._skill_names = skill_names
         self._thinking_enabled = thinking_enabled
         from deerflow.sp.syntax_grammar import SyntaxGrammarRequestGate
 
@@ -161,6 +170,17 @@ class SourcePrefetchVisibilityMiddleware(AgentMiddleware):
         )
         return request.override(tools=tools, messages=[*request.messages, note])
 
+    def _clause_current_source_request(self, request):
+        """Add transport facts only; preserve tools, source bodies and state."""
+        if self._settings is None:
+            return None
+        from deerflow.sp.syntax_grammar import clause_current_source_visibility_note
+
+        note = clause_current_source_visibility_note(request.messages, self._captured, contract=self._contract, skill_names=self._skill_names, auditor_role=self._auditor_role)
+        if note is None:
+            return None
+        return request.override(messages=[*request.messages, note])
+
     def _within_context(self, request) -> bool:
         try:
             count = count_source_prompt_tokens(request.messages, request.tools, self._settings, self._thinking_enabled)
@@ -175,6 +195,8 @@ class SourcePrefetchVisibilityMiddleware(AgentMiddleware):
         if proposed is not None:
             return handler(self._syntax_gate.finish(request, proposed, within_context=self._settings is not None and self._within_context(proposed)))
         complete = self._complete_file_audit_request(request)
+        if complete is None:
+            complete = self._clause_current_source_request(request)
         return handler(complete if complete is not None and self._within_context(complete) else request)
 
     async def awrap_model_call(self, request, handler):
@@ -184,6 +206,8 @@ class SourcePrefetchVisibilityMiddleware(AgentMiddleware):
             fits = self._settings is not None and await asyncio.to_thread(self._within_context, proposed)
             return await handler(self._syntax_gate.finish(request, proposed, within_context=fits))
         complete = self._complete_file_audit_request(request)
+        if complete is None:
+            complete = self._clause_current_source_request(request)
         within_context = complete is not None and await asyncio.to_thread(self._within_context, complete)
         return await handler(complete if within_context else request)
 

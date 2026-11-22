@@ -142,6 +142,32 @@ def _exact_visible_source(messages, captured, contract) -> bool:
     return source is not None and unavailable is None
 
 
+def _current_source_visibility_instruction(contract) -> str:
+    """Render only an already-authenticated original public file boundary."""
+    file = contract["source_requirements"]["files"][0]
+    path, total = file["path"], file["total_lines"]
+    return (
+        "[HOST CURRENT PUBLIC-SOURCE TRANSPORT FACTS] "
+        f"{path}: required physical source lines 1..{total} are completely visible in this exact request as authenticated successful original native read_file results. "
+        "These are physical newline-delimited source lines; long lines can wrap into many visual display lines. "
+        "The physical line count is not a page or sentence count or a content-length limit. "
+        f"Physical source line {total + 1} is beyond EOF of this required original file; an empty request starting there does not indicate missing required content. "
+        "A candidate quotation mismatch, when reported, is not a source-read failure or proof of truncated or unavailable source. "
+        "These transport facts are not substantive audit completion or a certification of quotation accuracy. "
+        "Recheck candidate quotations against the original evidence; preserve every supported distinct finding and honest partial/blocked status for genuine unmet requirements. "
+        "All existing source, quotation, schema, status, tool, token and acceptance checks still apply. "
+    )
+
+
+def clause_current_source_visibility_note(messages, captured, *, contract, skill_names, auditor_role):
+    """Certify current original transport only, independent of syntax opt-in."""
+    if not isinstance(contract, Mapping) or not isinstance(skill_names, list | tuple) or not clause_public_audit_scope(contract, skill_names, auditor_role):
+        return None
+    if _pending_tools(messages) or not _exact_visible_source(messages, captured, contract):
+        return None
+    return HumanMessage(name="sp_clause_current_source_visibility", content=_current_source_visibility_instruction(contract), additional_kwargs={"hide_from_ui": True})
+
+
 @dataclass(frozen=True)
 class _FinalNomination:
     phase: str
@@ -262,6 +288,7 @@ class SyntaxGrammarRequestGate:
                 f"<syntax-only-final>\nThis is the existing native {nomination.phase} final turn, temporarily without tools. "
                 "The complete original public source remains visible in this exact request. Return the complete raw public JSON array with correct single-layer escaping. "
                 "Verify findings against that source; preserve every supported distinct finding and complete original quotation, not broken serialized fragments. "
+                + _current_source_visibility_instruction(self.contract)
                 + source_character_fidelity_instruction()
                 + "The grammar does not establish substantive completion or choose an answer. If the audit remains incomplete, return the ordinary native SP envelope with "
                 'artifact_metadata.completion_status="partial" or "blocked" and concrete nonempty artifact_metadata.evidence_gaps. '
