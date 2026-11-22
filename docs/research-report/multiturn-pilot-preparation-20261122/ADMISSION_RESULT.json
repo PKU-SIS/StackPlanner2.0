@@ -1,0 +1,61 @@
+{
+  "scope": "50 CNY preparation and offline admission review; no paid execution",
+  "workspace": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn",
+  "branch": "feature/report-multiturn",
+  "upstream": "origin/sp2DeepResearch",
+  "implementation_commit": "025a265f4ddaa2712f01f53a257cf103e82c04d5",
+  "budget": {
+    "user_total_ceiling_cny": "50",
+    "operating_guard_cny": "48",
+    "safety_margin_cny": "2",
+    "entire_case_including_first_turn": true,
+    "account_billing_currency_confirmed": false,
+    "cost_prediction": null
+  },
+  "provider_review": {
+    "public_source_record": "docs/research-report/multiturn-pilot-preparation-20261122/ADMISSION_REVIEW.json",
+    "public_source_sha256": "227e980a7855508f7b1ba65c0d2a5827377c89049123bf5b9f86ec7d81caba85",
+    "documented_context": "1M",
+    "conservative_input_reservation_tokens": 1048576,
+    "ceiling_is_program_inference": true,
+    "combined_peak_exposure_cny": "48.000",
+    "parallel_stress_calls": 11,
+    "parallel_stress_reservation_cny": "25.952256"
+  },
+  "packet": {
+    "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-preflight/20261122-v6-50cny",
+    "manifest_sha256": "9f6387937bbbed7f793923c493bce445624b8830ba0501337c449f37c70f5204",
+    "verified": true,
+    "engine_files": 229,
+    "worker_bound_to_operating_guard": true
+  },
+  "tests": {
+    "broad_passed": 1112,
+    "broad_seconds": 73.05,
+    "specialized_passed": 56,
+    "specialized_seconds": 22.42,
+    "new_admission_cases": 11,
+    "counts_overlap": true,
+    "ruff_check": "passed",
+    "ruff_format": "passed",
+    "git_diff_check": "passed"
+  },
+  "transport_fix": "Independent compressed receipt decoding; real SDK sync/async gzip SSE, mocked HTTP only",
+  "old_workspace": {
+    "original_four_sha_unchanged": true,
+    "read_only": true
+  },
+  "frozen_suite_modified": false,
+  "api_experiments_authorized": false,
+  "provider_calls": 0,
+  "credentials_loaded": false,
+  "actual_experiment_cost_cny": "0",
+  "api_execution_ready": false,
+  "remaining_launch_requirements": [
+    "explicit API execution authorization",
+    "confirmed account billing currency",
+    "provider rate/model-version recheck at launch",
+    "live worker admission review after offline transport wiring"
+  ],
+  "push_merge_deploy_service_restart": false
+}
