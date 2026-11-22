@@ -1607,3 +1607,9 @@ Keep this integration independent of dataset strategies. Regression anchors in
 dispatch, and successful paired postwrite execution evidence; existing native
 acceptance and loop-repeat guards remain required. Compare complete native Python
 file inventories when synchronizing the embedded harness with its upstream.
+
+Keep real synthetic service probes aligned with the prepared run
+`enable_thinking` setting. `smoke_clause_syntax_grammar.py --enable-thinking`
+and `run_probe(enable_thinking=True)` explicitly enable it; the default remains
+false and the report records the actual boolean passed to the chat template.
+CPU HTTP/CLI tests verify propagation only, not deployed grammar enforcement.

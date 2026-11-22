@@ -34,7 +34,7 @@ SOURCE = 'The definition says "Information");tion");\nPayment is due on 1 Januar
 MALFORMED = json.dumps([{"text": SOURCE, "explanation": "The definition contains an incomplete fragment."}]).replace(';tion\\");', ';tion");')
 
 
-async def run_probe(*, base_url, model_name, tokenizer, max_tokens=1024, mode="repair", context_tokens=65536, timeout=180, syntax_grammar_backend="sglang", http_async_client=None, response_observer=None):
+async def run_probe(*, base_url, model_name, tokenizer, max_tokens=1024, mode="repair", context_tokens=65536, timeout=180, syntax_grammar_backend="sglang", enable_thinking=False, http_async_client=None, response_observer=None):
     if os.environ.get("SP_CLAUSE_SYNTAX_GRAMMAR") != "1":
         raise ValueError("Set SP_CLAUSE_SYNTAX_GRAMMAR=1 explicitly for this diagnostic")
     public = {
@@ -109,7 +109,7 @@ async def run_probe(*, base_url, model_name, tokenizer, max_tokens=1024, mode="r
             max_retries=0,
             streaming=False,
             syntax_grammar_backend=syntax_grammar_backend,
-            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+            extra_body={"chat_template_kwargs": {"enable_thinking": enable_thinking}},
             **kwargs,
         )
         visibility = SourcePrefetchVisibilityMiddleware(
@@ -122,6 +122,7 @@ async def run_probe(*, base_url, model_name, tokenizer, max_tokens=1024, mode="r
         return {
             "fixture": "public synthetic malformed candidate, not a production sample",
             "mode": mode,
+            "enable_thinking": enable_thinking,
             "service_model_responses": response_count,
             "raw_final": raw,
             "model_responses": model_responses,
@@ -146,6 +147,7 @@ def main():
     parser.add_argument("--model", required=True)
     parser.add_argument("--tokenizer", required=True, help="Local tokenizer used to verify exact request context headroom")
     parser.add_argument("--syntax-grammar-backend", choices=["sglang"], required=True)
+    parser.add_argument("--enable-thinking", action="store_true", help="Match a thinking-enabled target run; omitted keeps the diagnostic's existing false default")
     parser.add_argument("--mode", choices=["repair", "partial", "length"], default="repair")
     parser.add_argument("--max-tokens", type=int, default=1024)
     parser.add_argument("--context-tokens", type=int, default=65536)
@@ -167,6 +169,7 @@ def main():
                 model_name=args.model,
                 tokenizer=args.tokenizer,
                 syntax_grammar_backend=args.syntax_grammar_backend,
+                enable_thinking=args.enable_thinking,
                 mode=args.mode,
                 max_tokens=args.max_tokens,
                 context_tokens=args.context_tokens,

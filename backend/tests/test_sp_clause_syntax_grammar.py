@@ -282,7 +282,8 @@ def test_raw_create_provider_itself_propagates_original_async_cancellation():
 
 
 @pytest.mark.parametrize("mode,final,expected_status", [("repair", GOOD, "complete"), ("partial", PARTIAL, "partial"), ("length", GOOD[:-9], "partial")])
-def test_reusable_service_probe_keeps_native_graph_and_original_output(monkeypatch, mode, final, expected_status):
+@pytest.mark.parametrize("enable_thinking", [None, False, True])
+def test_reusable_service_probe_keeps_native_graph_and_original_output(monkeypatch, mode, final, expected_status, enable_thinking):
     import importlib.util
     from pathlib import Path
 
@@ -310,7 +311,8 @@ def test_reusable_service_probe_keeps_native_graph_and_original_output(monkeypat
 
     async def run():
         async with httpx.AsyncClient(transport=httpx.MockTransport(endpoint)) as client:
-            return await probe.run_probe(base_url="http://fixture.invalid/v1", model_name="fixture", tokenizer="fixture", max_tokens=256, mode=mode, http_async_client=client, response_observer=observed_responses.append)
+            settings = {} if enable_thinking is None else {"enable_thinking": enable_thinking}
+            return await probe.run_probe(base_url="http://fixture.invalid/v1", model_name="fixture", tokenizer="fixture", max_tokens=256, mode=mode, http_async_client=client, response_observer=observed_responses.append, **settings)
 
     result = asyncio.run(run())
     assert result["raw_final"] == final and result["completion_status"] == expected_status
@@ -319,6 +321,31 @@ def test_reusable_service_probe_keeps_native_graph_and_original_output(monkeypat
     assert result["model_responses"][0]["finish_reason"] == ("length" if mode == "length" else "stop")
     assert result["model_responses"][0]["syntax_grammar"][0]["status"] == "response_received"
     assert observed_responses == result["model_responses"]
+    assert result["enable_thinking"] is bool(enable_thinking)
+    assert all(body["chat_template_kwargs"]["enable_thinking"] is bool(enable_thinking) for body in payloads)
     assert "response_format" in payloads[0]
     assert all("response_format" not in body for body in payloads[1:])
     assert [d["status"] for d in result["syntax_grammar"]] == ["applied", "response_received"]
+
+
+@pytest.mark.parametrize("enable_thinking", [False, True])
+def test_probe_cli_passes_and_records_explicit_thinking_setting(monkeypatch, tmp_path, enable_thinking):
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location("syntax_service_probe_cli", Path(__file__).resolve().parents[1] / "scripts/smoke_clause_syntax_grammar.py")
+    probe = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(probe)
+    seen = []
+
+    async def fake_probe(**kwargs):
+        seen.append(kwargs["enable_thinking"])
+        return {"raw_final": "[]", "model_responses": [], "stop_reason": None, "enable_thinking": kwargs["enable_thinking"]}
+
+    monkeypatch.setattr(probe, "run_probe", fake_probe)
+    args = ["probe", "--base-url", "http://fixture.invalid/v1", "--model", "fixture", "--tokenizer", "fixture", "--syntax-grammar-backend", "sglang", "--output-dir", str(tmp_path)]
+    monkeypatch.setattr(sys, "argv", args + (["--enable-thinking"] if enable_thinking else []))
+    probe.main()
+    assert seen == [enable_thinking]
+    assert json.loads((tmp_path / "report.json").read_text())["enable_thinking"] is enable_thinking

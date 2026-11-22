@@ -592,3 +592,9 @@ Python callers may optionally bind a run-local policy for scoped delegation and
 additional delivery checks; ordinary runs leave that policy unbound and retain
 the existing native routing, recovery and acceptance behavior. Dataset-specific
 strategies are maintained separately from these portable native hooks.
+
+The synthetic syntax probe accepts `--enable-thinking` to match a target run
+whose chat template enables thinking. Omitting it preserves the existing false
+default. The corresponding `run_probe(enable_thinking=...)` setting reaches every
+service request and is recorded as `enable_thinking` in `report.json`; compare
+that setting with the prepared evaluation before interpreting service probes.
