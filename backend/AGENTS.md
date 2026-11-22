@@ -1407,6 +1407,21 @@ unchanged draft bytes/refs, failed validation previews, long/nested textual tool
 intent, honest failure envelopes and same-instance bad JSON/tool-text/valid JSON
 correction with the original AI history retained.
 
+Loop detection must distinguish exact `read_file` start/end bounds, including
+EOF vs a single line; coarse 200-line bucketing falsely rejects pagination.
+The total-call ceiling admits exactly N calls, then caps excess calls. Preserve
+real-repeat guards and incomplete-result surfacing. Regression anchors are
+`test_loop_detection_middleware.py`; no planning or acceptance policy is changed.
+
+Loop-call identity also preserves grep mode, limits and pagination arguments;
+changing literal/regex mode or advancing a search page must not alias a repeat.
+
+Offline callers may bind a trusted run-local action policy during graph execution. Explicit scoped delegation can supply a native stage and intermediate artifact type. Delegate and FINISH retain native tool permissions and ownership checks. Validated scoped artifact references may be exposed in control-tool results. Tool input and client state cannot install a policy.
+
+The trusted optional run policy can return a rejected file-delivery decision to Central through recover_delivery_with_central. Its presence preserves Central role selection during artifact recovery. Native artifact identity, completion, schema validation and recovery limits still apply.
+
+The DCC benchmark profile disables long-term memory updates and automatic injection; task-local MemoryStack remains enabled. Explicit recall actions are a separate control path.
+
 `sp/evidence_quotes.py` provides optional diagnostic quotation feedback under
 `SP_CLAUSE_QUOTE_REVIEW=1`. Scope it to the executor's validated `clause` Skill,
 host-designated Reporter, exact two-string text/explanation array schema, artifact
@@ -1584,3 +1599,11 @@ the final reviewed artifact alone cannot establish which grammar response was
 received. Keep these runtime artifacts out of Git and raw text out of the
 status-only report. Preserve existing calls and budgets; never add a retry just
 to obtain a preferred probe outcome.
+
+Portable native run-policy hooks remain inactive when `active_run_policy` is
+unbound (`None`); neither tool metadata nor client state can bind the ContextVar.
+Keep this integration independent of dataset strategies. Regression anchors in
+`test_sp_native_run_policy.py` exercise context isolation, real delegate/FINISH
+dispatch, and successful paired postwrite execution evidence; existing native
+acceptance and loop-repeat guards remain required. Compare complete native Python
+file inventories when synchronizing the embedded harness with its upstream.

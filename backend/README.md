@@ -584,3 +584,11 @@ diagnostic immediately, so later review changes or errors cannot hide the
 grammar round's raw output. It saves no request body. `report.json` contains only
 native status and review diagnostics. CPU MockTransport tests verify plumbing, not the
 deployed grammar compiler; actual service compatibility remains a separate check.
+
+Native loop detection preserves exact file-read bounds and grep mode, limits and
+pagination arguments, so distinct reads/search pages do not consume repeat-call
+allowances. The total-call ceiling and repeated-call guards still apply. Trusted
+Python callers may optionally bind a run-local policy for scoped delegation and
+additional delivery checks; ordinary runs leave that policy unbound and retain
+the existing native routing, recovery and acceptance behavior. Dataset-specific
+strategies are maintained separately from these portable native hooks.
