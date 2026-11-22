@@ -1,0 +1,29 @@
+"""Existing accepted reports import into a new owner/thread without model calls."""
+
+from report_pilot_entry import import_seed, run_turn_sequence
+from test_sp_report_turns import accepted
+
+from deerflow.sp.report.store import pointer_path, read_json
+from deerflow.sp.report.turns.store import ReportTurnStore, file_manifest
+
+
+def test_seed_import_preserves_source_and_makes_one_current_origin(tmp_path):
+    source = tmp_path / "source"
+    ctx, source_store = accepted(source)
+    before = file_manifest(source / "report/r1")
+    target = ReportTurnStore(tmp_path / "new-outputs", user_id="new-owner", thread_id="new-thread")
+    result = import_seed(source, target, tmp_path / "provenance")
+    assert file_manifest(source / "report/r1") == before
+    assert result["source_sha_unchanged"]
+    assert len(target.index()["versions"]) == 1
+    assert target.inspect(target.index()["head"])["requirements_status"] == "native_accepted"
+    assert read_json(pointer_path(target.outputs))["report_id"] == result["report_id"]
+    assert target._accepted(target._paths(result["report_id"]))
+    assert result["canonical_sha_unchanged"]
+
+
+def test_seeded_sequence_skips_original_first_round():
+    turns = [{"turn_index": i, "message_id": f"m{i}"} for i in range(2, 8)]
+    seen = []
+    result = run_turn_sequence(turns, lambda row: seen.append(row["turn_index"]) or {"passed": True}, first_turn=2)
+    assert result["completed"] and seen == list(range(2, 8))

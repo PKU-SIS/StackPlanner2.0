@@ -623,7 +623,9 @@ class OfflinePilotWorker:
                 self.stop("turn_execution_failed")
                 raise
             finally:
-                self.drain_memory(memory_queue)
+                self.drain_memory(
+                    memory_queue, timeout=getattr(self, "memory_drain_timeout", 10)
+                )
         if self.audit.abort_event.is_set() or self.guard.abort_event.is_set():
             raise AuditError("turn stopped with incomplete accounting")
         self.last_completed_turn = turn

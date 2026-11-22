@@ -187,16 +187,81 @@ class OfficialPilotWorker(OfflinePilotWorker):
         return result
 
 
-def run_turn_sequence(requests, execute):
+def run_turn_sequence(requests, execute, *, first_turn=1):
     results = []
-    for number, request in enumerate(requests, 1):
+    for number, request in enumerate(requests, first_turn):
         if request["turn_index"] != number or not request.get("message_id"):
             raise ValueError("frozen turns must be ordered and uniquely identified")
         row = execute(request)
         results.append(row)
         if not row.get("passed"):
             return {"completed": False, "turns": results}
-    return {"completed": len(results) == 7, "turns": results}
+    return {"completed": len(results) == 8 - first_turn, "turns": results}
+
+
+def import_seed(source_outputs, target, provenance):
+    """Program-controlled import of accepted artifacts; source stays read-only."""
+    from deerflow.sp.report import store as native
+    from deerflow.sp.report.turns.store import ReportTurnStore, file_manifest
+
+    source_outputs = Path(source_outputs).resolve()
+    if target.index()["versions"] or target.root.exists():
+        raise ValueError("seed import requires a fresh target")
+    source = ReportTurnStore(source_outputs, **target.owner)
+    original = native.ReportPaths(source_outputs, "r1")
+    source._accepted(original)
+    before = file_manifest(original.directory)
+    raw = native.read_text(original.request)
+    with target.locked():
+        index = target.index()
+        turn, _ = target._allocate(
+            index,
+            message_id="imported-origin",
+            raw_query=raw,
+            resolved_query=raw,
+            mode="origin",
+        )
+        target._snapshot(turn, original)
+        turn.update(status="accepted", report_id="r1")
+        target._record(turn)
+        index.update(
+            head=turn["turn_id"],
+            active_version=turn["turn_id"],
+            versions={turn["turn_id"]: {"report_id": "r1", "base_version_id": None}},
+        )
+        target._save(index)
+    restored = target.restore(turn["turn_id"])
+    target._accepted(restored)
+    provenance = Path(provenance)
+    provenance.mkdir(parents=True, exist_ok=False)
+    # Keep the transfer archive as provenance; expose only the rebased native
+    # accepted origin in the actual thread. No model can execute this import.
+    target.root.rename(provenance / "transfer-archive")
+    current = target.freeze(restored.report_id, resolved_query=raw)
+    native.write_json_atomic(
+        native.pointer_path(target.outputs), {"report_id": restored.report_id}
+    )
+    after = file_manifest(restored.directory)
+    canonical = [
+        name
+        for name in before
+        if name.startswith(("drafts/", "materials/", "user_inputs/"))
+        and name != "materials/catalog.md"
+    ]
+    if file_manifest(original.directory) != before or any(
+        after.get(name) != before[name] for name in canonical
+    ):
+        raise ValueError("seed import changed source or canonical bytes")
+    result = {
+        "report_id": restored.report_id,
+        "version_id": current["turn_id"],
+        "source_outputs": str(source_outputs),
+        "source_sha_unchanged": True,
+        "canonical_sha_unchanged": True,
+        "source_files": before,
+    }
+    dump(provenance / "import.json", result)
+    return result
 
 
 def dump(path, value):
@@ -205,9 +270,9 @@ def dump(path, value):
 
 def safe_failure(function):
     @wraps(function)
-    def wrapped(packet_dir, env_file, directory, channel):
+    def wrapped(packet_dir, env_file, directory, channel, **options):
         try:
-            return function(packet_dir, env_file, directory, channel)
+            return function(packet_dir, env_file, directory, channel, **options)
         except Exception as error:
             import traceback
 
@@ -231,7 +296,16 @@ def safe_failure(function):
 
 
 @safe_failure
-def _execute_child(packet_dir, env_file, directory, channel):
+def _execute_child(
+    packet_dir,
+    env_file,
+    directory,
+    channel,
+    *,
+    seed_source=None,
+    prior_usage=None,
+    evaluator_checks=None,
+):
     """Executed only under the spawn supervisor, after the CLI execution gate."""
     import logging
     from uuid import uuid4
@@ -268,6 +342,16 @@ def _execute_child(packet_dir, env_file, directory, channel):
         credentials=creds,
         emit=channel.send,
     )
+    worker.memory_drain_timeout = 180
+    if prior_usage is not None:
+        prior = json.loads(Path(prior_usage).read_text())
+        if not prior["usage"]["billing_complete"] or prior["budget"]["inflight"]:
+            raise ValueError("prior cost must be fully reconciled")
+        from report_pilot_audit import money
+
+        worker.guard.spent = money(prior["budget"]["spent_cost_cny"])
+        worker.guard.inp = prior["budget"]["input_tokens"]
+        worker.guard.out = prior["budget"]["output_tokens"]
     packet = json.loads((packet_dir / "preflight.json").read_text())
     public = packet["profile"]
     from deerflow.config.app_config import AppConfig, set_app_config
@@ -316,6 +400,10 @@ def _execute_child(packet_dir, env_file, directory, channel):
     outputs = get_paths().sandbox_outputs_dir(thread_id, user_id=user_id)
     store = ReportTurnStore(outputs, user_id=user_id, thread_id=thread_id)
     frozen = {}
+    generated_reports = {}
+    checks = (
+        json.loads(Path(evaluator_checks).read_text()) if evaluator_checks else None
+    )
     original_report = None
     dump(
         directory / "runtime-binding.json",
@@ -323,6 +411,18 @@ def _execute_child(packet_dir, env_file, directory, channel):
     )
     latest = {}
     public_requests = json.loads((packet_dir / "agent-input.json").read_text())["turns"]
+    if seed_source is not None:
+        seed = import_seed(seed_source, store, directory / "seed-provenance")
+        original_report = seed["report_id"]
+        generated_reports[1] = original_report
+        from deerflow.sp.report.turns.store import file_manifest
+
+        frozen[original_report] = file_manifest(outputs / "report" / original_report)
+        dump(
+            directory / "seed.json",
+            {key: value for key, value in seed.items() if key != "source_files"},
+        )
+        public_requests = public_requests[1:]
     with SqliteSaver.from_conn_string(
         str(directory / "checkpoints.sqlite")
     ) as checkpoint:
@@ -393,6 +493,58 @@ def _execute_child(packet_dir, env_file, directory, channel):
                 worker.audit,
                 calls_before,
             )
+            if row["native_delivery_created"]:
+                generated_reports[number] = row["native_report_id"]
+            if checks is not None:
+                expected = next(
+                    item for item in checks["turns"] if item["user_turn"] == number
+                )
+                index = store.index()
+                turn = (
+                    store.inspect(row["dialogue_turn_id"])
+                    if row["dialogue_turn_id"]
+                    else None
+                )
+                inverse = {
+                    ref["report_id"]: version
+                    for version, ref in index["versions"].items()
+                }
+                version_turn = {
+                    inverse[rid]: n
+                    for n, rid in generated_reports.items()
+                    if rid in inverse
+                }
+                actual = {
+                    "base_user_turn": version_turn.get(turn["base_version_id"])
+                    if turn
+                    else None,
+                    "accepted_head_user_turn": version_turn.get(index["head"]),
+                    "active_user_turn": version_turn.get(index["active_version"]),
+                }
+                row.update(actual)
+                row["version_binding_ok"] = all(
+                    actual[k] == expected[k] for k in actual
+                )
+                row["passed"] = (
+                    row["passed"]
+                    and row["version_binding_ok"]
+                    and row["native_delivery_created"]
+                    == expected["native_delivery_required"]
+                )
+                if row["native_delivery_created"]:
+                    changes = json.loads(
+                        (
+                            store.directory(row["dialogue_turn_id"]) / "changes.json"
+                        ).read_text()
+                    )
+                    row["canonical_changes"] = changes
+                    row["scope_ok"] = (
+                        sorted(changes["changed_nodes"])
+                        == sorted(expected["changed_nodes"])
+                        and not changes["added_nodes"]
+                        and not changes["removed_nodes"]
+                    )
+                    row["passed"] = row["passed"] and row["scope_ok"]
             if number == 1 and row["passed"]:
                 original_report = row["native_report_id"]
             dump(directory / f"turn-{number}.json", row)
@@ -400,7 +552,11 @@ def _execute_child(packet_dir, env_file, directory, channel):
 
         try:
             with worker.installed():
-                result = run_turn_sequence(public_requests, execute)
+                result = run_turn_sequence(
+                    public_requests,
+                    execute,
+                    first_turn=2 if seed_source is not None else 1,
+                )
         except Exception as exc:
             worker.stop("case_execution_failed")
             import traceback
@@ -485,6 +641,9 @@ def main():
     parser.add_argument("--env-file", required=True, type=Path)
     parser.add_argument("--run-dir", type=Path)
     parser.add_argument("--start", action="store_true")
+    parser.add_argument("--seed-source", type=Path)
+    parser.add_argument("--prior-usage", type=Path)
+    parser.add_argument("--evaluator-checks", type=Path)
     parser.add_argument("--billing-currency", choices=["CNY"])
     args = parser.parse_args()
     from report_multiturn_preflight import verify_packet
@@ -530,7 +689,15 @@ def main():
         },
     )
     target = partial(
-        _execute_child, args.packet.resolve(), args.env_file.resolve(), directory
+        _execute_child,
+        args.packet.resolve(),
+        args.env_file.resolve(),
+        directory,
+        seed_source=args.seed_source.resolve() if args.seed_source else None,
+        prior_usage=args.prior_usage.resolve() if args.prior_usage else None,
+        evaluator_checks=args.evaluator_checks.resolve()
+        if args.evaluator_checks
+        else None,
     )
     result = supervise(
         target, directory / "numeric-events.jsonl", api_execution_authorized=True

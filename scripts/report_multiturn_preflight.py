@@ -342,7 +342,9 @@ def offline_only(function):
 
 
 @offline_only
-def build_packet(root, destination, *, budget_cny=None, admission_review=False):
+def build_packet(
+    root, destination, *, budget_cny=None, admission_review=False, public_case=None
+):
     root, destination = Path(root).resolve(), Path(destination)
     if budget_cny is not None:
         budget_cny = str(money(budget_cny))
@@ -357,6 +359,29 @@ def build_packet(root, destination, *, budget_cny=None, admission_review=False):
         for case in load_public_cases(suite / "requests.json")["cases"]
         if case["case_id"] == "library-rag"
     )
+    if public_case is not None:
+        public_case = Path(public_case).resolve()
+        if not public_case.is_relative_to(root):
+            raise ValueError("public case must be in this checkout")
+        custom = json.loads(public_case.read_text())
+        if (
+            set(custom) != {"case_id", "length_band", "turns"}
+            or len(custom["turns"]) != 7
+            or custom["length_band"] != "10000"
+        ):
+            raise ValueError("invalid seeded public case")
+        identities = set()
+        for number, row in enumerate(custom["turns"], 1):
+            if (
+                set(row) != {"turn_index", "message_id", "query"}
+                or row["turn_index"] != number
+                or not isinstance(row["query"], str)
+                or not row["query"].strip()
+                or row["message_id"] in identities
+            ):
+                raise ValueError("invalid public turn")
+            identities.add(row["message_id"])
+        selected = custom
     from deerflow.sp.report import length
 
     if not Path(length.__file__).resolve().is_relative_to(root):
@@ -433,6 +458,10 @@ def build_packet(root, destination, *, budget_cny=None, admission_review=False):
             "verified provider input-context ceiling for reservations",
         ],
     }
+    if public_case is not None:
+        packet["engine_sha256"][str(public_case.relative_to(root))] = digest(
+            public_case
+        )
     if reviewed is not None:
         packet["admission_review"] = reviewed
         packet["remaining_launch_requirements"] = [
@@ -510,6 +539,7 @@ def main():
         action="store_true",
         help="Apply the frozen 50 CNY public review; never enables execution",
     )
+    parser.add_argument("--public-case", type=Path)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     if not args.verify:
@@ -518,6 +548,7 @@ def main():
             args.output,
             budget_cny=args.budget_cny,
             admission_review=args.admission_review,
+            public_case=args.public_case,
         )
     print(json.dumps(verify_packet(root, args.output), ensure_ascii=False, indent=2))
 
