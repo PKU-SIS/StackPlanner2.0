@@ -1,0 +1,147 @@
+{
+  "scope": "Offline API preparation; not execution authorization",
+  "code_commit": "55319bbf3ae662fe37aa803985ac1973efd19e79",
+  "packet_directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-preflight/20261122-v4",
+  "packet_manifest_sha256": "dde451b6e07ba8fb4cece08e15417d3e7cdbe31ec43e73d0ffc82338dcbeed82",
+  "selected_case_id": "library-rag",
+  "turns": 7,
+  "roles": {
+    "central": {
+      "model_alias": "deepseek-flash",
+      "max_tokens": 8192,
+      "thinking": {
+        "type": "enabled"
+      },
+      "sdk_max_retries": 2,
+      "executor": "central",
+      "reasoning_effort_request": null,
+      "reasoning_effort_documented_default": "high"
+    },
+    "git_agent": {
+      "model_alias": "deepseek-flash",
+      "max_tokens": 8192,
+      "thinking": {
+        "type": "enabled"
+      },
+      "sdk_max_retries": 2,
+      "executor": "perception",
+      "reasoning_effort_request": null,
+      "reasoning_effort_documented_default": "high"
+    },
+    "outline": {
+      "model_alias": "deepseek-flash",
+      "max_tokens": 32768,
+      "thinking": {
+        "type": "enabled"
+      },
+      "sdk_max_retries": 2,
+      "executor": "outline",
+      "reasoning_effort_request": null,
+      "reasoning_effort_documented_default": "high"
+    },
+    "researcher": {
+      "model_alias": "deepseek-flash",
+      "max_tokens": 8192,
+      "thinking": {
+        "type": "enabled"
+      },
+      "sdk_max_retries": 2,
+      "executor": "researcher",
+      "reasoning_effort_request": null,
+      "reasoning_effort_documented_default": "high"
+    },
+    "writer": {
+      "model_alias": "deepseek-flash",
+      "max_tokens": 8192,
+      "thinking": {
+        "type": "disabled"
+      },
+      "sdk_max_retries": 2,
+      "executor": "writer",
+      "reasoning_effort_request": null,
+      "reasoning_effort_documented_default": null
+    },
+    "memory_recaller": {
+      "model_alias": "deepseek-flash",
+      "max_tokens": 8192,
+      "thinking": {
+        "type": "enabled"
+      },
+      "sdk_max_retries": 2,
+      "executor": "memory_recaller",
+      "reasoning_effort_request": null,
+      "reasoning_effort_documented_default": "high"
+    },
+    "memory_updater": {
+      "model_alias": "deepseek-flash",
+      "max_tokens": 8192,
+      "thinking": {
+        "type": "disabled"
+      },
+      "sdk_max_retries": 2,
+      "executor": "background memory updater",
+      "reasoning_effort_request": null,
+      "reasoning_effort_documented_default": null
+    }
+  },
+  "limits": {
+    "currency": "CNY",
+    "max_cost_cny": null,
+    "budget_status": "pending_user_preference",
+    "proposed_max_cost_cny": "100.00",
+    "max_input_tokens": 20000000,
+    "max_output_tokens": 1000000,
+    "max_direct_tool_attempts": 2000,
+    "max_model_http_attempts": 600,
+    "turn_timeout_seconds": 1500,
+    "suite_timeout_seconds": 7200,
+    "no_progress_timeout_seconds": 300,
+    "outer_automatic_restarts": 0,
+    "native_retry_policy_changed": false,
+    "unknown_usage_or_transport_outcome": "stop_and_keep_reservation",
+    "account_billing_currency_confirmed": false
+  },
+  "environment": {
+    "python": "3.12.13",
+    "packages": {
+      "langchain": "1.2.15",
+      "langchain-core": "1.3.3",
+      "langchain-deepseek": "1.0.1",
+      "langchain-openai": "1.2.1",
+      "langgraph": "1.1.9",
+      "httpx": "0.28.1",
+      "pydantic": "2.13.3",
+      "tiktoken": "0.12.0"
+    },
+    "sdk_source_sha256": {
+      "langchain_deepseek.chat_models": "9d86dcb59d8a4b7773b3cb9733cd80ecffea7df866630f78170254e3e7e001bc",
+      "langchain_openai.chat_models.base": "ab8a9290d61e570a299e18e731f554c61322daa69e82f7f3071754836d62f960"
+    }
+  },
+  "historical_source_projection": {
+    "verified_here": true,
+    "source_file": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report/evaluation_runs/report_stability_10k_20261121/075632Z/repeat-17-a/17/config.yaml",
+    "source_sha256": "b115fb213e5474e393d33c268b0852427606c7b54144cee7d97a59de044e80cb",
+    "endpoint_observation_sha256": "993e9dbdb165d2f3e8101eb7a4f62fb34dc8d26b06b9cb20ff080808e8aee65a",
+    "values_exported": "public whitelist only",
+    "credential_values_exported": false
+  },
+  "engine_and_skill_file_count": 226,
+  "api_experiments_authorized": false,
+  "api_execution_ready": false,
+  "provider_calls": 0,
+  "credential_values_copied": false,
+  "remaining_launch_requirements": [
+    "explicit API execution authorization",
+    "confirmed cost ceiling and account currency",
+    "current rate/model-version review",
+    "actual-worker HTTP reservation and callback reconciliation installation"
+  ],
+  "tests": {
+    "broad_passed": 1073,
+    "broad_seconds": 53.76,
+    "preflight_passed": 17,
+    "final_preflight_seconds": 3.39
+  },
+  "semantic_review_sha256": "b28654ffaab0f19472b419659dac67987ae33301f494052914fa7462fce5e718"
+}
