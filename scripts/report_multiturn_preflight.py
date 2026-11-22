@@ -210,6 +210,7 @@ def frozen_engine(root):
         "scripts/report_multiturn_preflight.py",
         "scripts/report_pilot_audit.py",
         "scripts/report_pilot_worker.py",
+        "scripts/report_pilot_entry.py",
         "scripts/report_pilot_admission.py",
         "docs/research-report/multiturn-pilot-preparation-20261122/ADMISSION_REVIEW.json",
         "scripts/validate_report_multiturn_cases.py",

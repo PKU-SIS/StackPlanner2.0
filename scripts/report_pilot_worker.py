@@ -127,6 +127,49 @@ class OfflinePilotWorker:
     def cancel(self):
         self.stop("cancelled")
 
+    def _check_transport(self, client, request):
+        if not isinstance(client._transport_for_url(request.url), httpx.MockTransport):
+            self.stop("live_transport_forbidden")
+            raise AuditError("only offline MockTransport is permitted")
+
+    @contextmanager
+    def _network_scope(self):
+        def deny(*args, **kwargs):
+            raise AuditError("real socket connections are forbidden")
+
+        with (
+            patch.object(socket.socket, "connect", deny),
+            patch.object(socket.socket, "connect_ex", deny),
+        ):
+            yield
+
+    @contextmanager
+    def _wire_scope(self):
+        yield
+
+    def _send_options(self, options):
+        return options
+
+    def _wire_iter(self, stream):
+        iterator = iter(stream)
+        while True:
+            with self._wire_scope():
+                try:
+                    chunk = next(iterator)
+                except StopIteration:
+                    return
+            yield chunk
+
+    async def _wire_aiter(self, stream):
+        iterator = stream.__aiter__()
+        while True:
+            with self._wire_scope():
+                try:
+                    chunk = await anext(iterator)
+                except StopAsyncIteration:
+                    return
+            yield chunk
+
     def _admit(self, client, request):
         with self.lock:
             if (
@@ -149,10 +192,7 @@ class OfflinePilotWorker:
             ):
                 self.stop("unapproved_endpoint")
                 raise AuditError("unapproved endpoint")
-            # Check effective mount, not just the default transport.
-            if not isinstance(client._transport_for_url(url), httpx.MockTransport):
-                self.stop("live_transport_forbidden")
-                raise AuditError("only offline MockTransport is permitted")
+            self._check_transport(client, request)
             kind = (
                 "model"
                 if url.path.endswith("completions")
@@ -413,7 +453,7 @@ class OfflinePilotWorker:
             def __iter__(self):
                 chunks = self.chunks
                 try:
-                    for chunk in self.original:
+                    for chunk in worker._wire_iter(self.original):
                         chunks.append(chunk)
                         yield chunk
                     worker._received(
@@ -432,7 +472,8 @@ class OfflinePilotWorker:
                             self.row, self.response, b"".join(self.chunks), encoded=True
                         )
                 finally:
-                    self.original.close()
+                    with worker._wire_scope():
+                        self.original.close()
                     worker._unknown(self.row)
 
         class AsyncReceipt(httpx.AsyncByteStream):
@@ -443,7 +484,7 @@ class OfflinePilotWorker:
             async def __aiter__(self):
                 chunks = self.chunks
                 try:
-                    async for chunk in self.original:
+                    async for chunk in worker._wire_aiter(self.original):
                         chunks.append(chunk)
                         yield chunk
                     worker._received(
@@ -462,13 +503,17 @@ class OfflinePilotWorker:
                             self.row, self.response, b"".join(self.chunks), encoded=True
                         )
                 finally:
-                    await self.original.aclose()
+                    with worker._wire_scope():
+                        await self.original.aclose()
                     worker._unknown(self.row)
 
         def send(client, request, *, stream=False, **kwargs):
             row = worker._admit(client, request)
             try:
-                result = original_send(client, request, stream=True, **kwargs)
+                with worker._wire_scope():
+                    result = original_send(
+                        client, request, stream=True, **worker._send_options(kwargs)
+                    )
                 row["http_status"] = result.status_code
                 if result.is_stream_consumed:
                     worker._received(row, result, result.content)
@@ -484,7 +529,10 @@ class OfflinePilotWorker:
         async def asend(client, request, *, stream=False, **kwargs):
             row = worker._admit(client, request)
             try:
-                result = await original_async(client, request, stream=True, **kwargs)
+                with worker._wire_scope():
+                    result = await original_async(
+                        client, request, stream=True, **worker._send_options(kwargs)
+                    )
                 row["http_status"] = result.status_code
                 if result.is_stream_consumed:
                     worker._received(row, result, result.content)
@@ -497,9 +545,6 @@ class OfflinePilotWorker:
                 worker._unknown(row)
                 raise
 
-        def deny(*args, **kwargs):
-            raise AuditError("real socket connections are forbidden")
-
         self.active = True
         try:
             with (
@@ -508,8 +553,7 @@ class OfflinePilotWorker:
                 patch.object(PilotCallback, "on_chat_model_start", start),
                 patch.object(PilotCallback, "on_llm_end", end),
                 patch.object(PilotCallback, "on_llm_error", error),
-                patch.object(socket.socket, "connect", deny),
-                patch.object(socket.socket, "connect_ex", deny),
+                self._network_scope(),
             ):
                 yield self
         finally:
@@ -667,6 +711,7 @@ def supervise(
     turn_seconds=1500,
     idle_seconds=300,
     cancel_event=None,
+    api_execution_authorized=False,
 ):
     """External monotonic supervisor; journal survives kill; never auto-restart.
 
@@ -800,7 +845,7 @@ def supervise(
             "native_delivery_verified": False,
             "billing_complete": False,
             "automatic_restarts": 0,
-            "api_experiments_authorized": False,
+            "api_experiments_authorized": bool(api_execution_authorized),
         }
         output.write(json.dumps({"supervisor": result}) + "\n")
         output.flush()
