@@ -139,6 +139,8 @@ def sync_user_inputs(state: Mapping[str, Any] | None) -> None:
     paths = _paths_for_context(context)
     with report_store.report_lock(paths):
         ledger = ReportLedger.load(paths)
+        if ledger.payload.get("dialogue_turn"):
+            return  # Complete derived input is bound by the turn adapter.
         changed = False
         for message in _visible_human_messages(state):
             text = message_to_text(message).strip()
@@ -232,6 +234,10 @@ def _copy_rejected_outline_to_delivery(
 
 
 def start_report(context: HandlerContext, action: SPAction) -> dict[str, Any]:
+    from deerflow.sp.report.turns.adapter import session
+
+    if session(context.state, thread_id=context.thread_id) is not None:
+        raise ReportValidationError("bound follow-up must return through GitAgent before report execution")
     existing = report_context(context.state)
     if existing.status == "error":
         raise ReportValidationError(f"report ledger unavailable: {existing.error}")
@@ -300,6 +306,15 @@ def resume_report(context: HandlerContext, action: SPAction) -> dict[str, Any]:
     if context_info.status == "abandoned":
         raise ReportValidationError("cannot resume an abandoned report; start a new report instead")
     paths = _paths_for_context(context_info)
+    from deerflow.sp.report.turns.adapter import current_turn, guard_sealed_report
+
+    guard_sealed_report(context, context_info)
+    if context_info.status == "delivered":
+        dialogue = current_turn(context.state, thread_id=context.thread_id)
+        if dialogue is not None:
+            turn = dialogue[3]
+            if turn is None or turn["status"] != "prepared" or turn.get("report_id") != context_info.report_id:
+                raise ReportValidationError("bound follow-up requires GitAgent to fork before native resume")
     with report_store.report_lock(paths):
         ledger = ReportLedger.load(paths)
         ledger.register_run(context.run_id)
@@ -352,6 +367,9 @@ def close_report(context: HandlerContext, action: SPAction, *, reason: str) -> d
     context_info = report_context(context.state)
     if not context_info.is_enabled:
         raise ReportValidationError("no report exists to close")
+    from deerflow.sp.report.turns.adapter import guard_sealed_report
+
+    guard_sealed_report(context, context_info)
     paths = _paths_for_context(context_info)
     with report_store.report_lock(paths):
         ledger = ReportLedger.load(paths)
@@ -376,7 +394,13 @@ def close_report(context: HandlerContext, action: SPAction, *, reason: str) -> d
         }
         ledger.payload["outline_review_due"] = False
         ledger.save()
-        return {"report_id": context_info.report_id, "status": "abandoned", "closed": True, "reason": clean_reason}
+        result = {"report_id": context_info.report_id, "status": "abandoned", "closed": True, "reason": clean_reason}
+    binding = ledger.payload.get("dialogue_turn")
+    if isinstance(binding, dict):
+        from deerflow.sp.report.turns.store import ReportTurnStore
+
+        ReportTurnStore(paths.outputs_path, **binding["owner"]).end(binding["turn_id"], status="cancelled", diagnostic={"phase": "native_close", "closed": ledger.payload["closed"], "run_id": context.run_id})
+    return result
 
 
 def prepare_delegation(
@@ -386,7 +410,22 @@ def prepare_delegation(
     context_refs: dict[str, Any],
 ) -> None:
     """Bind report identity and input packets before the executor runs."""
+    from deerflow.sp.report.turns.tools import bind_profile
+
+    if bind_profile(action, context, task_metadata, context_refs):
+        return
     role = str(action.target_agent or "")
+    from deerflow.sp.report.turns.adapter import current_turn
+
+    dialogue = current_turn(context.state, thread_id=context.thread_id)
+    if dialogue is not None:
+        if role not in REPORT_DELEGATE_ROLES:
+            raise ReportValidationError("bound report follow-ups require GitAgent and native report roles")
+        if dialogue[3] is None or dialogue[3]["status"] != "executing":
+            raise ReportValidationError("bound follow-up requires an executing GitAgent handoff before report delegation")
+        working = report_context(context.state)
+        if not working.is_active or working.report_id != dialogue[3].get("report_id"):
+            raise ReportValidationError("bound report working copy is not the active native report")
     if role not in REPORT_DELEGATE_ROLES:
         return
     report = report_context(context.state)
@@ -593,6 +632,10 @@ def configure_report_subagent(
 ) -> tuple[Any, list[Any], str | None]:
     """Assemble one report role's prompt, Skill, and tool set."""
     role = str(task.metadata.get("report_role") or "")
+    if role == "git_agent":
+        from deerflow.sp.report.turns.tools import configure
+
+        return configure(task, state, subagent_config)
     if role not in REPORT_DELEGATE_ROLES:
         return subagent_config, available_tools, None
     report = active_report_required(state)
@@ -604,6 +647,13 @@ def configure_report_subagent(
     length_contract = (ReportLedger.load(paths).payload.get("length_contract") or {}) if role in {"outline", "writer"} else {}
     length_enabled = role in {"outline", "writer"} and bool(length_contract)
     compact_outline = bool(length_contract.get("compact_outline")) or (role == "researcher" and task.context_refs.get("report_packet", {}).get("compact_outline") is True)
+    if role in {"outline", "writer"} and ReportLedger.load(paths).payload.get("dialogue_turn"):
+        from deerflow.sp.report.turns.adapter import scoped_write_tool
+
+        destination = (
+            Path(str(task.metadata.get("outline_delivery_path") or _outline_delivery_path(paths, task.action_id))) if role == "outline" else paths.draft_file(str(task.metadata["report_node_id"]), str(task.metadata["report_draft_id"]))
+        )
+        available_tools = [scoped_write_tool(tool, paths, destination) if getattr(tool, "name", None) == "write_file" else tool for tool in available_tools]
     tools_by_name = {str(getattr(tool, "name", "")): tool for tool in available_tools}
     if role in {"outline", "researcher"} and not task.metadata.get("report_summary_repair") and not task.metadata.get("report_supplement_repair"):
         from deerflow.sp.report.read_material import build_read_material_tool
@@ -658,6 +708,10 @@ def configure_report_subagent(
                     "Do not request compression or rewrites solely for length; the host measures the range and stops a length-only failure. "
                     "Required-content blockers still follow the native content-revision path.",
                 )
+        if ReportLedger.load(paths).payload.get("dialogue_turn") and report_task == "revise":
+            from deerflow.sp.report.turns.adapter import skill
+
+            prompt = _join_prompt(prompt, skill("report-revision-plan"))
         disallowed_tools = list(subagent_config.disallowed_tools or [])
         if report_task == "integrate_review":
             disallowed_tools = list(dict.fromkeys([*disallowed_tools, "write_file"]))
@@ -744,6 +798,10 @@ def configure_report_subagent(
                 "When paragraph_plan exists, write one paragraph per item, fit its purpose and budget, "
                 "omit scope_exclusions and keep the conclusion complete. Do not output the plan or a claimed word count.",
             )
+        if ReportLedger.load(paths).payload.get("dialogue_turn"):
+            from deerflow.sp.report.turns.adapter import skill
+
+            writer_prompt = _join_prompt(writer_prompt, skill("report-node-revision"))
         config = replace(
             subagent_config,
             system_prompt=writer_prompt,
@@ -846,7 +904,14 @@ def handle_success(
     delegate_entry: StackMemoryEntry,
     executor: Any = None,
 ) -> HandlerResult | None:
+    from deerflow.sp.report.turns.adapter import record_result
+
+    record_result(context, task, result)
     role = str(task.metadata.get("report_role") or "")
+    if role == "git_agent":
+        from deerflow.sp.report.turns.tools import accept
+
+        return accept(action, context, result)
     if role == "outline":
         if str(task.metadata.get("report_task") or "").strip().lower() == "integrate_review":
             return _accept_integrate_review(action, context, result, task, artifact_adapter=artifact_adapter, delegate_entry=delegate_entry)
@@ -879,7 +944,15 @@ def handle_failure(
     result: SPSubagentResult,
     task: SPSubagentTask,
 ) -> None:
+    from deerflow.sp.report.turns.adapter import record_result
+
+    record_result(context, task, result)
     report_role = str(task.metadata.get("report_role") or "")
+    if report_role == "git_agent":
+        from deerflow.sp.report.turns.tools import fail_profile
+
+        fail_profile(context, result)
+        return
     report_task = str(task.metadata.get("report_task") or "").strip().lower()
     report_origin = str(task.metadata.get("report_acceptance_origin") or action.metadata.get("report_acceptance_origin") or "")
     if result.status.value == "cancelled" and report_role == "outline" and report_task in {"integrate_review", "revise"} and report_origin == "harness":
@@ -2586,6 +2659,10 @@ def report_finish_target(context: HandlerContext) -> dict[str, Any] | None:
     except Exception as exc:  # noqa: BLE001 - finish will surface the state error separately
         return {"status": "error", "error": str(exc), "refs": []}
     status = str(ledger.payload.get("status") or context_info.status)
+    if status == "delivered" and ledger.payload.get("dialogue_turn"):
+        from deerflow.sp.report.turns.adapter import publish_delivered
+
+        publish_delivered(context, ledger)
     final = ledger.payload.get("final_report") if isinstance(ledger.payload.get("final_report"), Mapping) else None
     if status == "active" and final is not None:
         refs = {str(value) for value in (final.get("artifact_id"), final.get("virtual_path"), final.get("path")) if value}
@@ -2676,7 +2753,10 @@ def deliver_report(context: HandlerContext, action: SPAction) -> dict[str, Any] 
         acceptance["pending_action_id"] = None
         acceptance["retry_kind"] = None
         ledger.save()
-        return delivered
+    from deerflow.sp.report.turns.adapter import publish_delivered
+
+    publish_delivered(context, ledger)
+    return delivered
 
 
 def control_context(state: Mapping[str, Any] | None) -> dict[str, Any] | None:

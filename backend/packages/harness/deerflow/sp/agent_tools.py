@@ -910,6 +910,14 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
 
     def _filter_request(self, request: ModelRequest) -> ModelRequest:
         state = request.state if isinstance(request.state, Mapping) else {}
+        from deerflow.sp.report.turns.adapter import current_turn
+
+        runtime = getattr(request, "runtime", None)
+        runtime_context = getattr(runtime, "context", None)
+        thread_id = runtime_context.get("thread_id") if isinstance(runtime_context, Mapping) else None
+        dialogue = current_turn(state, thread_id=thread_id)
+        if dialogue is not None and dialogue[3] is not None and dialogue[3]["status"] in {"exact_reuse", "read_only"}:
+            return request  # Verified archive has its own no-generation finish.
         try:
             from deerflow.sp.report import report_context
 

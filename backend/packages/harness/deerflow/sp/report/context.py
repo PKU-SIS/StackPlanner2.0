@@ -106,7 +106,13 @@ class SPReportContextMiddleware(AgentMiddleware[ThreadState]):
         request: ModelRequest,
         handler: Callable[[ModelRequest], ModelResponse],
     ) -> ModelCallResult:
-        return handler(self._augment_request(request))
+        try:
+            return handler(self._augment_request(request))
+        except Exception as exc:
+            from deerflow.sp.report.turns.adapter import finalize_run
+
+            finalize_run(_request_state(request), getattr(request, "runtime", None), error=exc)
+            raise
 
     @override
     async def awrap_model_call(
@@ -114,14 +120,33 @@ class SPReportContextMiddleware(AgentMiddleware[ThreadState]):
         request: ModelRequest,
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelCallResult:
-        return await handler(self._augment_request(request))
+        try:
+            return await handler(self._augment_request(request))
+        except (Exception, asyncio.CancelledError) as exc:
+            from deerflow.sp.report.turns.adapter import finalize_run
+
+            finalize_run(_request_state(request), getattr(request, "runtime", None), cancelled=isinstance(exc, asyncio.CancelledError), error=exc)
+            raise
 
     def _augment_request(self, request: ModelRequest) -> ModelRequest:
         messages = getattr(request, "messages", None)
         if not isinstance(messages, list):
             return request
         state = _request_state(request)
+        from deerflow.sp.report.turns.adapter import central_context
+
+        dialogue = central_context(state, getattr(request, "runtime", None))
+        if dialogue is not None:
+            # Request-only projection: UI/checkpoint history remains untouched.
+            humans = [m for m in messages if isinstance(m, HumanMessage) and getattr(m, "name", None) not in {REPORT_CONTEXT_MESSAGE_NAME, "sp_task_memory_context"} and m.additional_kwargs.get("hide_from_ui") is not True]
+            latest = humans[-1] if humans else None
+            start = messages.index(latest) if latest is not None else len(messages)
+            messages = [m for m in messages[start:] if getattr(m, "name", None) != "sp_task_memory_context"]
+            if dialogue.get("execution") and latest is not None:
+                messages = [HumanMessage(content=dialogue["execution"]["resolved_query"], id=latest.id) if m is latest else m for m in messages]
         context = control_context(state)
+        if dialogue is not None:
+            context = {**(context or {}), "report_dialogue": dialogue}
         if context is None:
             return request
         messages = [message for message in messages if getattr(message, "name", None) != REPORT_CONTEXT_MESSAGE_NAME]

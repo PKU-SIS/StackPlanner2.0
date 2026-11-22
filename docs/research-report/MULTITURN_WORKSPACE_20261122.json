@@ -1,0 +1,127 @@
+{
+  "recorded_at_utc": "2026-11-22T08:11:37.255394+00:00",
+  "repository": "https://github.com/PKU-SIS/StackPlanner2.0.git",
+  "remote_branch": "sp2DeepResearch",
+  "verified_remote_sha": "f94e06612d363b6a46f3d4bf59b342f77b786729",
+  "verification": "Live read-only git ls-remote before cloning; direct HTTPS for this command because the configured loopback proxy was unavailable. No fetch or branch switch in old workspaces.",
+  "workspace": {
+    "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn",
+    "branch": "feature/report-multiturn",
+    "head": "f94e06612d363b6a46f3d4bf59b342f77b786729",
+    "upstream": "origin/sp2DeepResearch",
+    "initial_tracked_state": "clean checkout at verified remote SHA; MDPLAN copied as the only old untracked development-plan input",
+    "implementation_state": "local uncommitted implementation; no push, merge or deployment",
+    "final_status_porcelain": [
+      " M README.md",
+      " M backend/AGENTS.md",
+      " M backend/packages/harness/deerflow/sp/actions/handlers/delegate.py",
+      " M backend/packages/harness/deerflow/sp/actions/handlers/finish.py",
+      " M backend/packages/harness/deerflow/sp/agent_tools.py",
+      " M backend/packages/harness/deerflow/sp/middlewares/task_memory_middleware.py",
+      " M backend/packages/harness/deerflow/sp/report/context.py",
+      " M backend/packages/harness/deerflow/sp/report/entry.py",
+      " M backend/packages/harness/deerflow/sp/report/hooks.py",
+      "?? MDPLAN.md",
+      "?? backend/packages/harness/deerflow/sp/report/turns/",
+      "?? backend/tests/test_sp_report_turns.py",
+      "?? backend/tests/test_sp_report_turns_executor.py",
+      "?? docs/research-report/MULTITURN_IMPLEMENTATION.md",
+      "?? docs/research-report/MULTITURN_OFFLINE_RESULTS.md",
+      "?? docs/research-report/MULTITURN_TEST_RUN_20261122.txt",
+      "?? docs/research-report/MULTITURN_WORKSPACE_20261122.json",
+      "?? scripts/validate_report_multiturn_snapshot.py",
+      "?? skills/report-multiturn/"
+    ]
+  },
+  "old_workspace_read_only": {
+    "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report",
+    "branch": "zx_sp2research",
+    "head": "f8438738fb3c9cd30e3d746bb0c6e61a4e4acc74",
+    "tracked_changes": [
+      "README.md",
+      "backend/AGENTS.md",
+      "backend/packages/harness/deerflow/agents/middlewares/invalid_tool_call_repair_middleware.py",
+      "backend/tests/test_invalid_tool_call_repair_middleware.py"
+    ],
+    "tracked_file_sha256_at_close": {
+      "README.md": "65b8db84467753fa3337f0952376f234849d4b0b402040e8e899a2d92fd00f67",
+      "backend/AGENTS.md": "8dc8b25ac8b7b7c8ec4d9ab156b73e64a00591921ce059a7e30505b2e98a5d31",
+      "backend/packages/harness/deerflow/agents/middlewares/invalid_tool_call_repair_middleware.py": "f99d877014e9df634caeafc9b94e89dbd518ade087adf3eca04ea81720b71758",
+      "backend/tests/test_invalid_tool_call_repair_middleware.py": "ffa47eb1532af7d44a033da712d645d88ac19e100a2617f0a7f16c4a8e9517d1"
+    },
+    "tracked_status_matches_initial_four_paths": true
+  },
+  "integration_read_only_reference": {
+    "directory": "/tmp/sp2-report-integration-20261121",
+    "branch": "integrate/sp2-report-threebands-20261121",
+    "head": "f94e06612d363b6a46f3d4bf59b342f77b786729"
+  },
+  "source_material_sha256": {
+    "MDPLAN.md": "e5a61308e8a9682f546e901c8c3ed7dbf1824f1b9e72424118c79f41985a3eeb",
+    "GitHarness/4_Method.tex": "281c37f18677d5bb845cb45771f314a89bfdd894ab174e2cb725b7061280f364",
+    "GitHarness/7_appendix.tex": "e4ef006e1c5620626be4c0b5dcb5591386ccf4e2ed032e7f2fd459896d2e6c36",
+    "GitHarness/figs/prompt.tex": "247b2715dac76566e3656b7b2fff38eb177993a366ce7f786060d939ff538fae",
+    "evaluation_runs/report_multiturn_design_20261122/CENTRAL_DISPATCH_PACKAGING.md": "ea9869a9e765277112f58e73e5f2129ffbf5a3dfdb70694a0006b78ac948f9c9",
+    "evaluation_runs/report_multiturn_design_20261122/ISOLATION_AND_ENTRY.md": "f03e3eef1f0c1093209caa1f8d852f48253827d89cb86a8d2f2eeb32f3525100",
+    "evaluation_runs/report_multiturn_design_20261122/BRANCH_CHECK_20261122.json": "af429373d16242020c9775c43bc7794a6251a3fcd48be682993675c26f5079a2"
+  },
+  "imported_modules": {
+    "hooks": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/backend/packages/harness/deerflow/sp/report/hooks.py",
+    "turn_store": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/backend/packages/harness/deerflow/sp/report/turns/store.py",
+    "runtime": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/backend/packages/harness/deerflow/sp/runtime.py"
+  },
+  "canonical_configuration_sha256": "28ba3ea2a2022907e1d93f3ded4b3647e3d923ba4369eba0b871219fa80844fe",
+  "unchanged_default_skill_sha256": {
+    "skills/public/report-outline/SKILL.md": "43c898e7531d7bf1ff11f3c2bb99e1be4da1dabced723d2a80e5e24d1e581da4",
+    "skills/public/report-node-writing/SKILL.md": "6c84b57c5555180708f8fbbfc3da1d6425cf47828eea783537eeff0067ed4939",
+    "skills/public/report-research/SKILL.md": "54bdff724e26273f8c8bd3d05841a0d1f4c29eafec3cbeabf5d7eff6efac828f"
+  },
+  "git_harness_source_and_weights": "Only the specified manuscript was used as the method reference. No GitHarness executor or trained weights were imported. GitAgent uses the existing perception executor through a dedicated profile.",
+  "historical_validation": {
+    "cancel_did_not_advance_head": true,
+    "forked_report_id": "r2",
+    "length_contract_inherited": true,
+    "model_calls": 0,
+    "native_resume_succeeded": true,
+    "old_delivery_not_reused_as_new": true,
+    "preserved_canonical_files": 215,
+    "restored_native_final_binding_error": null,
+    "source_file_count": 230,
+    "source_outputs": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report/evaluation_runs/report_stability_10k_20261121/075632Z/repeat-17-a/17/runtime/users/full-eval/threads/full-stability17a/user-data/outputs",
+    "source_sha_unchanged": true,
+    "work_directory": "/tmp/sp2-multiturn-historical-verified-20261122"
+  },
+  "implementation_file_sha256": {
+    "backend/packages/harness/deerflow/sp/actions/handlers/delegate.py": "3e3401c4bbfa7b94087f6b4741ff5322748e2eea937817ef0c03caf4c5078647",
+    "backend/packages/harness/deerflow/sp/actions/handlers/finish.py": "24ebce7c5c0a06f2f95a753030c97551d4be430dd1755b1a0e04f8d8dfb7c0e8",
+    "backend/packages/harness/deerflow/sp/agent_tools.py": "b09980c2f12c678b0c73a72b23320cd8222e1fc43d87617ff0aa94c28bc7bd17",
+    "backend/packages/harness/deerflow/sp/middlewares/task_memory_middleware.py": "81d9e3a0c8ba8137e47828707f52ef8278b9be984749c1825db25784fce358df",
+    "backend/packages/harness/deerflow/sp/report/context.py": "2f28dc9fffb37d2e4d65356b69b554f47056c355e3a024fc1a9636c909057c0f",
+    "backend/packages/harness/deerflow/sp/report/entry.py": "9711cb0134bdf70b51ac864a1488a46aa3d978b5c4c7eb771daecfc7b27f0985",
+    "backend/packages/harness/deerflow/sp/report/hooks.py": "e8f36af3bc76d2170a4a35a7ded96e805f63a94989d4ea4a55c60c9674cc15ca",
+    "backend/packages/harness/deerflow/sp/report/turns/__init__.py": "7dcaed366b9001b1cbb37a2fb53ad949054fc610764dcd19d1f77a595ceefd88",
+    "backend/packages/harness/deerflow/sp/report/turns/adapter.py": "efc3eaf65f11771d84a980024d47e9c1b0679393d11b4b5ef5a2243f330c06e8",
+    "backend/packages/harness/deerflow/sp/report/turns/store.py": "a7d921d7d23577513e708d71f828e0345a41427b0e9916ba1b593df63d9dd8e7",
+    "backend/packages/harness/deerflow/sp/report/turns/tools.py": "0ae83196bc2c6e094a12404eeab9324202df8a4d5ad2a5a3692319c15227de39",
+    "backend/tests/test_sp_report_turns.py": "c9979688223cd40933cba4d98f8ad4a59317629b3e350f760ef235f0fbaa55f6",
+    "backend/tests/test_sp_report_turns_executor.py": "b00a5af9745959a8f3e57f0de80e980dd5e2467e5fea39753e6429fb70dae421",
+    "scripts/validate_report_multiturn_snapshot.py": "403b383ff04ab5ac8a5f07077f99aecd9abe22c3dcb3ca3c81ac292e8e8e11e0",
+    "skills/report-multiturn/report-dialogue-routing/SKILL.md": "81a396d3430f8c62e5303cb8b5e91b866ba92debfe4a9d6e05389565e83dd3f4",
+    "skills/report-multiturn/report-node-revision/SKILL.md": "5bee2c3c6ccf463052f5ff36512faca6389a66b274e0f6758638f2e36ded181d",
+    "skills/report-multiturn/report-revision-plan/SKILL.md": "5335012cc79ed4ce970719d2004df95b297b910621f817f8dde2cfb2c11914ac",
+    "skills/report-multiturn/report-version-management/SKILL.md": "dbd9498879c67571945d2e9350a95ca50d8651f87a1580c9312d2ecbc6de22a7"
+  },
+  "offline_validation": {
+    "final_regression_passed": 1033,
+    "new_multiturn_tests_included": 22,
+    "test_output": "MULTITURN_TEST_RUN_20261122.txt",
+    "lint": "Ruff 0.14.11 check passed",
+    "format": "Ruff 0.14.11 format --check passed",
+    "diff_check": "git diff --check passed",
+    "paid_model_experiments": false,
+    "pushed": false,
+    "merged": false,
+    "deployed": false
+  },
+  "record_scope": "Initial checkout and first offline implementation record. HEAD/status fields describe that time, before local commit; latest review is MULTITURN_REVIEW_20261122.json."
+}

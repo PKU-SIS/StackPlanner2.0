@@ -1031,3 +1031,16 @@ Chat history supports recovered subtask attempts without triggering a React rend
 Report chats show a chapter-writing pipeline after the first Writer is dispatched, with pending, active and completed chapters, including Writers dispatched directly by the host. The view uses the report ledger for reload recovery and existing task events for live details.
 
 During report Outline consolidation, an empty requirements/nodes submission gets one bounded corrective submission in the same delegation. The original rejected placeholder does not consume this opportunity; that corrective turn requires the single submission tool. A failed correction returns to existing error handling without resetting budgets, cancellation or validation.
+
+The report development branch also contains an opt-in, post-delivery dialogue
+and local revision capability. It preserves the native first-report workflow,
+forks an accepted report before revision, and publishes a new version only after
+native delivery. The current entry is internal runtime message metadata; a UI
+switch and real-model multi-turn validation are pending. See
+[the implementation and offline validation notes](docs/research-report/MULTITURN_IMPLEMENTATION.md).
+
+The follow-up code has also passed an offline review covering sealed-version
+protection, native HITL provenance and Central routing. Two seven-turn evaluation
+fixtures are frozen with evaluator expectations kept out of model input. See
+[the review and next-stage protocol](docs/research-report/MULTITURN_REVIEW_20261122.md);
+no API experiments are enabled by these fixtures.

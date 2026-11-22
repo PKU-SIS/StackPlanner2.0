@@ -297,6 +297,11 @@ def _has_final_artifact(context: HandlerContext, action: SPAction) -> bool:
 
 class FinishHandler:
     def handle(self, action: SPAction, context: HandlerContext) -> HandlerResult:
+        from deerflow.sp.report.turns.adapter import archive_finish
+
+        archived = archive_finish(context, action)
+        if archived is not None:
+            return archived
         try:
             from deerflow.sp.report import finish_block_reason
 
@@ -405,6 +410,9 @@ class FinishHandler:
                             )
                         ],
                     )
+                from deerflow.sp.report.turns.adapter import record_response
+
+                record_response(context, action.task or action.reason or "Report delivery replayed")
                 replay_ref = report_target.get("final_artifact_id") or report_target.get("final_virtual_path")
                 return HandlerResult(
                     next_step="finish",
@@ -539,6 +547,9 @@ class FinishHandler:
             action,
             final_artifact_ref=final_artifact_ref,
         )
+        from deerflow.sp.report.turns.adapter import record_response
+
+        record_response(context, final_summary)
         entry = context.stack.append_finish(
             final_summary,
             thread_id=context.thread_id,

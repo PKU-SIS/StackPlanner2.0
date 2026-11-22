@@ -19,6 +19,12 @@ def explicit_report_entry_action(state: Mapping[str, Any], runtime: Any) -> AIMe
     Only the latest visible user turn can opt in. An older report's contract
     must never convert a later ordinary question into another report.
     """
+    from deerflow.sp.report.turns.adapter import session
+
+    runtime_context = getattr(runtime, "context", None)
+    thread_id = runtime_context.get("thread_id") if isinstance(runtime_context, Mapping) else None
+    if session(state, thread_id=thread_id) is not None:
+        return None
     messages = _visible_human_messages(state)
     if not messages:
         return None

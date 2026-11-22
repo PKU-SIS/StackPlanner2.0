@@ -1,0 +1,334 @@
+{
+  "schema_version": 1,
+  "suite_id": "report-multiturn-20261122-v1",
+  "cases": [
+    {
+      "case_id": "library-rag",
+      "turns": [
+        {
+          "turn_index": 1,
+          "mode": "generate",
+          "expected_base_turn": null,
+          "expected_accepted_head_turn": 1,
+          "expected_active_turn": 1,
+          "active_requirements": [
+            "library_scope",
+            "sources_2024_2026",
+            "traceable_citations"
+          ],
+          "withdrawn_requirements": [],
+          "allowed_changed_intents": [
+            "initial_report"
+          ],
+          "native_delivery_required": true,
+          "forbidden_roles": [],
+          "unchanged_canonical_sha_required": false
+        },
+        {
+          "turn_index": 2,
+          "mode": "revise",
+          "expected_base_turn": 1,
+          "expected_accepted_head_turn": 2,
+          "expected_active_turn": 2,
+          "active_requirements": [
+            "library_scope",
+            "sources_2024_2026",
+            "traceable_citations",
+            "refresh_comparison"
+          ],
+          "withdrawn_requirements": [],
+          "allowed_changed_intents": [
+            "operations"
+          ],
+          "native_delivery_required": true,
+          "forbidden_roles": [],
+          "unchanged_canonical_sha_required": true
+        },
+        {
+          "turn_index": 3,
+          "mode": "revise",
+          "expected_base_turn": 2,
+          "expected_accepted_head_turn": 3,
+          "expected_active_turn": 3,
+          "active_requirements": [
+            "library_scope",
+            "sources_2024_2026",
+            "traceable_citations",
+            "refresh_comparison",
+            "permission_table"
+          ],
+          "withdrawn_requirements": [],
+          "allowed_changed_intents": [
+            "privacy"
+          ],
+          "native_delivery_required": true,
+          "forbidden_roles": [],
+          "unchanged_canonical_sha_required": true
+        },
+        {
+          "turn_index": 4,
+          "mode": "revise",
+          "expected_base_turn": 1,
+          "expected_accepted_head_turn": 4,
+          "expected_active_turn": 4,
+          "active_requirements": [
+            "library_scope",
+            "sources_2024_2026",
+            "traceable_citations",
+            "permission_table"
+          ],
+          "withdrawn_requirements": [
+            "refresh_comparison"
+          ],
+          "allowed_changed_intents": [
+            "withdrawn_comparison_and_retained_correction"
+          ],
+          "native_delivery_required": true,
+          "forbidden_roles": [],
+          "unchanged_canonical_sha_required": true
+        },
+        {
+          "turn_index": 5,
+          "mode": "read_only",
+          "expected_base_turn": 4,
+          "expected_accepted_head_turn": 4,
+          "expected_active_turn": 4,
+          "active_requirements": [
+            "library_scope",
+            "sources_2024_2026",
+            "traceable_citations",
+            "permission_table"
+          ],
+          "withdrawn_requirements": [
+            "refresh_comparison"
+          ],
+          "allowed_changed_intents": [],
+          "native_delivery_required": false,
+          "forbidden_roles": [
+            "researcher",
+            "writer",
+            "reporter",
+            "outline"
+          ],
+          "unchanged_canonical_sha_required": true
+        },
+        {
+          "turn_index": 6,
+          "mode": "exact_reuse",
+          "expected_base_turn": 2,
+          "expected_accepted_head_turn": 4,
+          "expected_active_turn": 2,
+          "active_requirements": [
+            "library_scope",
+            "sources_2024_2026",
+            "traceable_citations",
+            "refresh_comparison"
+          ],
+          "withdrawn_requirements": [
+            "permission_table"
+          ],
+          "allowed_changed_intents": [],
+          "native_delivery_required": false,
+          "forbidden_roles": [
+            "researcher",
+            "writer",
+            "reporter",
+            "outline"
+          ],
+          "unchanged_canonical_sha_required": true
+        },
+        {
+          "turn_index": 7,
+          "mode": "revise",
+          "expected_base_turn": 2,
+          "expected_accepted_head_turn": 7,
+          "expected_active_turn": 7,
+          "active_requirements": [
+            "library_scope",
+            "sources_2024_2026",
+            "traceable_citations",
+            "refresh_comparison",
+            "operations_risk_clarity"
+          ],
+          "withdrawn_requirements": [
+            "permission_table"
+          ],
+          "allowed_changed_intents": [
+            "operations"
+          ],
+          "native_delivery_required": true,
+          "forbidden_roles": [],
+          "unchanged_canonical_sha_required": true
+        }
+      ]
+    },
+    {
+      "case_id": "campus-energy",
+      "turns": [
+        {
+          "turn_index": 1,
+          "mode": "generate",
+          "expected_base_turn": null,
+          "expected_accepted_head_turn": 1,
+          "expected_active_turn": 1,
+          "active_requirements": [
+            "campus_scope",
+            "exclude_hospital_and_hazardous_labs",
+            "traceable_citations",
+            "sources_2024_2026"
+          ],
+          "withdrawn_requirements": [],
+          "allowed_changed_intents": [
+            "initial_report"
+          ],
+          "native_delivery_required": true,
+          "forbidden_roles": [],
+          "unchanged_canonical_sha_required": false
+        },
+        {
+          "turn_index": 2,
+          "mode": "revise",
+          "expected_base_turn": 1,
+          "expected_accepted_head_turn": 2,
+          "expected_active_turn": 2,
+          "active_requirements": [
+            "campus_scope",
+            "exclude_hospital_and_hazardous_labs",
+            "traceable_citations",
+            "sources_2024_2026",
+            "pilot_acceptance_checklist"
+          ],
+          "withdrawn_requirements": [],
+          "allowed_changed_intents": [
+            "evaluation"
+          ],
+          "native_delivery_required": true,
+          "forbidden_roles": [],
+          "unchanged_canonical_sha_required": true
+        },
+        {
+          "turn_index": 3,
+          "mode": "revise",
+          "expected_base_turn": 2,
+          "expected_accepted_head_turn": 3,
+          "expected_active_turn": 3,
+          "active_requirements": [
+            "campus_scope",
+            "exclude_hospital_and_hazardous_labs",
+            "traceable_citations",
+            "pilot_acceptance_checklist",
+            "sources_2022_2026"
+          ],
+          "withdrawn_requirements": [
+            "sources_2024_2026_only"
+          ],
+          "allowed_changed_intents": [
+            "evidence_scope"
+          ],
+          "native_delivery_required": true,
+          "forbidden_roles": [],
+          "unchanged_canonical_sha_required": true
+        },
+        {
+          "turn_index": 4,
+          "mode": "revise",
+          "expected_base_turn": 1,
+          "expected_accepted_head_turn": 4,
+          "expected_active_turn": 4,
+          "active_requirements": [
+            "campus_scope",
+            "exclude_hospital_and_hazardous_labs",
+            "traceable_citations",
+            "sources_2022_2026"
+          ],
+          "withdrawn_requirements": [
+            "pilot_acceptance_checklist",
+            "sources_2024_2026_only"
+          ],
+          "allowed_changed_intents": [
+            "withdrawn_comparison_and_retained_correction"
+          ],
+          "native_delivery_required": true,
+          "forbidden_roles": [],
+          "unchanged_canonical_sha_required": true
+        },
+        {
+          "turn_index": 5,
+          "mode": "read_only",
+          "expected_base_turn": 4,
+          "expected_accepted_head_turn": 4,
+          "expected_active_turn": 4,
+          "active_requirements": [
+            "campus_scope",
+            "exclude_hospital_and_hazardous_labs",
+            "traceable_citations",
+            "sources_2022_2026"
+          ],
+          "withdrawn_requirements": [
+            "pilot_acceptance_checklist",
+            "sources_2024_2026_only"
+          ],
+          "allowed_changed_intents": [],
+          "native_delivery_required": false,
+          "forbidden_roles": [
+            "researcher",
+            "writer",
+            "reporter",
+            "outline"
+          ],
+          "unchanged_canonical_sha_required": true
+        },
+        {
+          "turn_index": 6,
+          "mode": "exact_reuse",
+          "expected_base_turn": 3,
+          "expected_accepted_head_turn": 4,
+          "expected_active_turn": 3,
+          "active_requirements": [
+            "campus_scope",
+            "exclude_hospital_and_hazardous_labs",
+            "traceable_citations",
+            "pilot_acceptance_checklist",
+            "sources_2022_2026"
+          ],
+          "withdrawn_requirements": [
+            "sources_2024_2026_only"
+          ],
+          "allowed_changed_intents": [],
+          "native_delivery_required": false,
+          "forbidden_roles": [
+            "researcher",
+            "writer",
+            "reporter",
+            "outline"
+          ],
+          "unchanged_canonical_sha_required": true
+        },
+        {
+          "turn_index": 7,
+          "mode": "revise",
+          "expected_base_turn": 3,
+          "expected_accepted_head_turn": 7,
+          "expected_active_turn": 7,
+          "active_requirements": [
+            "campus_scope",
+            "exclude_hospital_and_hazardous_labs",
+            "traceable_citations",
+            "pilot_acceptance_checklist",
+            "sources_2022_2026",
+            "missing_data_risks"
+          ],
+          "withdrawn_requirements": [
+            "sources_2024_2026_only"
+          ],
+          "allowed_changed_intents": [
+            "implementation_risks"
+          ],
+          "native_delivery_required": true,
+          "forbidden_roles": [],
+          "unchanged_canonical_sha_required": true
+        }
+      ]
+    }
+  ]
+}

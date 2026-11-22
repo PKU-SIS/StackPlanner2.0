@@ -659,6 +659,13 @@ class DelegateHandler:
                 if report_requirements:
                     context_refs["report_requirements"] = report_requirements
 
+        from deerflow.sp.report.turns.adapter import scoped_refs
+
+        if report_role == "git_agent":
+            context_refs = {"report_dialogue": context_refs["report_dialogue"]}
+        elif report_role:
+            context_refs = scoped_refs(context.state, context_refs)
+
         latest_uploaded_refs = _latest_uploaded_file_refs(context.state)
         input_refs = list(action.input_refs)
         if action.target_agent in {"perception", "reporter"}:
@@ -1688,14 +1695,7 @@ def _dedupe_outline_artifact_bodies(
     if not by_artifact:
         return bundle
     items = list(bundle.get("items") or [])
-    retained = [
-        item
-        for item in items
-        if not (
-            str(item.get("artifact_id") or "").strip() in by_artifact
-            and str(item.get("content") or "").strip() == by_artifact[str(item.get("artifact_id") or "").strip()]
-        )
-    ]
+    retained = [item for item in items if not (str(item.get("artifact_id") or "").strip() in by_artifact and str(item.get("content") or "").strip() == by_artifact[str(item.get("artifact_id") or "").strip()])]
     if len(retained) == len(items):
         return bundle
     updated = dict(bundle)

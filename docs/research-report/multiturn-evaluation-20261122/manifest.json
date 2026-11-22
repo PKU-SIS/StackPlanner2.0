@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "suite_id": "report-multiturn-20261122-v1",
+  "api_experiments_authorized": false,
+  "sha256": {
+    "requests.json": "32a8d666f917fd61c7e9d9fc41526a49757f49a0998785cfeaa8bc0daa1b6226",
+    "evaluator_checks.json": "a6c34d5cc33586ed03fbe6ba76fb284012543941c617b0cca22757e91a065a24"
+  }
+}

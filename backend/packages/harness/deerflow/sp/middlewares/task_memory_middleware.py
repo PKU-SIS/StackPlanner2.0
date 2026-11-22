@@ -171,6 +171,12 @@ class TaskMemoryMiddleware(AgentMiddleware[ThreadState]):
 
     @override
     def after_agent(self, state: ThreadState, runtime: Runtime) -> dict[str, Any] | None:
+        from deerflow.sp.report.turns.adapter import finalize_run, opted_request
+
+        if opted_request(state) is not None:
+            context = getattr(runtime, "context", None)
+            abort = context.get("__run_abort_event") if isinstance(context, Mapping) else None
+            finalize_run(state, runtime, cancelled=bool(abort is not None and abort.is_set()))
         stack = self._restore_stack(state, runtime)
         if stack.is_empty() and not self._has_raw_stack(state):
             return None
