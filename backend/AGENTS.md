@@ -1735,15 +1735,26 @@ coverage against this executor's captured native pairs; never rely on a parent's
 ledger or an old visibility flag. A matching complete original can coexist with
 an out-of-range empty/error read beyond N; that read is not a missing required
 range. Missing, changed, conflicting, failed, truncated, externalized or incomplete
-proof cannot establish full visibility. The note reports physical source lines,
-visual wrapping and N+1 beyond the required original EOF; candidate-quote mismatch
-is separate from source transport failure and substantive audit completion.
-Keep tools, source bodies, statuses, acceptance and all call/review budgets
-unchanged, with no replacement quotations or automatic gap clearance.
+proof cannot establish full visibility. Render the shared number-independent
+`clause_source_ready_instruction` only after authentication and a successful
+context check of the real input, including the separate system message, added
+note and remaining tools for either read policy. Do not restate physical source
+ranges or N+1 EOF claims in control notes; preserve actual native EOF ToolMessages.
+The complete-source transport fact is independent of
+`SP_CLAUSE_SOURCE_READY_NO_REREAD`: `0` retains native `read_file`/`grep`; `1` keeps
+the existing suppression gates. If no source tool needs suppression, a verified
+current-source fact may still render without claiming tools were removed.
+Source defects and candidate-quote mismatches alone cannot establish missing
+source, and source readiness does not establish substantive audit completion.
+Keep source bodies, statuses, acceptance and all call/review budgets unchanged,
+with no replacement quotations or automatic gap clearance.
 For nominated syntax turns, append the same authenticated fact inside the existing
 syntax-final note after tail validation; do not insert a new feedback name before
 nomination checks. The existing final token count includes it. CPU sync/async
 native HTTP and middleware controls in `test_sp_clause_syntax_grammar.py` cover
 long physical lines, composed ranges plus real EOF, ordinary/semantic/quote/format
 requests, genuine partial finals, unchanged tools/bodies/call counts, and invalid
-current proof or unavailable context budgets.
+current proof or unavailable context budgets. Fresh-process real native builder
+tests in `test_sp_clause_delivery_prompt.py` cover both read-policy flags in
+sync/async HTTP, a complete four-line original with its actual beyond-EOF result,
+and unchanged model-owned complete/partial/blocked outputs.

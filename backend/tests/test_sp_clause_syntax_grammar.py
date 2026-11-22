@@ -177,9 +177,10 @@ def test_real_http_constrains_existing_format_semantic_and_quote_final_turns(mon
         assert note["name"] == "sp_clause_syntax_final"
         assert "Source defects are audit content" in note["content"]
         assert "after exactly one JSON decode" in note["content"]
-        assert "physical source lines 1..2" in note["content"]
-        assert "line 3 is beyond EOF" in note["content"]
-        assert "candidate quotation" in note["content"] and "not a source-read failure" in note["content"]
+        assert "complete required original public source" in note["content"]
+        assert "physical source lines" not in note["content"] and "beyond EOF" not in note["content"]
+        assert "candidate quotation mismatches" in note["content"] and "do not by themselves establish missing source evidence" in note["content"]
+        assert "Source readiness does not establish task completion" in note["content"]
         assert "genuinely unavailable or unresolved" in note["content"]
         assert SOURCE not in note["content"]
     for body in payloads:
@@ -235,7 +236,9 @@ def test_repeated_paraphrase_feedback_reaches_real_http_and_preserves_the_models
 
 @pytest.mark.parametrize("asynchronous", [False, True])
 @pytest.mark.parametrize("damage", ["missing", "role", "skill", "schema"])
-def test_candidate_source_guidance_stays_out_of_other_scopes_and_preserves_real_source_failure(monkeypatch, asynchronous, damage):
+@pytest.mark.parametrize("source_ready", [False, True])
+def test_candidate_source_guidance_stays_out_of_other_scopes_and_preserves_real_source_failure(monkeypatch, asynchronous, damage, source_ready):
+    monkeypatch.setenv("SP_CLAUSE_SOURCE_READY_NO_REREAD", "1" if source_ready else "0")
     original = (
         json.dumps({"artifact_content": None, "artifact_metadata": {"completion_status": "blocked", "evidence_gaps": ["The required original source could not be read."]}})
         if damage == "missing"
@@ -244,6 +247,8 @@ def test_candidate_source_guidance_stays_out_of_other_scopes_and_preserves_real_
     result, payloads, _, _ = run_http(monkeypatch, [original], asynchronous=asynchronous, damage=damage, reviews=True)
     assert len(payloads) == 1
     assert not any(message.get("name") == "sp_clause_quote_review_feedback" for message in payloads[0]["messages"])
+    assert not any(message.get("name") in {"sp_clause_current_source_visibility", "sp_clause_source_ready_no_reread", "sp_clause_syntax_final"} for message in payloads[0]["messages"])
+    assert {item["function"]["name"] for item in payloads[0]["tools"]} == {"read_file", "write_file"}
     assert result["messages"][-1].content == original
 
 
@@ -264,9 +269,10 @@ def test_current_cross_page_source_stays_visible_and_does_not_force_completion(m
         assert source not in notes[name]  # No host-authored quotation or replacement answer.
     assert all(any(m.get("role") == "tool" and m.get("content") == source for m in body["messages"]) for body in payloads)
     assert not payloads[1].get("tools") and "response_format" in payloads[1]
-    assert "physical source lines 1..5" in notes["sp_clause_syntax_final"]
-    assert "line 6 is beyond EOF" in notes["sp_clause_syntax_final"]
-    assert "candidate quotation" in notes["sp_clause_syntax_final"] and "not a source-read failure" in notes["sp_clause_syntax_final"]
+    assert "complete required original public source" in notes["sp_clause_syntax_final"]
+    assert "physical source lines" not in notes["sp_clause_syntax_final"] and "beyond EOF" not in notes["sp_clause_syntax_final"]
+    assert "candidate quotation mismatches" in notes["sp_clause_syntax_final"] and "do not by themselves establish missing source evidence" in notes["sp_clause_syntax_final"]
+    assert "Source readiness does not establish task completion" in notes["sp_clause_syntax_final"]
     assert any(m.get("name") == "sp_clause_current_source_visibility" for m in payloads[0]["messages"])
     assert result["messages"][-1].content == final
     assert [(d["phase"], d["status"]) for d in collect_syntax_grammar_diagnostics(captured)] == [("semantic", "applied"), ("semantic", "response_received")]
@@ -284,9 +290,11 @@ def test_ordinary_http_exposes_only_current_source_transport_facts_with_real_eof
     facts = [m for m in payloads[0]["messages"] if m.get("name") == "sp_clause_current_source_visibility"]
     assert len(facts) == 1
     note = facts[0]["content"]
-    assert PATH in note and "physical source lines 1..3" in note and "line 4 is beyond EOF" in note
-    assert "visual display lines" in note and "not a source-read failure" in note
-    assert "not substantive audit completion" in note and "partial/blocked" in note
+    assert "complete required original public source" in note and "authenticated successful native read_file results" in note
+    assert "physical source lines" not in note and "beyond EOF" not in note
+    assert "candidate quotation mismatches" in note and "do not by themselves establish missing source evidence" in note
+    assert "Source readiness does not establish task completion" in note and "partial/blocked" in note
+    assert "temporarily unavailable" not in note
     assert source not in note and "synthetic source-only finding" not in note
     assert any(m.get("role") == "tool" and m.get("content") == source for m in payloads[0]["messages"])
     assert any(m.get("role") == "tool" and m.get("content") == "(empty: requested range starts after end of file; total_lines=3)" for m in payloads[0]["messages"])
@@ -297,8 +305,10 @@ def test_ordinary_http_exposes_only_current_source_transport_facts_with_real_eof
     "damage", ["missing", "changed", "args", "no_capture", "old_visibility", "truncated", "externalized", "failed", "empty", "partial_range", "eof_only", "conflict", "pending", "budget", "counter_error", "no_settings", "bad_skills"]
 )
 @pytest.mark.parametrize("asynchronous", [False, True])
-def test_current_source_fact_never_uses_uncertain_or_historical_proof(monkeypatch, damage, asynchronous):
+@pytest.mark.parametrize("source_ready", [False, True])
+def test_current_source_fact_never_uses_uncertain_or_historical_proof(monkeypatch, damage, asynchronous, source_ready):
     monkeypatch.setenv("SP_CLAUSE_SYNTAX_GRAMMAR", "0")
+    monkeypatch.setenv("SP_CLAUSE_SOURCE_READY_NO_REREAD", "1" if source_ready else "0")
     source = reads()
     source[-1].additional_kwargs.update(sp_host_source_prefetch=True, sp_host_source_prefetch_visible=True)
     captured = [m.model_dump() for m in source]
@@ -367,11 +377,63 @@ def test_current_source_fact_never_uses_uncertain_or_historical_proof(monkeypatc
         result = asyncio.run(visibility.awrap_model_call(request, handler))
     else:
         result = visibility.wrap_model_call(request, lambda current: current)
-    assert not any(m.name == "sp_clause_current_source_visibility" for m in result.messages)
+    assert not any(m.name in {"sp_clause_current_source_visibility", "sp_clause_source_ready_no_reread"} for m in result.messages)
     assert [m.model_dump() for m in result.messages] == before
     assert result.tools == request.tools
     if damage in {"budget", "counter_error"}:
         assert counted and any(m.name == "sp_clause_current_source_visibility" for m in counted[0])
+
+
+@pytest.mark.parametrize("source_ready", [False, True])
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_source_fact_budget_counts_the_real_separate_system_for_both_read_policies(monkeypatch, source_ready, asynchronous):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("SP_CLAUSE_SOURCE_READY_NO_REREAD", "1" if source_ready else "0")
+    monkeypatch.setenv("SP_CLAUSE_SYNTAX_GRAMMAR", "0")
+    source = reads()
+    captured = [message.model_dump() for message in source]
+    seen = []
+    system = SystemMessage(content="The actual separately bound Reporter system consumes the remaining input budget.")
+
+    def count(messages, *args):
+        seen.append(messages)
+        return 65536 if system in messages else 20
+
+    monkeypatch.setattr("deerflow.sp.source_prefetch.count_source_prompt_tokens", count)
+    request = ModelRequest(model=VllmChatModel(model="fixture", api_key="fixture"), messages=[HumanMessage(content="Audit source."), *source], system_message=system, tools=[SimpleNamespace(name="read_file")])
+    before = [message.model_dump() for message in request.messages]
+    middleware = SourcePrefetchVisibilityMiddleware(captured, contract=contract(), skill_names=["clause"], auditor_role="reporter", settings=SourcePrefetchSettings(tokenizer="fixture", context_tokens=65536, response_tokens=256))
+    if asynchronous:
+
+        async def handler(current):
+            return current
+
+        actual = asyncio.run(middleware.awrap_model_call(request, handler))
+    else:
+        actual = middleware.wrap_model_call(request, lambda current: current)
+    assert seen and system in seen[0]
+    assert [message.model_dump() for message in actual.messages] == before
+    assert actual.tools == request.tools and actual.system_message == system
+
+
+def test_no_reread_flag_does_not_hide_the_source_fact_when_no_read_tool_needs_suppression(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("SP_CLAUSE_SOURCE_READY_NO_REREAD", "1")
+    monkeypatch.setenv("SP_CLAUSE_SYNTAX_GRAMMAR", "0")
+    monkeypatch.setattr("deerflow.sp.source_prefetch.count_source_prompt_tokens", lambda *args: 20)
+    source = reads()
+    request = ModelRequest(model=VllmChatModel(model="fixture", api_key="fixture"), messages=[HumanMessage(content="Audit source."), *source], tools=[SimpleNamespace(name="write_file")])
+    middleware = SourcePrefetchVisibilityMiddleware(
+        [message.model_dump() for message in source], contract=contract(), skill_names=["clause"], auditor_role="reporter", settings=SourcePrefetchSettings(tokenizer="fixture", context_tokens=65536, response_tokens=256)
+    )
+    actual = middleware.wrap_model_call(request, lambda current: current)
+    assert actual.tools == request.tools
+    assert actual.messages[-1].name == "sp_clause_current_source_visibility"
+    assert "complete required original public source" in actual.messages[-1].content
+    assert "temporarily unavailable" not in actual.messages[-1].content
+    assert "physical source lines" not in actual.messages[-1].content
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
@@ -839,7 +901,8 @@ def test_fresh_composed_source_ranges_remain_proven_with_outside_eof_result(monk
     else:
         result = visibility.wrap_model_call(request, lambda current: current)
     assert result.messages[-1].name == "sp_clause_current_source_visibility"
-    assert "physical source lines 1..2" in result.messages[-1].content
+    assert "complete required original public source" in result.messages[-1].content
+    assert "physical source lines" not in result.messages[-1].content and "beyond EOF" not in result.messages[-1].content
     assert [m.model_dump() for m in result.messages[:-1]] == before
     assert result.tools == request.tools and result.model_settings == request.model_settings
 

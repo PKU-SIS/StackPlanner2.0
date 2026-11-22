@@ -193,7 +193,9 @@ class SourcePrefetchVisibilityMiddleware(AgentMiddleware):
         from deerflow.sp.syntax_grammar import clause_current_source_visibility_note, clause_source_ready_enabled
 
         if clause_source_ready_enabled(self._contract, self._skill_names, self._auditor_role):
-            return self._clause_source_ready_request(request)
+            suppressed = self._clause_source_ready_request(request)
+            if suppressed is not None:
+                return suppressed
         note = clause_current_source_visibility_note(request.messages, self._captured, contract=self._contract, skill_names=self._skill_names, auditor_role=self._auditor_role)
         if note is None:
             return None
@@ -201,11 +203,11 @@ class SourcePrefetchVisibilityMiddleware(AgentMiddleware):
 
     def _within_context(self, request) -> bool:
         try:
-            from deerflow.sp.syntax_grammar import clause_source_ready_enabled
+            from deerflow.sp.evidence_quotes import clause_public_audit_scope
 
             messages = request.messages
             system = getattr(request, "system_message", None)
-            if system is not None and clause_source_ready_enabled(self._contract, self._skill_names, self._auditor_role):
+            if system is not None and isinstance(self._contract, Mapping) and isinstance(self._skill_names, list | tuple) and clause_public_audit_scope(self._contract, self._skill_names, self._auditor_role):
                 messages = [system, *messages]
             count = count_source_prompt_tokens(messages, request.tools, self._settings, self._thinking_enabled)
         except Exception:

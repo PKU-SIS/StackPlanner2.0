@@ -176,10 +176,7 @@ def test_initial_completion_guidance_preserves_native_empty_and_missing_source_g
             assert "The required source file could not be read." in observation.metadata["evidence_gaps"]
 
 
-@pytest.mark.parametrize("asynchronous", [False, True])
-@pytest.mark.parametrize("syntax_grammar", [False, True])
-@pytest.mark.parametrize("compact_reporter", [False, True])
-def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asynchronous, syntax_grammar, compact_reporter):
+def run_native_builder_wire(tmp_path, asynchronous, syntax_grammar, compact_reporter, *, source_ready=None, four_lines=False, final_status="complete"):
     # A fresh process imports the real executor, bypassing conftest's lightweight
     # executor mock. The actual middleware chain and Vllm HTTP serialization run.
     task = bound_task()
@@ -205,13 +202,20 @@ def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asy
         syntax_grammar = os.environ['FIXTURE_SYNTAX_GRAMMAR'] == '1'
         compact_reporter = os.environ['FIXTURE_COMPACT_REPORTER'] == '1'
         os.environ['SP_CLAUSE_COMPACT_REPORTER'] = '1' if compact_reporter else '0'
-        os.environ['SP_CLAUSE_SOURCE_READY_NO_REREAD'] = '1' if compact_reporter else '0'
+        source_ready = os.environ['FIXTURE_SOURCE_READY'] == '1'
+        os.environ['SP_CLAUSE_SOURCE_READY_NO_REREAD'] = '1' if source_ready else '0'
         for flag in ['SP_CLAUSE_SYNTAX_GRAMMAR', 'SP_CLAUSE_SEMANTIC_REVIEW', 'SP_CLAUSE_QUOTE_REVIEW']:
             os.environ[flag] = '1' if syntax_grammar else '0'
         source = 'Payment is due on 1 January.'
         if syntax_grammar:
             source = 'The definition says "Information");tion"); Payment is due on 1 January.'
-        final = json.dumps([{'text':source, 'explanation':'A source-only fixture.'}])
+        four_lines = os.environ['FIXTURE_FOUR_LINES'] == '1'
+        if four_lines:
+            source = 'A complete source definition.\\nA long original clause with its printed punctuation.\\nPage 3\\nThe original sentence continues here.'
+            task.context_refs['task_contract']['source_requirements']['files'][0]['total_lines'] = 4
+        candidate = json.dumps([{'text':source, 'explanation':'A source-only fixture.'}])
+        final_status = os.environ['FIXTURE_FINAL_STATUS']
+        final = candidate if final_status == 'complete' else json.dumps({'artifact_content':None,'artifact_metadata':{'completion_status':final_status,'evidence_gaps':['A mandatory audit requirement remains unresolved.']}})
         wrapped = json.dumps([{'text':'"'+source+'"', 'explanation':'A source-only fixture.'}])
         app = AppConfig.model_validate({
             'models':[{'name':'fixture','use':'deerflow.models.vllm_provider:VllmChatModel','model':'fixture',
@@ -223,7 +227,7 @@ def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asy
         set_app_config(app)
         set_current_user(SimpleNamespace(id='fixture'))
         context={'thread_id':'fixture','run_id':'fixture','user_id':'fixture'}
-        prefetch = {'sp_source_prefetch_enabled':True,'sp_source_prefetch_tokenizer':'fixture','sp_source_prefetch_context_tokens':73728,'sp_source_prefetch_response_tokens':1024} if syntax_grammar or compact_reporter else {}
+        prefetch = {'sp_source_prefetch_enabled':True,'sp_source_prefetch_tokenizer':'fixture','sp_source_prefetch_context_tokens':73728,'sp_source_prefetch_response_tokens':1024} if syntax_grammar or compact_reporter or four_lines else {}
         provider=DR2SPExecutorProvider(app_config=app,parent_model='fixture',runnable_config={'configurable':prefetch},available_skill_names=frozenset({'clause'}),user_id='fixture')
         @tool
         def read_file(path: str) -> str:
@@ -242,7 +246,7 @@ def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asy
         requests=[]
         def endpoint(request):
             requests.append(json.loads(request.content))
-            replies = ['[{"text":"bad"quote","explanation":"draft"}]', final, wrapped, final] if syntax_grammar else [final]
+            replies = (['[{"text":"bad"quote","explanation":"draft"}]', candidate, wrapped, final] if final_status == 'complete' else ['[{"text":"bad"quote","explanation":"draft"}]', candidate, final]) if syntax_grammar else [final]
             choice = {'index':0,'message':{'role':'assistant','content':replies[len(requests)-1]},'finish_reason':'stop'}
             return httpx.Response(200,json={'id':'fixture-'+str(len(requests)),'object':'chat.completion','created':0,'model':'fixture','choices':[choice]})
         transport=httpx.MockTransport(endpoint)
@@ -253,6 +257,12 @@ def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asy
             state,tools,deferred=await executor._build_initial_state(render_sp_subagent_prompt(task))
             state['messages'].extend([AIMessage(content='',tool_calls=[{'name':'read_file','id':'read','args':{'path':'/mnt/user-data/uploads/document.txt'}}]),ToolMessage(content=source,name='read_file',tool_call_id='read')])
             executor._prefetch_captured.extend(message.model_dump() for message in state['messages'][-2:])
+            if four_lines:
+                state['messages'].extend([
+                    AIMessage(content='',tool_calls=[{'name':'read_file','id':'after-eof','args':{'path':'/mnt/user-data/uploads/document.txt','start_line':5,'end_line':50}}]),
+                    ToolMessage(content='(empty: requested range starts after end of file; total_lines=4)',name='read_file',tool_call_id='after-eof'),
+                ])
+                executor._prefetch_captured.extend(message.model_dump() for message in state['messages'][-2:])
             return state,tools,deferred
         with (
             patch('deerflow.subagents.executor.create_chat_model',return_value=model),
@@ -265,12 +275,25 @@ def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asy
             result=asyncio.run(graph.ainvoke(state,context=context)) if os.environ['FIXTURE_ASYNC']=='1' else graph.invoke(state,context=context)
         assert result['messages'][-1].content==final
         if syntax_grammar:
-            assert len(requests)==4
-            assert [i for i, request in enumerate(requests) if 'response_format' in request]==[1,2,3]
+            assert len(requests)==(4 if final_status=='complete' else 3)
+            assert [i for i, request in enumerate(requests) if 'response_format' in request]==list(range(1,len(requests)))
             assert all(not request.get('tools') for request in requests[1:])
-        if compact_reporter:
+        if source_ready:
             assert all(item['function']['name'] not in {'read_file','grep'} for item in requests[0].get('tools', []))
             assert any(message.get('name')=='sp_clause_source_ready_no_reread' for message in requests[0]['messages'])
+        elif four_lines:
+            assert {'read_file','grep'} <= {item['function']['name'] for item in requests[0].get('tools', [])}
+            assert any(message.get('name')=='sp_clause_current_source_visibility' for message in requests[0]['messages'])
+        if four_lines:
+            for request in requests:
+                notes=[m['content'] for m in request['messages'] if m.get('name') in {'sp_clause_current_source_visibility','sp_clause_source_ready_no_reread','sp_clause_syntax_final'}]
+                assert notes
+                for note in notes:
+                    assert 'complete required original public source' in note
+                    assert 'Source readiness does not establish task completion' in note
+                    assert 'beyond EOF' not in note and 'physical source lines' not in note and 'line 5' not in note
+                assert any(m.get('role')=='tool' and m.get('content')==source for m in request['messages'])
+                assert any(m.get('role')=='tool' and m.get('content')=='(empty: requested range starts after end of file; total_lines=4)' for m in request['messages'])
         assert len(executor._runtime_middlewares)>=20
         for request in requests:
             systems=[message['content'] for message in request['messages'] if message['role']=='system']
@@ -307,12 +330,29 @@ def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asy
         "FIXTURE_ASYNC": "1" if asynchronous else "0",
         "FIXTURE_SYNTAX_GRAMMAR": "1" if syntax_grammar else "0",
         "FIXTURE_COMPACT_REPORTER": "1" if compact_reporter else "0",
+        "FIXTURE_SOURCE_READY": "1" if (compact_reporter if source_ready is None else source_ready) else "0",
+        "FIXTURE_FOUR_LINES": "1" if four_lines else "0",
+        "FIXTURE_FINAL_STATUS": final_status,
         "FIXTURE_WIRE": str(tmp_path / "wire.json"),
         "FIXTURE_LEGACY_MARKERS": json.dumps(LEGACY_MARKERS),
     }
     completed = subprocess.run([sys.executable, "-c", script], env=env, text=True, capture_output=True, timeout=90)
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert json.loads((tmp_path / "wire.json").read_text())
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("syntax_grammar", [False, True])
+@pytest.mark.parametrize("compact_reporter", [False, True])
+def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asynchronous, syntax_grammar, compact_reporter):
+    run_native_builder_wire(tmp_path, asynchronous, syntax_grammar, compact_reporter)
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("source_ready", [False, True])
+@pytest.mark.parametrize("final_status", ["complete", "partial", "blocked"])
+def test_real_native_builder_four_line_source_facts_are_independent_of_read_tool_policy(tmp_path, asynchronous, source_ready, final_status):
+    run_native_builder_wire(tmp_path, asynchronous, True, True, source_ready=source_ready, four_lines=True, final_status=final_status)
 
 
 def test_owned_public_reporter_template_omits_generic_success_delivery_but_retains_policy():
@@ -322,15 +362,29 @@ def test_owned_public_reporter_template_omits_generic_success_delivery_but_retai
     public = reporter_system_prompt(public_schema=True)
     assert ordinary == reporter_system_prompt()
     for marker in (
-        "<output_contract>", "Keep the control", "For a required file or a long report", "Then set artifact_content to null",
-        "same created_paths contract", "return the complete report in artifact_content", "Keep only a compact completion note in summary",
-        'Use artifact_type "report_revision"', "Keep the final summary under 700 characters", "and list the same check in",
+        "<output_contract>",
+        "Keep the control",
+        "For a required file or a long report",
+        "Then set artifact_content to null",
+        "same created_paths contract",
+        "return the complete report in artifact_content",
+        "Keep only a compact completion note in summary",
+        'Use artifact_type "report_revision"',
+        "Keep the final summary under 700 characters",
+        "and list the same check in",
     ):
         assert marker in ordinary
         assert marker not in public
     for marker in (
-        "human_feedback", "Preserve every distinct supported finding and original", "single-layer encoding", "expected_output",
-        "required_literal_tokens", "Never claim completion while one of those tokens is absent", "Never expose a host filesystem path",
-        "Do not delegate to another agent", "do not search for, invent", "Never claim a created path without a successful native write_file call",
+        "human_feedback",
+        "Preserve every distinct supported finding and original",
+        "single-layer encoding",
+        "expected_output",
+        "required_literal_tokens",
+        "Never claim completion while one of those tokens is absent",
+        "Never expose a host filesystem path",
+        "Do not delegate to another agent",
+        "do not search for, invent",
+        "Never claim a created path without a successful native write_file call",
     ):
         assert marker in public
