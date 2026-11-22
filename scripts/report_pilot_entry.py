@@ -321,7 +321,17 @@ def _execute_child(
         LANGSMITH_TRACING="false",
         LANGCHAIN_TRACING_V2="false",
         DEER_FLOW_PROJECT_ROOT=str(root),
-        DEER_FLOW_HOME=str((Path(resume_run) if resume_run else directory) / "runtime"),
+        DEER_FLOW_HOME=(
+            str(
+                Path(
+                    json.loads((Path(resume_run) / "runtime-binding.json").read_text())[
+                        "outputs"
+                    ]
+                ).parents[5]
+            )
+            if resume_run
+            else str(directory / "runtime")
+        ),
     )
     creds = load_credentials(env_file)
     os.environ["LLM_API_KEY"] = creds.api_key
@@ -412,7 +422,12 @@ def _execute_child(
     original_report = None
     dump(
         directory / "runtime-binding.json",
-        {"thread_id": thread_id, "user_id": user_id, "outputs": str(outputs)},
+        {
+            "thread_id": thread_id,
+            "user_id": user_id,
+            "outputs": str(outputs),
+            "runtime_home": os.environ["DEER_FLOW_HOME"],
+        },
     )
     latest = {}
     public_requests = json.loads((packet_dir / "agent-input.json").read_text())["turns"]
@@ -479,11 +494,6 @@ def _execute_child(
     with SqliteSaver.from_conn_string(
         str(directory / "checkpoints.sqlite")
     ) as checkpoint:
-        initial = {
-            "configurable": {"thread_id": thread_id, "model_name": "deepseek-flash"}
-        }
-        graph = make_sp_agent(initial, app_config=app)
-        graph.checkpointer = checkpoint
 
         def execute(request):
             nonlocal latest, original_report
@@ -519,6 +529,18 @@ def _execute_child(
                     "recursion_limit": public["runtime"]["recursion_limit"],
                     "callbacks": [callback],
                 }
+                # Gateway resolves a new graph factory for each user run.
+                graph = make_sp_agent(
+                    {
+                        **config,
+                        "context": {
+                            k: v for k, v in runtime.items() if k != "__run_abort_event"
+                        },
+                    },
+                    app_config=app,
+                )
+                graph.checkpointer = checkpoint
+                latest = {}
                 for value in graph.stream(
                     {"messages": [message]},
                     config=config,
