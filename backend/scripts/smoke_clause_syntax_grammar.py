@@ -34,7 +34,7 @@ SOURCE = 'The definition says "Information");tion");\nPayment is due on 1 Januar
 MALFORMED = json.dumps([{"text": SOURCE, "explanation": "The definition contains an incomplete fragment."}]).replace(';tion\\");', ';tion");')
 
 
-async def run_probe(*, base_url, model_name, tokenizer, max_tokens=1024, mode="repair", context_tokens=65536, timeout=180, syntax_grammar_backend="sglang", http_async_client=None):
+async def run_probe(*, base_url, model_name, tokenizer, max_tokens=1024, mode="repair", context_tokens=65536, timeout=180, syntax_grammar_backend="sglang", http_async_client=None, response_observer=None):
     if os.environ.get("SP_CLAUSE_SYNTAX_GRAMMAR") != "1":
         raise ValueError("Set SP_CLAUSE_SYNTAX_GRAMMAR=1 explicitly for this diagnostic")
     public = {
@@ -75,15 +75,27 @@ async def run_probe(*, base_url, model_name, tokenizer, max_tokens=1024, mode="r
             raise RuntimeError("Synthetic fixture did not enter the ordinary native format-repair budget")
         seed["messages"][-1] = update["messages"][0]
         response_count = 0
+        model_responses = []
 
         class Capture(AgentMiddleware):
-            def after_model(self, state, runtime):
+            def capture(self, state):
                 nonlocal response_count
                 response_count += 1
-                captured.append(state["messages"][-1].model_dump())
+                original = state["messages"][-1].model_dump()
+                captured.append(original)
+                row = {"index": response_count, "content": original["content"], "finish_reason": original["response_metadata"].get("finish_reason"), "syntax_grammar": collect_syntax_grammar_diagnostics([original])}
+                model_responses.append(row)
+                return row
+
+            def after_model(self, state, runtime):
+                row = self.capture(state)
+                if response_observer is not None:
+                    response_observer(row)
 
             async def aafter_model(self, state, runtime):
-                self.after_model(state, runtime)
+                row = self.capture(state)
+                if response_observer is not None:
+                    await asyncio.to_thread(response_observer, row)
 
         kwargs = {"http_async_client": http_async_client} if http_async_client is not None else {}
         model = VllmChatModel(
@@ -112,6 +124,7 @@ async def run_probe(*, base_url, model_name, tokenizer, max_tokens=1024, mode="r
             "mode": mode,
             "service_model_responses": response_count,
             "raw_final": raw,
+            "model_responses": model_responses,
             "completion_status": normalized.artifact_metadata.get("completion_status"),
             "stop_reason": normalized.stop_reason,
             "finish_reason": state["messages"][-1].response_metadata.get("finish_reason"),
@@ -139,12 +152,29 @@ def main():
     parser.add_argument("--timeout", type=float, default=180)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
-    report = asyncio.run(
-        run_probe(
-            base_url=args.base_url, model_name=args.model, tokenizer=args.tokenizer, syntax_grammar_backend=args.syntax_grammar_backend, mode=args.mode, max_tokens=args.max_tokens, context_tokens=args.context_tokens, timeout=args.timeout
-        )
-    )
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    # Flush each actual response immediately: a later review/service failure
+    # must not erase the grammar response that the diagnostic needs to inspect.
+    with (args.output_dir / "model-responses.jsonl").open("w", encoding="utf-8") as responses:
+
+        def persist_response(row):
+            responses.write(json.dumps(row, ensure_ascii=False) + "\n")
+            responses.flush()
+
+        report = asyncio.run(
+            run_probe(
+                base_url=args.base_url,
+                model_name=args.model,
+                tokenizer=args.tokenizer,
+                syntax_grammar_backend=args.syntax_grammar_backend,
+                mode=args.mode,
+                max_tokens=args.max_tokens,
+                context_tokens=args.context_tokens,
+                timeout=args.timeout,
+                response_observer=persist_response,
+            )
+        )
+    report.pop("model_responses")
     (args.output_dir / "final.txt").write_bytes(report.pop("raw_final").encode("utf-8"))
     (args.output_dir / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     print(json.dumps(report, ensure_ascii=False))

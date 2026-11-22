@@ -1578,3 +1578,9 @@ actual deployed grammar compatibility. CPU/MockTransport regression coverage:
 `scripts/smoke_clause_syntax_grammar.py`. The probe starts from a synthetic malformed
 fixture and uses the ordinary native format/review graph for real service outputs;
 never call it a production model sample or a repair of an official prediction.
+The probe's `model-responses.jsonl` must flush each real response immediately,
+including its original content/finish reason and response_received diagnostic;
+the final reviewed artifact alone cannot establish which grammar response was
+received. Keep these runtime artifacts out of Git and raw text out of the
+status-only report. Preserve existing calls and budgets; never add a retry just
+to obtain a preferred probe outcome.

@@ -293,6 +293,7 @@ def test_reusable_service_probe_keeps_native_graph_and_original_output(monkeypat
     monkeypatch.setenv("SP_CLAUSE_SYNTAX_GRAMMAR", "1")
     monkeypatch.setattr("deerflow.sp.source_prefetch.count_source_prompt_tokens", lambda *a, **k: 20)
     payloads = []
+    observed_responses = []
 
     def endpoint(request):
         payloads.append(json.loads(request.content))
@@ -309,10 +310,15 @@ def test_reusable_service_probe_keeps_native_graph_and_original_output(monkeypat
 
     async def run():
         async with httpx.AsyncClient(transport=httpx.MockTransport(endpoint)) as client:
-            return await probe.run_probe(base_url="http://fixture.invalid/v1", model_name="fixture", tokenizer="fixture", max_tokens=256, mode=mode, http_async_client=client)
+            return await probe.run_probe(base_url="http://fixture.invalid/v1", model_name="fixture", tokenizer="fixture", max_tokens=256, mode=mode, http_async_client=client, response_observer=observed_responses.append)
 
     result = asyncio.run(run())
     assert result["raw_final"] == final and result["completion_status"] == expected_status
+    assert len(result["model_responses"]) == result["service_model_responses"]
+    assert result["model_responses"][0]["content"] == final
+    assert result["model_responses"][0]["finish_reason"] == ("length" if mode == "length" else "stop")
+    assert result["model_responses"][0]["syntax_grammar"][0]["status"] == "response_received"
+    assert observed_responses == result["model_responses"]
     assert "response_format" in payloads[0]
     assert all("response_format" not in body for body in payloads[1:])
     assert [d["status"] for d in result["syntax_grammar"]] == ["applied", "response_received"]

@@ -578,6 +578,9 @@ Run `--mode partial` separately to exercise the honest failure exit. For
 and requires native `token_capped`; if length is not reached it reports that
 fact and makes no retry. The initial malformed candidate is explicitly a public
 synthetic fixture; all subsequent model responses come from the specified
-service. `final.txt` preserves final UTF-8 bytes and `report.json` contains native
-status and review diagnostics. CPU MockTransport tests verify plumbing, not the
+service. `final.txt` preserves final UTF-8 bytes. `model-responses.jsonl` flushes
+each actual service response's original content, finish reason and grammar
+diagnostic immediately, so later review changes or errors cannot hide the
+grammar round's raw output. It saves no request body. `report.json` contains only
+native status and review diagnostics. CPU MockTransport tests verify plumbing, not the
 deployed grammar compiler; actual service compatibility remains a separate check.
