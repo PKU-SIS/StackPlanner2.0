@@ -61,3 +61,11 @@ until child exit, retains numeric journals and enforces outer deadlines/cancel.
 No production imports or live API launcher are added. The provider input-context
 ceiling remains unverified/null in preflight. See the pilot preparation
 `WORKER_OFFLINE.md` for validation and the remaining real-API boundary.
+
+The optional preflight `--admission-review --budget-cny 50` applies the frozen
+public review in `ADMISSION_REVIEW.json`: a 50 CNY total ceiling, 48 CNY operating
+guard, and a conservative 2^20 input reservation derived from the documented 1M
+context. `OfflinePilotWorker.from_preflight` verifies and binds those limits; it
+still rejects live transports. Never equate budget approval with execution
+authorization. Decode compressed HTTP receipts independently from SDK decoder
+state; sync/async gzip SSE regression lives in `test_sp_report_pilot_admission.py`.

@@ -79,6 +79,42 @@ class OfflinePilotWorker:
         self.active = False
         self.last_completed_turn = None
 
+    @classmethod
+    def from_preflight(cls, root, packet_directory, *, turn, emit=None):
+        """Use reviewed limits directly; budget preference alone cannot bind them.
+
+        Verifies frozen source/environment before instantiating a still-offline
+        worker. This method never changes transport admission or loads secrets.
+        """
+        from report_multiturn_preflight import verify_packet
+        from report_pilot_admission import reviewed_limits
+        from report_pilot_audit import BudgetGuard, PilotUsageAudit, RateCard
+
+        verify_packet(root, packet_directory)
+        packet = json.loads((Path(packet_directory) / "preflight.json").read_text())
+        limits = packet["limits"]
+        expected, review = reviewed_limits(
+            root, limits["max_cost_cny"], packet["profile"], packet["roles"]
+        )
+        if packet.get("admission_review") != review or any(
+            limits.get(k) != v for k, v in expected.items()
+        ):
+            raise AuditError("packet lacks matching reviewed operating limits")
+        guard = BudgetGuard(
+            max_cost_cny=limits["operating_max_cost_cny"],
+            max_input_tokens=limits["max_input_tokens"],
+            max_output_tokens=limits["max_output_tokens"],
+        )
+        return cls(
+            PilotUsageAudit(RateCard()),
+            guard,
+            turn=turn,
+            input_upper_bound=limits["provider_input_context_ceiling_tokens"],
+            max_model_attempts=limits["max_model_http_attempts"],
+            max_tool_attempts=limits["max_direct_tool_attempts"],
+            emit=emit,
+        )
+
     def callback(self, role):
         return PilotCallback(self.audit, turn=self.turn, role=role)
 
@@ -215,12 +251,36 @@ class OfflinePilotWorker:
             self.stop("unknown_http_outcome")
             self.emit({"event": "unknown", "identity": row["identity"]})
 
-    def _received(self, row, response, body):
+    @staticmethod
+    def _decoded_receipt(response, body):
+        # HTTPX delivers decoded bytes to the SDK but our stream wrapper sees
+        # transport bytes. Use an independent decoder; sharing the SDK decoder
+        # would consume its gzip/SSE state. This Response performs no network IO.
+        encoding = response.headers.get("content-encoding")
+        if not encoding:
+            return body
+        return httpx.Response(
+            200, headers={"content-encoding": encoding}, content=body
+        ).content
+
+    def _stream_has_done(self, response, chunks):
+        try:
+            decoded = self._decoded_receipt(response, b"".join(chunks))
+            return any(
+                line.startswith(b"data:") and line[5:].strip() == b"[DONE]"
+                for line in decoded.splitlines()
+            )
+        except (ValueError, httpx.DecodingError):
+            return False
+
+    def _received(self, row, response, body, *, encoded=False):
         with self.lock:
             try:
                 row["http_status"] = response.status_code
                 if response.status_code != 200:
                     raise AuditError("HTTP error charge not confirmed")
+                if encoded:
+                    body = self._decoded_receipt(response, body)
                 if row["kind"] == "model":
                     if "text/event-stream" in response.headers.get("content-type", ""):
                         records, done = [], False
@@ -287,7 +347,7 @@ class OfflinePilotWorker:
                         "output_tokens": out,
                     }
                 )
-            except (ValueError, TypeError, KeyError, AuditError):
+            except (ValueError, TypeError, KeyError, AuditError, httpx.DecodingError):
                 # Overruns are already settled and must retain their actual charge.
                 if row["identity"] in self.guard.completed:
                     row["status"] = "overrun"
@@ -356,17 +416,21 @@ class OfflinePilotWorker:
                     for chunk in self.original:
                         chunks.append(chunk)
                         yield chunk
-                    worker._received(self.row, self.response, b"".join(chunks))
+                    worker._received(
+                        self.row, self.response, b"".join(chunks), encoded=True
+                    )
                 except BaseException:
                     worker._unknown(self.row)
                     raise
 
             def close(self):
                 try:
-                    if self.row["status"] == "reserved" and b"data: [DONE]" in b"".join(
-                        self.chunks
+                    if self.row["status"] == "reserved" and worker._stream_has_done(
+                        self.response, self.chunks
                     ):
-                        worker._received(self.row, self.response, b"".join(self.chunks))
+                        worker._received(
+                            self.row, self.response, b"".join(self.chunks), encoded=True
+                        )
                 finally:
                     self.original.close()
                     worker._unknown(self.row)
@@ -382,17 +446,21 @@ class OfflinePilotWorker:
                     async for chunk in self.original:
                         chunks.append(chunk)
                         yield chunk
-                    worker._received(self.row, self.response, b"".join(chunks))
+                    worker._received(
+                        self.row, self.response, b"".join(chunks), encoded=True
+                    )
                 except BaseException:
                     worker._unknown(self.row)
                     raise
 
             async def aclose(self):
                 try:
-                    if self.row["status"] == "reserved" and b"data: [DONE]" in b"".join(
-                        self.chunks
+                    if self.row["status"] == "reserved" and worker._stream_has_done(
+                        self.response, self.chunks
                     ):
-                        worker._received(self.row, self.response, b"".join(self.chunks))
+                        worker._received(
+                            self.row, self.response, b"".join(self.chunks), encoded=True
+                        )
                 finally:
                     await self.original.aclose()
                     worker._unknown(self.row)

@@ -1062,3 +1062,8 @@ worker: real SDK/native-executor callbacks reconcile with mocked HTTP receipts,
 including background memory calls, reservations and an external timeout/cancel
 supervisor. Real network transports remain disabled. See
 [the worker wiring checks](docs/research-report/multiturn-pilot-preparation-20261122/WORKER_OFFLINE.md).
+
+The pilot now has a reviewed 50 CNY total budget sheet with a 48 CNY operating
+allowance, a verified public context bound and an offline worker binding. It
+continues to deny live API transports. See
+[the seven-turn experiment sheet](docs/research-report/multiturn-pilot-preparation-20261122/EXPERIMENT_SHEET_50CNY.md).

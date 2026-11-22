@@ -210,6 +210,8 @@ def frozen_engine(root):
         "scripts/report_multiturn_preflight.py",
         "scripts/report_pilot_audit.py",
         "scripts/report_pilot_worker.py",
+        "scripts/report_pilot_admission.py",
+        "docs/research-report/multiturn-pilot-preparation-20261122/ADMISSION_REVIEW.json",
         "scripts/validate_report_multiturn_cases.py",
     ]
     return {name: digest(root / name) for name in sorted(set(names))}
@@ -339,7 +341,7 @@ def offline_only(function):
 
 
 @offline_only
-def build_packet(root, destination, *, budget_cny=None):
+def build_packet(root, destination, *, budget_cny=None, admission_review=False):
     root, destination = Path(root).resolve(), Path(destination)
     if budget_cny is not None:
         budget_cny = str(money(budget_cny))
@@ -382,6 +384,14 @@ def build_packet(root, destination, *, budget_cny=None):
         "provider_input_context_ceiling_tokens": None,
         "provider_input_context_ceiling_verified": False,
     }
+    reviewed = None
+    if admission_review:
+        from report_pilot_admission import reviewed_limits
+
+        extra_limits, reviewed = reviewed_limits(
+            root, budget_cny, public_profile, roles
+        )
+        limits.update(extra_limits)
     rates = {
         "currency": "CNY",
         "basis": "peak-rate conservative upper estimate; cache reads included in input",
@@ -422,6 +432,14 @@ def build_packet(root, destination, *, budget_cny=None):
             "verified provider input-context ceiling for reservations",
         ],
     }
+    if reviewed is not None:
+        packet["admission_review"] = reviewed
+        packet["remaining_launch_requirements"] = [
+            "explicit API execution authorization",
+            "confirmed account billing currency",
+            "provider rate/model-version recheck at launch",
+            "live worker admission review after offline transport wiring",
+        ]
     destination.mkdir(parents=True)
     write(destination / "agent-input.json", selected)
     write(destination / "profile.json", public_profile)
@@ -486,10 +504,20 @@ def main():
     parser.add_argument(
         "--budget-cny", help="Budget preference only; never enables execution"
     )
+    parser.add_argument(
+        "--admission-review",
+        action="store_true",
+        help="Apply the frozen 50 CNY public review; never enables execution",
+    )
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     if not args.verify:
-        build_packet(root, args.output, budget_cny=args.budget_cny)
+        build_packet(
+            root,
+            args.output,
+            budget_cny=args.budget_cny,
+            admission_review=args.admission_review,
+        )
     print(json.dumps(verify_packet(root, args.output), ensure_ascii=False, indent=2))
 
 
