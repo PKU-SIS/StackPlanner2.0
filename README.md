@@ -777,13 +777,19 @@ replace the reviewed final value. A receipt still uses the real written file;
 source, schema, execution-stop and partial-status checks retain their ordinary
 behavior. The host does not edit findings or overwrite the optional file.
 
-For a Reporter with the validated CLAUSE Skill and public array schema, native
-task rendering replaces the known legacy mandatory-file/success-envelope
-instruction block with that same raw-array final transport. Files can still be
-used for source inspection and optional drafts; the final message carries the
-complete current corrected array. This changes only a detached model-facing
-instruction view. The host's original task contract, source artifacts, ordinary
+For a task with the validated CLAUSE Skill and public array schema, native
+Central and Reporter rendering replace the known legacy mandatory-file/success-envelope
+instruction block with that same raw-array final transport. On both initial and
+recovery Central requests, replacement requires the complete immutable original
+task to match the visible user turn, with optional workflow guidance before it.
+That guidance, source evidence and hidden task memory retain their original bytes.
+Files can still be used for source inspection and optional drafts; the final
+message carries the complete current corrected array. This changes only a detached
+model-facing instruction view. The host's original task contract, source artifacts, ordinary
 tasks and other output schemas keep their existing content and behavior.
+The public Skill describes evidence appropriate to all five discrepancy families;
+only inconsistency requires comparing incompatible statements. Other families
+use their own document-grounded evidence, with original quotations preserved.
 
 
 CLAUSE audit and review guidance checks sentence continuations across physical

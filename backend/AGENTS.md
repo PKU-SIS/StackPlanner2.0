@@ -1566,6 +1566,20 @@ their instructions. Tests: test_sp_clause_delivery_prompt.py checks exact-block
 scope, unchanged source/host state, controls and sync/async real SubagentExecutor
 builders through Vllm HTTP serialization.
 
+SPFinishAvailabilityMiddleware also renders that exact CLAUSE control block in
+the latest visible original user turn before any Central request branch, for
+both initial and recovery calls. Authenticate the full original_issue (or
+original_request fallback) suffix against the immutable contract and require the
+same strict public CLAUSE schema/source/Skill scope. Preserve any workflow prefix
+and message identity/metadata in a detached copy. Never rewrite arbitrary user
+instructions, tool/source bodies, prior assistant messages or hidden task memory;
+never mutate the authoritative contract, findings, acceptance or recovery budgets.
+Tests: test_sp_clause_central_delivery_prompt.py covers real sync/async Vllm HTTP
+serialization, initial/recovery delegation, exact scope and unchanged host state.
+Its public Skill regression keeps all five discrepancy families supported;
+only inconsistency requires comparing incompatible statements. Preserve the
+Skill's whole-document review, verbatim evidence and delivery requirements.
+
 `sp/syntax_grammar.py` is a default-disabled, executor-local final-request gate for
 `SP_CLAUSE_SYNTAX_GRAMMAR=1`. Share the same gate instance between
 `PublicArtifactFormatRepairMiddleware` and the innermost source-visibility

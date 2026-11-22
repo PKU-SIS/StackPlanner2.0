@@ -38,6 +38,7 @@ from deerflow.agents.thread_state import (
 from deerflow.sp.actions import ActionType, ActionValidationError, SPAction, build_default_action_router
 from deerflow.sp.actions.handlers.context import allows_human_interaction
 from deerflow.sp.actions.router import SP_SUMMARY_TURN_RESERVED_KEY
+from deerflow.sp.clause_delivery import align_clause_central_messages
 from deerflow.sp.hitl import record_human_feedback
 from deerflow.sp.memory import StackMemoryEntry, TaskMemoryStack
 from deerflow.sp.output_contract import output_contract_gaps
@@ -1101,6 +1102,9 @@ class SPFinishAvailabilityMiddleware(AgentMiddleware[AgentState]):
         state = request.state if isinstance(request.state, Mapping) else {}
         if not state.get("messages"):
             state = {**state, "messages": request.messages}
+        messages = align_clause_central_messages(request.messages, contract=state.get("sp_task_contract"))
+        if messages is not request.messages:
+            request = request.override(messages=messages)
         if not self._allows_human_recovery(state):
             request = request.override(tools=[candidate for candidate in request.tools if getattr(candidate, "name", None) not in {"sp_ask_human", "ask_clarification"}])
         request = self._rejected_finish_feedback(request, state)

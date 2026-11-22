@@ -3,6 +3,8 @@
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from langchain_core.messages import HumanMessage
+
 from deerflow.sp.evidence_quotes import clause_public_audit_scope, supplied_document_boundary_instruction
 
 # This exact, harness-authored legacy control block occurs in prepare_task's
@@ -40,6 +42,33 @@ _PUBLIC_DELIVERY = (
     "The input contract and recovered tool evidence are not answers. "
     "If a mandatory source or audit requirement remains unresolved, return the ordinary partial/blocked failure envelope with concrete evidence_gaps."
 )
+
+
+def align_clause_central_messages(messages: Sequence[Any], *, contract: Mapping[str, Any] | None) -> Sequence[Any]:
+    """Render the bound original user turn without changing task/source state."""
+    if not isinstance(contract, Mapping):
+        return messages
+    sources = contract.get("source_requirements")
+    skills = sources.get("skill_names") if isinstance(sources, Mapping) else None
+    if not isinstance(skills, list | tuple) or not clause_public_audit_scope(contract, skills, sources.get("audit_agent")):
+        return messages
+    original = contract.get("original_issue") or contract.get("original_request")
+    if not isinstance(original, str) or _LEGACY_DELIVERY not in original:
+        return messages
+    for index in range(len(messages) - 1, -1, -1):
+        message = messages[index]
+        if not isinstance(message, HumanMessage) or message.name == "sp_task_memory_context" or message.additional_kwargs.get("hide_from_ui"):
+            continue
+        # Public workflow guidance may prefix this same turn. Authenticate its
+        # whole original task suffix; never replace source/history/custom text
+        # merely because it contains the known control block.
+        if not isinstance(message.content, str) or not message.content.endswith(original):
+            return messages
+        content = message.content[: -len(original)] + original.replace(_LEGACY_DELIVERY, _PUBLIC_DELIVERY)
+        rendered = list(messages)
+        rendered[index] = message.model_copy(update={"content": content})
+        return rendered
+    return messages
 
 
 def clause_audit_completion_instruction(*, contract: Mapping[str, Any] | None, skill_names: Sequence[str] | None, auditor_role: str) -> str | None:
