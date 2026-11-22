@@ -1,0 +1,351 @@
+{
+  "scope": "Real DeepSeek follow-ups from accepted historical low-code report; first generation skipped",
+  "baseline": {
+    "estimated_words": 9234,
+    "original_source_files": 230,
+    "source_and_original_canonical_unchanged": true,
+    "imported_report_id": "r2",
+    "imported_version_id": "t0001",
+    "new_model_calls_for_seed": 0
+  },
+  "passed_user_turns": [
+    2,
+    3,
+    4,
+    5
+  ],
+  "failed_user_turns": [
+    6
+  ],
+  "not_executed_user_turns": [
+    7
+  ],
+  "all_six_followups_passed": false,
+  "turns": [
+    {
+      "user_turn": 2,
+      "message_id": "seeded-lowcode.t2",
+      "runtime_message_id": "seeded-lowcode.t2__user",
+      "native_report_id": "r3",
+      "native_delivery_created": true,
+      "dialogue_turn_id": "t0002",
+      "roles": [
+        "central",
+        "git_agent",
+        "outline",
+        "writer",
+        "memory_updater"
+      ],
+      "old_version_sha_unchanged": true,
+      "passed": true,
+      "semantic_intent_verified": false,
+      "factual_quality_verified": false,
+      "base_user_turn": 1,
+      "accepted_head_user_turn": 2,
+      "active_user_turn": 2,
+      "version_binding_ok": true,
+      "canonical_changes": {
+        "added_nodes": [],
+        "changed_nodes": [
+          "n11"
+        ],
+        "factual_correctness_verified": false,
+        "kept_nodes": [
+          "n8",
+          "n2",
+          "n4",
+          "n9",
+          "n14",
+          "n6",
+          "n13"
+        ],
+        "removed_nodes": [],
+        "scope": "canonical node bytes; final citation display and assembly may change"
+      },
+      "scope_ok": true,
+      "validation_recovery_only": true,
+      "no_model_replay": true
+    },
+    {
+      "user_turn": 3,
+      "message_id": "seeded-lowcode.t3",
+      "runtime_message_id": "seeded-lowcode.t3",
+      "native_report_id": "r4",
+      "native_delivery_created": true,
+      "dialogue_turn_id": "t0003",
+      "roles": [
+        "central",
+        "git_agent",
+        "git_agent",
+        "git_agent",
+        "central",
+        "outline",
+        "outline",
+        "outline",
+        "writer",
+        "writer",
+        "writer",
+        "writer",
+        "outline",
+        "memory_updater"
+      ],
+      "old_version_sha_unchanged": true,
+      "passed": true,
+      "semantic_intent_verified": false,
+      "factual_quality_verified": false,
+      "base_user_turn": 2,
+      "accepted_head_user_turn": 3,
+      "active_user_turn": 3,
+      "version_binding_ok": true,
+      "canonical_changes": {
+        "added_nodes": [],
+        "changed_nodes": [
+          "n14"
+        ],
+        "factual_correctness_verified": false,
+        "kept_nodes": [
+          "n8",
+          "n2",
+          "n4",
+          "n9",
+          "n6",
+          "n13",
+          "n11"
+        ],
+        "removed_nodes": [],
+        "scope": "canonical node bytes; final citation display and assembly may change"
+      },
+      "scope_ok": true
+    },
+    {
+      "user_turn": 4,
+      "message_id": "seeded-lowcode.t4",
+      "runtime_message_id": "seeded-lowcode.t4",
+      "native_report_id": "r5",
+      "native_delivery_created": true,
+      "dialogue_turn_id": "t0004",
+      "roles": [
+        "central",
+        "git_agent",
+        "git_agent",
+        "git_agent",
+        "central",
+        "central",
+        "outline",
+        "outline",
+        "outline",
+        "outline",
+        "outline",
+        "outline",
+        "outline",
+        "outline",
+        "writer",
+        "writer",
+        "writer",
+        "outline",
+        "memory_updater"
+      ],
+      "old_version_sha_unchanged": true,
+      "passed": true,
+      "semantic_intent_verified": false,
+      "factual_quality_verified": false,
+      "base_user_turn": 1,
+      "accepted_head_user_turn": 4,
+      "active_user_turn": 4,
+      "version_binding_ok": true,
+      "canonical_changes": {
+        "added_nodes": [],
+        "changed_nodes": [
+          "n14"
+        ],
+        "factual_correctness_verified": false,
+        "kept_nodes": [
+          "n8",
+          "n2",
+          "n4",
+          "n11",
+          "n9",
+          "n6",
+          "n13"
+        ],
+        "removed_nodes": [],
+        "scope": "canonical node bytes; final citation display and assembly may change"
+      },
+      "scope_ok": true
+    },
+    {
+      "user_turn": 5,
+      "message_id": "seeded-lowcode.t5",
+      "runtime_message_id": "seeded-lowcode.t5",
+      "native_report_id": "r5",
+      "native_delivery_created": false,
+      "dialogue_turn_id": "t0005",
+      "roles": [
+        "central",
+        "git_agent",
+        "git_agent",
+        "git_agent",
+        "central",
+        "central",
+        "central",
+        "memory_updater"
+      ],
+      "old_version_sha_unchanged": true,
+      "passed": true,
+      "semantic_intent_verified": false,
+      "factual_quality_verified": false,
+      "base_user_turn": 4,
+      "accepted_head_user_turn": 4,
+      "active_user_turn": 4,
+      "version_binding_ok": true
+    },
+    {
+      "user_turn": 6,
+      "message_id": "seeded-lowcode.t6",
+      "runtime_message_id": "seeded-lowcode.t6",
+      "native_report_id": "r6",
+      "native_delivery_created": true,
+      "dialogue_turn_id": "t0006",
+      "roles": [
+        "central",
+        "git_agent",
+        "git_agent",
+        "central",
+        "outline",
+        "outline",
+        "outline",
+        "outline",
+        "outline",
+        "outline",
+        "outline",
+        "outline",
+        "outline",
+        "memory_updater"
+      ],
+      "old_version_sha_unchanged": true,
+      "passed": false,
+      "semantic_intent_verified": false,
+      "factual_quality_verified": false,
+      "base_user_turn": 2,
+      "accepted_head_user_turn": 6,
+      "active_user_turn": 6,
+      "version_binding_ok": false,
+      "canonical_changes": {
+        "added_nodes": [],
+        "changed_nodes": [],
+        "factual_correctness_verified": false,
+        "kept_nodes": [
+          "n8",
+          "n2",
+          "n4",
+          "n9",
+          "n14",
+          "n6",
+          "n13",
+          "n11"
+        ],
+        "removed_nodes": [],
+        "scope": "canonical node bytes; final citation display and assembly may change"
+      },
+      "scope_ok": true
+    }
+  ],
+  "exact_reuse_failure": {
+    "requested_base_user_turn": 2,
+    "actual_base_user_turn": 2,
+    "successful_reuse_tool_path": false,
+    "actual_mode": "revision",
+    "canonical_changed_nodes": [],
+    "rendered_identical_to_second_version": true,
+    "researcher_calls": 0,
+    "writer_calls": 0,
+    "outline_calls": 9,
+    "expected_head_user_turn": 4,
+    "actual_head_user_turn": 6,
+    "expected_active_user_turn": 2,
+    "actual_active_user_turn": 6,
+    "unexpected_new_native_delivery": true,
+    "fixed_in_this_run": false
+  },
+  "reports": {
+    "r2": {
+      "estimated_words": 9234,
+      "rendered_sha256": "862be85a50400678996f5d1781d2881aa6d4959b137516dea79d3f37e721a0a9",
+      "review_action_id": "spact_sp-fixed-c0-review-r1"
+    },
+    "r3": {
+      "estimated_words": 9401,
+      "rendered_sha256": "43ae967a66c5e2e2d2246501e0bdb3854146f5f471d683f80e6bfcde375c152d",
+      "review_action_id": "spact_sp-fixed-r3-t0002-c0-review-r1"
+    },
+    "r4": {
+      "estimated_words": 9620,
+      "rendered_sha256": "ad845419c96d9b8110703813f5e228a5f88677dd758ce397b1194923ad4c7d65",
+      "review_action_id": "spact_sp-fixed-r4-t0003-c0-review-r1"
+    },
+    "r5": {
+      "estimated_words": 9453,
+      "rendered_sha256": "cb4ecfc7877bcbc8a71294947cdac73cc84c4a7e5b275790988f175a4b37f2f6",
+      "review_action_id": "spact_sp-fixed-r5-t0004-c0-review-r1"
+    },
+    "r6": {
+      "estimated_words": 9401,
+      "rendered_sha256": "43ae967a66c5e2e2d2246501e0bdb3854146f5f471d683f80e6bfcde375c152d",
+      "review_action_id": "spact_sp-fixed-r6-t0006-c0-review-r1"
+    }
+  },
+  "cost": {
+    "basis": "conservative verified peak rates; not provider invoice",
+    "seeded_only_cny": "3.43721368",
+    "all_trials_cumulative_cny": "6.21026880",
+    "pending_cost_cny": "0",
+    "billing_complete_all_segments": true,
+    "model_calls": 68,
+    "direct_tool_calls": 0,
+    "total_input_tokens": 3255011,
+    "total_output_tokens": 151810
+  },
+  "harness_fixes": {
+    "message_identity": "Use actual normalized HumanMessage ID; earlier successful turn 2 verified without model replay",
+    "gateway_lifecycle": "New make_sp_agent graph per user run with the same checkpoint; previously skipped turn 4 had no model calls",
+    "validated_paid_turns_replayed": 0,
+    "continuations_retain_prior_costs": true
+  },
+  "restore_proof": {
+    "file": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261122-seeded-recovery-proof/result.json",
+    "sha256": "7d4321c4399b927c0269942a2125dae93fb7c188cb490ede4629667850b40236",
+    "all_six_archives_independently_restored": true,
+    "offline_model_calls": 0
+  },
+  "artifacts": {
+    "20261122-seeded-lowcode-01": {
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261122-seeded-lowcode-01",
+      "manifest_sha256": "489c809de1cc9aa6aaa4d7ef74ad9f99c0f78dc889dfd54b9e8db6d2d60c8e04",
+      "files": 2962
+    },
+    "20261122-seeded-lowcode-cont02": {
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261122-seeded-lowcode-cont02",
+      "manifest_sha256": "a9d8c5b527e26055971aebcc9a36ff4b908ef881762d23293296cc7c180ab3d5",
+      "files": 14
+    },
+    "20261122-seeded-lowcode-cont03": {
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261122-seeded-lowcode-cont03",
+      "manifest_sha256": "767ba402bc9a05eee13330f32f58583c30fec1451fe79151d5b8ce8784923a1b",
+      "files": 12
+    }
+  },
+  "frozen_public_sha256": "3ce84b097475d761994dfc88b3052af75a55b9823cd30f5b43b0139cbd331dfc",
+  "evaluator_only_sha256": "3df45ace630c54d204563c56699b675b4523787032af27407c4e2c6206980fc4",
+  "tests": {
+    "final_broad_passed": 1125,
+    "final_broad_seconds": 72.84,
+    "last_entry_smoke_passed": 13,
+    "counts_overlap": true
+  },
+  "old_four_tracked_sha_unchanged": true,
+  "facts_evaluated": false,
+  "evaluator_expectations_in_model_input": false,
+  "native_thresholds_lowered": false,
+  "push_merge_deploy_service_restart": false,
+  "next_issue": "Disambiguate whole-version ExactReuse from ancestor-based patching; add operation-contract protection and retest turns 6–7 separately without relabelling this failure."
+}

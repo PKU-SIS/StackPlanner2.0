@@ -91,3 +91,12 @@ skips model generation for user turn 1 and starts opt-in follow-ups at turn 2.
 models. `--prior-usage` carries prior reconciled costs/tokens into the same total
 budget. The real worker allows up to 180 seconds to drain background memory;
 model and native role budgets remain unchanged. See seeded-lowcode-20261122.
+
+Real seeded follow-up evidence is in seeded-lowcode-20261122/RESULT.md: turns
+2–5 pass; turn 6 chose prepare/review instead of ExactReuse, emitted an identical
+new delivery and advanced head incorrectly; turn 7 was not executed. Do not
+relabel identical content or zero Writer calls as correct reuse. The reuse tool
+itself was not the successful path in this run. Runtime message IDs must come
+from actual HumanMessage objects, and the pilot builds a fresh native graph per
+user run like Gateway while retaining the checkpoint. Successful paid turns
+were validated/recovered without replay; the known mode-selection defect remains.

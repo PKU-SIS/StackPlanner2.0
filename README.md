@@ -1076,3 +1076,8 @@ user authorization. See [the live-pilot record](docs/research-report/MULTITURN_L
 The multi-turn pilot can now start from a verified historical native delivery,
 restore it into an independent thread and test follow-up edits directly, without
 regenerating the first report. See [the seeded pilot protocol](docs/research-report/seeded-lowcode-20261122/PLAN.md).
+
+Real seeded follow-up tests passed local edits, retained/withdrawn requirements,
+ancestor selection and read-only answering. Whole-version reuse exposed an
+operation-selection defect: identical content was unnecessarily published as a
+new version. See [the measured results and limits](docs/research-report/seeded-lowcode-20261122/RESULT.md).
