@@ -252,6 +252,12 @@ def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asy
             assert all(not request.get('tools') for request in requests[1:])
         assert len(executor._runtime_middlewares)>=20
         for request in requests:
+            systems=[message['content'] for message in request['messages'] if message['role']=='system']
+            assert systems
+            for marker in ['For a required file or a long report', 'Keep the control', 'Then set artifact_content to null', 'Use artifact_type "report_revision"', '<output_contract>']:
+                assert all(marker not in system for system in systems), marker
+            assert any('<public-schema-final-delivery>' in system for system in systems)
+            assert any('partial' in system and 'blocked' in system for system in systems)
             rendered=json.dumps(request['messages'])
             assert '<clause-audit-completion>' in rendered
             assert 'their presence alone does not make the audit incomplete' in rendered
@@ -280,3 +286,24 @@ def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asy
     completed = subprocess.run([sys.executable, "-c", script], env=env, text=True, capture_output=True, timeout=90)
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert json.loads((tmp_path / "wire.json").read_text())
+
+
+def test_owned_public_reporter_template_omits_generic_success_delivery_but_retains_policy():
+    from deerflow.subagents.builtins.sp_specialists import REPORTER_CONFIG, reporter_system_prompt
+
+    ordinary = REPORTER_CONFIG.system_prompt
+    public = reporter_system_prompt(public_schema=True)
+    assert ordinary == reporter_system_prompt()
+    for marker in (
+        "<output_contract>", "Keep the control", "For a required file or a long report", "Then set artifact_content to null",
+        "same created_paths contract", "return the complete report in artifact_content", "Keep only a compact completion note in summary",
+        'Use artifact_type "report_revision"', "Keep the final summary under 700 characters", "and list the same check in",
+    ):
+        assert marker in ordinary
+        assert marker not in public
+    for marker in (
+        "human_feedback", "Preserve every distinct supported finding and original", "single-layer encoding", "expected_output",
+        "required_literal_tokens", "Never claim completion while one of those tokens is absent", "Never expose a host filesystem path",
+        "Do not delegate to another agent", "do not search for, invent", "Never claim a created path without a successful native write_file call",
+    ):
+        assert marker in public

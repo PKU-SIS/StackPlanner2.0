@@ -142,6 +142,31 @@ def _exact_visible_source(messages, captured, contract) -> bool:
     return source is not None and unavailable is None
 
 
+def clause_source_ready_enabled(contract, skill_names, auditor_role) -> bool:
+    """Independent opt-in for the authenticated public CLAUSE audit only."""
+    return (
+        os.environ.get("SP_CLAUSE_SOURCE_READY_NO_REREAD") == "1"
+        and isinstance(contract, Mapping)
+        and isinstance(skill_names, list | tuple)
+        and clause_public_audit_scope(contract, skill_names, auditor_role)
+    )
+
+
+def clause_source_ready_instruction() -> str:
+    """Explain source readiness without certifying the audit or inventing EOF gaps."""
+    return (
+        "[HOST CLAUSE SOURCE-READY MODE] "
+        "The complete required original public source is currently visible in this exact model input as authenticated successful native read_file results. "
+        "Review that original evidence and perform the requested audit. Repeated read_file/grep tools are temporarily unavailable while the complete originals remain visible. "
+        "Source defects, physical line breaks and candidate quotation mismatches are audit content or candidate issues; they do not by themselves establish missing source evidence. "
+        "Preserve source characters and every supported distinct finding, and return the exact raw public output required by the task contract. "
+        "The host has not performed the substantive audit, verified your quotations or selected an answer. "
+        "Source readiness does not establish task completion. Do not fabricate findings or conceal unfinished work using a default/empty success answer. "
+        "If a mandatory requirement genuinely remains unresolved, return the ordinary partial/blocked failure envelope with concrete evidence_gaps. "
+        "All existing native source, quotation, schema, status, token, turn, loop, safety and acceptance checks still apply. "
+    )
+
+
 def _current_source_visibility_instruction(contract) -> str:
     """Render only an already-authenticated original public file boundary."""
     file = contract["source_requirements"]["files"][0]
@@ -288,7 +313,7 @@ class SyntaxGrammarRequestGate:
                 f"<syntax-only-final>\nThis is the existing native {nomination.phase} final turn, temporarily without tools. "
                 "The complete original public source remains visible in this exact request. Return the complete raw public JSON array with correct single-layer escaping. "
                 "Verify findings against that source; preserve every supported distinct finding and complete original quotation, not broken serialized fragments. "
-                + _current_source_visibility_instruction(self.contract)
+                + (clause_source_ready_instruction() if clause_source_ready_enabled(self.contract, self.skill_names, self.auditor_role) else _current_source_visibility_instruction(self.contract))
                 + source_character_fidelity_instruction()
                 + "The grammar does not establish substantive completion or choose an answer. If the audit remains incomplete, return the ordinary native SP envelope with "
                 'artifact_metadata.completion_status="partial" or "blocked" and concrete nonempty artifact_metadata.evidence_gaps. '

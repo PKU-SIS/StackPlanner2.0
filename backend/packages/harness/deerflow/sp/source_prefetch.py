@@ -170,12 +170,30 @@ class SourcePrefetchVisibilityMiddleware(AgentMiddleware):
         )
         return request.override(tools=tools, messages=[*request.messages, note])
 
+    def _clause_source_ready_request(self, request):
+        """Close repeated reads only while exact native originals remain present."""
+        from deerflow.sp.syntax_grammar import _exact_visible_source, _pending_tools, clause_source_ready_enabled, clause_source_ready_instruction
+
+        if self._settings is None or not clause_source_ready_enabled(self._contract, self._skill_names, self._auditor_role):
+            return None
+        if _pending_tools(request.messages) or not _exact_visible_source(request.messages, self._captured, self._contract):
+            return None
+        tools = [tool for tool in request.tools if getattr(tool, "name", None) not in {"read_file", "grep"}]
+        if len(tools) == len(request.tools):
+            return None
+        note = HumanMessage(name="sp_clause_source_ready_no_reread", content=clause_source_ready_instruction(), additional_kwargs={"hide_from_ui": True})
+        # The caller independently verifies the complete proposed wire budget,
+        # including this note and remaining tools, before using this request.
+        return request.override(tools=tools, messages=[*request.messages, note])
+
     def _clause_current_source_request(self, request):
         """Add transport facts only; preserve tools, source bodies and state."""
         if self._settings is None:
             return None
-        from deerflow.sp.syntax_grammar import clause_current_source_visibility_note
+        from deerflow.sp.syntax_grammar import clause_current_source_visibility_note, clause_source_ready_enabled
 
+        if clause_source_ready_enabled(self._contract, self._skill_names, self._auditor_role):
+            return self._clause_source_ready_request(request)
         note = clause_current_source_visibility_note(request.messages, self._captured, contract=self._contract, skill_names=self._skill_names, auditor_role=self._auditor_role)
         if note is None:
             return None
@@ -183,7 +201,13 @@ class SourcePrefetchVisibilityMiddleware(AgentMiddleware):
 
     def _within_context(self, request) -> bool:
         try:
-            count = count_source_prompt_tokens(request.messages, request.tools, self._settings, self._thinking_enabled)
+            from deerflow.sp.syntax_grammar import clause_source_ready_enabled
+
+            messages = request.messages
+            system = getattr(request, "system_message", None)
+            if system is not None and clause_source_ready_enabled(self._contract, self._skill_names, self._auditor_role):
+                messages = [system, *messages]
+            count = count_source_prompt_tokens(messages, request.tools, self._settings, self._thinking_enabled)
         except Exception:
             logger.debug("Current-source audit token verification unavailable; retaining native source tools", exc_info=True)
             return False

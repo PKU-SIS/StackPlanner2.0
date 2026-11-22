@@ -790,3 +790,38 @@ def test_fresh_composed_source_ranges_remain_proven_with_outside_eof_result(monk
     assert "physical source lines 1..2" in result.messages[-1].content
     assert [m.model_dump() for m in result.messages[:-1]] == before
     assert result.tools == request.tools and result.model_settings == request.model_settings
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_source_ready_mode_is_independent_of_grammar_and_preserves_other_native_tools(monkeypatch, asynchronous):
+    monkeypatch.setenv("SP_CLAUSE_SOURCE_READY_NO_REREAD", "1")
+    state, payloads, _, _ = run_http(monkeypatch, [GOOD], asynchronous=asynchronous, enabled=False)
+    assert state["messages"][-1].content == GOOD
+    assert [item["function"]["name"] for item in payloads[0]["tools"]] == ["write_file"]
+    assert any(message.get("name") == "sp_clause_source_ready_no_reread" for message in payloads[0]["messages"])
+    assert not any(message.get("name") == "sp_clause_current_source_visibility" for message in payloads[0]["messages"])
+    assert "response_format" not in payloads[0]
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_source_ready_grammar_final_uses_same_fact_without_numeric_eof_note(monkeypatch, asynchronous):
+    monkeypatch.setenv("SP_CLAUSE_SOURCE_READY_NO_REREAD", "1")
+    state, payloads, _, _ = run_http(monkeypatch, [BAD, GOOD], asynchronous=asynchronous)
+    assert state["messages"][-1].content == GOOD
+    assert [index for index, request in enumerate(payloads) if "response_format" in request] == [1]
+    final_notes = [message["content"] for message in payloads[1]["messages"] if message.get("name") == "sp_clause_syntax_final"]
+    assert len(final_notes) == 1
+    assert "[HOST CLAUSE SOURCE-READY MODE]" in final_notes[0]
+    assert "beyond EOF" not in final_notes[0] and "physical source lines" not in final_notes[0]
+    assert "partial" in final_notes[0] and "blocked" in final_notes[0]
+    assert "complete original public source" in final_notes[0]
+    assert not payloads[1].get("tools")
+
+
+@pytest.mark.parametrize("final", ["[]", PARTIAL])
+def test_source_ready_preserves_native_completed_empty_or_real_partial_output(monkeypatch, final):
+    monkeypatch.setenv("SP_CLAUSE_SOURCE_READY_NO_REREAD", "1")
+    state, payloads, _, _ = run_http(monkeypatch, [final], enabled=False)
+    assert state["messages"][-1].content == final
+    assert len(payloads) == 1
+    assert [item["function"]["name"] for item in payloads[0]["tools"]] == ["write_file"]

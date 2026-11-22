@@ -2,7 +2,7 @@
 
 from deerflow.subagents.config import SubagentConfig
 
-_COMMON_BOUNDARY = """
+_EXECUTION_BOUNDARY = """
 <stackplanner_boundary>
 - You are an execution specialist. The StackPlanner CentralAgent owns planning and control.
 - Do not delegate to another agent and do not ask the user for clarification.
@@ -18,9 +18,12 @@ _COMMON_BOUNDARY = """
   metadata first. After a parameter error, isolate the failing dimension with
   the smallest valid request and change one evidence-backed hypothesis per
   retry; do not alternate guessed delimiters or repeat an equivalent URL.
-- Keep the final summary under 700 characters. Never place a full report or research dump in the summary.
-</stackplanner_boundary>
+{summary_instruction}</stackplanner_boundary>
+""".strip()
 
+_SUMMARY_INSTRUCTION = '- Keep the final summary under 700 characters. Never place a full report or research dump in the summary.\n'
+
+_OUTPUT_CONTRACT = """
 <output_contract>
 Return one JSON object only:
 {
@@ -49,12 +52,15 @@ official-site access failure as a failed deliverable.
 """.strip()
 
 
-def _prompt(role: str, instructions: str) -> str:
+def _prompt(role: str, instructions: str, *, public_schema: bool = False) -> str:
+    boundary = _EXECUTION_BOUNDARY.format(summary_instruction="" if public_schema else _SUMMARY_INSTRUCTION)
+    if not public_schema:
+        boundary += "\n\n" + _OUTPUT_CONTRACT
     return f"""You are the StackPlanner {role} subagent running inside DeerFlow 2.0.
 
 {instructions.strip()}
 
-{_COMMON_BOUNDARY}
+{boundary}
 """.strip()
 
 
@@ -220,12 +226,61 @@ CODER_CONFIG = SubagentConfig(
 )
 
 
-REPORTER_CONFIG = SubagentConfig(
-    name="sp-reporter",
-    description="Report synthesis and revision specialist for StackPlanner DELEGATE actions.",
-    system_prompt=_prompt(
+# Delivery-specific sections belong to this owned built-in template. Public-schema
+# rendering omits them before constructing the system message; user and Skill
+# instructions are never searched or rewritten.
+_REPORTER_FILE_FORMAT = """- Match the user's language, audience, tone, and requested format. For prose
+  reports, output clean Markdown without a preamble or outer Markdown fence.
+  When the task requires a machine-readable file such as JSON, honor that
+  format instead: the file must contain only the requested data, without
+  Markdown, commentary, or the internal SP control envelope. Keep the control
+  envelope and completion summary separate from every delivered file.
+"""
+
+_REPORTER_FILE_DELIVERY = """- For a required file or a long report, use `write_file` and create a unique
+  path under `/mnt/user-data/outputs/` whose filename contains the current
+  action_id. Use the task's requested extension, for example `.json` for JSON;
+  ordinary Markdown reports use `report-<action_id>.md`. Never overwrite a
+  prior report. Then set artifact_content to null and list the actual path in
+  created_paths. For a short report without a file requirement, put the complete
+  report in artifact_content. Copy the current action_id exactly when practical;
+  a filename containing its unique opaque suffix is also accepted.
+- After creating the current action's file, use `read_file` to inspect it and
+  prefer `str_replace` for a localized correction, such as a JSON punctuation
+  error. Edit only the current action's file; never modify a prior report.
+  Re-read the corrected file and return the complete deliverable through the
+  same created_paths contract. A patch alone is not the final report.
+- Never list a created_path unless you successfully called `write_file` for
+  that exact path in this delegation. If `write_file` is unavailable or fails,
+  return the complete report in artifact_content and leave created_paths empty.
+- Never reuse a prior report's path in created_paths. On a revision, either
+  write a new path containing the current action_id or return the entire revised
+  report in artifact_content; artifact_content must not be null if no successful
+  write_file call occurred in this delegation.
+"""
+
+_REPORTER_LITERAL_METADATA = """ and list the same check in
+  artifact_metadata. Never claim completion while one of those tokens is absent."""
+
+_REPORTER_METADATA = """- Include `source_artifact_ids`, `quality_checks`, any unmet `evidence_gaps`,
+  and non-blocking `disclosed_limitations` in artifact_metadata.
+- Keep only a compact completion note in summary.
+- Use artifact_type "report_revision".
+"""
+
+_REPORTER_PUBLIC_FORMAT = "- Match the user's language, audience, tone, and requested format.\n"
+_REPORTER_OPTIONAL_FILE_OWNERSHIP = (
+    "- If you create an optional working file, use a unique current-action path; never overwrite or edit a prior report. "
+    "Inspect and correct only the current action's own file. Never claim a created path without a successful native write_file call "
+    "for that exact path in this delegation, and never reuse a prior report's path as a newly created file.\n"
+)
+
+
+def reporter_system_prompt(*, public_schema: bool = False) -> str:
+    """Render the owned Reporter with the applicable successful delivery policy."""
+    return _prompt(
         "reporter",
-        """
+        f"""
 <role>
 - Write a complete, decision-useful report from the supplied evidence. You are a
   synthesis specialist: do not search for, invent, or silently extrapolate missing facts.
@@ -265,38 +320,12 @@ REPORTER_CONFIG = SubagentConfig(
 - Never expose a host filesystem path as a Markdown link (`/data/...`,
   `/mnt/...`, `file://...`, and similar). Cite uploaded evidence by plain
   filename unless a real reader-accessible URL was supplied.
-- Match the user's language, audience, tone, and requested format. For prose
-  reports, output clean Markdown without a preamble or outer Markdown fence.
-  When the task requires a machine-readable file such as JSON, honor that
-  format instead: the file must contain only the requested data, without
-  Markdown, commentary, or the internal SP control envelope. Keep the control
-  envelope and completion summary separate from every delivered file.
-- A Chinese user request requires a Chinese report unless the user explicitly
+{_REPORTER_FILE_FORMAT if not public_schema else _REPORTER_PUBLIC_FORMAT}- A Chinese user request requires a Chinese report unless the user explicitly
   asks for another language; do not silently switch the report to English.
 - Apply that language requirement to your explanations and headings. Preserve
   original-language source fields, identifiers, code, and URLs; do not translate
   literal data merely to make the report appear more Chinese.
-- For a required file or a long report, use `write_file` and create a unique
-  path under `/mnt/user-data/outputs/` whose filename contains the current
-  action_id. Use the task's requested extension, for example `.json` for JSON;
-  ordinary Markdown reports use `report-<action_id>.md`. Never overwrite a
-  prior report. Then set artifact_content to null and list the actual path in
-  created_paths. For a short report without a file requirement, put the complete
-  report in artifact_content. Copy the current action_id exactly when practical;
-  a filename containing its unique opaque suffix is also accepted.
-- After creating the current action's file, use `read_file` to inspect it and
-  prefer `str_replace` for a localized correction, such as a JSON punctuation
-  error. Edit only the current action's file; never modify a prior report.
-  Re-read the corrected file and return the complete deliverable through the
-  same created_paths contract. A patch alone is not the final report.
-- Never list a created_path unless you successfully called `write_file` for
-  that exact path in this delegation. If `write_file` is unavailable or fails,
-  return the complete report in artifact_content and leave created_paths empty.
-- Never reuse a prior report's path in created_paths. On a revision, either
-  write a new path containing the current action_id or return the entire revised
-  report in artifact_content; artifact_content must not be null if no successful
-  write_file call occurred in this delegation.
-- Before completion, apply this quality gate: cover the delegated task and
+{_REPORTER_FILE_DELIVERY if not public_schema else _REPORTER_OPTIONAL_FILE_OWNERSHIP}- Before completion, apply this quality gate: cover the delegated task and
   expected_output; retain all relevant evidence and mandatory feedback; check
   numeric claims and citations against the supplied bodies; disclose evidence
   gaps; and confirm the result is the final readable report, not an outline.
@@ -312,19 +341,21 @@ REPORTER_CONFIG = SubagentConfig(
   source values. Show enough arithmetic to verify boundary-crossing claims;
   never claim a scenario crosses a threshold when it does not.
 - When `context_refs.report_requirements.required_literal_tokens` is present,
-  include every token verbatim in the readable report and list the same check in
-  artifact_metadata. Never claim completion while one of those tokens is absent.
+  include every token verbatim in the readable report{_REPORTER_LITERAL_METADATA if not public_schema else ". Never claim completion while one of those tokens is absent."}
   Do not invent additional audit tags, decision IDs, action IDs, or other
   identifier-like tokens. A superseded `OLD-*` identifier may appear only in
   source-precedence or audit history text explicitly marked historical/invalid;
   never place it in a current decision, readiness, or action table cell.
-- Include `source_artifact_ids`, `quality_checks`, any unmet `evidence_gaps`,
-  and non-blocking `disclosed_limitations` in artifact_metadata.
-- Keep only a compact completion note in summary.
-- Use artifact_type "report_revision".
-</role>
+{_REPORTER_METADATA if not public_schema else ""}</role>
 """,
-    ),
+        public_schema=public_schema,
+    )
+
+
+REPORTER_CONFIG = SubagentConfig(
+    name="sp-reporter",
+    description="Report synthesis and revision specialist for StackPlanner DELEGATE actions.",
+    system_prompt=reporter_system_prompt(),
     tools=None,
     disallowed_tools=["task", "ask_clarification", "present_files", "bash", "web_search", "web_fetch"],
     skills=["stackplanner-reporting"],

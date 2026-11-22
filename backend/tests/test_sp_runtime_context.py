@@ -910,3 +910,45 @@ def test_sp_executor_provider_initializes_shared_tools_once_under_parallel_load(
 
     assert call_count == 1
     assert all(result is expected for result in results)
+
+
+@pytest.mark.parametrize("scope", ["clause", "other_skill", "different_source", "inline", "schema", "custom_system"])
+def test_only_authenticated_builtin_clause_reporter_uses_structural_public_template(monkeypatch, scope):
+    from deerflow.subagents.builtins.sp_specialists import REPORTER_CONFIG
+
+    captured = {}
+    config = REPORTER_CONFIG
+    if scope == "custom_system":
+        from dataclasses import replace
+        config = replace(config, system_prompt="<role>Caller-owned: For a required file or a long report</role>\n<output_contract>Generic envelope</output_contract>")
+    class FakeExecutor:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+        def execute(self, prompt):
+            return SimpleNamespace(status="completed", result="done", ai_messages=[], token_usage_records=[])
+    monkeypatch.setattr("deerflow.subagents.get_subagent_config", lambda name, app_config=None: config)
+    monkeypatch.setattr("deerflow.subagents.SubagentExecutor", FakeExecutor)
+    contract = {
+        "delivery_mode": "artifact", "output_parse_mode": "json",
+        "output_schema": {"type": "array", "items": {"type": "object", "properties": {"text": {"type": "string"}, "explanation": {"type": "string"}}, "required": ["text", "explanation"], "additionalProperties": False}},
+        "source_requirements": {"audit_agent": "reporter", "files": [{"path": "/mnt/user-data/uploads/document.txt", "total_lines": 1}], "document_ids": []},
+    }
+    skills = ["clause"]
+    if scope == "other_skill":
+        skills = ["nba"]
+    elif scope == "different_source":
+        contract["source_requirements"]["files"][0]["path"] = "/mnt/user-data/uploads/other.txt"
+    elif scope == "inline":
+        contract["delivery_mode"] = "inline"
+    elif scope == "schema":
+        contract["output_schema"]["items"]["additionalProperties"] = True
+    provider = DR2SPExecutorProvider(app_config=SimpleNamespace(), parent_model="test", runnable_config={}, available_skill_names=frozenset({"clause", "nba"}))
+    provider._tools = []
+    executor = provider({}, SimpleNamespace(context={"thread_id": "thread", "run_id": "run"}, stream_writer=None))
+    executor.execute(SPSubagentTask(action_id="audit", subagent_type="reporter", task="Audit original public evidence.", description="Whole source audit", context_refs={"task_contract": contract}, metadata={"skill_names": skills}))
+    prompt = captured["config"].system_prompt
+    assert ("For a required file or a long report" not in prompt) is (scope == "clause")
+    assert "<output_contract>" not in prompt
+    assert "<public-schema-final-delivery>" in prompt
+    assert 'completion_status="partial" or "blocked"' in prompt
+    assert captured["public_output_contract"] == (contract if contract["delivery_mode"] == "artifact" else None)
