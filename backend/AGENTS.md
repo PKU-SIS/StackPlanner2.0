@@ -81,3 +81,13 @@ worker remains mock-only. Use native make_sp_agent/checkpoints and native
 acceptance; record failure without automatic paid restarts. Factory-only role
 probes do not cover native Researcher continuation's 65536-token override;
 accounting must reserve from each actual request. See the live-pilot record.
+
+The pilot entry also supports `--seed-source` with a frozen `--public-case`
+preflight. Import verifies a read-only native delivery, uses the existing full
+copy/restore/hash rebinding, retains its transfer archive as provenance, and
+freezes the verified restored native report as the thread's sole origin. It
+skips model generation for user turn 1 and starts opt-in follow-ups at turn 2.
+`--evaluator-checks` runs only after each graph turn; never pass its contents to
+models. `--prior-usage` carries prior reconciled costs/tokens into the same total
+budget. The real worker allows up to 180 seconds to drain background memory;
+model and native role budgets remain unchanged. See seeded-lowcode-20261122.

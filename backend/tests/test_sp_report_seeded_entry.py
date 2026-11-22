@@ -27,3 +27,17 @@ def test_seeded_sequence_skips_original_first_round():
     seen = []
     result = run_turn_sequence(turns, lambda row: seen.append(row["turn_index"]) or {"passed": True}, first_turn=2)
     assert result["completed"] and seen == list(range(2, 8))
+
+
+def test_inspection_binds_native_normalized_source_id(tmp_path):
+    from types import SimpleNamespace
+
+    from report_pilot_entry import inspect_turn
+
+    ctx, store = accepted(tmp_path)
+    origin = store.freeze("r1", resolved_query="Accepted requirement")
+    turn = store.reuse(origin["turn_id"], message_id="read-query__user", raw_query="Read the accepted report", response="Saved answer", mode="read_only")
+    row = inspect_turn(tmp_path, store, {"turn_index": 5, "message_id": "read-query"}, "new-run", "r1", {}, SimpleNamespace(calls={}), set(), source_message_id="read-query__user")
+    assert row["passed"]
+    assert row["dialogue_turn_id"] == turn["turn_id"]
+    assert row["runtime_message_id"] == "read-query__user"

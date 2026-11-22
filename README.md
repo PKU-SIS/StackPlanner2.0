@@ -1072,3 +1072,7 @@ An explicitly gated official DeepSeek pilot entry now wraps the native report
 graph with isolated checkpoints, shared accounting and restricted TLS transport.
 Its default precheck makes no model calls; actual execution requires separate
 user authorization. See [the live-pilot record](docs/research-report/MULTITURN_LIVE_PILOT_20261122.md).
+
+The multi-turn pilot can now start from a verified historical native delivery,
+restore it into an independent thread and test follow-up edits directly, without
+regenerating the first report. See [the seeded pilot protocol](docs/research-report/seeded-lowcode-20261122/PLAN.md).

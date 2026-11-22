@@ -305,6 +305,7 @@ def _execute_child(
     seed_source=None,
     prior_usage=None,
     evaluator_checks=None,
+    resume_run=None,
 ):
     """Executed only under the spawn supervisor, after the CLI execution gate."""
     import logging
@@ -320,7 +321,7 @@ def _execute_child(
         LANGSMITH_TRACING="false",
         LANGCHAIN_TRACING_V2="false",
         DEER_FLOW_PROJECT_ROOT=str(root),
-        DEER_FLOW_HOME=str(directory / "runtime"),
+        DEER_FLOW_HOME=str((Path(resume_run) if resume_run else directory) / "runtime"),
     )
     creds = load_credentials(env_file)
     os.environ["LLM_API_KEY"] = creds.api_key
@@ -395,7 +396,11 @@ def _execute_child(
     from deerflow.sp.report.length import contract_for_band
 
     user_id = "report-pilot"
-    thread_id = "pilot-" + uuid4().hex
+    thread_id = (
+        json.loads((Path(resume_run) / "runtime-binding.json").read_text())["thread_id"]
+        if resume_run
+        else "pilot-" + uuid4().hex
+    )
     set_current_user(SimpleNamespace(id=user_id, role="admin"))
     outputs = get_paths().sandbox_outputs_dir(thread_id, user_id=user_id)
     store = ReportTurnStore(outputs, user_id=user_id, thread_id=thread_id)
@@ -411,7 +416,55 @@ def _execute_child(
     )
     latest = {}
     public_requests = json.loads((packet_dir / "agent-input.json").read_text())["turns"]
-    if seed_source is not None:
+    first_user_turn = 1
+    if resume_run is not None:
+        import sqlite3
+
+        prior = Path(resume_run)
+        recovered = json.loads((prior / "recovered-validation.json").read_text())
+        if not recovered["passed"]:
+            raise ValueError("resume requires verified completed prior turn")
+        original_report = json.loads((prior / "seed.json").read_text())["report_id"]
+        generated_reports[1] = original_report
+        index = store.index()
+        from deerflow.sp.report.turns.store import file_manifest
+
+        for version, ref in index["versions"].items():
+            expected_files = store.verify(version)["files"]
+            if file_manifest(outputs / "report" / ref["report_id"]) != expected_files:
+                raise ValueError("accepted files changed before continuation")
+            frozen[ref["report_id"]] = expected_files
+        for request in public_requests[1:]:
+            prior_turns = [
+                store.inspect(t)
+                for t in index["requests"].values()
+                if store.inspect(t)["raw_query"] == request["query"]
+                and store.inspect(t)["status"] == "accepted"
+            ]
+            if prior_turns:
+                generated_reports[request["turn_index"]] = prior_turns[0]["report_id"]
+        first_user_turn = recovered["user_turn"] + 1
+        public_requests = [
+            r for r in public_requests if r["turn_index"] >= first_user_turn
+        ]
+        with (
+            sqlite3.connect(
+                "file:" + str(prior / "checkpoints.sqlite") + "?mode=ro", uri=True
+            ) as src,
+            sqlite3.connect(str(directory / "checkpoints.sqlite")) as dest,
+        ):
+            src.backup(dest)
+        dump(directory / "seed.json", json.loads((prior / "seed.json").read_text()))
+        dump(
+            directory / "continuation.json",
+            {
+                "previous_run": str(prior),
+                "starts_at_user_turn": first_user_turn,
+                "replayed_model_turns": 0,
+            },
+        )
+    elif seed_source is not None:
+        first_user_turn = 2
         seed = import_seed(seed_source, store, directory / "seed-provenance")
         original_report = seed["report_id"]
         generated_reports[1] = original_report
@@ -492,59 +545,18 @@ def _execute_child(
                 frozen,
                 worker.audit,
                 calls_before,
+                source_message_id=str(
+                    next(
+                        message.id
+                        for message in reversed(latest.get("messages", []))
+                        if getattr(message, "type", None) == "human"
+                    )
+                ),
             )
             if row["native_delivery_created"]:
                 generated_reports[number] = row["native_report_id"]
             if checks is not None:
-                expected = next(
-                    item for item in checks["turns"] if item["user_turn"] == number
-                )
-                index = store.index()
-                turn = (
-                    store.inspect(row["dialogue_turn_id"])
-                    if row["dialogue_turn_id"]
-                    else None
-                )
-                inverse = {
-                    ref["report_id"]: version
-                    for version, ref in index["versions"].items()
-                }
-                version_turn = {
-                    inverse[rid]: n
-                    for n, rid in generated_reports.items()
-                    if rid in inverse
-                }
-                actual = {
-                    "base_user_turn": version_turn.get(turn["base_version_id"])
-                    if turn
-                    else None,
-                    "accepted_head_user_turn": version_turn.get(index["head"]),
-                    "active_user_turn": version_turn.get(index["active_version"]),
-                }
-                row.update(actual)
-                row["version_binding_ok"] = all(
-                    actual[k] == expected[k] for k in actual
-                )
-                row["passed"] = (
-                    row["passed"]
-                    and row["version_binding_ok"]
-                    and row["native_delivery_created"]
-                    == expected["native_delivery_required"]
-                )
-                if row["native_delivery_created"]:
-                    changes = json.loads(
-                        (
-                            store.directory(row["dialogue_turn_id"]) / "changes.json"
-                        ).read_text()
-                    )
-                    row["canonical_changes"] = changes
-                    row["scope_ok"] = (
-                        sorted(changes["changed_nodes"])
-                        == sorted(expected["changed_nodes"])
-                        and not changes["added_nodes"]
-                        and not changes["removed_nodes"]
-                    )
-                    row["passed"] = row["passed"] and row["scope_ok"]
+                validate_turn_checks(row, store, checks, generated_reports)
             if number == 1 and row["passed"]:
                 original_report = row["native_report_id"]
             dump(directory / f"turn-{number}.json", row)
@@ -555,7 +567,7 @@ def _execute_child(
                 result = run_turn_sequence(
                     public_requests,
                     execute,
-                    first_turn=2 if seed_source is not None else 1,
+                    first_turn=first_user_turn,
                 )
         except Exception as exc:
             worker.stop("case_execution_failed")
@@ -578,8 +590,52 @@ def _execute_child(
             dump(directory / "result.json", result)
 
 
+def validate_turn_checks(row, store, checks, generated_reports):
+    number = row["user_turn"]
+    expected = next(item for item in checks["turns"] if item["user_turn"] == number)
+    index = store.index()
+    turn = store.inspect(row["dialogue_turn_id"]) if row["dialogue_turn_id"] else None
+    inverse = {ref["report_id"]: version for version, ref in index["versions"].items()}
+    version_turn = {
+        inverse[rid]: n for n, rid in generated_reports.items() if rid in inverse
+    }
+    actual = {
+        "base_user_turn": version_turn.get(turn["base_version_id"]) if turn else None,
+        "accepted_head_user_turn": version_turn.get(index["head"]),
+        "active_user_turn": version_turn.get(index["active_version"]),
+    }
+    row.update(actual)
+    row["version_binding_ok"] = all(actual[k] == expected[k] for k in actual)
+    row["passed"] = (
+        row["passed"]
+        and row["version_binding_ok"]
+        and row["native_delivery_created"] == expected["native_delivery_required"]
+    )
+    if row["native_delivery_created"]:
+        changes = json.loads(
+            (store.directory(row["dialogue_turn_id"]) / "changes.json").read_text()
+        )
+        row["canonical_changes"] = changes
+        row["scope_ok"] = (
+            sorted(changes["changed_nodes"]) == sorted(expected["changed_nodes"])
+            and not changes["added_nodes"]
+            and not changes["removed_nodes"]
+        )
+        row["passed"] = row["passed"] and row["scope_ok"]
+    return row
+
+
 def inspect_turn(
-    outputs, store, request, run_id, original_report, frozen, audit, calls_before
+    outputs,
+    store,
+    request,
+    run_id,
+    original_report,
+    frozen,
+    audit,
+    calls_before,
+    *,
+    source_message_id=None,
 ):
     """Native acceptance + SHA checks; evaluator expectations are never model input."""
     from deerflow.sp.report import store as native
@@ -603,7 +659,9 @@ def inspect_turn(
     turn_id = None
     turn = None
     if number > 1:
-        turn_id = store.index()["requests"].get(request["message_id"])
+        turn_id = store.index()["requests"].get(
+            source_message_id or request["message_id"]
+        )
         turn = store.inspect(turn_id) if turn_id else None
     if delivered:
         valid = not final_binding_error(ledger)
@@ -624,6 +682,7 @@ def inspect_turn(
     return {
         "user_turn": number,
         "message_id": request["message_id"],
+        "runtime_message_id": source_message_id or request["message_id"],
         "native_report_id": rid,
         "native_delivery_created": delivered,
         "dialogue_turn_id": turn_id,
@@ -644,6 +703,7 @@ def main():
     parser.add_argument("--seed-source", type=Path)
     parser.add_argument("--prior-usage", type=Path)
     parser.add_argument("--evaluator-checks", type=Path)
+    parser.add_argument("--resume-run", type=Path)
     parser.add_argument("--billing-currency", choices=["CNY"])
     args = parser.parse_args()
     from report_multiturn_preflight import verify_packet
@@ -698,6 +758,7 @@ def main():
         evaluator_checks=args.evaluator_checks.resolve()
         if args.evaluator_checks
         else None,
+        resume_run=args.resume_run.resolve() if args.resume_run else None,
     )
     result = supervise(
         target, directory / "numeric-events.jsonl", api_execution_authorized=True
