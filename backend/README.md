@@ -573,6 +573,13 @@ preserve source characters, compare decoded `text` against the original native
 read, and encode JSON once. It supplies no replacement quotation and retains
 partial/blocked delivery for genuinely unresolved mandatory requirements.
 
+The bound CLAUSE Reporter's initial task also defines completion as reading the
+required evidence, covering the requested audit and delivering supported findings.
+Defects in the supplied document belong in findings; the audit does not require
+repairing the document or supplying missing business facts. A completed audit may
+return `[]`, while incomplete source access, coverage or required checks retain
+the native partial/blocked path. Other roles and public contracts keep their prompts.
+
 Use the explicit synthetic real-service probe before a new protocol run; it does
 not touch production artifacts or choose a replacement answer:
 

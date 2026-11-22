@@ -176,7 +176,7 @@ def public_schema_delivery_instruction(task: SPSubagentTask) -> str | None:
 
 def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
     """Render a structured SP task for a DR2 subagent prompt."""
-    from deerflow.sp.clause_delivery import align_clause_delivery_payload
+    from deerflow.sp.clause_delivery import align_clause_delivery_payload, clause_audit_completion_instruction
 
     task.validate_protocol()
     payload = {
@@ -212,6 +212,9 @@ def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
             "Full reports, outlines, research bodies, and other large text belong in artifact_content, never in summary.",
         ]
     )
+    completion_instruction = clause_audit_completion_instruction(contract=task.context_refs.get("task_contract"), skill_names=task.metadata.get("skill_names"), auditor_role=task.subagent_type)
+    if completion_instruction is not None:
+        output_instructions.append(completion_instruction)
     return "\n".join(
         [
             "<sp-subagent-task>",

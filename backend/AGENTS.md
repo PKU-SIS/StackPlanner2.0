@@ -1633,3 +1633,14 @@ passed current-source verification. Source-internal fragments, punctuation and
 OCR defects are audit content, not by themselves a missing-evidence decision.
 Keep the matcher, schema, native acceptance and budgets unchanged; supply no
 replacement quotation and retain genuine mandatory-gap partial/blocked exits.
+
+`clause_audit_completion_instruction` is appended by the initial subagent renderer
+only for the validated CLAUSE Skill, Reporter role and exact public-array/file
+source contract. It defines completion of the requested audit of the supplied
+document, including its defects, rather than completion or repair of that document.
+Keep this outside the immutable task payload and source bodies. Missing source
+access, task coverage and required execution still block completion; `[]` remains
+valid after a completed audit finds no supported issue. Preserve all native
+normalization, source-access, acceptance and status rules. Regression anchors:
+`test_sp_clause_delivery_prompt.py` exercises initial real executor/provider HTTP
+requests plus native empty-answer and unread-source/partial controls.

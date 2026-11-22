@@ -55,13 +55,17 @@ def test_bound_clause_renderer_unifies_only_known_transport_in_model_visible_cop
         assert marker not in rendered
     assert "complete raw JSON array" in rendered
     assert "optional draft" in rendered
+    assert "<clause-audit-completion>" in rendered
+    assert "their presence alone does not make the audit incomplete" in rendered
+    assert "A completed audit may return []" in rendered
+    assert "required source access, task coverage or required execution/checks" in rendered
     assert "Read it using file tools; review the entire document" in rendered
     assert "Preserve every supported issue." in rendered
     assert task == before
     assert all(marker in task.task for marker in LEGACY_MARKERS)
 
 
-@pytest.mark.parametrize("damage", ["unbound", "different_shape", "different_role", "different_skill", "invalid_skill_selection", "different_source", "inline"])
+@pytest.mark.parametrize("damage", ["unbound", "different_shape", "different_role", "different_skill", "invalid_skill_selection", "different_source", "missing_source", "inline"])
 def test_unbound_and_other_tasks_keep_their_original_transport(damage):
     task = bound_task()
     if damage == "unbound":
@@ -76,10 +80,13 @@ def test_unbound_and_other_tasks_keep_their_original_transport(damage):
         task.metadata["skill_names"] = 1
     elif damage == "different_source":
         task.context_refs["task_contract"]["source_requirements"]["files"][0]["path"] = "/mnt/user-data/uploads/other.txt"
+    elif damage == "missing_source":
+        task.context_refs["task_contract"]["source_requirements"]["files"] = []
     else:
         task.context_refs["task_contract"]["delivery_mode"] = "inline"
     rendered = render_sp_subagent_prompt(task)
     assert all(marker in rendered for marker in LEGACY_MARKERS)
+    assert "<clause-audit-completion>" not in rendered
 
 
 def test_source_artifact_bodies_and_unknown_user_wording_are_never_rewritten():
@@ -99,6 +106,7 @@ def test_unknown_similar_instruction_block_is_not_partially_removed():
     value = render_sp_subagent_prompt(task)
     payload = json.loads(value.split("<sp-subagent-task>\n", 1)[1].split("\n</sp-subagent-task>", 1)[0])
     assert payload["task"] == task.task
+    assert "<clause-audit-completion>" in value
 
 
 @pytest.mark.parametrize("bound", [False, True])
@@ -121,6 +129,48 @@ def test_current_dataset_prepare_task_keeps_its_independent_prompt_behavior(boun
         assert payload["context_refs"]["task_contract"]["original_issue"] == original
         assert payload["context_refs"]["task_contract"]["original_request"] == original
     assert task == before
+
+
+@pytest.mark.parametrize("outcome", ["empty_complete", "empty_without_source", "explicit_partial"])
+def test_initial_completion_guidance_preserves_native_empty_and_missing_source_gates(tmp_path, outcome):
+    from types import SimpleNamespace
+
+    from langchain_core.messages import AIMessage, ToolMessage
+
+    from deerflow.sp.actions import ActionType, SPAction, build_default_action_router
+    from deerflow.sp.artifacts import SPArtifactAdapter
+    from deerflow.sp.memory import TaskMemoryStack
+    from deerflow.sp.subagents.dr2_adapter import normalize_dr2_subagent_result
+
+    current_task = bound_task()
+    raw = "[]" if outcome != "explicit_partial" else json.dumps({"artifact_content": None, "artifact_metadata": {"completion_status": "partial", "evidence_gaps": ["The required source file could not be read."]}})
+    pairs = []
+    if outcome == "empty_complete":
+        pairs = [
+            AIMessage(content="", tool_calls=[{"id": "read", "name": "read_file", "args": {"path": "/mnt/user-data/uploads/document.txt"}}]),
+            ToolMessage(content="A complete public source sentence.", name="read_file", tool_call_id="read"),
+        ]
+    messages = [*pairs, AIMessage(content=raw)]
+
+    class Executor:
+        def execute(self, delegated_task):
+            assert "<clause-audit-completion>" in render_sp_subagent_prompt(delegated_task)
+            return normalize_dr2_subagent_result(SimpleNamespace(status="completed", result=raw, ai_messages=[message.model_dump() for message in messages]), task=delegated_task)
+
+    action = SPAction.create(ActionType.DELEGATE, reason="Audit public source", action_id="audit", target_agent="reporter", task=current_task.task, stage="reporting", metadata={"skill_names": ["clause"]})
+    state = {"sp_task_contract": current_task.context_refs["task_contract"], "thread_data": {"outputs_path": str(tmp_path)}, "sp_loop_run_id": "run", "sp_non_interactive": True}
+    result = build_default_action_router(delegate_executor=Executor()).execute(action, state=state, thread_id="thread", run_id="run")
+    observation = TaskMemoryStack.from_dict(result.state_update["sp_task_memory"]).entries[-1]
+    if outcome == "empty_complete":
+        assert observation.metadata["completion_status"] == "complete"
+        reference = result.state_update["sp_current_artifact_refs"]["report_revision"]
+        content, truncated = SPArtifactAdapter().read_text_artifact(reference, state=state, thread_id="thread", max_chars=1000)
+        assert content == "[]" and not truncated
+    else:
+        assert observation.metadata["completion_status"] in {"partial", "blocked"}
+        assert observation.metadata["evidence_gaps"]
+        if outcome == "explicit_partial":
+            assert "The required source file could not be read." in observation.metadata["evidence_gaps"]
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
@@ -200,6 +250,10 @@ def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asy
         assert len(executor._runtime_middlewares)>=20
         for request in requests:
             rendered=json.dumps(request['messages'])
+            assert '<clause-audit-completion>' in rendered
+            assert 'their presence alone does not make the audit incomplete' in rendered
+            assert 'A completed audit may return []' in rendered
+            assert 'required source access, task coverage or required execution/checks' in rendered
             for marker in json.loads(os.environ['FIXTURE_LEGACY_MARKERS']):
                 assert marker not in rendered, marker
             assert 'complete raw JSON array' in rendered

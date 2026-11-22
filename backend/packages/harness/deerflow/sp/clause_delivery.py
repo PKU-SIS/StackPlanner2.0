@@ -42,6 +42,26 @@ _PUBLIC_DELIVERY = (
 )
 
 
+def clause_audit_completion_instruction(*, contract: Mapping[str, Any] | None, skill_names: Sequence[str] | None, auditor_role: str) -> str | None:
+    """Define audit completion only for the validated, bound public CLAUSE task."""
+    if not isinstance(contract, Mapping) or not isinstance(skill_names, list | tuple) or not clause_public_audit_scope(contract, skill_names, auditor_role):
+        return None
+    return (
+        "<clause-audit-completion>\n"
+        "Complete this audit by actually reading all required public source evidence, covering the requested whole-document analysis, "
+        "and delivering all supported findings in the public array. "
+        "Document ambiguities, missing or undefined terms, placeholders, and OCR or sentence fragments are potential findings to evaluate against the document; "
+        "their presence alone does not make the audit incomplete. Assess the supplied document as written. "
+        "Completion does not require resolving its defects, supplying missing commercial facts, filling placeholders, or correcting the source. "
+        "Preserve original quotations and every supported distinct finding without inventing findings. "
+        "A completed audit may return [] when it finds no supported issue. "
+        "If required source access, task coverage or required execution/checks genuinely remain incomplete or unavailable, "
+        "return honest partial/blocked status with those concrete unmet requirements. "
+        "Do not equate reading a file, producing a plan or matching the schema with completion.\n"
+        "</clause-audit-completion>"
+    )
+
+
 def align_clause_delivery_payload(payload: dict[str, Any], *, contract: Mapping[str, Any] | None, skill_names: Sequence[str] | None, auditor_role: str) -> dict[str, Any]:
     """Edit only detached prompt control fields, leaving the host task untouched."""
     if not isinstance(contract, Mapping) or not isinstance(skill_names, list | tuple) or not clause_public_audit_scope(contract, skill_names, auditor_role):
