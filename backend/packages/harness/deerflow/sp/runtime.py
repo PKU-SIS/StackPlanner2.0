@@ -531,6 +531,9 @@ class DR2SPExecutorProvider:
             from deerflow.sp.semantic_review import emit_semantic_review_events
 
             emit_semantic_review_events(raw_result, writer)
+            from deerflow.sp.syntax_grammar import emit_syntax_grammar_events
+
+            emit_syntax_grammar_events(raw_result, writer)
 
         adapter = DR2SubagentExecutorAdapter(
             executor_factory,

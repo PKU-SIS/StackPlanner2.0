@@ -658,6 +658,8 @@ class SubagentExecutor:
                     settings=self.source_prefetch_settings,
                     auditor_role=self.source_prefetch_auditor_role,
                     thinking_enabled=self.thinking_enabled,
+                    skill_names=self.config.skills,
+                    syntax_scope=self.reporter_action_id,
                 )
             )
 

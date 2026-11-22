@@ -1407,21 +1407,6 @@ unchanged draft bytes/refs, failed validation previews, long/nested textual tool
 intent, honest failure envelopes and same-instance bad JSON/tool-text/valid JSON
 correction with the original AI history retained.
 
-Loop detection must distinguish exact `read_file` start/end bounds, including
-EOF vs a single line; coarse 200-line bucketing falsely rejects pagination.
-The total-call ceiling admits exactly N calls, then caps excess calls. Preserve
-real-repeat guards and incomplete-result surfacing. Regression anchors are
-`test_loop_detection_middleware.py`; no planning or acceptance policy is changed.
-
-Loop-call identity also preserves grep mode, limits and pagination arguments;
-changing literal/regex mode or advancing a search page must not alias a repeat.
-
-Offline callers may bind a trusted run-local action policy during graph execution. Explicit scoped delegation can supply a native stage and intermediate artifact type. Delegate and FINISH retain native tool permissions and ownership checks. Validated scoped artifact references may be exposed in control-tool results. Tool input and client state cannot install a policy.
-
-The trusted optional run policy can return a rejected file-delivery decision to Central through recover_delivery_with_central. Its presence preserves Central role selection during artifact recovery. Native artifact identity, completion, schema validation and recovery limits still apply.
-
-The DCC benchmark profile disables long-term memory updates and automatic injection; task-local MemoryStack remains enabled. Explicit recall actions are a separate control path.
-
 `sp/evidence_quotes.py` provides optional diagnostic quotation feedback under
 `SP_CLAUSE_QUOTE_REVIEW=1`. Scope it to the executor's validated `clause` Skill,
 host-designated Reporter, exact two-string text/explanation array schema, artifact
@@ -1565,3 +1550,31 @@ unknown similar user wording. Unbound, non-CLAUSE and other-role tasks preserve
 their instructions. Tests: test_sp_clause_delivery_prompt.py checks exact-block
 scope, unchanged source/host state, controls and sync/async real SubagentExecutor
 builders through Vllm HTTP serialization.
+
+`sp/syntax_grammar.py` is a default-disabled, executor-local one-use gate for
+`SP_CLAUSE_SYNTAX_GRAMMAR=1`. Nominate only an ordinary native format-repair
+candidate with the exact CLAUSE Reporter schema/Skill and a genuine JSON syntax
+error in a raw array. The innermost `SourcePrefetchVisibilityMiddleware` must
+match all current source call args/results to captured native originals, reject
+pending tools/conflicts/truncation, verify context headroom and obtain an explicit
+`public_syntax_grammar_capability()=="sglang"` declaration. Never treat a prior
+source-access ledger or a captured source absent from the current input as proof.
+A skip preserves the existing request. The transient no-tools request reuses the
+existing format attempt and permits the exact successful public array or an
+ordinary partial/blocked envelope; do not constrain all audit/review requests.
+Afterward restore normal semantic/quote/tool execution. Preserve response bytes,
+provider finish reasons, cancellation and all native budgets/acceptance gates.
+`VllmChatModel` consumes the internal request marker and merges schema into SDK
+`extra_body` so raw create is used instead of SDK.parse. Backend declaration is
+separate from the opt-in flag and never inferred from URL/model names. Unsupported
+providers, existing constraints and unverified source/context must retain the old
+path. No host JSON repair, finding selection or gold lookup is permitted.
+
+Content-free `clause_syntax_grammar` observer events distinguish applied,
+response_received and enumerated guard_skip, retaining both a response receipt and
+a later skip on the same saved AI message. They never imply semantic validity or
+actual deployed grammar compatibility. CPU/MockTransport regression coverage:
+`tests/test_sp_clause_syntax_grammar.py`; explicit real-service entry:
+`scripts/smoke_clause_syntax_grammar.py`. The probe starts from a synthetic malformed
+fixture and uses the ordinary native format/review graph for real service outputs;
+never call it a production model sample or a repair of an official prediction.

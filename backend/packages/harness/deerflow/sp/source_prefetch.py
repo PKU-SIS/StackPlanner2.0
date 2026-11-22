@@ -86,12 +86,17 @@ def mark_prefetch_model_visibility(messages: list, captured: list[dict]) -> None
 class SourcePrefetchVisibilityMiddleware(AgentMiddleware):
     """Innermost model wrapper: summaries/previews do not count as full input."""
 
-    def __init__(self, captured: list[dict], *, contract: Mapping[str, Any] | None = None, settings: SourcePrefetchSettings | None = None, auditor_role: str | None = None, thinking_enabled: bool | None = None):
+    def __init__(
+        self, captured: list[dict], *, contract: Mapping[str, Any] | None = None, settings: SourcePrefetchSettings | None = None, auditor_role: str | None = None, thinking_enabled: bool | None = None, skill_names=None, syntax_scope=None
+    ):
         self._captured = captured
         self._contract = contract
         self._settings = settings
         self._auditor_role = auditor_role
         self._thinking_enabled = thinking_enabled
+        from deerflow.sp.syntax_grammar import SyntaxGrammarRequestGate
+
+        self._syntax_gate = SyntaxGrammarRequestGate(captured, contract=contract, skill_names=skill_names, auditor_role=auditor_role, scope=syntax_scope)
 
     def _complete_file_audit_request(self, request):
         """Use fresh original pairs in this request, never a parent's read ledger."""
@@ -165,11 +170,18 @@ class SourcePrefetchVisibilityMiddleware(AgentMiddleware):
 
     def wrap_model_call(self, request, handler):
         mark_prefetch_model_visibility(request.messages, self._captured)
+        proposed = self._syntax_gate.prepare(request)
+        if proposed is not None:
+            return handler(self._syntax_gate.finish(request, proposed, within_context=self._settings is not None and self._within_context(proposed)))
         complete = self._complete_file_audit_request(request)
         return handler(complete if complete is not None and self._within_context(complete) else request)
 
     async def awrap_model_call(self, request, handler):
         mark_prefetch_model_visibility(request.messages, self._captured)
+        proposed = self._syntax_gate.prepare(request)
+        if proposed is not None:
+            fits = self._settings is not None and await asyncio.to_thread(self._within_context, proposed)
+            return await handler(self._syntax_gate.finish(request, proposed, within_context=fits))
         complete = self._complete_file_audit_request(request)
         within_context = complete is not None and await asyncio.to_thread(self._within_context, complete)
         return await handler(complete if within_context else request)

@@ -371,6 +371,24 @@ class VllmChatModel(ChatOpenAI):
     """ChatOpenAI variant that preserves vLLM reasoning fields across turns."""
 
     model_config = {"arbitrary_types_allowed": True}
+    syntax_grammar_backend: str | None = None
+
+    def public_syntax_grammar_capability(self) -> str | None:
+        """Require trusted backend declaration; never infer it from a URL/model."""
+        constraints = {"response_format", "json_schema", "regex", "ebnf", "structural_tag"}
+        if self.syntax_grammar_backend != "sglang" or self.streaming:
+            return None
+        params = self._default_params
+        extras = params.get("extra_body") or {}
+        return None if any(name in params or name in extras for name in constraints) else "sglang"
+
+    def _syntax_response_diagnostic(self, result: ChatResult, kwargs: dict) -> ChatResult:
+        info = kwargs.get("_sp_clause_syntax_grammar")
+        if isinstance(info, dict) and self.public_syntax_grammar_capability() == "sglang" and not kwargs.get("tools"):
+            for generation in result.generations:
+                if isinstance(generation.message, AIMessage):
+                    generation.message.additional_kwargs["sp_clause_syntax_grammar"] = {"status": "response_received", **{key: info[key] for key in ("scope", "attempt", "backend")}}
+        return result
 
     @property
     def _llm_type(self) -> str:
@@ -384,8 +402,14 @@ class VllmChatModel(ChatOpenAI):
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Restore assistant reasoning in request payloads for interleaved thinking."""
+        syntax = kwargs.pop("_sp_clause_syntax_grammar", None)
         original_messages = self._convert_input(input_).to_messages()
         payload = super()._get_request_payload(input_, stop=stop, **kwargs)
+        if isinstance(syntax, dict) and self.public_syntax_grammar_capability() == "sglang" and not payload.get("tools") and "response_format" not in payload:
+            # Keep response_format inside SDK extra_body until HTTP serialization.
+            # A top-level LangChain response_format would select SDK.parse and
+            # convert an ordinary length finish into LengthFinishReasonError.
+            payload["extra_body"] = {**(payload.get("extra_body") or {}), "response_format": {"type": "json_schema", "json_schema": {"name": "clause_syntax_repair", "schema": syntax["schema"]}}}
         _normalize_vllm_chat_template_kwargs(payload)
         payload_messages = payload.get("messages", [])
 
@@ -431,7 +455,7 @@ class VllmChatModel(ChatOpenAI):
     def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
         """Reask once for a clearly malformed tool-bound protocol response."""
         if not kwargs.get("tools"):
-            return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+            return self._syntax_response_diagnostic(super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs), kwargs)
         request_kwargs = {**kwargs, "stream": False}
         result = super()._generate(messages, stop=stop, run_manager=run_manager, **request_kwargs)
         if not _result_has_malformed_tool_protocol(result):
@@ -442,7 +466,7 @@ class VllmChatModel(ChatOpenAI):
     async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
         """Async counterpart; preserve the same model, tools and request limits."""
         if not kwargs.get("tools"):
-            return await super()._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
+            return self._syntax_response_diagnostic(await super()._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs), kwargs)
         request_kwargs = {**kwargs, "stream": False}
         result = await super()._agenerate(messages, stop=stop, run_manager=run_manager, **request_kwargs)
         if not _result_has_malformed_tool_protocol(result):

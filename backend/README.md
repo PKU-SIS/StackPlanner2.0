@@ -541,3 +541,43 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 The main integration replaces the earlier Researcher 256/40 and other-role 20-call policy: graph steps and tool budgets are independent, with built-in 480 graph steps (subject to explicit overrides), at most 50 tool calls and 8 searches per child, and a shared atomic 200-call default per run. DCC Reporter overrides remain effective. Record this budget change when comparing experiments.
 
 DCC compatibility: `task_kind` is the canonical coder contract; legacy `coder_task_kind` remains accepted. Audit findings such as a violated cap are valid data results when execution succeeds. Runtime errors, masked failures and unmet verification still block completion.
+
+### Opt-in CLAUSE syntax decoding
+
+`SP_CLAUSE_SYNTAX_GRAMMAR=1` allows at most one existing native format-repair
+turn to use constrained decoding. It also requires a trusted provider capability
+`syntax_grammar_backend="sglang"`; ordinary providers and undeclared backends keep
+the existing path. Only the exact public CLAUSE Reporter array contract qualifies.
+The final request must still contain complete original native source reads,
+matched to this executor's captured call arguments and result bytes, with no
+pending tools and verified context headroom. Otherwise the ordinary repair runs.
+
+This one request temporarily has no tools and accepts either the exact public
+array or the existing native partial/blocked envelope with concrete gaps. Later
+semantic/quote review and tool access resume normally. Sampling, call/turn/token
+budgets, source/status checks and original response bytes are preserved. Schema
+is carried through raw `create` via `extra_body`, preserving ordinary length
+handling. `clause_syntax_grammar` events contain only status, action scope, format
+attempt, declared backend and an enumerated skip reason. An `applied` event proves
+the request gate ran; it does not prove service-side grammar compatibility or
+answer correctness.
+
+Use the explicit synthetic real-service probe before a new protocol run; it does
+not touch production artifacts or choose a replacement answer:
+
+```bash
+SP_CLAUSE_SYNTAX_GRAMMAR=1 PYTHONPATH=packages/harness:. \
+  python scripts/smoke_clause_syntax_grammar.py \
+  --base-url http://localhost:30000/v1 --model Qwen3-30B-A3B \
+  --tokenizer /path/to/local/tokenizer --syntax-grammar-backend sglang \
+  --mode repair --output-dir /path/to/diagnostics/repair
+```
+
+Run `--mode partial` separately to exercise the honest failure exit. For
+`--mode length --max-tokens 1`, the probe preserves the actual truncated bytes
+and requires native `token_capped`; if length is not reached it reports that
+fact and makes no retry. The initial malformed candidate is explicitly a public
+synthetic fixture; all subsequent model responses come from the specified
+service. `final.txt` preserves final UTF-8 bytes and `report.json` contains native
+status and review diagnostics. CPU MockTransport tests verify plumbing, not the
+deployed grammar compiler; actual service compatibility remains a separate check.

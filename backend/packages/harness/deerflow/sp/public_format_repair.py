@@ -174,6 +174,7 @@ class PublicArtifactFormatRepairMiddleware(AgentMiddleware):
 
         self.semantic_review_enabled = clause_semantic_review_enabled(contract, skill_names, auditor_role)
         self.captured_sources = captured_sources
+        self.syntax_skill_names = skill_names
 
     def before_model(self, state, runtime):
         # A write_file result is an optional draft under the bound CLAUSE raw
@@ -204,6 +205,13 @@ class PublicArtifactFormatRepairMiddleware(AgentMiddleware):
             ):
                 return None
         update = public_format_repair_update(state, self.contract, scope=self.action_id)
+        if update is not None and update.get("jump_to") == "model":
+            from deerflow.sp.syntax_grammar import syntax_candidate_enabled
+
+            candidate = update["messages"][0]
+            if syntax_candidate_enabled(self.contract, self.syntax_skill_names, self.auditor_role, candidate):
+                info = candidate.additional_kwargs[_FEEDBACK]
+                candidate.additional_kwargs[_FEEDBACK] = {**info, "syntax_grammar_candidate": True}
         if update is not None or (not self.quote_review_enabled and not self.semantic_review_enabled):
             return update
         from deerflow.sp.evidence_quotes import quote_review_update
