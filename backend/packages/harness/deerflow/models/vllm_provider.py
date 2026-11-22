@@ -387,7 +387,10 @@ class VllmChatModel(ChatOpenAI):
         if isinstance(info, dict) and self.public_syntax_grammar_capability() == "sglang" and not kwargs.get("tools"):
             for generation in result.generations:
                 if isinstance(generation.message, AIMessage):
-                    generation.message.additional_kwargs["sp_clause_syntax_grammar"] = {"status": "response_received", **{key: info[key] for key in ("scope", "attempt", "backend")}}
+                    diagnostic = {"status": "response_received", **{key: info[key] for key in ("scope", "attempt", "backend")}}
+                    if info.get("phase") in {"format", "semantic", "quote"}:
+                        diagnostic["phase"] = info["phase"]
+                    generation.message.additional_kwargs["sp_clause_syntax_grammar"] = diagnostic
         return result
 
     @property

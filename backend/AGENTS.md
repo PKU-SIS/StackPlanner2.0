@@ -1566,18 +1566,27 @@ their instructions. Tests: test_sp_clause_delivery_prompt.py checks exact-block
 scope, unchanged source/host state, controls and sync/async real SubagentExecutor
 builders through Vllm HTTP serialization.
 
-`sp/syntax_grammar.py` is a default-disabled, executor-local one-use gate for
-`SP_CLAUSE_SYNTAX_GRAMMAR=1`. Nominate only an ordinary native format-repair
-candidate with the exact CLAUSE Reporter schema/Skill and a genuine JSON syntax
-error in a raw array. The innermost `SourcePrefetchVisibilityMiddleware` must
+`sp/syntax_grammar.py` is a default-disabled, executor-local final-request gate for
+`SP_CLAUSE_SYNTAX_GRAMMAR=1`. Share the same gate instance between
+`PublicArtifactFormatRepairMiddleware` and the innermost source-visibility
+wrapper. Only a fresh native re-entry decision may register a private in-memory
+nomination: format attempts 1/2 require a raw-array JSON syntax error; semantic
+attempt 1 and quote attempts 1/2 require `candidate_kind=raw_final`. Do not infer
+eligibility from serialized annotations, provider output or client metadata.
+Bind each nomination to the actual candidate ID/content, consume it once and
+reject changed candidates, unrelated later messages, old phase/attempts and stops.
+The exact CLAUSE Reporter schema/Skill remains mandatory.
+The innermost `SourcePrefetchVisibilityMiddleware` must
 match all current source call args/results to captured native originals, reject
 pending tools/conflicts/truncation, verify context headroom and obtain an explicit
 `public_syntax_grammar_capability()=="sglang"` declaration. Never treat a prior
 source-access ledger or a captured source absent from the current input as proof.
-A skip preserves the existing request. The transient no-tools request reuses the
-existing format attempt and permits the exact successful public array or an
-ordinary partial/blocked envelope; do not constrain all audit/review requests.
-Afterward restore normal semantic/quote/tool execution. Preserve response bytes,
+A skip preserves the existing request. A transient no-tools request reuses only
+its already-budgeted final phase/attempt and permits the exact successful public
+array or an ordinary partial/blocked envelope. File-write/receipt reviews and
+ordinary tool continuations are not nominated; subsequent ordinary turns restore
+their normal tools. Do not add calls or increase format/review budgets.
+Preserve response bytes,
 provider finish reasons, cancellation and all native budgets/acceptance gates.
 `VllmChatModel` consumes the internal request marker and merges schema into SDK
 `extra_body` so raw create is used instead of SDK.parse. Backend declaration is
@@ -1587,7 +1596,11 @@ path. No host JSON repair, finding selection or gold lookup is permitted.
 
 Content-free `clause_syntax_grammar` observer events distinguish applied,
 response_received and enumerated guard_skip, retaining both a response receipt and
-a later skip on the same saved AI message. They never imply semantic validity or
+a later skip on the same saved AI message. New records include only the host
+request phase `format|semantic|quote`; old records without phase keep their
+original shape. Provider receipt phase comes from the actual host request marker,
+never model output. `stale_nomination` and `stopped` are safe enumerated skip
+reasons. They never imply semantic validity or
 actual deployed grammar compatibility. CPU/MockTransport regression coverage:
 `tests/test_sp_clause_syntax_grammar.py`; explicit real-service entry:
 `scripts/smoke_clause_syntax_grammar.py`. The probe starts from a synthetic malformed

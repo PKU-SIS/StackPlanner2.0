@@ -631,6 +631,11 @@ class SubagentExecutor:
         # is picked up automatically.
         self._stop_reason_middlewares = [m for m in middlewares if hasattr(m, "consume_stop_reason")]
         self._runtime_middlewares = middlewares
+        syntax_gate = None
+        if self.public_output_contract is not None and self.source_prefetch_settings is not None:
+            from deerflow.sp.syntax_grammar import SyntaxGrammarRequestGate
+
+            syntax_gate = SyntaxGrammarRequestGate(self._prefetch_captured, contract=self.source_prefetch_contract, skill_names=self.config.skills, auditor_role=self.source_prefetch_auditor_role, scope=self.reporter_action_id)
         if self.public_output_contract is not None:
             from deerflow.sp.public_format_repair import PublicArtifactFormatRepairMiddleware
 
@@ -644,6 +649,7 @@ class SubagentExecutor:
                     auditor_role=self.source_prefetch_auditor_role,
                     skill_names=self.config.skills,
                     captured_sources=lambda: self._prefetch_captured,
+                    syntax_gate=syntax_gate,
                 ),
             )
         if self.source_prefetch_settings is not None:
@@ -660,6 +666,7 @@ class SubagentExecutor:
                     thinking_enabled=self.thinking_enabled,
                     skill_names=self.config.skills,
                     syntax_scope=self.reporter_action_id,
+                    syntax_gate=syntax_gate,
                 )
             )
 

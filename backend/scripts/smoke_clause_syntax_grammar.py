@@ -27,7 +27,7 @@ from deerflow.sp.semantic_review import collect_semantic_review_diagnostics
 from deerflow.sp.source_prefetch import SourcePrefetchSettings, SourcePrefetchVisibilityMiddleware
 from deerflow.sp.subagents.adapter import SPSubagentTask
 from deerflow.sp.subagents.dr2_adapter import normalize_dr2_subagent_result, render_sp_subagent_prompt
-from deerflow.sp.syntax_grammar import collect_syntax_grammar_diagnostics
+from deerflow.sp.syntax_grammar import SyntaxGrammarRequestGate, collect_syntax_grammar_diagnostics
 
 SOURCE_PATH = "/mnt/user-data/uploads/document.txt"
 SOURCE = 'The definition says "Information");tion");\nPayment is due on 1 January.'
@@ -68,7 +68,8 @@ async def run_probe(*, base_url, model_name, tokenizer, max_tokens=1024, mode="r
     for name in review_flags:
         os.environ[name] = "1"
     try:
-        check = PublicArtifactFormatRepairMiddleware(public, action_id=task.action_id, auditor_role="reporter", skill_names=["clause"], captured_sources=lambda: captured)
+        syntax_gate = SyntaxGrammarRequestGate(captured, contract=public, skill_names=["clause"], auditor_role="reporter", scope=task.action_id)
+        check = PublicArtifactFormatRepairMiddleware(public, action_id=task.action_id, auditor_role="reporter", skill_names=["clause"], captured_sources=lambda: captured, syntax_gate=syntax_gate)
         seed = {"messages": [HumanMessage(content=render_sp_subagent_prompt(task)), *source_pair, candidate]}
         update = check.after_model(seed, None)
         if not update or update.get("jump_to") != "model":
@@ -113,7 +114,8 @@ async def run_probe(*, base_url, model_name, tokenizer, max_tokens=1024, mode="r
             **kwargs,
         )
         visibility = SourcePrefetchVisibilityMiddleware(
-            captured, contract=public, settings=SourcePrefetchSettings(tokenizer=tokenizer, context_tokens=context_tokens, response_tokens=max_tokens), auditor_role="reporter", skill_names=["clause"], syntax_scope=task.action_id
+            captured, contract=public, settings=SourcePrefetchSettings(tokenizer=tokenizer, context_tokens=context_tokens, response_tokens=max_tokens),
+            auditor_role="reporter", thinking_enabled=enable_thinking, skill_names=["clause"], syntax_scope=task.action_id, syntax_gate=syntax_gate
         )
         graph = create_agent(model=model, tools=[read_file], middleware=[check, Capture(), visibility], state_schema=ThreadState)
         state = await graph.ainvoke(seed)

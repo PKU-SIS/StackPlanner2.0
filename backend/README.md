@@ -544,21 +544,26 @@ DCC compatibility: `task_kind` is the canonical coder contract; legacy `coder_ta
 
 ### Opt-in CLAUSE syntax decoding
 
-`SP_CLAUSE_SYNTAX_GRAMMAR=1` allows at most one existing native format-repair
-turn to use constrained decoding. It also requires a trusted provider capability
+`SP_CLAUSE_SYNTAX_GRAMMAR=1` permits constrained decoding on existing native
+format-repair and raw-final semantic/quotation review turns. It requires a trusted provider capability
 `syntax_grammar_backend="sglang"`; ordinary providers and undeclared backends keep
 the existing path. Only the exact public CLAUSE Reporter array contract qualifies.
 The final request must still contain complete original native source reads,
 matched to this executor's captured call arguments and result bytes, with no
 pending tools and verified context headroom. Otherwise the ordinary repair runs.
 
-This one request temporarily has no tools and accepts either the exact public
-array or the existing native partial/blocked envelope with concrete gaps. Later
-semantic/quote review and tool access resume normally. Sampling, call/turn/token
+Each qualifying request temporarily has no tools and accepts either the exact public
+array or the existing native partial/blocked envelope with concrete gaps. Ordinary
+turns and file-delivery reviews keep their tool access. Sampling, call/turn/token
 budgets, source/status checks and original response bytes are preserved. Schema
 is carried through raw `create` via `extra_body`, preserving ordinary length
-handling. `clause_syntax_grammar` events contain only status, action scope, format
-attempt, declared backend and an enumerated skip reason. An `applied` event proves
+handling. An executor-local host nomination binds each actual candidate to its
+existing phase/attempt; serialized model/client annotations cannot nominate or
+replay a turn. Native format (two), semantic (one) and quotation (two) correction
+budgets remain unchanged; no call or review is added. `clause_syntax_grammar`
+events contain only status, action scope, phase (`format`, `semantic`, `quote`),
+attempt, declared backend and an enumerated skip reason. Legacy records without
+phase retain their original shape. An `applied` event proves
 the request gate ran; it does not prove service-side grammar compatibility or
 answer correctness.
 

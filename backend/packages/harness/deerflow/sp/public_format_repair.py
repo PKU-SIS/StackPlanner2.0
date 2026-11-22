@@ -163,7 +163,7 @@ def augment_public_format_request(request):
 class PublicArtifactFormatRepairMiddleware(AgentMiddleware):
     """Keep public schema corrections inside the host-bound auditor instance."""
 
-    def __init__(self, contract: Mapping[str, Any], *, action_id: str | None = None, auditor_role: str | None = None, skill_names=None, captured_sources=None):
+    def __init__(self, contract: Mapping[str, Any], *, action_id: str | None = None, auditor_role: str | None = None, skill_names=None, captured_sources=None, syntax_gate=None):
         self.contract = contract
         self.action_id = action_id
         self.auditor_role = auditor_role
@@ -175,6 +175,21 @@ class PublicArtifactFormatRepairMiddleware(AgentMiddleware):
         self.semantic_review_enabled = clause_semantic_review_enabled(contract, skill_names, auditor_role)
         self.captured_sources = captured_sources
         self.syntax_skill_names = skill_names
+        self.syntax_gate = syntax_gate
+
+    def _nominate_final(self, update, phase):
+        if self.syntax_gate is None or update is None or update.get("jump_to") != "model":
+            return update
+        candidate = update["messages"][0]
+        annotation = {"format": _FEEDBACK, "semantic": "sp_clause_semantic_review", "quote": "sp_clause_quote_review"}[phase]
+        info = candidate.additional_kwargs.get(annotation) or {}
+        if phase == "format":
+            eligible = info.get("syntax_grammar_candidate")
+        else:
+            eligible = info.get("candidate_kind") == "raw_final" and (info.get("status") == "requested" if phase == "semantic" else info.get("feedback") is True)
+        if eligible and info.get("scope") == self.action_id:
+            self.syntax_gate.nominate(candidate, phase=phase, attempt=info.get("attempt"))
+        return update
 
     def before_model(self, state, runtime):
         # A write_file result is an optional draft under the bound CLAUSE raw
@@ -192,6 +207,8 @@ class PublicArtifactFormatRepairMiddleware(AgentMiddleware):
 
     @hook_config(can_jump_to=["model"])
     def after_model(self, state, runtime):
+        if self.syntax_gate is not None:
+            self.syntax_gate.clear_nomination()
         if self.contract.get("delivery_mode") != "artifact":
             required = self.contract.get("source_requirements")
             if (
@@ -213,18 +230,19 @@ class PublicArtifactFormatRepairMiddleware(AgentMiddleware):
                 info = candidate.additional_kwargs[_FEEDBACK]
                 candidate.additional_kwargs[_FEEDBACK] = {**info, "syntax_grammar_candidate": True}
         if update is not None or (not self.quote_review_enabled and not self.semantic_review_enabled):
-            return update
+            return self._nominate_final(update, "format")
         from deerflow.sp.evidence_quotes import quote_review_update
         from deerflow.sp.semantic_review import review_update_requests_semantic_pass, semantic_review_pending, semantic_review_update, state_with_review_update
 
         captured = self.captured_sources() if self.captured_sources is not None else None
         update = semantic_review_update(state, self.contract, scope=self.action_id or "native", captured_sources=captured) if self.semantic_review_enabled else None
         if review_update_requests_semantic_pass(update):
-            return update
+            return self._nominate_final(update, "semantic")
         reviewed = state_with_review_update(state, update) if update else state
         if self.semantic_review_enabled and semantic_review_pending(reviewed, scope=self.action_id or "native", captured_sources=captured):
             return update
-        return (quote_review_update(reviewed, self.contract, scope=self.action_id or "native", captured_sources=captured) if self.quote_review_enabled else None) or update
+        quote_update = quote_review_update(reviewed, self.contract, scope=self.action_id or "native", captured_sources=captured) if self.quote_review_enabled else None
+        return self._nominate_final(quote_update, "quote") if quote_update else update
 
     @hook_config(can_jump_to=["model"])
     async def aafter_model(self, state, runtime):

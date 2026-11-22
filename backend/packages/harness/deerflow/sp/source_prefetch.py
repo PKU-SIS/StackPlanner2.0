@@ -87,7 +87,8 @@ class SourcePrefetchVisibilityMiddleware(AgentMiddleware):
     """Innermost model wrapper: summaries/previews do not count as full input."""
 
     def __init__(
-        self, captured: list[dict], *, contract: Mapping[str, Any] | None = None, settings: SourcePrefetchSettings | None = None, auditor_role: str | None = None, thinking_enabled: bool | None = None, skill_names=None, syntax_scope=None
+        self, captured: list[dict], *, contract: Mapping[str, Any] | None = None, settings: SourcePrefetchSettings | None = None,
+        auditor_role: str | None = None, thinking_enabled: bool | None = None, skill_names=None, syntax_scope=None, syntax_gate=None
     ):
         self._captured = captured
         self._contract = contract
@@ -96,7 +97,7 @@ class SourcePrefetchVisibilityMiddleware(AgentMiddleware):
         self._thinking_enabled = thinking_enabled
         from deerflow.sp.syntax_grammar import SyntaxGrammarRequestGate
 
-        self._syntax_gate = SyntaxGrammarRequestGate(captured, contract=contract, skill_names=skill_names, auditor_role=auditor_role, scope=syntax_scope)
+        self._syntax_gate = syntax_gate or SyntaxGrammarRequestGate(captured, contract=contract, skill_names=skill_names, auditor_role=auditor_role, scope=syntax_scope)
 
     def _complete_file_audit_request(self, request):
         """Use fresh original pairs in this request, never a parent's read ledger."""

@@ -124,7 +124,8 @@ def test_current_dataset_prepare_task_keeps_its_independent_prompt_behavior(boun
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
-def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asynchronous):
+@pytest.mark.parametrize("syntax_grammar", [False, True])
+def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asynchronous, syntax_grammar):
     # A fresh process imports the real executor, bypassing conftest's lightweight
     # executor mock. The actual middleware chain and Vllm HTTP serialization run.
     task = bound_task()
@@ -146,8 +147,14 @@ def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asy
 
         native = pathlib.Path(os.environ['FIXTURE_NATIVE_ROOT'])
         task = SPSubagentTask(**json.loads(pathlib.Path(os.environ['FIXTURE_TASK']).read_text()))
+        syntax_grammar = os.environ['FIXTURE_SYNTAX_GRAMMAR'] == '1'
+        for flag in ['SP_CLAUSE_SYNTAX_GRAMMAR', 'SP_CLAUSE_SEMANTIC_REVIEW', 'SP_CLAUSE_QUOTE_REVIEW']:
+            os.environ[flag] = '1' if syntax_grammar else '0'
         source = 'Payment is due on 1 January.'
+        if syntax_grammar:
+            source = 'The definition says "Information");tion"); Payment is due on 1 January.'
         final = json.dumps([{'text':source, 'explanation':'A source-only fixture.'}])
+        wrapped = json.dumps([{'text':'"'+source+'"', 'explanation':'A source-only fixture.'}])
         app = AppConfig.model_validate({
             'models':[{'name':'fixture','use':'deerflow.models.vllm_provider:VllmChatModel','model':'fixture',
                        'api_key':'fixture','base_url':'http://fixture.invalid/v1','context_window':73728}],
@@ -158,29 +165,38 @@ def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asy
         set_app_config(app)
         set_current_user(SimpleNamespace(id='fixture'))
         context={'thread_id':'fixture','run_id':'fixture','user_id':'fixture'}
-        provider=DR2SPExecutorProvider(app_config=app,parent_model='fixture',runnable_config={'configurable':{}},available_skill_names=frozenset({'clause'}),user_id='fixture')
+        prefetch = {'sp_source_prefetch_enabled':True,'sp_source_prefetch_tokenizer':'fixture','sp_source_prefetch_context_tokens':73728,'sp_source_prefetch_response_tokens':1024} if syntax_grammar else {}
+        provider=DR2SPExecutorProvider(app_config=app,parent_model='fixture',runnable_config={'configurable':prefetch},available_skill_names=frozenset({'clause'}),user_id='fixture')
         executor=provider({'sp_non_interactive':True},SimpleNamespace(context=context,stream_writer=None)).adapter._executor_factory(task)
         requests=[]
         def endpoint(request):
             requests.append(json.loads(request.content))
-            return httpx.Response(200,json={'id':'fixture','object':'chat.completion','created':0,'model':'fixture','choices':[{'index':0,'message':{'role':'assistant','content':final},'finish_reason':'stop'}]})
+            replies = ['[{"text":"bad"quote","explanation":"draft"}]', final, wrapped, final] if syntax_grammar else [final]
+            choice = {'index':0,'message':{'role':'assistant','content':replies[len(requests)-1]},'finish_reason':'stop'}
+            return httpx.Response(200,json={'id':'fixture-'+str(len(requests)),'object':'chat.completion','created':0,'model':'fixture','choices':[choice]})
         transport=httpx.MockTransport(endpoint)
         sync=httpx.Client(transport=transport)
         ac=httpx.AsyncClient(transport=transport)
-        model=VllmChatModel(model='fixture',api_key='fixture',base_url='http://fixture.invalid/v1',http_client=sync,http_async_client=ac,max_retries=0)
+        model=VllmChatModel(model='fixture',api_key='fixture',base_url='http://fixture.invalid/v1',http_client=sync,http_async_client=ac,max_retries=0,syntax_grammar_backend='sglang')
         async def initial():
             state,tools,deferred=await executor._build_initial_state(render_sp_subagent_prompt(task))
             state['messages'].extend([AIMessage(content='',tool_calls=[{'name':'read_file','id':'read','args':{'path':'/mnt/user-data/uploads/document.txt'}}]),ToolMessage(content=source,name='read_file',tool_call_id='read')])
+            executor._prefetch_captured.extend(message.model_dump() for message in state['messages'][-2:])
             return state,tools,deferred
         with (
             patch('deerflow.subagents.executor.create_chat_model',return_value=model),
             patch('deerflow.models.create_chat_model',return_value=model),
             patch('deerflow.agents.middlewares.summarization_middleware.create_chat_model',return_value=model),
+            patch('deerflow.sp.source_prefetch.count_source_prompt_tokens',return_value=20),
         ):
             state,tools,deferred=asyncio.run(initial())
             graph=executor._create_agent(tools,deferred_setup=deferred)
             result=asyncio.run(graph.ainvoke(state,context=context)) if os.environ['FIXTURE_ASYNC']=='1' else graph.invoke(state,context=context)
         assert result['messages'][-1].content==final
+        if syntax_grammar:
+            assert len(requests)==4
+            assert [i for i, request in enumerate(requests) if 'response_format' in request]==[1,2,3]
+            assert all(not request.get('tools') for request in requests[1:])
         assert len(executor._runtime_middlewares)>=20
         for request in requests:
             rendered=json.dumps(request['messages'])
@@ -200,6 +216,7 @@ def test_real_native_builder_wire_has_one_clause_success_transport(tmp_path, asy
         "FIXTURE_NATIVE_ROOT": str(native),
         "FIXTURE_TASK": str(fixture),
         "FIXTURE_ASYNC": "1" if asynchronous else "0",
+        "FIXTURE_SYNTAX_GRAMMAR": "1" if syntax_grammar else "0",
         "FIXTURE_WIRE": str(tmp_path / "wire.json"),
         "FIXTURE_LEGACY_MARKERS": json.dumps(LEGACY_MARKERS),
     }

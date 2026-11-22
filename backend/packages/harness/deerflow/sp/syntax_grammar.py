@@ -1,4 +1,4 @@
-"""Opt-in single-request syntax decoding, never host-side answer repair."""
+"""Opt-in native final-request syntax decoding, never host-side answer repair."""
 
 from __future__ import annotations
 
@@ -7,27 +7,26 @@ import os
 import threading
 from collections.abc import Mapping
 from copy import deepcopy
+from dataclasses import dataclass
 
-from jsonschema import Draft202012Validator, SchemaError
+from jsonschema import Draft202012Validator, SchemaError, ValidationError
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from deerflow.sp.evidence_quotes import _annotate_message, _complete_original, _serialized, clause_public_audit_scope
 from deerflow.sp.output_contract import _has_external_ref
+from deerflow.subagents.status_contract import model_response_stop_reason
 from deerflow.utils.messages import message_to_text
 
 ANNOTATION = "sp_clause_syntax_grammar"
 REQUEST_KEY = "_sp_clause_syntax_grammar"
 _FORMAT = "sp_public_format_feedback"
-_REASONS = {"unsupported_provider", "source_not_visible", "pending_tools", "existing_constraint", "context_unverified", "already_used"}
+_REASONS = {"unsupported_provider", "source_not_visible", "pending_tools", "existing_constraint", "context_unverified", "already_used", "stale_nomination", "stopped"}
 _CONSTRAINTS = {"response_format", "json_schema", "regex", "ebnf", "structural_tag", REQUEST_KEY}
+_PHASE_ATTEMPTS = {"format": {1, 2}, "semantic": {1}, "quote": {1, 2}}
+_PHASE_FEEDBACK = {"format": _FORMAT, "semantic": "sp_clause_semantic_review_feedback", "quote": "sp_clause_quote_review_feedback"}
 
 
-def syntax_candidate_enabled(contract, skill_names, auditor_role, candidate) -> bool:
-    """Only a real ordinary array with JSON syntax failure can be nominated.
-
-    Ordinary native format/stop/status guards run before this nomination.
-    The final request independently proves source visibility and capability.
-    """
+def _syntax_scope_enabled(contract, skill_names, auditor_role) -> bool:
     if os.environ.get("SP_CLAUSE_SYNTAX_GRAMMAR") != "1" or not clause_public_audit_scope(contract, skill_names, auditor_role):
         return False
     if _has_external_ref(contract["output_schema"]):
@@ -35,6 +34,13 @@ def syntax_candidate_enabled(contract, skill_names, auditor_role, candidate) -> 
     try:
         Draft202012Validator.check_schema(contract["output_schema"])
     except SchemaError:
+        return False
+    return True
+
+
+def syntax_candidate_enabled(contract, skill_names, auditor_role, candidate) -> bool:
+    """Only an ordinary array with JSON syntax failure nominates format repair."""
+    if not _syntax_scope_enabled(contract, skill_names, auditor_role):
         return False
     text = message_to_text(candidate)
     if not text.lstrip().startswith("["):
@@ -128,8 +134,16 @@ def _exact_visible_source(messages, captured, contract) -> bool:
     return source is not None and unavailable is None
 
 
+@dataclass(frozen=True)
+class _FinalNomination:
+    phase: str
+    attempt: int
+    candidate_id: str
+    content: object
+
+
 class SyntaxGrammarRequestGate:
-    """Executor-local one-use gate at the innermost actual model boundary."""
+    """Consume only fresh native nominations, once per existing final phase."""
 
     def __init__(self, captured, *, contract, skill_names, auditor_role, scope):
         self.captured = captured
@@ -137,15 +151,37 @@ class SyntaxGrammarRequestGate:
         self.skill_names = skill_names
         self.auditor_role = auditor_role
         self.scope = scope
-        self._used = False
+        self._pending = None
+        self._issued = set()
+        self._used = set()
+        self._prepared = {}
         self._lock = threading.Lock()
 
-    def _record(self, request, status, *, reason=None, backend="none"):
+    def clear_nomination(self):
+        with self._lock:
+            self._pending = None
+
+    def nominate(self, candidate, *, phase, attempt):
+        """Trusted middleware calls this only after a real native re-entry decision.
+
+        This run-local state is never deserialized from tools, client state,
+        message metadata or provider output. Old phase/attempts cannot reopen it.
+        """
+        if not isinstance(phase, str) or phase not in _PHASE_ATTEMPTS or type(attempt) is not int or attempt not in _PHASE_ATTEMPTS[phase] or not isinstance(candidate, AIMessage) or not candidate.id:
+            return False
+        with self._lock:
+            key = (phase, attempt)
+            if key in self._issued:
+                return False
+            self._issued.add(key)
+            self._pending = _FinalNomination(phase, attempt, candidate.id, deepcopy(candidate.content))
+        return True
+
+    def _record(self, request, nomination, status, *, reason=None, backend="none"):
         latest = next((message for message in reversed(request.messages) if isinstance(message, AIMessage)), None)
-        info = latest.additional_kwargs.get(_FORMAT) if latest is not None else None
-        if not isinstance(info, Mapping):
+        if latest is None or latest.id != nomination.candidate_id or latest.content != nomination.content:
             return request
-        diagnostic = {"status": status, "scope": self.scope, "attempt": info["attempt"], "backend": backend}
+        diagnostic = {"status": status, "scope": self.scope, "phase": nomination.phase, "attempt": nomination.attempt, "backend": backend}
         if reason is not None:
             diagnostic["reason"] = reason
         previous = latest.additional_kwargs.get(ANNOTATION)
@@ -154,39 +190,68 @@ class SyntaxGrammarRequestGate:
         return request.override(messages=[candidate if message is latest else message for message in request.messages])
 
     def prepare(self, request):
+        with self._lock:
+            nomination, self._pending = self._pending, None
+        if nomination is None:
+            return None
         latest = next((message for message in reversed(request.messages) if isinstance(message, AIMessage)), None)
-        info = latest.additional_kwargs.get(_FORMAT) if latest is not None else None
-        if not isinstance(info, Mapping) or not info.get("syntax_grammar_candidate") or info.get("scope") != self.scope:
+        position = next((index for index in reversed(range(len(request.messages))) if request.messages[index] is latest), -1)
+        tail = request.messages[position + 1 :] if position >= 0 else []
+        if (
+            latest is None
+            or latest.id != nomination.candidate_id
+            or latest.content != nomination.content
+            or not tail
+            or any(not isinstance(message, HumanMessage) or not message.additional_kwargs.get("hide_from_ui") or message.name not in _PHASE_FEEDBACK.values() for message in tail)
+            or not any(message.name == _PHASE_FEEDBACK[nomination.phase] for message in tail)
+        ):
+            self._record(request, nomination, "guard_skip", reason="stale_nomination")
             return None
-        if not isinstance(self.contract, Mapping) or not syntax_candidate_enabled(self.contract, self.skill_names, self.auditor_role, latest):
+        extra = latest.additional_kwargs
+        if (
+            latest.tool_calls
+            or latest.invalid_tool_calls
+            or model_response_stop_reason(request.messages)
+            or any(extra.get(key) for key in ("error_type", "hide_from_ui", "tool_calls", "function_call", "subagent_stop_reason", "safety_termination"))
+            or latest.response_metadata.get("finish_reason") in {"tool_calls", "function_call", "content_filter", "safety"}
+            or (extra.get("stackplanner") or {}).get("status") in {"incomplete", "recovery_required", "action_capped", "blocked"}
+        ):
+            self._record(request, nomination, "guard_skip", reason="stopped")
             return None
-        if self._used:
-            self._record(request, "guard_skip", reason="already_used")
+        if not isinstance(self.contract, Mapping) or not _syntax_scope_enabled(self.contract, self.skill_names, self.auditor_role):
             return None
+        if nomination.phase == "format":
+            if not syntax_candidate_enabled(self.contract, self.skill_names, self.auditor_role, latest):
+                return None
+        else:
+            try:
+                Draft202012Validator(self.contract["output_schema"]).validate(json.loads(message_to_text(latest)))
+            except (ValueError, RecursionError, ValidationError):
+                return None
         try:
             capability = getattr(request.model, "public_syntax_grammar_capability", None)
             supported = callable(capability) and capability() == "sglang"
         except Exception:
             supported = False  # Preserve the ordinary provider path; cancellation still propagates.
         if not supported:
-            self._record(request, "guard_skip", reason="unsupported_provider")
+            self._record(request, nomination, "guard_skip", reason="unsupported_provider")
             return None
         if _pending_tools(request.messages):
-            self._record(request, "guard_skip", reason="pending_tools", backend="sglang")
+            self._record(request, nomination, "guard_skip", reason="pending_tools", backend="sglang")
             return None
         if not _exact_visible_source(request.messages, self.captured, self.contract):
-            self._record(request, "guard_skip", reason="source_not_visible", backend="sglang")
+            self._record(request, nomination, "guard_skip", reason="source_not_visible", backend="sglang")
             return None
         settings = request.model_settings
         extras = settings.get("extra_body") or {}
-        if any(name in settings or name in extras for name in _CONSTRAINTS):
-            self._record(request, "guard_skip", reason="existing_constraint", backend="sglang")
+        if request.response_format is not None or any(name in settings or name in extras for name in _CONSTRAINTS):
+            self._record(request, nomination, "guard_skip", reason="existing_constraint", backend="sglang")
             return None
         note = HumanMessage(
             name="sp_clause_syntax_final",
             additional_kwargs={"hide_from_ui": True},
             content=(
-                "<syntax-only-final>\nThis is the existing native format-correction turn, temporarily without tools. "
+                f"<syntax-only-final>\nThis is the existing native {nomination.phase} final turn, temporarily without tools. "
                 "The complete original public source remains visible in this exact request. Return the complete raw public JSON array with correct single-layer escaping. "
                 "Verify findings against that source; preserve every supported distinct finding and complete original quotation, not broken serialized fragments. "
                 "The grammar does not establish substantive completion or choose an answer. If the audit remains incomplete, return the ordinary native SP envelope with "
@@ -195,19 +260,27 @@ class SyntaxGrammarRequestGate:
             ),
         )
         settings = {key: value for key, value in settings.items() if key not in {"tools", "tool_choice", "parallel_tool_calls"}}
-        settings.update(stream=False, **{REQUEST_KEY: {"schema": syntax_repair_schema(self.contract), "scope": self.scope, "attempt": info["attempt"], "backend": "sglang"}})
-        return request.override(messages=[*request.messages, note], tools=[], model_settings=settings)
+        settings.update(stream=False, **{REQUEST_KEY: {"schema": syntax_repair_schema(self.contract), "scope": self.scope, "phase": nomination.phase, "attempt": nomination.attempt, "backend": "sglang"}})
+        proposed = request.override(messages=[*request.messages, note], tools=[], tool_choice=None, model_settings=settings)
+        with self._lock:
+            self._prepared[id(proposed)] = nomination
+        return proposed
 
     def finish(self, original, proposed, *, within_context):
+        with self._lock:
+            nomination = self._prepared.pop(id(proposed), None)
+        if nomination is None:
+            return original
         if not within_context:
-            self._record(original, "guard_skip", reason="context_unverified", backend="sglang")
+            self._record(original, nomination, "guard_skip", reason="context_unverified", backend="sglang")
             return original
         with self._lock:
-            if self._used:
-                self._record(original, "guard_skip", reason="already_used", backend="sglang")
+            key = (nomination.phase, nomination.attempt)
+            if key in self._used:
+                self._record(original, nomination, "guard_skip", reason="already_used", backend="sglang")
                 return original
-            self._used = True
-        return self._record(proposed, "applied", backend="sglang")
+            self._used.add(key)
+        return self._record(proposed, nomination, "applied", backend="sglang")
 
 
 def collect_syntax_grammar_diagnostics(messages, *, scope=None):
@@ -220,7 +293,12 @@ def collect_syntax_grammar_diagnostics(messages, *, scope=None):
                 continue
             if isinstance(info.get("attempt"), bool) or not isinstance(info.get("attempt"), int) or info["attempt"] not in {1, 2} or info.get("backend") not in {"sglang", "none"}:
                 continue
+            phase = info.get("phase")
+            if phase is not None and (not isinstance(phase, str) or phase not in _PHASE_ATTEMPTS or info["attempt"] not in _PHASE_ATTEMPTS[phase]):
+                continue
             diagnostic = {key: info[key] for key in ("status", "scope", "attempt", "backend")}
+            if phase is not None:
+                diagnostic["phase"] = phase
             if info.get("reason") in _REASONS:
                 diagnostic["reason"] = info["reason"]
             if diagnostic not in diagnostics:
