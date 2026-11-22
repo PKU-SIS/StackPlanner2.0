@@ -1677,3 +1677,22 @@ disabled flag preserve the existing prompt. Regression anchor:
 `tests/test_sp_capped_repetition.py` exercises captured cap provenance, spoofed
 metadata, scope/no-signal controls and actual next-delegate artifact/byte/budget
 preservation with synthetic outputs and no service requests.
+
+
+`supplied_document_boundary_instruction` is shared prompt guidance for the
+strictly bound CLAUSE initial audit, existing semantic review, and checked
+quote/syntax-final source-fidelity paths. Inspect continuations across physical
+newlines/page boundaries before judging a passage incomplete; preserve all source
+characters, whitespace and intervening page text. Layout markers and file EOF
+alone establish neither missing evidence nor substantive completion. Keep the
+source matcher, real truncation/unread-range checks, partial/blocked exits,
+acceptance and all review budgets unchanged; never infer or replace an answer.
+`source_audit_recovery_instruction` labels prior `evidence_gaps` as reported
+claims to revalidate against immutable task requirements and current original
+native tool results, not host-verified missing source. This does not clear a gap
+or override its existing status. Regression coverage in `test_sp_agent_tools.py`
+checks the real next recovery with historical full coverage; native sync/async
+HTTP tests in `test_sp_clause_syntax_grammar.py` preserve a synthetic cross-page
+source and either a model-owned public array or honest partial final with the
+same single semantic request. Initial/semantic prompt scope remains independently
+covered by their existing renderer/provider tests.

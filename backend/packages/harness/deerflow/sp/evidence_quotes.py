@@ -33,10 +33,23 @@ def clause_quote_review_enabled(contract: Mapping[str, Any], skill_names: Sequen
     return os.environ.get("SP_CLAUSE_QUOTE_REVIEW") == "1" and clause_public_audit_scope(contract, skill_names, auditor_role)
 
 
+def supplied_document_boundary_instruction() -> str:
+    """Review the supplied source across layout boundaries without declaring gaps."""
+    return (
+        "Audit the public document actually supplied by the task, as written. "
+        "Before declaring a sentence or clause incomplete, inspect its continuation across physical line breaks and page boundaries in the original read_file evidence. "
+        "Physical line counts, page numbers or page headers and the supplied file's EOF do not by themselves prove that required evidence is missing. "
+        "Do not cut a quotation at a physical line or page boundary while its continuation is present and then claim the original source is incomplete. "
+        "Preserve original whitespace and any intervening page text in verbatim passages; do not merge or normalize source characters. "
+        "Genuine read failures, truncated tool outputs, unread required ranges and unmet mandatory task requirements remain gaps; "
+        "source visibility alone does not establish a completed audit. "
+    )
+
+
 def source_character_fidelity_instruction() -> str:
     """Clarify source-vs-serialization defects without supplying quotation text."""
     return (
-        "Source defects are audit content: fragments, grammatical or OCR defects, and unbalanced punctuation in a fully available original passage "
+        supplied_document_boundary_instruction() + "Source defects are audit content: fragments, grammatical or OCR defects, and unbalanced punctuation in a fully available original passage "
         "do not by themselves establish that mandatory evidence is missing. "
         "Do not repair or normalize source characters or punctuation when quoting. "
         "Compare each quoted text passage, after exactly one JSON decode, character by character with the original read_file passage; "

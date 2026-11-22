@@ -272,6 +272,9 @@ def test_semantic_scope_http_preserves_one_pass_and_model_owned_empty_or_nonempt
     assert "every supported distinct finding" in note["content"]
     assert "count limit" in note["content"]
     assert "host supplies no replacement text or labels" in note["content"]
+    assert "public document actually supplied" in note["content"]
+    assert "physical line breaks and page boundaries" in note["content"]
+    assert "unread required ranges" in note["content"]
     assert all(any(message.get("content") == source for message in payload["messages"]) for payload in payloads)
     assert result["messages"][-1].content == final
     diagnostics = collect_semantic_review_diagnostics(result["messages"], finalize=True)

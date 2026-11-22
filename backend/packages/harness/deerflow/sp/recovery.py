@@ -45,16 +45,20 @@ def recovery_limit(state: Mapping[str, Any] | None, kind: str) -> int:
 
 
 def source_audit_recovery_instruction(previous: Any, *, has_documents: bool) -> str:
-    """Expose actual prior gaps and transport semantics, without resolving them."""
+    """Distinguish prior auditor claims from native source transport facts."""
     raw_gaps = previous.metadata.get("evidence_gaps")
-    actual_gaps = [str(gap)[:500] for gap in raw_gaps[:5]] if isinstance(raw_gaps, list) else []
+    reported_claims = [str(gap)[:500] for gap in raw_gaps[:5]] if isinstance(raw_gaps, list) else []
     instruction = (
-        "Use a materially different recovery method that resolves the previous native auditor's actual gaps, not another identical evidence-only delegation. "
+        "Use a materially different recovery method where needed to address verified remaining requirements, not another identical evidence-only delegation. "
+        "Treat the prior auditor's evidence_gaps as reported claims, not host-verified missing source. "
+        "Revalidate each claim against the immutable original task requirements and current original native tool results. "
+        "Do not repeat a source-missing claim disproved by those originals as a fact. "
+        "Preserve honest partial/blocked status for genuine unresolved requirements; source coverage alone does not complete the substantive audit. "
         "Reuse the actual referenced draft for valid prior work; the current auditor still needs original source content. "
         "Complete the original audit, including any analysis and final answer requested by the public task; do not stop at collecting rules or planning the analysis. "
         + (f"Previous native audit result_ref: {previous.result_ref}. " if previous.result_ref else "")
-        + "Previous native audit gaps: "
-        + "; ".join(actual_gaps or ["The previous audit has no clean complete native status."])
+        + "Prior auditor reported claims: "
+        + "; ".join(reported_claims or ["The previous audit has no clean complete native status."])
         + " "
     )
     if has_documents:

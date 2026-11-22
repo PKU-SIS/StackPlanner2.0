@@ -138,7 +138,7 @@ def test_public_source_coverage_without_a_completed_audit_still_requires_auditor
 
 
 @pytest.mark.parametrize("document_ids", [[], ["scoped-document"]])
-def test_source_audit_recovery_carries_actual_native_gaps_and_draft_without_hiding_policy_checkpoint(document_ids):
+def test_source_audit_recovery_carries_reported_gaps_and_draft_without_hiding_policy_checkpoint(document_ids):
     stack = TaskMemoryStack()
     stack.append_delegate("Audit every operation", run_id="run", metadata={"target_agent": "researcher"})
     stack.append_observe(
@@ -167,6 +167,40 @@ def test_source_audit_recovery_carries_actual_native_gaps_and_draft_without_hidi
     checkpoint = SPFinishAvailabilityMiddleware()._filter_request(request)
     assert all(tool.name != "sp_delegate" for tool in checkpoint.tools)
     assert checkpoint.messages[-1].name == "sp_delegate_policy_checkpoint"
+
+
+@pytest.mark.parametrize("role", ["reporter", "researcher"])
+def test_source_recovery_rechecks_reported_missing_source_claim_without_overriding_partial(role):
+    from deerflow.sp.source_access import source_access_gaps
+
+    path = "/mnt/user-data/uploads/document.txt"
+    prior_claim = "The supplied document ends before the complete sentence is available."
+    stack = TaskMemoryStack()
+    stack.append_delegate("Audit the supplied document", run_id="run", metadata={"target_agent": role})
+    stack.append_observe("An unfinished audit", actor=role, run_id="run", result_ref="prior-draft", metadata={"completion_status": "partial", "evidence_gaps": [prior_claim]})
+    state = {
+        "sp_loop_run_id": "run",
+        "sp_non_interactive": True,
+        "sp_task_memory": stack.to_dict(),
+        "sp_task_contract": {"source_requirements": {"audit_agent": role, "files": [{"path": path, "total_lines": 7}], "document_ids": []}},
+        "sp_source_access": {"run_id": "run", "reads": {path: [[1, 7]]}},
+        "messages": [HumanMessage(content="Audit only the supplied public document.")],
+    }
+    assert source_access_gaps(state) == []
+    before = stack.to_dict()
+    request = _ModelRequestStub(tools=build_sp_control_tools(), state=state, messages=state["messages"])
+    filtered = SPFinishAvailabilityMiddleware()._filter_request(request)
+    note = filtered.messages[-1]
+    assert [tool.name for tool in filtered.tools] == ["sp_delegate"]
+    assert note.name == "sp_public_source_audit_required"
+    assert prior_claim in note.content
+    assert "Prior auditor reported claims" in note.content
+    assert "not host-verified missing source" in note.content
+    assert "current original native tool results" in note.content
+    assert "partial/blocked" in note.content
+    assert "actual gaps" not in note.content
+    assert f"Current source gaps: Required public {role} audit has no complete native status." in note.content
+    assert stack.to_dict() == before
 
 
 @pytest.mark.parametrize("mode,requires_file", [("inline", False), ("artifact", True)])

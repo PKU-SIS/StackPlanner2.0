@@ -784,3 +784,13 @@ used for source inspection and optional drafts; the final message carries the
 complete current corrected array. This changes only a detached model-facing
 instruction view. The host's original task contract, source artifacts, ordinary
 tasks and other output schemas keep their existing content and behavior.
+
+
+CLAUSE audit and review guidance checks sentence continuations across physical
+line breaks and page boundaries in the supplied public document. Line counts,
+page numbers, headers and the file's EOF alone do not prove missing evidence;
+quotations must retain any visible continuation and original source characters.
+Audit recovery presents prior auditors' gap statements as reported claims to
+recheck against the original task and current native evidence. Genuine unread or
+truncated sources and unfinished audits still require partial/blocked status.
+These instructions do not add reviews, change acceptance, or supply findings.

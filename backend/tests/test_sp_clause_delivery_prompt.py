@@ -57,6 +57,9 @@ def test_bound_clause_renderer_unifies_only_known_transport_in_model_visible_cop
     assert "optional draft" in rendered
     assert "<clause-audit-completion>" in rendered
     assert "their presence alone does not make the audit incomplete" in rendered
+    assert "public document actually supplied" in rendered
+    assert "physical line breaks and page boundaries" in rendered
+    assert "unread required ranges" in rendered
     assert "A completed audit may return []" in rendered
     assert "required source access, task coverage or required execution/checks" in rendered
     assert "Read it using file tools; review the entire document" in rendered

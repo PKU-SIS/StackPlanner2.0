@@ -9,7 +9,7 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from deerflow.sp.evidence_quotes import _annotate_message, _complete_original, _public_review_candidate, _serialized, _written_candidate, clause_public_audit_scope
+from deerflow.sp.evidence_quotes import _annotate_message, _complete_original, _public_review_candidate, _serialized, _written_candidate, clause_public_audit_scope, supplied_document_boundary_instruction
 from deerflow.subagents.status_contract import model_response_stop_reason
 
 _REVIEW = "sp_clause_semantic_review"
@@ -151,7 +151,8 @@ def augment_semantic_review_request(request):
             "<clause-semantic-review>\n"
             "Perform the one allowed semantic self-review of your first complete candidate in this same audit. "
             "Use only the original public /mnt/user-data/uploads/document.txt read_file evidence already in this audit; if read_file is currently bound, reopen passages as needed. "
-            "Review all five public issue families against the quoted source and its surrounding context, definitions and exceptions. "
+            + supplied_document_boundary_instruction()
+            + "Review all five public issue families against the quoted source and its surrounding context, definitions and exceptions. "
             "Apply these alternative public-document evidence standards:\n"
             "- Ambiguity: identify materially different plausible readings grounded in the document and explain what remains unresolved by its context.\n"
             "- Inconsistency: identify statements, obligations, dates or quantities that cannot be reconciled within the document, accounting for its definitions and exceptions.\n"

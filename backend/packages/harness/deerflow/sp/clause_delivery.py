@@ -3,7 +3,7 @@
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from deerflow.sp.evidence_quotes import clause_public_audit_scope
+from deerflow.sp.evidence_quotes import clause_public_audit_scope, supplied_document_boundary_instruction
 
 # This exact, harness-authored legacy control block occurs in prepare_task's
 # prompt. Match it whole: never heuristically delete user/source instructions.
@@ -50,7 +50,8 @@ def clause_audit_completion_instruction(*, contract: Mapping[str, Any] | None, s
         "<clause-audit-completion>\n"
         "Complete this audit by actually reading all required public source evidence, covering the requested whole-document analysis, "
         "and delivering all supported findings in the public array. "
-        "Document ambiguities, missing or undefined terms, placeholders, and OCR or sentence fragments are potential findings to evaluate against the document; "
+        + supplied_document_boundary_instruction()
+        + "Document ambiguities, missing or undefined terms, placeholders, and OCR or sentence fragments are potential findings to evaluate against the document; "
         "their presence alone does not make the audit incomplete. Assess the supplied document as written. "
         "Completion does not require resolving its defects, supplying missing commercial facts, filling placeholders, or correcting the source. "
         "Preserve original quotations and every supported distinct finding without inventing findings. "

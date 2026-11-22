@@ -42,14 +42,16 @@ def reads():
     return [AIMessage(content="", tool_calls=[{"name": "read_file", "id": "original-read", "args": {"path": PATH}}]), ToolMessage(content=SOURCE, name="read_file", tool_call_id="original-read")]
 
 
-def run_http(monkeypatch, responses, *, asynchronous=False, backend="sglang", damage=None, reviews=False, enabled=True):
+def run_http(monkeypatch, responses, *, asynchronous=False, backend="sglang", damage=None, reviews=False, enabled=True, source_text=None):
     monkeypatch.setenv("SP_CLAUSE_SYNTAX_GRAMMAR", "1" if enabled else "0")
     monkeypatch.setenv("SP_CLAUSE_SEMANTIC_REVIEW", "1" if reviews else "0")
     monkeypatch.setenv("SP_CLAUSE_QUOTE_REVIEW", "1" if reviews else "0")
     monkeypatch.setattr("deerflow.sp.source_prefetch.count_source_prompt_tokens", lambda *a, **k: 20)
     source = reads()
+    if source_text is not None:
+        source[-1].content = source_text
     captured = [m.model_dump() for m in source]
-    public = contract()
+    public = contract() if source_text is None else public_output_contract(PublicTask(benchmark="clause", prompt="Audit the supplied document.", files=(InputFile(name="document.txt", text=source_text),)))
     role, skills = "reporter", ["clause"]
     if damage == "missing":
         source = []
@@ -102,7 +104,7 @@ def run_http(monkeypatch, responses, *, asynchronous=False, backend="sglang", da
     def read_file(path: str) -> str:
         """Read original source."""
         assert path == PATH
-        return SOURCE
+        return SOURCE if source_text is None else source_text
 
     @tool
     def write_file(path: str, content: str) -> str:
@@ -180,6 +182,27 @@ def test_real_http_constrains_existing_format_semantic_and_quote_final_turns(mon
     diagnostics = collect_syntax_grammar_diagnostics(captured)
     assert [(d["phase"], d["status"]) for d in diagnostics] == [(phase, status) for phase in ("format", "semantic", "quote") for status in ("applied", "response_received")]
     assert all(d["attempt"] == 1 and d["backend"] == "sglang" for d in diagnostics)
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("partial", [False, True])
+def test_current_cross_page_source_stays_visible_and_does_not_force_completion(monkeypatch, asynchronous, partial):
+    source = "Public agreement.\nPayment must be made to\nPage 12\nExample Company within ten days.\nSigned below."
+    candidate = json.dumps([{"text": source, "explanation": "A synthetic public-document finding."}])
+    final = PARTIAL if partial else candidate
+    result, payloads, _, captured = run_http(monkeypatch, [candidate, final], asynchronous=asynchronous, reviews=True, source_text=source)
+    assert len(payloads) == 2  # Reuse the one existing semantic review turn.
+    notes = {m.get("name"): m.get("content", "") for m in payloads[1]["messages"] if m.get("role") == "user"}
+    for name in ("sp_clause_semantic_review_feedback", "sp_clause_syntax_final"):
+        assert "public document actually supplied" in notes[name]
+        assert "physical line breaks and page boundaries" in notes[name]
+        assert "Do not cut a quotation" in notes[name]
+        assert "unread required ranges" in notes[name]
+        assert source not in notes[name]  # No host-authored quotation or replacement answer.
+    assert all(any(m.get("role") == "tool" and m.get("content") == source for m in body["messages"]) for body in payloads)
+    assert not payloads[1].get("tools") and "response_format" in payloads[1]
+    assert result["messages"][-1].content == final
+    assert [(d["phase"], d["status"]) for d in collect_syntax_grammar_diagnostics(captured)] == [("semantic", "applied"), ("semantic", "response_received")]
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
