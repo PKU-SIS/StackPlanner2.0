@@ -136,3 +136,12 @@ Only an explicit --carry-unknown-exposure on a fresh --prefix-source trial may
 carry original journal-backed reservations; --resume-run cannot use it, unknown
 requests are not replayed, and global_billing_complete stays false until holds
 are reconciled. Never call held exposure zero or count it as an actual invoice.
+
+2026-11-23 verification is recorded in exactreuse-retest-20261123/RESULT.md:
+original/paraphrased 6–7 and partial-retention 4 plus continued 5–7 all pass their
+target functional checks; 21 archives independently restore. Preserve three
+intermediate stopped trials. Current final-trial usage reconciles, but one old
+unknown memory request remains held at 2.162688 CNY and was not replayed;
+global_billing_complete remains false. Do not convert functional acceptance,
+standalone recovery, factual correctness or provider invoice reconciliation into
+one success flag. Shared/default first-turn behavior remains unchanged.

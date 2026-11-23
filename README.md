@@ -1085,3 +1085,8 @@ new version. See [the measured results and limits](docs/research-report/seeded-l
 Follow-up delegation can bind an explicit patch/reuse/read-only operation to
 GitAgent's tool permissions. This addresses whole-version restoration being
 misrouted into a redundant revision. First-turn generation is unchanged.
+
+The ExactReuse fix has now passed real original/paraphrased follow-up tests and
+partial-retention controls, including old-version recovery followed by a local
+edit. The retained stopped trials and one unresolved historical usage reservation
+are reported separately. See [the corrected real-test results](docs/research-report/exactreuse-retest-20261123/RESULT.md).

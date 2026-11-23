@@ -1,0 +1,613 @@
+{
+  "date": "2026-11-23",
+  "scope": "Real-model ExactReuse fix, natural-language paraphrase and partial-retention controls from independently restored accepted prefixes",
+  "all_target_functional_checks_passed": true,
+  "functional_checks": {
+    "original_6_7": true,
+    "paraphrase_6_7": true,
+    "partial_retention_4": true,
+    "readonly_reuse_edit_5_7": true
+  },
+  "successful_target_user_rounds": 8,
+  "planned_target_groups": 3,
+  "actual_trial_processes": 6,
+  "intermediate_failed_trials_preserved": 3,
+  "full_uninterrupted_single_session_six_round_claim": false,
+  "prefix_recovery_and_continuation": true,
+  "trials": [
+    {
+      "name": "20261123-exactreuse-original-01",
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-exactreuse-original-01",
+      "completed": true,
+      "turns": [
+        {
+          "user_turn": 6,
+          "message_id": "seeded-lowcode.t6",
+          "runtime_message_id": "seeded-lowcode.t6__user",
+          "native_report_id": "r7",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0006",
+          "roles": [
+            "central",
+            "git_agent",
+            "git_agent",
+            "central",
+            "central",
+            "central",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 2,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 2,
+          "version_binding_ok": true,
+          "operation_contract": "exact_reuse"
+        },
+        {
+          "user_turn": 7,
+          "message_id": "seeded-lowcode.t7",
+          "runtime_message_id": "seeded-lowcode.t7",
+          "native_report_id": "r10",
+          "native_delivery_created": true,
+          "dialogue_turn_id": "t0007",
+          "roles": [
+            "central",
+            "git_agent",
+            "git_agent",
+            "git_agent",
+            "central",
+            "outline",
+            "outline",
+            "central",
+            "outline",
+            "outline",
+            "writer",
+            "writer",
+            "writer",
+            "outline",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 2,
+          "accepted_head_user_turn": 7,
+          "active_user_turn": 7,
+          "version_binding_ok": true,
+          "operation_contract": "patch",
+          "canonical_changes": {
+            "added_nodes": [],
+            "changed_nodes": [
+              "n11"
+            ],
+            "factual_correctness_verified": false,
+            "kept_nodes": [
+              "n8",
+              "n2",
+              "n4",
+              "n9",
+              "n14",
+              "n6",
+              "n13"
+            ],
+            "removed_nodes": [],
+            "scope": "canonical node bytes; final citation display and assembly may change"
+          },
+          "scope_ok": true
+        }
+      ],
+      "current_trial_billing_complete": true,
+      "global_billing_complete": true,
+      "known_cumulative_peak_cny": "7.50228368",
+      "held_cny": "0",
+      "unknown_receipts": [],
+      "role_calls": {
+        "central": 7,
+        "git_agent": 5,
+        "memory_updater": 2,
+        "outline": 5,
+        "writer": 3
+      },
+      "model_calls": 22,
+      "manifest_sha256": "ddd50be0f1f2e6bd2a3acdb3ba34d250b61a50088fd45ead0d7c2e10a70c1ea4",
+      "artifact_files": 4198
+    },
+    {
+      "name": "20261123-exactreuse-paraphrase-01",
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-exactreuse-paraphrase-01",
+      "completed": true,
+      "turns": [
+        {
+          "user_turn": 6,
+          "message_id": "seeded-paraphrase.t6",
+          "runtime_message_id": "seeded-paraphrase.t6__user",
+          "native_report_id": "r7",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0006",
+          "roles": [
+            "central",
+            "git_agent",
+            "git_agent",
+            "central",
+            "central",
+            "central",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 2,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 2,
+          "version_binding_ok": true,
+          "operation_contract": "exact_reuse"
+        },
+        {
+          "user_turn": 7,
+          "message_id": "seeded-paraphrase.t7",
+          "runtime_message_id": "seeded-paraphrase.t7",
+          "native_report_id": "r10",
+          "native_delivery_created": true,
+          "dialogue_turn_id": "t0007",
+          "roles": [
+            "central",
+            "git_agent",
+            "git_agent",
+            "git_agent",
+            "central",
+            "outline",
+            "outline",
+            "outline",
+            "outline",
+            "outline",
+            "outline",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "outline",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 2,
+          "accepted_head_user_turn": 7,
+          "active_user_turn": 7,
+          "version_binding_ok": true,
+          "operation_contract": "patch",
+          "canonical_changes": {
+            "added_nodes": [],
+            "changed_nodes": [
+              "n11"
+            ],
+            "factual_correctness_verified": false,
+            "kept_nodes": [
+              "n8",
+              "n2",
+              "n4",
+              "n9",
+              "n14",
+              "n6",
+              "n13"
+            ],
+            "removed_nodes": [],
+            "scope": "canonical node bytes; final citation display and assembly may change"
+          },
+          "scope_ok": true
+        }
+      ],
+      "current_trial_billing_complete": true,
+      "global_billing_complete": true,
+      "known_cumulative_peak_cny": "8.20978816",
+      "held_cny": "0",
+      "unknown_receipts": [],
+      "role_calls": {
+        "central": 6,
+        "git_agent": 5,
+        "memory_updater": 2,
+        "outline": 7,
+        "writer": 5
+      },
+      "model_calls": 25,
+      "manifest_sha256": "5c4241d2d07636b8da2314cd2f9a3dd8fbf2dfc86bff56ec5276feeb5ca0e26f",
+      "artifact_files": 4197
+    },
+    {
+      "name": "20261123-partial-retention-control-01",
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-partial-retention-control-01",
+      "completed": false,
+      "turns": [
+        {
+          "user_turn": 4,
+          "message_id": "seeded-lowcode.t4",
+          "runtime_message_id": "seeded-lowcode.t4__user",
+          "native_report_id": "r7",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0004",
+          "roles": [
+            "central",
+            "git_agent",
+            "git_agent",
+            "git_agent",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": false,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 3,
+          "accepted_head_user_turn": 3,
+          "active_user_turn": 3,
+          "version_binding_ok": false,
+          "operation_contract": "patch"
+        }
+      ],
+      "current_trial_billing_complete": true,
+      "global_billing_complete": true,
+      "known_cumulative_peak_cny": "8.40511112",
+      "held_cny": "0",
+      "unknown_receipts": [],
+      "role_calls": {
+        "central": 8,
+        "git_agent": 3
+      },
+      "model_calls": 11,
+      "manifest_sha256": "c9af4aa6377ca6a61a9905d8d42bc34d12242f42a2bdceb2ed4f77aff4e9647e",
+      "artifact_files": 2469
+    },
+    {
+      "name": "20261123-partial-retention-control-02",
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-partial-retention-control-02",
+      "completed": false,
+      "turns": [
+        {
+          "user_turn": 4,
+          "message_id": "seeded-lowcode.t4",
+          "runtime_message_id": "seeded-lowcode.t4__user",
+          "native_report_id": "r8",
+          "native_delivery_created": true,
+          "dialogue_turn_id": "t0004",
+          "roles": [
+            "central",
+            "git_agent",
+            "git_agent",
+            "git_agent",
+            "git_agent",
+            "central",
+            "outline",
+            "outline",
+            "outline",
+            "outline",
+            "outline",
+            "outline",
+            "outline",
+            "outline",
+            "outline",
+            "outline",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "outline",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 1,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 4,
+          "version_binding_ok": true,
+          "operation_contract": "patch",
+          "canonical_changes": {
+            "added_nodes": [],
+            "changed_nodes": [
+              "n14"
+            ],
+            "factual_correctness_verified": false,
+            "kept_nodes": [
+              "n8",
+              "n2",
+              "n4",
+              "n11",
+              "n9",
+              "n6",
+              "n13"
+            ],
+            "removed_nodes": [],
+            "scope": "canonical node bytes; final citation display and assembly may change"
+          },
+          "scope_ok": true
+        },
+        {
+          "user_turn": 5,
+          "message_id": "seeded-lowcode.t5",
+          "runtime_message_id": "seeded-lowcode.t5",
+          "native_report_id": "r8",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0005",
+          "roles": [
+            "central",
+            "memory_recaller",
+            "central",
+            "git_agent",
+            "git_agent",
+            "git_agent",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": false,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 4,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 4,
+          "version_binding_ok": true,
+          "operation_contract": "read_only"
+        }
+      ],
+      "current_trial_billing_complete": true,
+      "global_billing_complete": true,
+      "known_cumulative_peak_cny": "9.65404304",
+      "held_cny": "0",
+      "unknown_receipts": [],
+      "role_calls": {
+        "central": 14,
+        "git_agent": 7,
+        "outline": 11,
+        "writer": 4,
+        "memory_updater": 2,
+        "memory_recaller": 1
+      },
+      "model_calls": 39,
+      "manifest_sha256": "1c1100bd8b3171b386be81b4bf93f3d3c43e67ca1d55945c4b7c6e6231dacff2",
+      "artifact_files": 2953
+    },
+    {
+      "name": "20261123-partial-retention-control-03",
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-partial-retention-control-03",
+      "completed": false,
+      "turns": [
+        {
+          "user_turn": 5,
+          "passed": false,
+          "stopped_for_accounting": true,
+          "native_delivery_created": false
+        }
+      ],
+      "current_trial_billing_complete": false,
+      "global_billing_complete": false,
+      "known_cumulative_peak_cny": "9.80070504",
+      "held_cny": "2.162688",
+      "unknown_receipts": [
+        {
+          "identity": "http-b05c246e0a0f49919d40ade6792240a2-12",
+          "source_id": "01a20663-ac65-7030-8a42-b940d9d00e72",
+          "turn": 5,
+          "kind": "model",
+          "status": "unknown",
+          "http_status": null,
+          "usage": null,
+          "reported_model": null
+        }
+      ],
+      "role_calls": {
+        "central": 5,
+        "git_agent": 6,
+        "memory_updater": 1
+      },
+      "model_calls": 12,
+      "manifest_sha256": "21c074c862a3c13294b388a7b1eac61231ca8e40c687a28042c217ee7a7dc76e",
+      "artifact_files": 3196
+    },
+    {
+      "name": "20261123-partial-retention-control-04",
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-partial-retention-control-04",
+      "completed": true,
+      "turns": [
+        {
+          "user_turn": 5,
+          "message_id": "seeded-lowcode.t5",
+          "runtime_message_id": "seeded-lowcode.t5__user",
+          "native_report_id": "r12",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0005",
+          "roles": [
+            "central",
+            "git_agent",
+            "git_agent",
+            "git_agent",
+            "git_agent",
+            "git_agent",
+            "central",
+            "central",
+            "central",
+            "central",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 4,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 4,
+          "version_binding_ok": true,
+          "operation_contract": "read_only"
+        },
+        {
+          "user_turn": 6,
+          "message_id": "seeded-lowcode.t6",
+          "runtime_message_id": "seeded-lowcode.t6",
+          "native_report_id": "r10",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0006",
+          "roles": [
+            "central",
+            "git_agent",
+            "git_agent",
+            "git_agent",
+            "central",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 2,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 2,
+          "version_binding_ok": true,
+          "operation_contract": "exact_reuse"
+        },
+        {
+          "user_turn": 7,
+          "message_id": "seeded-lowcode.t7",
+          "runtime_message_id": "seeded-lowcode.t7",
+          "native_report_id": "r13",
+          "native_delivery_created": true,
+          "dialogue_turn_id": "t0007",
+          "roles": [
+            "central",
+            "git_agent",
+            "git_agent",
+            "git_agent",
+            "central",
+            "outline",
+            "outline",
+            "writer",
+            "writer",
+            "writer",
+            "outline",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 2,
+          "accepted_head_user_turn": 7,
+          "active_user_turn": 7,
+          "version_binding_ok": true,
+          "operation_contract": "patch",
+          "canonical_changes": {
+            "added_nodes": [],
+            "changed_nodes": [
+              "n11"
+            ],
+            "factual_correctness_verified": false,
+            "kept_nodes": [
+              "n8",
+              "n2",
+              "n4",
+              "n9",
+              "n14",
+              "n6",
+              "n13"
+            ],
+            "removed_nodes": [],
+            "scope": "canonical node bytes; final citation display and assembly may change"
+          },
+          "scope_ok": true
+        }
+      ],
+      "current_trial_billing_complete": true,
+      "global_billing_complete": false,
+      "known_cumulative_peak_cny": "10.68349592",
+      "held_cny": "2.162688",
+      "unknown_receipts": [],
+      "role_calls": {
+        "central": 9,
+        "git_agent": 11,
+        "memory_updater": 3,
+        "outline": 3,
+        "writer": 3
+      },
+      "model_calls": 29,
+      "manifest_sha256": "442714064274a420e81127207a323abc42ae76caf0353ce0dd63d74b89abfaed",
+      "artifact_files": 3962
+    }
+  ],
+  "fixes": [
+    "Central report_operation binds GitAgent terminal tool permissions and reuse mode",
+    "Conditional Skills distinguish full restoration from partial retained changes",
+    "Explicit follow-up graph step capacity matches nominal eight-tool budget; shared executor and first-turn budgets untouched",
+    "Read-only evidence bundle is bounded, hash-verified and saved-only",
+    "Official public DNS rotation is refreshed without removing audited-socket/TLS/credential restrictions",
+    "Unknown earlier request stays reserved and is not replayed in fresh independent trial"
+  ],
+  "accounting": {
+    "basis": "verified peak-rate conservative accounting, not provider invoice",
+    "today_known_peak_subtotal_cny": "4.47322712",
+    "all_trials_known_peak_subtotal_cny": "10.68349592",
+    "prior_unknown_held_cny": "2.162688",
+    "maximum_booked_exposure_cny": "12.84618392",
+    "current_final_trial_billing_complete": true,
+    "global_billing_complete": false,
+    "unknown_source_identities": [
+      "http-b05c246e0a0f49919d40ade6792240a2-12"
+    ],
+    "unknown_requests_replayed": 0,
+    "operating_ceiling_cny": "48",
+    "total_ceiling_cny": "50"
+  },
+  "regression": {
+    "broad_passed": 1139,
+    "broad_seconds": 73.46,
+    "targeted_bundle_dns_wallet_mode_passed": 50,
+    "targeted_seconds": 19.17,
+    "counts_overlap": true,
+    "two_skills_validated": true,
+    "first_turn_default_skills_modified": false
+  },
+  "restore_proof": {
+    "file": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-operation-standalone-recovery/result.json",
+    "sha256": "085db100269b3fc7453c92f2b49a68692e30585e353d49914a6dc78a1088462b",
+    "independent_archives_restored": 21,
+    "all_valid": true,
+    "model_calls": 0
+  },
+  "original_failed_head_preserved": "t0006",
+  "old_four_tracked_sha_unchanged": true,
+  "historical_230_files_unchanged": true,
+  "semantic_spot_checks": [
+    "Original and paraphrased round 7 edit only the requested exit-responsibility table row",
+    "Final control round 7 changes only the exit-responsibility table row",
+    "Round 7 conclusion bytes equal restored second-version conclusion; withdrawn checklist does not return"
+  ],
+  "factual_correctness_evaluated": false,
+  "race_fact_scoring_run": false,
+  "push_merge_deploy_service_restart": false,
+  "code_commits": [
+    "7566890",
+    "6bd2f78",
+    "3c7e4bf",
+    "45dff9c",
+    "f593743"
+  ]
+}
