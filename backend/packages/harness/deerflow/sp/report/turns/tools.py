@@ -158,7 +158,21 @@ def configure(task, state, config):
         else f"Host-bound report operation: {operation}. The available terminal tools and reuse mode enforce this Central decision. Do not switch operations."
     )
     prompt = skill("report-version-management") + "\n" + contract
-    config = replace(config, system_prompt=prompt, tools=[t.name for t in selected], disallowed_tools=[], skills=[], max_turns=min(config.max_turns, 50), tool_call_limit=8, finalize_after_tool_calls=None)
+    config = replace(
+        config,
+        system_prompt=prompt,
+        tools=[t.name for t in selected],
+        disallowed_tools=[],
+        skills=[],
+        max_turns=60 if operation == "patch" else min(config.max_turns, 50),
+        tool_call_limit=8,
+        loop_warning_instruction=(
+            "Use the history and active state already supplied; avoid duplicate inspection. Reserve the next available call for report_prepare_turn and do not return before a terminal version-tool handoff."
+            if operation == "patch"
+            else config.loop_warning_instruction
+        ),
+        finalize_after_tool_calls=None,
+    )
     return config, selected, "git_agent"
 
 

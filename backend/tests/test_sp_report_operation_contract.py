@@ -45,6 +45,7 @@ def test_patch_contract_uses_prepare_only(tmp_path):
     _, cfg, tools = bind(tmp_path, "patch")
     assert {t.name for t in tools} == {"report_inspect_version", "report_prepare_turn"}
     assert native_role("sp-perception", cfg.tools) == "git_agent"
+    assert cfg.max_turns == 60 and cfg.tool_call_limit == 8
 
 
 def test_readonly_contract_rejects_version_switch(tmp_path):
@@ -61,3 +62,21 @@ def test_readonly_contract_rejects_version_switch(tmp_path):
 def test_unknown_operation_fails_before_recording_attempt(tmp_path):
     with pytest.raises(ReportValidationError):
         bind(tmp_path, "unrestricted")
+
+
+def test_patch_graph_reserves_native_guard_steps(tmp_path):
+    import importlib
+    import sys
+
+    _, cfg, _ = bind(tmp_path, "patch")
+    key = "deerflow.subagents.executor"
+    previous = sys.modules.pop(key, None)
+    try:
+        executor = importlib.import_module(key)
+        assert executor._subagent_tool_loop_limits(40, 8)[1] == 5
+        assert executor._subagent_tool_loop_limits(cfg.max_turns, cfg.tool_call_limit)[1] == 8
+    finally:
+        if previous is not None:
+            sys.modules[key] = previous
+        else:
+            sys.modules.pop(key, None)

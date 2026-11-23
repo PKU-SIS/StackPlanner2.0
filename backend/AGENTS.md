@@ -110,3 +110,11 @@ whole-version restoration from ancestor-based partial editing; default Skills
 and first-turn routing remain unchanged. The pilot's --prefix-source imports a
 verified linear history prefix into a fresh owner/thread, retaining raw transfer
 archives and rebasing native paths; never rewind or edit old experiment results.
+
+Typed patch GitAgent profiles use 60 graph steps with the same nominal 8-tool
+limit. Native perception's 40 steps otherwise clamp the actual loop guard to 5
+proposed calls (6 reserved shutdown steps / 6 steps per tool cycle). The scoped
+padding restores the intended bounded tool capacity; exact/read-only/legacy
+profiles, shared executor, token limits and first-turn generation are unchanged.
+Use a terminal-tool-specific loop warning so inspection cannot consume the
+handoff allowance. Retain capped real trials as failures, never relabel them.
