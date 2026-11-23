@@ -11,8 +11,12 @@ section titles. report_read_section returns the real title; confirm it matches
 the requested location before editing. Locate the requested text using
 report_find_sections, then read the relevant section with report_read_section.
 Use report_replace_text to replace a unique exact span. Preserve every character
-outside the requested changes, including citations. You may edit more than one
-section when the request clearly requires it. Unmentioned content remains valid.
+outside the requested changes, including citations. For a one-cell table edit,
+replace only that cell's existing text; preserve separators, neighboring cells
+and other rows byte-for-byte. Do not distribute the clarification across columns.
+When a named row needs clearer advice, use its existing recommendation/common
+confirmation cell, rather than adding advice to the business/developer concern
+cells. You may edit more than one section when the request clearly requires it. Unmentioned content remains valid.
 Read saved evidence with report_read_material when needed. For selective undo,
 report_read_section(version_id=...) can read an accepted historical section;
 copy only the withdrawn portion, retaining other still valid edits.
