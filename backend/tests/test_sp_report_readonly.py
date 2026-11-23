@@ -19,9 +19,9 @@ def test_compact_provenance_uses_saved_locator_not_material_prefix(tmp_path, lon
     ctx, ledger = _seed(tmp_path, body="Report conclusion [S1].\n", with_sources=True, node_evidence=[{"material_id": "m1", "source_ids": ["S1"], "locator": {"lines": [35, 35]}, "use": "Report interpretation, not a source quote"}])
     material = ledger.payload["materials"][0]
     passage = ("long introduction " * 300 if long_line else "") + "Actual supporting passage at saved locator."
-    text = "\n".join(["Unrelated introduction"] * 34 + [passage] + ["Other text"] * 10) + "\n"
+    text = "\n".join(["Unrelated introduction"] * 34 + [passage] + ["Other text"] * 112) + "\n"
     Path(material["path"]).write_text(text)
-    material.update(sha256=native.sha256_text(text), chars=len(text), lines=45)
+    material.update(sha256=native.sha256_text(text), chars=len(text), lines=147)
     for item in ledger.payload["materials"]:
         data = native.read_text(Path(item["path"]))
         path = ledger.paths.material_file(item["source_id"], item["sha256"])
@@ -39,6 +39,12 @@ def test_compact_provenance_uses_saved_locator_not_material_prefix(tmp_path, lon
     assert payload["sections"][0]["title"] == "指标"
     item = payload["sections"][0]["evidence"][0]
     assert item["saved_locator"] == {"lines": [35, 35]}
+    assert item["saved_line_range"] == [1, 147]
+    assert item["returned_line_range"] == [35, 35]
+    assert item["saved_file_available"] is True
+    assert payload["material_boundaries"][0]["saved_total_lines"] == 147
+    assert payload["material_boundaries"][0]["returned_line_ranges"] == [[35, 35]]
+    assert "未展示不等于未保存" in item["reading_boundary"]
     assert "Actual supporting passage" in item["content"]
     assert item["source"]["source_id"] == "S1"
     if long_line:

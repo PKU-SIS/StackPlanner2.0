@@ -30,6 +30,7 @@ def read_provenance(store, version_id, node_id=None):
         selected = native.read_json(changes).get("changed_nodes", []) if changes.exists() else []
     nodes = {n["node_id"]: n for n in tree.get("nodes", [])}
     sections = []
+    material_boundaries = {}
     for identity in selected:
         node = nodes.get(identity)
         draft = next((d for d in ledger.get("drafts", []) if d.get("is_current") and d.get("node_id") == identity), None)
@@ -56,6 +57,18 @@ def read_provenance(store, version_id, node_id=None):
             }
             if material:
                 lines = saved(material).splitlines()
+                boundary = material_boundaries.setdefault(
+                    material["material_id"],
+                    {
+                        "material_id": material["material_id"],
+                        "source_id": material.get("source_id"),
+                        "saved_file_available": True,
+                        "saved_total_lines": len(lines),
+                        "saved_line_range": [1, len(lines)],
+                        "returned_line_ranges": [],
+                    },
+                )
+                row.update(saved_file_available=True, saved_total_lines=len(lines), saved_line_range=[1, len(lines)], unshown_content_is_still_saved=True)
                 locator = (ref.get("locator") or {}).get("lines")
                 if isinstance(locator, list) and len(locator) == 2 and all(type(v) is int for v in locator) and 1 <= locator[0] <= locator[1] <= len(lines):
                     start, end = locator
@@ -66,7 +79,17 @@ def read_provenance(store, version_id, node_id=None):
                     shortened = len(excerpt) > 2400
                     displayed = excerpt if not shortened else excerpt[:1200] + "\n[Middle omitted]\n" + excerpt[-1200:]
                     ranges = [[1, len(excerpt)]] if not shortened else [[1, 1200], [len(excerpt) - 1199, len(excerpt)]]
-                    row.update(content=displayed, lines=[start, stop], truncated=stop < end or shortened, numbered_excerpt_char_ranges=ranges, total_lines=len(lines), material_sha256=material["sha256"])
+                    boundary["returned_line_ranges"].append([start, stop])
+                    row.update(
+                        content=displayed,
+                        lines=[start, stop],
+                        returned_line_range=[start, stop],
+                        truncated=stop < end or shortened,
+                        numbered_excerpt_char_ranges=ranges,
+                        total_lines=len(lines),
+                        material_sha256=material["sha256"],
+                        reading_boundary=f"本地已保存第1–{len(lines)}行；本次仅展示第{start}–{stop}行的摘录。未展示不等于未保存。truncated只描述本次摘录。",
+                    )
                 else:
                     row.update(content=None, missing_valid_line_locator=True, material_sha256=material["sha256"], hint="Read material:<id> if more source text is necessary; a report interpretation is not a source quote.")
             else:
@@ -86,6 +109,8 @@ def read_provenance(store, version_id, node_id=None):
         )
     return {
         "version_id": version_id,
+        "material_boundaries": list(material_boundaries.values()),
+        "reading_boundary": "saved_line_range是本地完整保存范围，returned_line_ranges是本次展示范围；其余行仍已保存、尚未展示。未读到不等于未保存或不存在；本地保存文本也不保证是网络原文全文。",
         "section_catalog": catalog,
         "sections": sections,
         "scope": "Saved report passages and their original evidence locators; not fresh research or independent factual verification.",

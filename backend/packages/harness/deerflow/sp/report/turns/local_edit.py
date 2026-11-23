@@ -224,7 +224,7 @@ def accept(action, context, result, task, *, artifact_adapter, delegate_entry):
         if not session.get("edits"):
             fail(context, {"phase": "local_edit", "reason": "No changes saved", "writer_response": result.result}, action_id=action.action_id)
             entry = context.stack.append_observe(
-                "No changes saved; prior accepted report remains active. Explain ambiguity/missing evidence or choose Outline if needed. Writer response: " + str(result.result),
+                "No changes saved; this turn is failed and ended. Prior accepted report remains active. Do not re-delegate this message. Writer response: " + str(result.result),
                 actor="writer",
                 thread_id=context.thread_id,
                 run_id=context.run_id,

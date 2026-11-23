@@ -61,7 +61,11 @@ class SPReportContextMiddleware(AgentMiddleware[ThreadState]):
 
     def _entry_update(self, state, runtime):
         from deerflow.sp.report.entry import explicit_report_entry_action
+        from deerflow.sp.report.turns.adapter import terminal_failure_update
 
+        terminal = terminal_failure_update(state, runtime)
+        if terminal is not None:
+            return terminal
         action = explicit_report_entry_action(state, runtime)
         return {"jump_to": "tools", "messages": [action]} if action is not None else None
 

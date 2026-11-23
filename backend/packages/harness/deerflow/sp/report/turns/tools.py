@@ -118,6 +118,9 @@ def build_tools(store, message, *, operation="auto"):
                     material_sha256=ref["sha256"],
                     lines=[start_line, end],
                     total_lines=len(lines),
+                    saved_line_range=[1, len(lines)],
+                    returned_line_range=[start_line, end],
+                    reading_boundary="本次仅返回指定行；其他行仍在本地保存，未返回不代表未保存或不存在。",
                     source=next(({k: source.get(k) for k in ("source_id", "url", "title")} for source in ledger.get("sources", []) if source.get("source_id") == ref["source_id"]), None),
                 )
                 return json.dumps(result, ensure_ascii=False)

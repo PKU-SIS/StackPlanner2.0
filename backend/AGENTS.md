@@ -246,3 +246,13 @@ spot checks are 2/3: A2A incorrectly equates a returned line-23 excerpt with the
 material ending there, although 147 lines are saved. A locator view is not proof
 of source absence. See three-topic-stability-20261123/RESULT.md. This is an
 unresolved source-boundary wording issue, not full factual-quality acceptance.
+
+
+Report provenance now leads with material_boundaries: complete locally saved
+line ranges vs ranges returned in the current reply, with explicit unread vs
+unsaved wording. A saved file may itself be partial relative to the web original.
+Only failed/cancelled *terminal dialogue turns* receive a program notice and
+jump to end before another Central model call; executing/prepared and ordinary
+first-turn work retain their original recovery paths. A new source message can
+start another turn. Preserve the failed status, old accepted head and diagnostics;
+never convert failure notice delivery into report delivery success.

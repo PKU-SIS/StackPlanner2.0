@@ -1128,3 +1128,8 @@ The [three-topic fixed stability results](docs/research-report/three-topic-stabi
 retain imported-write-key first-pass failures and a separate 12/12 exact-scope
 replication after correction. Readonly source-boundary accuracy remains limited
 (2/3 content spot checks); file/restore success is not factual acceptance.
+
+Bound-report source reads explicitly distinguish complete locally saved ranges
+from excerpts returned in the current call. Ended failed/cancelled follow-ups
+return an honest notice without further automatic delegation; normal editing
+and in-progress corrections keep their existing path.

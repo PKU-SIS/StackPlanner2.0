@@ -203,6 +203,39 @@ def guard_sealed_report(context, report):
         raise ReportValidationError("sealed report is immutable; fork a new dialogue turn before mutation")
 
 
+def terminal_failure_update(state, runtime):
+    """Finish an already ended dialogue turn; never start a recovery model loop."""
+    if opted_request(state) is None:
+        return None
+    context = getattr(runtime, "context", None)
+    thread_id = context.get("thread_id") if isinstance(context, Mapping) else None
+    active = current_turn(state, thread_id=thread_id)
+    if active is None or active[3] is None or active[3]["status"] not in {"failed", "cancelled"}:
+        return None
+    store, _, _, turn = active
+    from langchain_core.messages import AIMessage
+
+    diagnostic = turn.get("diagnostic") or {}
+    if turn["status"] == "cancelled":
+        outcome = "本轮已取消"
+    elif diagnostic.get("reason") == "No changes saved":
+        outcome = "本轮修改未完成：Writer未保存任何修改"
+    elif diagnostic.get("reason") == "truncated Writer response" or diagnostic.get("stop_reason") in {"token_capped", "loop_capped", "turn_capped"}:
+        outcome = "本轮修改未完成：执行已停止"
+    else:
+        outcome = "本轮修改未完成：执行失败"
+    notice = f"{outcome}。本轮已结束，不会自动重派agent；已接受报告保持原样。诊断和用量记录已保留（{turn['turn_id']}）。"
+    path = store.directory(turn["turn_id"]) / "response.md"
+    if not path.exists():
+        native.write_text_atomic(path, notice)
+    return {
+        "jump_to": "end",
+        "sp_active_delegate_id": None,
+        "sp_last_run_summary": notice,
+        "messages": [AIMessage(id=f"report-terminal-{turn['turn_id']}", content=notice, additional_kwargs={"deerflow_error_fallback": True, "report_dialogue_failure": turn["turn_id"], "report_turn_status": turn["status"]})],
+    }
+
+
 def central_context(state, runtime):
     context = getattr(runtime, "context", None)
     thread_id = context.get("thread_id") if isinstance(context, Mapping) else None

@@ -17,6 +17,11 @@ For read-only questions, use sp_replan metadata.report_action="inspect_version"
 with view="provenance" (the default): it returns the recently changed section,
 actual source titles/URLs and short quotes at the accepted saved evidence lines.
 For another section, use view="provenance:<node_id>" from its section_catalog.
+saved_line_range/saved_total_lines describe the entire locally saved file;
+returned_line_ranges describe only this reply's excerpts. If 21–23 of 147 lines
+are shown, the other lines are saved but not inspected. Say "not checked in this
+excerpt", never "not saved" or "does not exist" from an omitted excerpt. Local
+saved text is not necessarily the full original web source.
 Separate quoted source claims, report synthesis, and recommendations. Answer
 concisely once those distinctions are supported; say when evidence is missing.
 Do not expand a local provenance question into an audit of every chapter or the
@@ -46,6 +51,7 @@ The selected accepted body plus latest edit defines current requirements; do not
 reintroduce withdrawn requirements from old chat or task memory. Original chat
 remains provenance. An ambiguous target can be clarified without a resolver loop.
 If the turn is executing, continue its existing native work; if archived, return
-its result without another fork/delegation. Diagnose failed/cancelled turns;
-do not automatically restart paid work. Preparation and executor completion are
-not delivery. Do not start a new report via report_length ahead of this decision.
+its result without another fork/delegation. Failed/cancelled turns are ended;
+do not re-delegate the same message. The program returns its failure notice.
+A new user message can continue normally. Do not automatically restart paid work.
+Preparation and executor completion are not delivery. Do not start a new report via report_length ahead of this decision.
