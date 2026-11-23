@@ -1,0 +1,20 @@
+{
+  "case_id": "a2a-table-preparation",
+  "turns": [
+    {
+      "user_turn": 2,
+      "base_user_turn": 1,
+      "accepted_head_user_turn": 2,
+      "active_user_turn": 2,
+      "changed_nodes": [
+        "n14"
+      ],
+      "native_delivery_required": true,
+      "forbidden_roles": [
+        "researcher",
+        "outline",
+        "git_agent"
+      ]
+    }
+  ]
+}

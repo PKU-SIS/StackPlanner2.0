@@ -1123,3 +1123,8 @@ The [readonly API results](docs/research-report/readonly-provenance-api-20261123
 record five completed provenance questions, a complete six-turn functional run,
 and a separately retained single-cell scope failure and targeted correction.
 Citation fidelity remains a documented quality limitation.
+
+The [three-topic fixed stability results](docs/research-report/three-topic-stability-20261123/RESULT.md)
+retain imported-write-key first-pass failures and a separate 12/12 exact-scope
+replication after correction. Readonly source-boundary accuracy remains limited
+(2/3 content spot checks); file/restore success is not factual acceptance.

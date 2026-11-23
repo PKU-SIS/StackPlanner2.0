@@ -1,0 +1,8 @@
+trial,input_tokens,output_tokens,total_tokens,cache_read_tokens_included_in_input,cost_estimate_cny,trajectory_wall_seconds,tool_errors
+a2a-table-preparation,36548,1605,38153,24960,0.03701440,,0
+first-lowcode,243856,9548,253404,228864,0.11552256,72.002,7
+first-manufacturing,159955,6161,166116,145536,0.08394744,52.317,5
+first-a2a,220529,10052,230581,205824,0.11805896,69.04,6
+retest-lowcode,316356,25000,341356,238080,0.36607520,165.916,2
+retest-manufacturing,444368,19813,464181,342912,0.37513248,141.815,1
+retest-a2a,266294,11293,277587,201344,0.22829776,76.806,0

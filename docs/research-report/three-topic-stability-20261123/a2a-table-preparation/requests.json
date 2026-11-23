@@ -1,0 +1,41 @@
+{
+  "case_id": "a2a-table-preparation",
+  "length_band": "10000",
+  "turns": [
+    {
+      "turn_index": 1,
+      "message_id": "stability.a2a.prep.t1",
+      "query": "本次仅执行第二轮的表格准备，不执行本轮。"
+    },
+    {
+      "turn_index": 2,
+      "message_id": "stability.a2a.prep.t2",
+      "query": "仅在“总结：差异、联系、创新与问题”末尾追加下面这个建议性对照表，原文、其他章节和引用都不要改，不检索或加入新事实。\n\n**协议落地核对表（建议）**\n\n| 协议 | 关注问题 | 落地检查建议 |\n| --- | --- | --- |\n| MCP | Agent到工具的接入 | 先核实工具能力和接口边界。 |\n| A2A | Agent到Agent的协作 | 协作双方共同确认任务边界与交接责任。 |"
+    },
+    {
+      "turn_index": 3,
+      "message_id": "stability.a2a.prep.t3",
+      "query": "本次仅执行第二轮的表格准备，不执行本轮。"
+    },
+    {
+      "turn_index": 4,
+      "message_id": "stability.a2a.prep.t4",
+      "query": "本次仅执行第二轮的表格准备，不执行本轮。"
+    },
+    {
+      "turn_index": 5,
+      "message_id": "stability.a2a.prep.t5",
+      "query": "本次仅执行第二轮的表格准备，不执行本轮。"
+    },
+    {
+      "turn_index": 6,
+      "message_id": "stability.a2a.prep.t6",
+      "query": "本次仅执行第二轮的表格准备，不执行本轮。"
+    },
+    {
+      "turn_index": 7,
+      "message_id": "stability.a2a.prep.t7",
+      "query": "本次仅执行第二轮的表格准备，不执行本轮。"
+    }
+  ]
+}

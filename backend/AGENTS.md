@@ -237,3 +237,12 @@ write_requests, not derive uniqueness from a reset dialogue turn number. Keep
 legacy keys unchanged and duplicate tool receipts idempotent. The fixed first
 three-topic pass in three-topic-stability-20261123/FIRST_PASS.md retains all
 three first-turn failures; any post-fix replication is a separate new batch.
+
+
+Post-key-fix fixed three-topic replication: all 12 version/exact-canonical
+checks pass (three conversations); recovered tool errors remain 2/1/0 and only
+one conversation is clean. Preserve the 0/3 original first pass. Readonly content
+spot checks are 2/3: A2A incorrectly equates a returned line-23 excerpt with the
+material ending there, although 147 lines are saved. A locator view is not proof
+of source absence. See three-topic-stability-20261123/RESULT.md. This is an
+unresolved source-boundary wording issue, not full factual-quality acceptance.

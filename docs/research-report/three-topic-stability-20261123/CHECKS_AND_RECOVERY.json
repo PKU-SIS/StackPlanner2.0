@@ -1,0 +1,192 @@
+[
+  {
+    "case_id": "lowcode",
+    "per_turn_exact_scope": [
+      {
+        "user_turn": 2,
+        "passed": true,
+        "canonical_scope_ok": true,
+        "mismatch_nodes": []
+      },
+      {
+        "user_turn": 3,
+        "passed": true,
+        "canonical_scope_ok": true,
+        "mismatch_nodes": []
+      },
+      {
+        "user_turn": 4,
+        "passed": true,
+        "canonical_scope_ok": true,
+        "mismatch_nodes": []
+      },
+      {
+        "user_turn": 5,
+        "passed": true,
+        "canonical_scope_ok": true,
+        "mismatch_nodes": []
+      }
+    ],
+    "all_native_files_unchanged": true,
+    "source_baseline_sha_unchanged": true,
+    "head_and_active": {
+      "head": "t0004",
+      "active": "t0004"
+    },
+    "verified_archives": [
+      "t0001",
+      "t0002",
+      "t0003",
+      "t0004",
+      "t0005"
+    ],
+    "independently_restored_versions": [
+      "t0001",
+      "t0002",
+      "t0003",
+      "t0004"
+    ],
+    "live_human_interventions": 0,
+    "tool_errors": [
+      {
+        "tool": "sp_delegate",
+        "response": "{\"action_type\": \"DELEGATE\", \"next_step\": \"error_recoverable\", \"error\": \"Report delegation rejected: bound report follow-ups require GitAgent and native report roles\", \"result\": null, \"completion_status\": null, \"stop_reason\": null}"
+      },
+      {
+        "tool": "sp_replan",
+        "response": "{\"action_type\": \"REPLAN\", \"next_step\": \"error_recoverable\", \"error\": \"Report lifecycle action rejected: unknown snapshot material/view\"}"
+      }
+    ],
+    "readonly_content_review": {
+      "distinguishes_direct_evidence_from_recommendation": true,
+      "verbatim_quote_and_locator_checked": false,
+      "quality_passed": true,
+      "notes": [
+        "No direct source for assigned business/developer responsibilities; answer states that limitation. Exact background source lines were not obtained, and this is disclosed."
+      ]
+    }
+  },
+  {
+    "case_id": "manufacturing",
+    "per_turn_exact_scope": [
+      {
+        "user_turn": 2,
+        "passed": true,
+        "canonical_scope_ok": true,
+        "mismatch_nodes": []
+      },
+      {
+        "user_turn": 3,
+        "passed": true,
+        "canonical_scope_ok": true,
+        "mismatch_nodes": []
+      },
+      {
+        "user_turn": 4,
+        "passed": true,
+        "canonical_scope_ok": true,
+        "mismatch_nodes": []
+      },
+      {
+        "user_turn": 5,
+        "passed": true,
+        "canonical_scope_ok": true,
+        "mismatch_nodes": []
+      }
+    ],
+    "all_native_files_unchanged": true,
+    "source_baseline_sha_unchanged": true,
+    "head_and_active": {
+      "head": "t0004",
+      "active": "t0004"
+    },
+    "verified_archives": [
+      "t0001",
+      "t0002",
+      "t0003",
+      "t0004",
+      "t0005"
+    ],
+    "independently_restored_versions": [
+      "t0001",
+      "t0002",
+      "t0003",
+      "t0004"
+    ],
+    "live_human_interventions": 0,
+    "tool_errors": [
+      {
+        "tool": "sp_delegate",
+        "response": "{\"action_type\": \"DELEGATE\", \"next_step\": \"error_recoverable\", \"error\": \"Report delegation rejected: bound report follow-ups require GitAgent and native report roles\", \"result\": null, \"completion_status\": null, \"stop_reason\": null}"
+      }
+    ],
+    "readonly_content_review": {
+      "distinguishes_direct_evidence_from_recommendation": true,
+      "verbatim_quote_and_locator_checked": true,
+      "quality_passed": true,
+      "notes": [
+        "S91/m91 line5 contains exact Japanese quote; no source is invented for approval/record-keeping assignments."
+      ]
+    }
+  },
+  {
+    "case_id": "a2a",
+    "per_turn_exact_scope": [
+      {
+        "user_turn": 2,
+        "passed": true,
+        "canonical_scope_ok": true,
+        "mismatch_nodes": []
+      },
+      {
+        "user_turn": 3,
+        "passed": true,
+        "canonical_scope_ok": true,
+        "mismatch_nodes": []
+      },
+      {
+        "user_turn": 4,
+        "passed": true,
+        "canonical_scope_ok": true,
+        "mismatch_nodes": []
+      },
+      {
+        "user_turn": 5,
+        "passed": true,
+        "canonical_scope_ok": true,
+        "mismatch_nodes": []
+      }
+    ],
+    "all_native_files_unchanged": true,
+    "source_baseline_sha_unchanged": true,
+    "head_and_active": {
+      "head": "t0004",
+      "active": "t0004"
+    },
+    "verified_archives": [
+      "t0001",
+      "t0002",
+      "t0003",
+      "t0004",
+      "t0005"
+    ],
+    "independently_restored_versions": [
+      "t0001",
+      "t0002",
+      "t0003",
+      "t0004"
+    ],
+    "live_human_interventions": 0,
+    "tool_errors": [],
+    "readonly_content_review": {
+      "distinguishes_direct_evidence_from_recommendation": true,
+      "verbatim_quote_and_locator_checked": true,
+      "quality_passed": false,
+      "notes": [
+        "S1/m1 line96 and S4/m4 lines21-23 quote accurately, but answer falsely says m4 was only saved through line23: actual saved file has 147 lines; line24 contains information. Returning a locator excerpt is not absence of saved source content."
+      ],
+      "actual_m4_saved_lines": 147,
+      "actual_m4_line24": "information."
+    }
+  }
+]

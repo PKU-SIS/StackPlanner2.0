@@ -1,0 +1,93 @@
+{
+  "preparation_tokens": {
+    "model_calls": 6,
+    "usage_complete": true,
+    "missing_usage_calls": 0,
+    "input_tokens": 36548,
+    "output_tokens": 1605,
+    "total_tokens": 38153,
+    "observed_input_tokens": 36548,
+    "observed_output_tokens": 1605,
+    "observed_total_tokens": 38153,
+    "cache_read_tokens": 24960,
+    "observed_cache_read_tokens": 24960,
+    "cache_missing_calls": 0,
+    "cache_is_subset_of_input": true,
+    "by_role": {
+      "central": {
+        "model_calls": 1,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 15752,
+        "output_tokens": 825,
+        "total_tokens": 16577,
+        "observed_input_tokens": 15752,
+        "observed_output_tokens": 825,
+        "observed_total_tokens": 16577,
+        "cache_read_tokens": 10624,
+        "observed_cache_read_tokens": 10624,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true
+      },
+      "writer": {
+        "model_calls": 4,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 18914,
+        "output_tokens": 615,
+        "total_tokens": 19529,
+        "observed_input_tokens": 18914,
+        "observed_output_tokens": 615,
+        "observed_total_tokens": 19529,
+        "cache_read_tokens": 14336,
+        "observed_cache_read_tokens": 14336,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true
+      },
+      "memory_updater": {
+        "model_calls": 1,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 1882,
+        "output_tokens": 165,
+        "total_tokens": 2047,
+        "observed_input_tokens": 1882,
+        "observed_output_tokens": 165,
+        "observed_total_tokens": 2047,
+        "cache_read_tokens": 0,
+        "observed_cache_read_tokens": 0,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true
+      }
+    },
+    "by_turn": {
+      "2": {
+        "model_calls": 6,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 36548,
+        "output_tokens": 1605,
+        "total_tokens": 38153,
+        "observed_input_tokens": 36548,
+        "observed_output_tokens": 1605,
+        "observed_total_tokens": 38153,
+        "cache_read_tokens": 24960,
+        "observed_cache_read_tokens": 24960,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true
+      }
+    }
+  },
+  "firstpass_tokens": 650101,
+  "retest_tokens": 1083124,
+  "all_tokens": 1771378,
+  "incremental_estimated_cost_cny": "1.32404880",
+  "known_cumulative_peak_cny": "21.66970408",
+  "old_unknown_held_cny": "2.162688",
+  "global_billing_complete": false,
+  "retest_functional_passed": 12,
+  "retest_functional_planned": 12,
+  "retest_readonly_content_passed": 2,
+  "retest_readonly_content_denominator": 3,
+  "not_a_general_success_rate": true
+}

@@ -1,0 +1,26 @@
+{
+  "node_id": "n11",
+  "title": "分歧不在“快不快”，而在谁来承担长期成本",
+  "old_sentence": "管理者和开发者并不在争论同一个问题。",
+  "new_sentence": "就本文已保存资料而言，管理者和开发者并不在争论同一个问题。",
+  "row": "平台退出时",
+  "column": "共同确认事项",
+  "old_cell": "退出时的迁移清单与时限；僵尸应用的清理归属；多年总拥有成本由哪一方记账",
+  "new_cell": "建议由业务方确认资产导出范围，由开发方负责迁移交接；其余安排仍按原有约定执行。",
+  "inherited_length_contract": {
+    "compact_outline": true,
+    "counter_version": "mixed-word-estimate-v1",
+    "enabled": true,
+    "heading_reserve_words": 300,
+    "length_auto_revision": false,
+    "max_words": 11000,
+    "measurement_mode": "estimate",
+    "min_words": 9000,
+    "outline_budget_selection": true,
+    "reference_reserve_words": 1000,
+    "safety_margin_words": 500,
+    "scope": "whole_document",
+    "target_words": 10000,
+    "writer_task_cards": true
+  }
+}

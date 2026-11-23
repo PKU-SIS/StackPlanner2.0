@@ -1,0 +1,11 @@
+{
+  "node_id": "n14",
+  "title": "总结：差异、联系、创新与问题",
+  "old_sentence": "综合以上各节，A2A 与 MCP 可以被归结为两类互补的互联问题：MCP 解决的是 **agent 到工具**，A2A 解决的是 **agent 到 agent**。",
+  "new_sentence": "就本文已保存资料而言，综合以上各节，A2A 与 MCP 可以被归结为两类互补的互联问题：MCP 解决的是 **agent 到工具**，A2A 解决的是 **agent 到 agent**。",
+  "row": "A2A",
+  "column": "落地检查建议",
+  "old_cell": "协作双方共同确认任务边界与交接责任。",
+  "new_cell": "建议先明确任务边界与交接责任，再由协作双方确认验收方式。",
+  "inherited_length_contract": null
+}

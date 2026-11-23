@@ -1,0 +1,105 @@
+{
+  "case_id": "stability-manufacturing",
+  "turns": [
+    {
+      "user_turn": 2,
+      "base_user_turn": 1,
+      "accepted_head_user_turn": 2,
+      "active_user_turn": 2,
+      "changed_nodes": [
+        "n4"
+      ],
+      "native_delivery_required": true,
+      "forbidden_roles": [
+        "git_agent",
+        "outline",
+        "researcher"
+      ],
+      "canonical_sha256_by_node": {
+        "n1": "e0e1670adb0c11acef2a3ebe271518b31f5f90147b125b74fc5b533f2ae5feb9",
+        "n3": "1bf5d651b86c6a22d9483c6bcc8ded79b161ca7514d9778aad0091bb8fa4373a",
+        "n8": "d5689c5fc0d69e5d29c88b3a1d187b5ca81dbd64100032bf6dd6261acf2deb7f",
+        "n2": "f557d9064b0380ef95c85d07756803a1b63aca7ae8f16b57b849f6ac0d5986ee",
+        "n7": "1a6d9e01a87e02d6ea4d82ca25757ab1f852b0c955cfd4eee170967213bdbd8e",
+        "n5": "ce6274584cbff94ec5c70003c4cbbee8f54ab897e7c46eb61a0d812b8bdacc94",
+        "n6": "50fac0373273632356ba190cd8b9346b86601638552d51faed956c3639414bbb",
+        "n4": "29a5dd6947f81f173addab7731bc5575ed7e1ae8cec92a77c491e5978fc2d900"
+      }
+    },
+    {
+      "user_turn": 3,
+      "base_user_turn": 2,
+      "accepted_head_user_turn": 3,
+      "active_user_turn": 3,
+      "changed_nodes": [
+        "n4"
+      ],
+      "native_delivery_required": true,
+      "forbidden_roles": [
+        "git_agent",
+        "outline",
+        "researcher"
+      ],
+      "canonical_sha256_by_node": {
+        "n1": "e0e1670adb0c11acef2a3ebe271518b31f5f90147b125b74fc5b533f2ae5feb9",
+        "n3": "1bf5d651b86c6a22d9483c6bcc8ded79b161ca7514d9778aad0091bb8fa4373a",
+        "n8": "d5689c5fc0d69e5d29c88b3a1d187b5ca81dbd64100032bf6dd6261acf2deb7f",
+        "n2": "f557d9064b0380ef95c85d07756803a1b63aca7ae8f16b57b849f6ac0d5986ee",
+        "n7": "1a6d9e01a87e02d6ea4d82ca25757ab1f852b0c955cfd4eee170967213bdbd8e",
+        "n5": "ce6274584cbff94ec5c70003c4cbbee8f54ab897e7c46eb61a0d812b8bdacc94",
+        "n6": "50fac0373273632356ba190cd8b9346b86601638552d51faed956c3639414bbb",
+        "n4": "1a7960f07999a2608a7d9367a121f061d72225d0a3d9d07c80e063539d209594"
+      }
+    },
+    {
+      "user_turn": 4,
+      "base_user_turn": 3,
+      "accepted_head_user_turn": 4,
+      "active_user_turn": 4,
+      "changed_nodes": [
+        "n4"
+      ],
+      "native_delivery_required": true,
+      "forbidden_roles": [
+        "git_agent",
+        "outline",
+        "researcher"
+      ],
+      "canonical_sha256_by_node": {
+        "n1": "e0e1670adb0c11acef2a3ebe271518b31f5f90147b125b74fc5b533f2ae5feb9",
+        "n3": "1bf5d651b86c6a22d9483c6bcc8ded79b161ca7514d9778aad0091bb8fa4373a",
+        "n8": "d5689c5fc0d69e5d29c88b3a1d187b5ca81dbd64100032bf6dd6261acf2deb7f",
+        "n2": "f557d9064b0380ef95c85d07756803a1b63aca7ae8f16b57b849f6ac0d5986ee",
+        "n7": "1a6d9e01a87e02d6ea4d82ca25757ab1f852b0c955cfd4eee170967213bdbd8e",
+        "n5": "ce6274584cbff94ec5c70003c4cbbee8f54ab897e7c46eb61a0d812b8bdacc94",
+        "n6": "50fac0373273632356ba190cd8b9346b86601638552d51faed956c3639414bbb",
+        "n4": "e563d38d274385551f8a7aa90da863875816ad9dd27e571c934dc49b7fec1a43"
+      }
+    },
+    {
+      "user_turn": 5,
+      "base_user_turn": 4,
+      "accepted_head_user_turn": 4,
+      "active_user_turn": 4,
+      "changed_nodes": [],
+      "native_delivery_required": false,
+      "forbidden_roles": [
+        "git_agent",
+        "outline",
+        "researcher",
+        "writer",
+        "coder"
+      ],
+      "canonical_sha256_by_node": {
+        "n1": "e0e1670adb0c11acef2a3ebe271518b31f5f90147b125b74fc5b533f2ae5feb9",
+        "n3": "1bf5d651b86c6a22d9483c6bcc8ded79b161ca7514d9778aad0091bb8fa4373a",
+        "n8": "d5689c5fc0d69e5d29c88b3a1d187b5ca81dbd64100032bf6dd6261acf2deb7f",
+        "n2": "f557d9064b0380ef95c85d07756803a1b63aca7ae8f16b57b849f6ac0d5986ee",
+        "n7": "1a6d9e01a87e02d6ea4d82ca25757ab1f852b0c955cfd4eee170967213bdbd8e",
+        "n5": "ce6274584cbff94ec5c70003c4cbbee8f54ab897e7c46eb61a0d812b8bdacc94",
+        "n6": "50fac0373273632356ba190cd8b9346b86601638552d51faed956c3639414bbb",
+        "n4": "e563d38d274385551f8a7aa90da863875816ad9dd27e571c934dc49b7fec1a43"
+      }
+    }
+  ]
+}

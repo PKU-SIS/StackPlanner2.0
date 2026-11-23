@@ -1,0 +1,26 @@
+{
+  "node_id": "n4",
+  "title": "四、第三重难度：默会知识的编码边界",
+  "old_sentence": "自动化真正吃掉的是“可分解、可重复、可测量”的那一段。",
+  "new_sentence": "就本文已保存资料而言，自动化真正吃掉的是“可分解、可重复、可测量”的那一段。",
+  "row": "验收放行",
+  "column": "验证建议",
+  "old_cell": "建议对规则化项取自动化判定，对精修与配合环节保留人工终检记录；以“自动判定与人工终检的一致性”作为验证线索，仅作参考，不设为放行门槛",
+  "new_cell": "建议由工艺与质量负责人确认放行标准，由现场操作人员负责人工接管，并保留双方确认记录。",
+  "inherited_length_contract": {
+    "compact_outline": true,
+    "counter_version": "mixed-word-estimate-v1",
+    "enabled": true,
+    "heading_reserve_words": 300,
+    "length_auto_revision": false,
+    "max_words": 11000,
+    "measurement_mode": "estimate",
+    "min_words": 9000,
+    "outline_budget_selection": true,
+    "reference_reserve_words": 1000,
+    "safety_margin_words": 500,
+    "scope": "whole_document",
+    "target_words": 10000,
+    "writer_task_cards": true
+  }
+}
