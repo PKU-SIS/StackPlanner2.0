@@ -339,3 +339,22 @@ def test_writer_receives_authoritative_titles_instead_of_guessed_delegate_ids(tm
     section = json.loads(tools["report_read_section"].invoke({"node_id": "n3"}))
     assert section["title"] == "Unchanged section"
     assert task.context_refs["report_local_edit"]["current_edit"] == ctx.state["messages"][-1].content
+
+
+@pytest.mark.parametrize("existing_keys", [["local-t0002-1"], ["local-t0002-1", "local1"]])
+def test_imported_completed_writer_keys_do_not_collide_with_new_turn(tmp_path, existing_keys):
+    ctx, action, task, tools, original = setup_edit(tmp_path)
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    ledger.payload["write_requests"] = [{"key": key, "node_ids": ["n2"], "feedback_wanted": False, "status": "completed", "round": 1, "attempts": []} for key in existing_keys]
+    ledger.save()
+    payload = {"node_id": "n2", "old_text": "Seed", "new_text": "Revised"}
+    receipt = json.loads(tools["report_replace_text"].invoke(payload))
+    assert receipt["status"] == "saved"
+    tools["report_replace_text"].invoke(payload)
+    ledger = ReportLedger.load(ledger.paths)
+    keys = [r["key"] for r in ledger.payload["write_requests"]]
+    assert len(keys) == len(existing_keys) + 1 and len(keys) == len(set(keys))
+    assert all(r["status"] == "completed" for r in ledger.payload["write_requests"])
+    assert not complete(ctx, action, task).error
+    assert not _finish(ctx).error
+    assert file_manifest(tmp_path / "report/r1") == original

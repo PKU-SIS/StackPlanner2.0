@@ -230,3 +230,10 @@ execution; never send expected hashes to agents. Same-node extra edits fail.
 The pilot inherits the source's native length contract, including its historical
 absence; reports with a contract retain all original length checks. This changes
 only the experiment adapter, not production acceptance or first-turn generation.
+
+Imported report baselines may already contain completed local-tNNNN-* write
+requests. Writer-first must allocate new local keys from all existing native
+write_requests, not derive uniqueness from a reset dialogue turn number. Keep
+legacy keys unchanged and duplicate tool receipts idempotent. The fixed first
+three-topic pass in three-topic-stability-20261123/FIRST_PASS.md retains all
+three first-turn failures; any post-fix replication is a separate new batch.

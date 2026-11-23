@@ -1,0 +1,392 @@
+{
+  "planned_followups": 12,
+  "cases": [
+    {
+      "case_id": "lowcode",
+      "topic": "lowcode",
+      "style": "fixed-exact-scope",
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-three-topic-stability-01/lowcode",
+      "completed": false,
+      "attempted": 1,
+      "attempted_user_turns": [
+        2
+      ],
+      "succeeded": 0,
+      "tool_errors": 7,
+      "subagent_guard_stops": 0,
+      "subagent_stop_reasons": [],
+      "tool_trace_complete": true,
+      "tool_error_codes": {
+        "tool_error": 7
+      },
+      "tool_observation_errors": [],
+      "stop_reason": "resolution_failure",
+      "turns": [
+        {
+          "user_turn": 2,
+          "message_id": "stability.lowcode.t2",
+          "runtime_message_id": "stability.lowcode.t2__user",
+          "operation_contract": null,
+          "native_report_id": "r6",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0002",
+          "roles": [
+            "central",
+            "writer",
+            "writer",
+            "writer",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": false,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 1,
+          "accepted_head_user_turn": 1,
+          "active_user_turn": 1,
+          "version_binding_ok": false,
+          "canonical_scope_ok": false,
+          "canonical_mismatch_nodes": [
+            "n11"
+          ]
+        }
+      ],
+      "tokens": {
+        "model_calls": 13,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 243856,
+        "output_tokens": 9548,
+        "total_tokens": 253404,
+        "observed_input_tokens": 243856,
+        "observed_output_tokens": 9548,
+        "observed_total_tokens": 253404,
+        "cache_read_tokens": 228864,
+        "observed_cache_read_tokens": 228864,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true,
+        "by_role": {
+          "central": {
+            "model_calls": 10,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 229219,
+            "output_tokens": 9018,
+            "total_tokens": 238237,
+            "observed_input_tokens": 229219,
+            "observed_output_tokens": 9018,
+            "observed_total_tokens": 238237,
+            "cache_read_tokens": 219008,
+            "observed_cache_read_tokens": 219008,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "writer": {
+            "model_calls": 3,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 14637,
+            "output_tokens": 530,
+            "total_tokens": 15167,
+            "observed_input_tokens": 14637,
+            "observed_output_tokens": 530,
+            "observed_total_tokens": 15167,
+            "cache_read_tokens": 9856,
+            "observed_cache_read_tokens": 9856,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        },
+        "by_turn": {
+          "2": {
+            "model_calls": 13,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 243856,
+            "output_tokens": 9548,
+            "total_tokens": 253404,
+            "observed_input_tokens": 243856,
+            "observed_output_tokens": 9548,
+            "observed_total_tokens": 253404,
+            "cache_read_tokens": 228864,
+            "observed_cache_read_tokens": 228864,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        }
+      },
+      "trial_billing_complete": true,
+      "known_cumulative_peak_cny": "20.49819224",
+      "held_cny": "2.162688",
+      "wall_seconds": 72.002,
+      "process_exit_code": 0,
+      "planned_followups": 4
+    },
+    {
+      "case_id": "manufacturing",
+      "topic": "manufacturing",
+      "style": "fixed-exact-scope",
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-three-topic-stability-01/manufacturing",
+      "completed": false,
+      "attempted": 1,
+      "attempted_user_turns": [
+        2
+      ],
+      "succeeded": 0,
+      "tool_errors": 5,
+      "subagent_guard_stops": 0,
+      "subagent_stop_reasons": [],
+      "tool_trace_complete": true,
+      "tool_error_codes": {
+        "tool_error": 5
+      },
+      "tool_observation_errors": [],
+      "stop_reason": "resolution_failure",
+      "turns": [
+        {
+          "user_turn": 2,
+          "message_id": "stability.manufacturing.t2",
+          "runtime_message_id": "stability.manufacturing.t2__user",
+          "operation_contract": null,
+          "native_report_id": "r6",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0002",
+          "roles": [
+            "central",
+            "writer",
+            "writer",
+            "writer",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": false,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 1,
+          "accepted_head_user_turn": 1,
+          "active_user_turn": 1,
+          "version_binding_ok": false,
+          "canonical_scope_ok": false,
+          "canonical_mismatch_nodes": [
+            "n4"
+          ]
+        }
+      ],
+      "tokens": {
+        "model_calls": 10,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 159955,
+        "output_tokens": 6161,
+        "total_tokens": 166116,
+        "observed_input_tokens": 159955,
+        "observed_output_tokens": 6161,
+        "observed_total_tokens": 166116,
+        "cache_read_tokens": 145536,
+        "observed_cache_read_tokens": 145536,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true,
+        "by_role": {
+          "central": {
+            "model_calls": 7,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 145021,
+            "output_tokens": 5757,
+            "total_tokens": 150778,
+            "observed_input_tokens": 145021,
+            "observed_output_tokens": 5757,
+            "observed_total_tokens": 150778,
+            "cache_read_tokens": 135424,
+            "observed_cache_read_tokens": 135424,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "writer": {
+            "model_calls": 3,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 14934,
+            "output_tokens": 404,
+            "total_tokens": 15338,
+            "observed_input_tokens": 14934,
+            "observed_output_tokens": 404,
+            "observed_total_tokens": 15338,
+            "cache_read_tokens": 10112,
+            "observed_cache_read_tokens": 10112,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        },
+        "by_turn": {
+          "2": {
+            "model_calls": 10,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 159955,
+            "output_tokens": 6161,
+            "total_tokens": 166116,
+            "observed_input_tokens": 159955,
+            "observed_output_tokens": 6161,
+            "observed_total_tokens": 166116,
+            "cache_read_tokens": 145536,
+            "observed_cache_read_tokens": 145536,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        }
+      },
+      "trial_billing_complete": true,
+      "known_cumulative_peak_cny": "20.58213968",
+      "held_cny": "2.162688",
+      "wall_seconds": 52.317,
+      "process_exit_code": 0,
+      "planned_followups": 4
+    },
+    {
+      "case_id": "a2a",
+      "topic": "a2a",
+      "style": "fixed-exact-scope",
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-three-topic-stability-01/a2a",
+      "completed": false,
+      "attempted": 1,
+      "attempted_user_turns": [
+        2
+      ],
+      "succeeded": 0,
+      "tool_errors": 6,
+      "subagent_guard_stops": 0,
+      "subagent_stop_reasons": [],
+      "tool_trace_complete": true,
+      "tool_error_codes": {
+        "tool_error": 6
+      },
+      "tool_observation_errors": [],
+      "stop_reason": "resolution_failure",
+      "turns": [
+        {
+          "user_turn": 2,
+          "message_id": "stability.a2a.t2",
+          "runtime_message_id": "stability.a2a.t2__user",
+          "operation_contract": null,
+          "native_report_id": "r7",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0002",
+          "roles": [
+            "central",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "central"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": false,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 1,
+          "accepted_head_user_turn": 1,
+          "active_user_turn": 1,
+          "version_binding_ok": false,
+          "canonical_scope_ok": false,
+          "canonical_mismatch_nodes": [
+            "n14"
+          ]
+        }
+      ],
+      "tokens": {
+        "model_calls": 15,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 220529,
+        "output_tokens": 10052,
+        "total_tokens": 230581,
+        "observed_input_tokens": 220529,
+        "observed_output_tokens": 10052,
+        "observed_total_tokens": 230581,
+        "cache_read_tokens": 205824,
+        "observed_cache_read_tokens": 205824,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true,
+        "by_role": {
+          "central": {
+            "model_calls": 9,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 189089,
+            "output_tokens": 9088,
+            "total_tokens": 198177,
+            "observed_input_tokens": 189089,
+            "observed_output_tokens": 9088,
+            "observed_total_tokens": 198177,
+            "cache_read_tokens": 179968,
+            "observed_cache_read_tokens": 179968,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "writer": {
+            "model_calls": 6,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 31440,
+            "output_tokens": 964,
+            "total_tokens": 32404,
+            "observed_input_tokens": 31440,
+            "observed_output_tokens": 964,
+            "observed_total_tokens": 32404,
+            "cache_read_tokens": 25856,
+            "observed_cache_read_tokens": 25856,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        },
+        "by_turn": {
+          "2": {
+            "model_calls": 15,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 220529,
+            "output_tokens": 10052,
+            "total_tokens": 230581,
+            "observed_input_tokens": 220529,
+            "observed_output_tokens": 10052,
+            "observed_total_tokens": 230581,
+            "cache_read_tokens": 205824,
+            "observed_cache_read_tokens": 205824,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        }
+      },
+      "trial_billing_complete": true,
+      "known_cumulative_peak_cny": "20.70019864",
+      "held_cny": "2.162688",
+      "wall_seconds": 69.04,
+      "process_exit_code": 0,
+      "planned_followups": 4
+    }
+  ],
+  "planned_conversations": 3
+}

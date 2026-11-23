@@ -150,7 +150,9 @@ def build_tools(paths, task, state):
             if any(m.group("source_id") not in known for m in CITATION_RE.finditer(changed)):
                 return adjust("Unknown source marker. Use saved evidence IDs; ask Central for research if evidence is missing.")
             tree = packets.load_current_tree(ledger)
-            key = f"local-{ledger.payload['dialogue_turn']['turn_id']}-{len(edits) + 1}"
+            # Imported baselines can already contain local keys from a turn
+            # with the same number. Allocate from the authoritative native ledger.
+            key = native.next_identifier("local", [str(item.get("key")) for item in writing.write_requests(ledger)])
             writing.apply_write_requests(ledger, {**tree, "write_requests": [{"key": key, "node_ids": [node_id], "feedback_wanted": False}]})
             attempt = writing.begin_writer_attempt(ledger, key, action_id=task.action_id, node_id=node_id, run_id=ledger.payload["writer_first"]["run_id"])
             basis = packets.writer_basis(ledger, node_id)
