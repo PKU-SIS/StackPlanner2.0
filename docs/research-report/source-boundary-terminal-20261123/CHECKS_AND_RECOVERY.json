@@ -1,0 +1,193 @@
+[
+  {
+    "case_id": "a2a-original-1",
+    "native_outcome": "read_only",
+    "per_turn": {
+      "user_turn": 5,
+      "message_id": "boundary.a2a-original-1.t5",
+      "runtime_message_id": "boundary.a2a-original-1.t5__user",
+      "operation_contract": null,
+      "native_report_id": "r14",
+      "native_delivery_created": false,
+      "dialogue_turn_id": "t0005",
+      "roles": [
+        "central",
+        "central",
+        "central",
+        "central",
+        "memory_updater"
+      ],
+      "old_version_sha_unchanged": true,
+      "passed": true,
+      "semantic_intent_verified": false,
+      "factual_quality_verified": false,
+      "base_user_turn": 4,
+      "accepted_head_user_turn": 4,
+      "active_user_turn": 4,
+      "version_binding_ok": true,
+      "canonical_scope_ok": true,
+      "canonical_mismatch_nodes": []
+    },
+    "old_accepted_native_sha_unchanged": true,
+    "source_index_unchanged_during_restore": true,
+    "independently_restored_version": "t0004",
+    "tool_errors": [
+      {
+        "tool": "sp_replan",
+        "response": "{\"action_type\": \"REPLAN\", \"next_step\": \"error_recoverable\", \"error\": \"Unsupported stage 'read-only-check'; allowed: finished, implementation, perception, planning, reporting, research, revision, verification\"}"
+      }
+    ],
+    "visible_answer_matches_archive": true,
+    "live_human_interventions": 0,
+    "source_boundary_review": {
+      "passed": true,
+      "actual_m4_saved_lines": 147,
+      "answer_distinguishes_saved_and_returned_ranges": true,
+      "does_not_claim_unseen_lines_unsaved": true,
+      "no_global_source_absence_claim_from_excerpt": true,
+      "independent_factual_score": false
+    }
+  },
+  {
+    "case_id": "a2a-original-2",
+    "native_outcome": "read_only",
+    "per_turn": {
+      "user_turn": 5,
+      "message_id": "boundary.a2a-original-2.t5",
+      "runtime_message_id": "boundary.a2a-original-2.t5__user",
+      "operation_contract": null,
+      "native_report_id": "r14",
+      "native_delivery_created": false,
+      "dialogue_turn_id": "t0005",
+      "roles": [
+        "central",
+        "central",
+        "central",
+        "memory_updater"
+      ],
+      "old_version_sha_unchanged": true,
+      "passed": true,
+      "semantic_intent_verified": false,
+      "factual_quality_verified": false,
+      "base_user_turn": 4,
+      "accepted_head_user_turn": 4,
+      "active_user_turn": 4,
+      "version_binding_ok": true,
+      "canonical_scope_ok": true,
+      "canonical_mismatch_nodes": []
+    },
+    "old_accepted_native_sha_unchanged": true,
+    "source_index_unchanged_during_restore": true,
+    "independently_restored_version": "t0004",
+    "tool_errors": [],
+    "visible_answer_matches_archive": false,
+    "live_human_interventions": 0,
+    "source_boundary_review": {
+      "passed": true,
+      "actual_m4_saved_lines": 147,
+      "answer_distinguishes_saved_and_returned_ranges": true,
+      "does_not_claim_unseen_lines_unsaved": true,
+      "no_global_source_absence_claim_from_excerpt": true,
+      "independent_factual_score": false
+    }
+  },
+  {
+    "case_id": "a2a-original-3",
+    "native_outcome": "read_only",
+    "per_turn": {
+      "user_turn": 5,
+      "message_id": "boundary.a2a-original-3.t5",
+      "runtime_message_id": "boundary.a2a-original-3.t5__user",
+      "operation_contract": null,
+      "native_report_id": "r14",
+      "native_delivery_created": false,
+      "dialogue_turn_id": "t0005",
+      "roles": [
+        "central",
+        "central",
+        "central",
+        "memory_updater"
+      ],
+      "old_version_sha_unchanged": true,
+      "passed": true,
+      "semantic_intent_verified": false,
+      "factual_quality_verified": false,
+      "base_user_turn": 4,
+      "accepted_head_user_turn": 4,
+      "active_user_turn": 4,
+      "version_binding_ok": true,
+      "canonical_scope_ok": true,
+      "canonical_mismatch_nodes": []
+    },
+    "old_accepted_native_sha_unchanged": true,
+    "source_index_unchanged_during_restore": true,
+    "independently_restored_version": "t0004",
+    "tool_errors": [],
+    "visible_answer_matches_archive": true,
+    "live_human_interventions": 0,
+    "source_boundary_review": {
+      "passed": true,
+      "actual_m4_saved_lines": 147,
+      "answer_distinguishes_saved_and_returned_ranges": true,
+      "does_not_claim_unseen_lines_unsaved": true,
+      "no_global_source_absence_claim_from_excerpt": true,
+      "independent_factual_score": false
+    }
+  },
+  {
+    "case_id": "lowcode-normal-edit",
+    "native_outcome": "accepted",
+    "per_turn": {
+      "user_turn": 2,
+      "message_id": "boundary.lowcode-normal-edit.t2",
+      "runtime_message_id": "boundary.lowcode-normal-edit.t2__user",
+      "operation_contract": null,
+      "native_report_id": "r7",
+      "native_delivery_created": true,
+      "dialogue_turn_id": "t0002",
+      "roles": [
+        "central",
+        "writer",
+        "writer",
+        "writer",
+        "writer",
+        "memory_updater"
+      ],
+      "old_version_sha_unchanged": true,
+      "passed": true,
+      "semantic_intent_verified": false,
+      "factual_quality_verified": false,
+      "base_user_turn": 1,
+      "accepted_head_user_turn": 2,
+      "active_user_turn": 2,
+      "version_binding_ok": true,
+      "canonical_changes": {
+        "added_nodes": [],
+        "changed_nodes": [
+          "n11"
+        ],
+        "factual_correctness_verified": false,
+        "kept_nodes": [
+          "n8",
+          "n2",
+          "n4",
+          "n9",
+          "n14",
+          "n6",
+          "n13"
+        ],
+        "removed_nodes": [],
+        "scope": "canonical node bytes; final citation display and assembly may change"
+      },
+      "scope_ok": true,
+      "canonical_scope_ok": true,
+      "canonical_mismatch_nodes": []
+    },
+    "old_accepted_native_sha_unchanged": true,
+    "source_index_unchanged_during_restore": true,
+    "independently_restored_version": "t0002",
+    "tool_errors": [],
+    "visible_answer_matches_archive": true,
+    "live_human_interventions": 0
+  }
+]

@@ -1,0 +1,508 @@
+{
+  "planned_followups": 4,
+  "cases": [
+    {
+      "case_id": "a2a-original-1",
+      "topic": "a2a",
+      "style": "fixed-original-request",
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-source-boundary-terminal-01/a2a-original-1",
+      "completed": true,
+      "attempted": 1,
+      "attempted_user_turns": [
+        5
+      ],
+      "succeeded": 1,
+      "tool_errors": 1,
+      "subagent_guard_stops": 0,
+      "subagent_stop_reasons": [],
+      "tool_trace_complete": true,
+      "tool_error_codes": {
+        "tool_error": 1
+      },
+      "tool_observation_errors": [],
+      "stop_reason": null,
+      "turns": [
+        {
+          "user_turn": 5,
+          "message_id": "boundary.a2a-original-1.t5",
+          "runtime_message_id": "boundary.a2a-original-1.t5__user",
+          "operation_contract": null,
+          "native_report_id": "r14",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0005",
+          "roles": [
+            "central",
+            "central",
+            "central",
+            "central",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 4,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 4,
+          "version_binding_ok": true,
+          "canonical_scope_ok": true,
+          "canonical_mismatch_nodes": []
+        }
+      ],
+      "tokens": {
+        "model_calls": 5,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 74007,
+        "output_tokens": 4132,
+        "total_tokens": 78139,
+        "observed_input_tokens": 74007,
+        "observed_output_tokens": 4132,
+        "observed_total_tokens": 78139,
+        "cache_read_tokens": 53760,
+        "observed_cache_read_tokens": 53760,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true,
+        "by_role": {
+          "central": {
+            "model_calls": 4,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 71738,
+            "output_tokens": 3320,
+            "total_tokens": 75058,
+            "observed_input_tokens": 71738,
+            "observed_output_tokens": 3320,
+            "observed_total_tokens": 75058,
+            "cache_read_tokens": 53760,
+            "observed_cache_read_tokens": 53760,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "memory_updater": {
+            "model_calls": 1,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 2269,
+            "output_tokens": 812,
+            "total_tokens": 3081,
+            "observed_input_tokens": 2269,
+            "observed_output_tokens": 812,
+            "observed_total_tokens": 3081,
+            "cache_read_tokens": 0,
+            "observed_cache_read_tokens": 0,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        },
+        "by_turn": {
+          "5": {
+            "model_calls": 5,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 74007,
+            "output_tokens": 4132,
+            "total_tokens": 78139,
+            "observed_input_tokens": 74007,
+            "observed_output_tokens": 4132,
+            "observed_total_tokens": 78139,
+            "cache_read_tokens": 53760,
+            "observed_cache_read_tokens": 53760,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        }
+      },
+      "trial_billing_complete": true,
+      "known_cumulative_peak_cny": "21.74540448",
+      "held_cny": "2.162688",
+      "wall_seconds": 26.482,
+      "process_exit_code": 0,
+      "planned_followups": 1
+    },
+    {
+      "case_id": "a2a-original-2",
+      "topic": "a2a",
+      "style": "fixed-original-request",
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-source-boundary-terminal-01/a2a-original-2",
+      "completed": true,
+      "attempted": 1,
+      "attempted_user_turns": [
+        5
+      ],
+      "succeeded": 1,
+      "tool_errors": 0,
+      "subagent_guard_stops": 0,
+      "subagent_stop_reasons": [],
+      "tool_trace_complete": true,
+      "tool_error_codes": {},
+      "tool_observation_errors": [],
+      "stop_reason": null,
+      "turns": [
+        {
+          "user_turn": 5,
+          "message_id": "boundary.a2a-original-2.t5",
+          "runtime_message_id": "boundary.a2a-original-2.t5__user",
+          "operation_contract": null,
+          "native_report_id": "r14",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0005",
+          "roles": [
+            "central",
+            "central",
+            "central",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 4,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 4,
+          "version_binding_ok": true,
+          "canonical_scope_ok": true,
+          "canonical_mismatch_nodes": []
+        }
+      ],
+      "tokens": {
+        "model_calls": 4,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 61316,
+        "output_tokens": 6272,
+        "total_tokens": 67588,
+        "observed_input_tokens": 61316,
+        "observed_output_tokens": 6272,
+        "observed_total_tokens": 67588,
+        "cache_read_tokens": 42112,
+        "observed_cache_read_tokens": 42112,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true,
+        "by_role": {
+          "central": {
+            "model_calls": 3,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 59088,
+            "output_tokens": 5978,
+            "total_tokens": 65066,
+            "observed_input_tokens": 59088,
+            "observed_output_tokens": 5978,
+            "observed_total_tokens": 65066,
+            "cache_read_tokens": 42112,
+            "observed_cache_read_tokens": 42112,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "memory_updater": {
+            "model_calls": 1,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 2228,
+            "output_tokens": 294,
+            "total_tokens": 2522,
+            "observed_input_tokens": 2228,
+            "observed_output_tokens": 294,
+            "observed_total_tokens": 2522,
+            "cache_read_tokens": 0,
+            "observed_cache_read_tokens": 0,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        },
+        "by_turn": {
+          "5": {
+            "model_calls": 4,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 61316,
+            "output_tokens": 6272,
+            "total_tokens": 67588,
+            "observed_input_tokens": 61316,
+            "observed_output_tokens": 6272,
+            "observed_total_tokens": 67588,
+            "cache_read_tokens": 42112,
+            "observed_cache_read_tokens": 42112,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        }
+      },
+      "trial_billing_complete": true,
+      "known_cumulative_peak_cny": "21.83567296",
+      "held_cny": "2.162688",
+      "wall_seconds": 34.407,
+      "process_exit_code": 0,
+      "planned_followups": 1
+    },
+    {
+      "case_id": "a2a-original-3",
+      "topic": "a2a",
+      "style": "fixed-original-request",
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-source-boundary-terminal-01/a2a-original-3",
+      "completed": true,
+      "attempted": 1,
+      "attempted_user_turns": [
+        5
+      ],
+      "succeeded": 1,
+      "tool_errors": 0,
+      "subagent_guard_stops": 0,
+      "subagent_stop_reasons": [],
+      "tool_trace_complete": true,
+      "tool_error_codes": {},
+      "tool_observation_errors": [],
+      "stop_reason": null,
+      "turns": [
+        {
+          "user_turn": 5,
+          "message_id": "boundary.a2a-original-3.t5",
+          "runtime_message_id": "boundary.a2a-original-3.t5__user",
+          "operation_contract": null,
+          "native_report_id": "r14",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0005",
+          "roles": [
+            "central",
+            "central",
+            "central",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 4,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 4,
+          "version_binding_ok": true,
+          "canonical_scope_ok": true,
+          "canonical_mismatch_nodes": []
+        }
+      ],
+      "tokens": {
+        "model_calls": 4,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 57935,
+        "output_tokens": 4084,
+        "total_tokens": 62019,
+        "observed_input_tokens": 57935,
+        "observed_output_tokens": 4084,
+        "observed_total_tokens": 62019,
+        "cache_read_tokens": 41344,
+        "observed_cache_read_tokens": 41344,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true,
+        "by_role": {
+          "central": {
+            "model_calls": 3,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 55693,
+            "output_tokens": 3228,
+            "total_tokens": 58921,
+            "observed_input_tokens": 55693,
+            "observed_output_tokens": 3228,
+            "observed_total_tokens": 58921,
+            "cache_read_tokens": 41344,
+            "observed_cache_read_tokens": 41344,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "memory_updater": {
+            "model_calls": 1,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 2242,
+            "output_tokens": 856,
+            "total_tokens": 3098,
+            "observed_input_tokens": 2242,
+            "observed_output_tokens": 856,
+            "observed_total_tokens": 3098,
+            "cache_read_tokens": 0,
+            "observed_cache_read_tokens": 0,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        },
+        "by_turn": {
+          "5": {
+            "model_calls": 4,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 57935,
+            "output_tokens": 4084,
+            "total_tokens": 62019,
+            "observed_input_tokens": 57935,
+            "observed_output_tokens": 4084,
+            "observed_total_tokens": 62019,
+            "cache_read_tokens": 41344,
+            "observed_cache_read_tokens": 41344,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        }
+      },
+      "trial_billing_complete": true,
+      "known_cumulative_peak_cny": "21.90318072",
+      "held_cny": "2.162688",
+      "wall_seconds": 25.778,
+      "process_exit_code": 0,
+      "planned_followups": 1
+    },
+    {
+      "case_id": "lowcode-normal-edit",
+      "topic": "lowcode",
+      "style": "fixed-original-request",
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-source-boundary-terminal-01/lowcode-normal-edit",
+      "completed": true,
+      "attempted": 1,
+      "attempted_user_turns": [
+        2
+      ],
+      "succeeded": 1,
+      "tool_errors": 0,
+      "subagent_guard_stops": 0,
+      "subagent_stop_reasons": [],
+      "tool_trace_complete": true,
+      "tool_error_codes": {},
+      "tool_observation_errors": [],
+      "stop_reason": null,
+      "turns": [
+        {
+          "user_turn": 2,
+          "message_id": "boundary.lowcode-normal-edit.t2",
+          "runtime_message_id": "boundary.lowcode-normal-edit.t2__user",
+          "operation_contract": null,
+          "native_report_id": "r7",
+          "native_delivery_created": true,
+          "dialogue_turn_id": "t0002",
+          "roles": [
+            "central",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 1,
+          "accepted_head_user_turn": 2,
+          "active_user_turn": 2,
+          "version_binding_ok": true,
+          "canonical_changes": {
+            "added_nodes": [],
+            "changed_nodes": [
+              "n11"
+            ],
+            "factual_correctness_verified": false,
+            "kept_nodes": [
+              "n8",
+              "n2",
+              "n4",
+              "n9",
+              "n14",
+              "n6",
+              "n13"
+            ],
+            "removed_nodes": [],
+            "scope": "canonical node bytes; final citation display and assembly may change"
+          },
+          "scope_ok": true,
+          "canonical_scope_ok": true,
+          "canonical_mismatch_nodes": []
+        }
+      ],
+      "tokens": {
+        "model_calls": 6,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 41627,
+        "output_tokens": 1288,
+        "total_tokens": 42915,
+        "observed_input_tokens": 41627,
+        "observed_output_tokens": 1288,
+        "observed_total_tokens": 42915,
+        "cache_read_tokens": 28544,
+        "observed_cache_read_tokens": 28544,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true,
+        "by_role": {
+          "central": {
+            "model_calls": 1,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 17462,
+            "output_tokens": 696,
+            "total_tokens": 18158,
+            "observed_input_tokens": 17462,
+            "observed_output_tokens": 696,
+            "observed_total_tokens": 18158,
+            "cache_read_tokens": 13184,
+            "observed_cache_read_tokens": 13184,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "writer": {
+            "model_calls": 4,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 22317,
+            "output_tokens": 389,
+            "total_tokens": 22706,
+            "observed_input_tokens": 22317,
+            "observed_output_tokens": 389,
+            "observed_total_tokens": 22706,
+            "cache_read_tokens": 15360,
+            "observed_cache_read_tokens": 15360,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "memory_updater": {
+            "model_calls": 1,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 1848,
+            "output_tokens": 203,
+            "total_tokens": 2051,
+            "observed_input_tokens": 1848,
+            "observed_output_tokens": 203,
+            "observed_total_tokens": 2051,
+            "cache_read_tokens": 0,
+            "observed_cache_read_tokens": 0,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        },
+        "by_turn": {
+          "2": {
+            "model_calls": 6,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 41627,
+            "output_tokens": 1288,
+            "total_tokens": 42915,
+            "observed_input_tokens": 41627,
+            "observed_output_tokens": 1288,
+            "observed_total_tokens": 42915,
+            "cache_read_tokens": 28544,
+            "observed_cache_read_tokens": 28544,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        }
+      },
+      "trial_billing_complete": true,
+      "known_cumulative_peak_cny": "21.94079248",
+      "held_cny": "2.162688",
+      "wall_seconds": 16.918,
+      "process_exit_code": 0,
+      "planned_followups": 1
+    }
+  ]
+}

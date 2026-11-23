@@ -1,0 +1,10 @@
+{
+  "input_tokens": 234885,
+  "output_tokens": 15776,
+  "total_tokens": 250661,
+  "cache_read_tokens": 165760,
+  "estimated_incremental_cost_cny": "0.27108840",
+  "known_cumulative_peak_cny": "21.94079248",
+  "old_unknown_held_cny": "2.162688",
+  "global_billing_complete": false
+}

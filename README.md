@@ -1133,3 +1133,8 @@ Bound-report source reads explicitly distinguish complete locally saved ranges
 from excerpts returned in the current call. Ended failed/cancelled follow-ups
 return an honest notice without further automatic delegation; normal editing
 and in-progress corrections keep their existing path.
+
+[Source-boundary and terminal-failure validation](docs/research-report/source-boundary-terminal-20261123/RESULT.md)
+records three corrected A2A provenance answers, an unchanged normal-edit path,
+and scripted graph failures ending without automatic redelegation. These remain
+local changes; the small sample is not a general factual-quality guarantee.

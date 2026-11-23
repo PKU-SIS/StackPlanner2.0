@@ -256,3 +256,12 @@ jump to end before another Central model call; executing/prepared and ordinary
 first-turn work retain their original recovery paths. A new source message can
 start another turn. Preserve the failed status, old accepted head and diagnostics;
 never convert failure notice delivery into report delivery success.
+
+
+source-boundary-terminal-20261123/RESULT.md records the frozen validation:
+three original A2A questions correctly distinguish saved 147 lines from returned
+excerpts, and one original edit passes exact SHA. One invalid stage is recovered;
+this is not a terminal failed turn. Two scripted Writer-failure production-graph
+probes stop after one Central request/delegation and preserve failed status/usage.
+831 offline regressions pass. Do not claim provider-failure experiments were run
+or that these few samples establish universal source-faithfulness accuracy.
