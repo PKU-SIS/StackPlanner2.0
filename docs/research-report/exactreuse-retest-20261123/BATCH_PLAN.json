@@ -1,0 +1,35 @@
+{
+  "experiments": [
+    {
+      "case": "original",
+      "prefix_through": 5,
+      "run_turns": [
+        6,
+        7
+      ]
+    },
+    {
+      "case": "paraphrase",
+      "prefix_through": 5,
+      "run_turns": [
+        6,
+        7
+      ]
+    },
+    {
+      "case": "partial-retention-control",
+      "prefix_through": 3,
+      "run_turns": [
+        4,
+        5,
+        6,
+        7
+      ]
+    }
+  ],
+  "independent_owner_threads": true,
+  "historical_first_five_not_regenerated": true,
+  "automatic_failed_query_replay": false,
+  "costs_carry_forward": true,
+  "paraphrase_public_sha256": "b231696bf3d7fb840da17a8d7dac1193eb6723a3d7f4ee634b61844fb01c92df"
+}
