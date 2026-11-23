@@ -14,10 +14,12 @@ from deerflow.sp.report.turns import adapter
 from deerflow.sp.report.turns.store import file_manifest
 
 
-def test_compact_provenance_uses_saved_locator_not_material_prefix(tmp_path):
+@pytest.mark.parametrize("long_line", [False, True])
+def test_compact_provenance_uses_saved_locator_not_material_prefix(tmp_path, long_line):
     ctx, ledger = _seed(tmp_path, body="Report conclusion [S1].\n", with_sources=True, node_evidence=[{"material_id": "m1", "source_ids": ["S1"], "locator": {"lines": [35, 35]}, "use": "Report interpretation, not a source quote"}])
     material = ledger.payload["materials"][0]
-    text = "\n".join(["Unrelated introduction"] * 34 + ["Actual supporting passage at saved locator."] + ["Other text"] * 10) + "\n"
+    passage = ("long introduction " * 300 if long_line else "") + "Actual supporting passage at saved locator."
+    text = "\n".join(["Unrelated introduction"] * 34 + [passage] + ["Other text"] * 10) + "\n"
     Path(material["path"]).write_text(text)
     material.update(sha256=native.sha256_text(text), chars=len(text), lines=45)
     for item in ledger.payload["materials"]:
@@ -39,6 +41,9 @@ def test_compact_provenance_uses_saved_locator_not_material_prefix(tmp_path):
     assert item["saved_locator"] == {"lines": [35, 35]}
     assert "Actual supporting passage" in item["content"]
     assert item["source"]["source_id"] == "S1"
+    if long_line:
+        assert item["truncated"] and "[Middle omitted]" in item["content"]
+        assert len(item["numbered_excerpt_char_ranges"]) == 2
     assert "Report interpretation" not in item["content"]
     assert item["report_use"].startswith("Report interpretation")
     assert len(result.memory_entries[0].content) < 10000
