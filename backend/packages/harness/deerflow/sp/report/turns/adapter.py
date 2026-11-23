@@ -228,6 +228,20 @@ def finalize_run(state, runtime, *, cancelled=False, error=None):
         context = getattr(runtime, "context", None)
         thread_id = context.get("thread_id") if isinstance(context, Mapping) else None
         active = current_turn(state, thread_id=thread_id)
+        if active is not None and active[3] is not None and active[3]["status"] in {"read_only", "exact_reuse"}:
+            # Keep the model-supplied archive response and the actual final UI
+            # answer separately; they need not be identical after sp_replan.
+            from langchain_core.messages import AIMessage
+
+            from deerflow.utils.messages import message_to_text
+
+            store, message, _, turn = active
+            messages = list(state.get("messages") or [])
+            position = next((i for i in range(len(messages) - 1, -1, -1) if messages[i] is message), None)
+            final = next((m for m in reversed(messages[position + 1 :]) if isinstance(m, AIMessage)), None) if position is not None else None
+            path = store.directory(turn["turn_id"]) / "visible_response.md"
+            if final is not None and not final.tool_calls and message_to_text(final).strip() and not path.exists():
+                native.write_text_atomic(path, message_to_text(final))
         if active is not None and active[3] is None:
             store, message, head, _ = active
             from deerflow.sp.report.hooks import _message_id

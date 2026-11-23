@@ -1,0 +1,147 @@
+{
+  "case_id": "cell",
+  "topic": "lowcode",
+  "style": "concise",
+  "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-readonly-cell-retarget-01",
+  "completed": true,
+  "attempted": 1,
+  "attempted_user_turns": [
+    7
+  ],
+  "succeeded": 1,
+  "tool_errors": 0,
+  "subagent_guard_stops": 0,
+  "subagent_stop_reasons": [],
+  "tool_trace_complete": true,
+  "tool_error_codes": {},
+  "tool_observation_errors": [],
+  "stop_reason": null,
+  "turns": [
+    {
+      "user_turn": 7,
+      "message_id": "firstpass.lowcode-concise.t7",
+      "runtime_message_id": "firstpass.lowcode-concise.t7__user",
+      "operation_contract": null,
+      "native_report_id": "r11",
+      "native_delivery_created": true,
+      "dialogue_turn_id": "t0007",
+      "roles": [
+        "central",
+        "writer",
+        "writer",
+        "writer",
+        "writer",
+        "memory_updater"
+      ],
+      "old_version_sha_unchanged": true,
+      "passed": true,
+      "semantic_intent_verified": false,
+      "factual_quality_verified": false,
+      "base_user_turn": 2,
+      "accepted_head_user_turn": 7,
+      "active_user_turn": 7,
+      "version_binding_ok": true,
+      "canonical_changes": {
+        "added_nodes": [],
+        "changed_nodes": [
+          "n11"
+        ],
+        "factual_correctness_verified": false,
+        "kept_nodes": [
+          "n8",
+          "n2",
+          "n4",
+          "n9",
+          "n14",
+          "n6",
+          "n13"
+        ],
+        "removed_nodes": [],
+        "scope": "canonical node bytes; final citation display and assembly may change"
+      },
+      "scope_ok": true
+    }
+  ],
+  "tokens": {
+    "model_calls": 6,
+    "usage_complete": true,
+    "missing_usage_calls": 0,
+    "input_tokens": 41696,
+    "output_tokens": 2656,
+    "total_tokens": 44352,
+    "observed_input_tokens": 41696,
+    "observed_output_tokens": 2656,
+    "observed_total_tokens": 44352,
+    "cache_read_tokens": 25856,
+    "observed_cache_read_tokens": 25856,
+    "cache_missing_calls": 0,
+    "cache_is_subset_of_input": true,
+    "by_role": {
+      "central": {
+        "model_calls": 1,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 16675,
+        "output_tokens": 1763,
+        "total_tokens": 18438,
+        "observed_input_tokens": 16675,
+        "observed_output_tokens": 1763,
+        "observed_total_tokens": 18438,
+        "cache_read_tokens": 10880,
+        "observed_cache_read_tokens": 10880,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true
+      },
+      "writer": {
+        "model_calls": 4,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 23189,
+        "output_tokens": 557,
+        "total_tokens": 23746,
+        "observed_input_tokens": 23189,
+        "observed_output_tokens": 557,
+        "observed_total_tokens": 23746,
+        "cache_read_tokens": 14976,
+        "observed_cache_read_tokens": 14976,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true
+      },
+      "memory_updater": {
+        "model_calls": 1,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 1832,
+        "output_tokens": 336,
+        "total_tokens": 2168,
+        "observed_input_tokens": 1832,
+        "observed_output_tokens": 336,
+        "observed_total_tokens": 2168,
+        "cache_read_tokens": 0,
+        "observed_cache_read_tokens": 0,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true
+      }
+    },
+    "by_turn": {
+      "7": {
+        "model_calls": 6,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 41696,
+        "output_tokens": 2656,
+        "total_tokens": 44352,
+        "observed_input_tokens": 41696,
+        "observed_output_tokens": 2656,
+        "observed_total_tokens": 44352,
+        "cache_read_tokens": 25856,
+        "observed_cache_read_tokens": 25856,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true
+      }
+    }
+  },
+  "trial_billing_complete": true,
+  "known_cumulative_peak_cny": "20.34565528",
+  "held_cny": "2.162688"
+}

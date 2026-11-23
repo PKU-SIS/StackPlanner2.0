@@ -1,0 +1,13 @@
+{
+  "code_commit": "8706d2d98df23c720348bdbb50b8e0bfca8e1ad9",
+  "runtime_unchanged": true,
+  "functional_gate": "5/5 single-turn execution/archive checks passed; semantic spot-check limitations remain separately recorded",
+  "public_case": "docs/research-report/readonly-provenance-api-20261123/original-1/requests.json",
+  "packet": ".deer-flow/pilot-preflight/20261123-readonly-v2-original-1",
+  "checks": "docs/research-report/readonly-provenance-api-20261123/original-1/evaluator_checks.json",
+  "prefix_source": ".deer-flow/firstpass-baselines/20261123/lowcode/outputs",
+  "prefix_through": 1,
+  "through_turn": 7,
+  "prior_usage": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-readonly-provenance-01/paraphrase-2/usage.json",
+  "outer_automatic_restarts": 0
+}

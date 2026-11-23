@@ -1,0 +1,127 @@
+[
+  {
+    "case_id": "original-1",
+    "read_only_status": "read_only",
+    "answer_chars": 782,
+    "head_and_active_unchanged": true,
+    "all_accepted_files_sha_unchanged": true,
+    "readonly_snapshot_equal_baseline_manifest": true,
+    "bound_report_independently_restored": true,
+    "inspect_views": [
+      "provenance"
+    ],
+    "tool_errors": [],
+    "content_spot_check": {
+      "addresses_three_items": true,
+      "separates_source_and_advice": true,
+      "discloses_evidence_limits": true,
+      "independent_factual_score": false,
+      "notes": []
+    },
+    "visible_answer_chars": 782,
+    "visible_answer_matches_archive": true
+  },
+  {
+    "case_id": "original-2",
+    "read_only_status": "read_only",
+    "answer_chars": 1397,
+    "head_and_active_unchanged": true,
+    "all_accepted_files_sha_unchanged": true,
+    "readonly_snapshot_equal_baseline_manifest": true,
+    "bound_report_independently_restored": true,
+    "inspect_views": [
+      "provenance",
+      "provenance:n9",
+      "provenance:n8"
+    ],
+    "tool_errors": [],
+    "content_spot_check": {
+      "addresses_three_items": true,
+      "separates_source_and_advice": true,
+      "discloses_evidence_limits": true,
+      "independent_factual_score": false,
+      "notes": []
+    },
+    "visible_answer_chars": 1732,
+    "visible_answer_matches_archive": false
+  },
+  {
+    "case_id": "original-3",
+    "read_only_status": "read_only",
+    "answer_chars": 1765,
+    "head_and_active_unchanged": true,
+    "all_accepted_files_sha_unchanged": true,
+    "readonly_snapshot_equal_baseline_manifest": true,
+    "bound_report_independently_restored": true,
+    "inspect_views": [
+      "provenance",
+      "provenance:n9"
+    ],
+    "tool_errors": [],
+    "content_spot_check": {
+      "addresses_three_items": true,
+      "separates_source_and_advice": true,
+      "discloses_evidence_limits": true,
+      "independent_factual_score": false,
+      "notes": [
+        "Paragraph ordinal for the recurring-cost passage is imprecise; source UI/activity-export limitation is broadened to data/logic export."
+      ]
+    },
+    "visible_answer_chars": 1765,
+    "visible_answer_matches_archive": true
+  },
+  {
+    "case_id": "paraphrase-1",
+    "read_only_status": "read_only",
+    "answer_chars": 1523,
+    "head_and_active_unchanged": true,
+    "all_accepted_files_sha_unchanged": true,
+    "readonly_snapshot_equal_baseline_manifest": true,
+    "bound_report_independently_restored": true,
+    "inspect_views": [
+      "provenance:n14",
+      "provenance:n11",
+      "provenance:n9"
+    ],
+    "tool_errors": [],
+    "content_spot_check": {
+      "addresses_three_items": true,
+      "separates_source_and_advice": true,
+      "discloses_evidence_limits": true,
+      "independent_factual_score": false,
+      "notes": []
+    },
+    "visible_answer_chars": 1591,
+    "visible_answer_matches_archive": false
+  },
+  {
+    "case_id": "paraphrase-2",
+    "read_only_status": "read_only",
+    "answer_chars": 2141,
+    "head_and_active_unchanged": true,
+    "all_accepted_files_sha_unchanged": true,
+    "readonly_snapshot_equal_baseline_manifest": true,
+    "bound_report_independently_restored": true,
+    "inspect_views": [
+      "provenance",
+      "provenance:n11"
+    ],
+    "tool_errors": [
+      {
+        "tool": "sp_delegate",
+        "response": "{\"action_type\": \"DELEGATE\", \"next_step\": \"error_recoverable\", \"error\": \"Report delegation rejected: bound report follow-ups require GitAgent and native report roles\", \"result\": null, \"completion_status\": null, \"stop_reason\": null}"
+      }
+    ],
+    "content_spot_check": {
+      "addresses_three_items": true,
+      "separates_source_and_advice": true,
+      "discloses_evidence_limits": true,
+      "independent_factual_score": false,
+      "notes": [
+        "An empty citations_without_saved_locator list is misused as reasoning about whether recommendations have direct support; migration-cost implication is phrased too directly as S113 source content."
+      ]
+    },
+    "visible_answer_chars": 2141,
+    "visible_answer_matches_archive": true
+  }
+]

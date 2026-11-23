@@ -211,3 +211,13 @@ HandlerResult.tool_observation; SPControlActionMiddleware must not substitute
 its 2000-character task-memory summary as the read result. This is scoped to
 inspect_version; absent observations retain the original serialization and
 first-turn behavior. Keep compact source views and the global memory bound.
+
+
+Readonly live follow-ups are recorded in
+`../docs/research-report/readonly-provenance-api-20261123/RESULT.md`: 5/5 single
+questions archived, one recovered tool error; six-turn node/version checks pass
+but strict last-cell scope initially fails. Preserve that failure; Writer's
+single-cell guidance passes one fresh isolated turn-7 retest, not a new full-six
+quality claim. Some citation/paragraph phrasing remains imprecise. Successful
+readonly/reuse runs also retain actual final UI text as visible_response.md
+separately from model-supplied response.md; do not rewrite frozen old results.

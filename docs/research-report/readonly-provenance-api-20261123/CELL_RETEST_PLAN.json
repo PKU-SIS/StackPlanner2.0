@@ -1,0 +1,12 @@
+{
+  "code_commit": "f22a00b95dcb649d06a4430d1bb1331ec124e501",
+  "packet": ".deer-flow/pilot-preflight/20261123-readonly-cell-retarget-01",
+  "prefix_source": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-readonly-full-six-01/runtime/users/report-pilot/threads/pilot-d7021be4c8dc4c47bed0aec1c42e8844/user-data/outputs",
+  "prefix_through": 6,
+  "through_turn": 7,
+  "prior_usage": ".deer-flow/pilot-live/20261123-readonly-full-six-01/usage.json",
+  "query_unchanged": true,
+  "only_change": "Writer Skill clarifies editing only the requested advice/common-confirmation cell",
+  "expected_strict_scope": "Other cells and all row-external bytes identical to restored turn2 baseline",
+  "outer_automatic_restarts": 0
+}

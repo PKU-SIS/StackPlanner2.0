@@ -1,0 +1,31 @@
+{
+  "scope_checks": {
+    "original_body_exact_prefix": true,
+    "original_conclusion_exact_prefix": true,
+    "retained_checklist_exact": true,
+    "withdrawn_table_absent": true,
+    "outside_target_row_unchanged": true,
+    "other_target_row_cells_unchanged": false,
+    "withdrawn_checklist_not_revived": true
+  },
+  "strict_single_cell_scope_passed": false,
+  "verified_archives": [
+    "t0002",
+    "t0003",
+    "t0004",
+    "t0006",
+    "t0007",
+    "t0001",
+    "t0005"
+  ],
+  "independently_restored_accepted_versions": [
+    "t0001",
+    "t0002",
+    "t0003",
+    "t0004",
+    "t0007"
+  ],
+  "source_files_and_index_unchanged": true,
+  "old_target_row": "| 平台退出时 | 已上线流程能否平稳接续、业务不中断 | 模型与数据能否迁走、扩展模块是否有对应实现、离职后由谁维护 | 退出时的迁移清单与时限；僵尸应用的清理归属；多年总拥有成本由哪一方记账 |",
+  "new_target_row": "| 平台退出时 | 已上线流程能否平稳接续、业务不中断；建议由业务方确认资产导出范围（哪些流程、数据与应用须导出，验收标准是什么） | 模型与数据能否迁走、扩展模块是否有对应实现、离职后由谁维护；建议由开发方承担迁移交接的执行与技术校验 | 退出时的迁移清单与时限；僵尸应用的清理归属；多年总拥有成本由哪一方记账；建议共同确认资产导出结果与交接验收，并共同指派退出后的维护承接方 |"
+}

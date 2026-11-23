@@ -1118,3 +1118,8 @@ Bound report provenance questions now have a compact saved-evidence view using
 accepted source line locators, and empty or truncated terminal follow-up answers
 retain a failed archive with a visible notice. See
 [readonly provenance changes](docs/research-report/READONLY_PROVENANCE_20261123.md).
+
+The [readonly API results](docs/research-report/readonly-provenance-api-20261123/RESULT.md)
+record five completed provenance questions, a complete six-turn functional run,
+and a separately retained single-cell scope failure and targeted correction.
+Citation fidelity remains a documented quality limitation.

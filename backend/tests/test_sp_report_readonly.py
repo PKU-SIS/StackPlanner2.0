@@ -156,3 +156,16 @@ def test_report_tool_reply_preserves_data_beyond_short_task_memory(tmp_path, mon
     payload = json.loads(json.loads(reply.content)["result"])
     assert payload["sections"][0]["content"].endswith("Source conclusion at end.\n")
     assert any("Source conclusion at end." in str(m.content) for request in _CAPTURED_REQUESTS for m in request if getattr(m, "name", None) == "sp_replan")
+
+
+def test_final_visible_answer_is_kept_separate_from_explicit_readonly_archive(tmp_path):
+    ctx, store = accepted(tmp_path)
+    followup(ctx, text="Read only")
+    store, message, head = adapter.session(ctx.state, thread_id="t1")
+    turn = store.reuse(head["turn_id"], message_id="m2", raw_query=message.content, response="Archive answer", mode="read_only")
+    before = file_manifest(tmp_path / "report/r1")
+    ctx.state["messages"].append(AIMessage(content="Final visible answer with additional caveats."))
+    assert adapter.finalize_run(ctx.state, SimpleNamespace(context={"thread_id": "t1"})) is None
+    assert (store.directory(turn["turn_id"]) / "response.md").read_text() == "Archive answer"
+    assert (store.directory(turn["turn_id"]) / "visible_response.md").read_text() == "Final visible answer with additional caveats."
+    assert file_manifest(tmp_path / "report/r1") == before

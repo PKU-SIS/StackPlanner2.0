@@ -1,0 +1,584 @@
+{
+  "planned_followups": 5,
+  "cases": [
+    {
+      "case_id": "original-1",
+      "topic": "lowcode",
+      "style": "original",
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-readonly-provenance-01/original-1",
+      "completed": true,
+      "attempted": 1,
+      "attempted_user_turns": [
+        5
+      ],
+      "succeeded": 1,
+      "tool_errors": 0,
+      "subagent_guard_stops": 0,
+      "subagent_stop_reasons": [],
+      "tool_trace_complete": true,
+      "tool_error_codes": {},
+      "tool_observation_errors": [],
+      "stop_reason": null,
+      "turns": [
+        {
+          "user_turn": 5,
+          "message_id": "readonly.original-1.t5",
+          "runtime_message_id": "readonly.original-1.t5__user",
+          "operation_contract": null,
+          "native_report_id": "r10",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0005",
+          "roles": [
+            "central",
+            "central",
+            "central",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 4,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 4,
+          "version_binding_ok": true
+        }
+      ],
+      "tokens": {
+        "model_calls": 4,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 64192,
+        "output_tokens": 5033,
+        "total_tokens": 69225,
+        "observed_input_tokens": 64192,
+        "observed_output_tokens": 5033,
+        "observed_total_tokens": 69225,
+        "cache_read_tokens": 39296,
+        "observed_cache_read_tokens": 39296,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true,
+        "by_role": {
+          "central": {
+            "model_calls": 3,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 61893,
+            "output_tokens": 4219,
+            "total_tokens": 66112,
+            "observed_input_tokens": 61893,
+            "observed_output_tokens": 4219,
+            "observed_total_tokens": 66112,
+            "cache_read_tokens": 39296,
+            "observed_cache_read_tokens": 39296,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "memory_updater": {
+            "model_calls": 1,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 2299,
+            "output_tokens": 814,
+            "total_tokens": 3113,
+            "observed_input_tokens": 2299,
+            "observed_output_tokens": 814,
+            "observed_total_tokens": 3113,
+            "cache_read_tokens": 0,
+            "observed_cache_read_tokens": 0,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        },
+        "by_turn": {
+          "5": {
+            "model_calls": 4,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 64192,
+            "output_tokens": 5033,
+            "total_tokens": 69225,
+            "observed_input_tokens": 64192,
+            "observed_output_tokens": 5033,
+            "observed_total_tokens": 69225,
+            "cache_read_tokens": 39296,
+            "observed_cache_read_tokens": 39296,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        }
+      },
+      "trial_billing_complete": true,
+      "known_cumulative_peak_cny": "19.38734624",
+      "held_cny": "2.162688",
+      "wall_seconds": 36.901,
+      "process_exit_code": 0,
+      "planned_followups": 1
+    },
+    {
+      "case_id": "original-2",
+      "topic": "lowcode",
+      "style": "original",
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-readonly-provenance-01/original-2",
+      "completed": true,
+      "attempted": 1,
+      "attempted_user_turns": [
+        5
+      ],
+      "succeeded": 1,
+      "tool_errors": 0,
+      "subagent_guard_stops": 0,
+      "subagent_stop_reasons": [],
+      "tool_trace_complete": true,
+      "tool_error_codes": {},
+      "tool_observation_errors": [],
+      "stop_reason": null,
+      "turns": [
+        {
+          "user_turn": 5,
+          "message_id": "readonly.original-2.t5",
+          "runtime_message_id": "readonly.original-2.t5__user",
+          "operation_contract": null,
+          "native_report_id": "r10",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0005",
+          "roles": [
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 4,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 4,
+          "version_binding_ok": true
+        }
+      ],
+      "tokens": {
+        "model_calls": 6,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 120946,
+        "output_tokens": 8653,
+        "total_tokens": 129599,
+        "observed_input_tokens": 120946,
+        "observed_output_tokens": 8653,
+        "observed_total_tokens": 129599,
+        "cache_read_tokens": 90240,
+        "observed_cache_read_tokens": 90240,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true,
+        "by_role": {
+          "central": {
+            "model_calls": 5,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 118561,
+            "output_tokens": 7773,
+            "total_tokens": 126334,
+            "observed_input_tokens": 118561,
+            "observed_output_tokens": 7773,
+            "observed_total_tokens": 126334,
+            "cache_read_tokens": 90240,
+            "observed_cache_read_tokens": 90240,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "memory_updater": {
+            "model_calls": 1,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 2385,
+            "output_tokens": 880,
+            "total_tokens": 3265,
+            "observed_input_tokens": 2385,
+            "observed_output_tokens": 880,
+            "observed_total_tokens": 3265,
+            "cache_read_tokens": 0,
+            "observed_cache_read_tokens": 0,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        },
+        "by_turn": {
+          "5": {
+            "model_calls": 6,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 120946,
+            "output_tokens": 8653,
+            "total_tokens": 129599,
+            "observed_input_tokens": 120946,
+            "observed_output_tokens": 8653,
+            "observed_total_tokens": 129599,
+            "cache_read_tokens": 90240,
+            "observed_cache_read_tokens": 90240,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        }
+      },
+      "trial_billing_complete": true,
+      "known_cumulative_peak_cny": "19.52159184",
+      "held_cny": "2.162688",
+      "wall_seconds": 57.104,
+      "process_exit_code": 0,
+      "planned_followups": 1
+    },
+    {
+      "case_id": "original-3",
+      "topic": "lowcode",
+      "style": "original",
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-readonly-provenance-01/original-3",
+      "completed": true,
+      "attempted": 1,
+      "attempted_user_turns": [
+        5
+      ],
+      "succeeded": 1,
+      "tool_errors": 0,
+      "subagent_guard_stops": 0,
+      "subagent_stop_reasons": [],
+      "tool_trace_complete": true,
+      "tool_error_codes": {},
+      "tool_observation_errors": [],
+      "stop_reason": null,
+      "turns": [
+        {
+          "user_turn": 5,
+          "message_id": "readonly.original-3.t5",
+          "runtime_message_id": "readonly.original-3.t5__user",
+          "operation_contract": null,
+          "native_report_id": "r10",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0005",
+          "roles": [
+            "central",
+            "central",
+            "central",
+            "central",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 4,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 4,
+          "version_binding_ok": true
+        }
+      ],
+      "tokens": {
+        "model_calls": 5,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 89416,
+        "output_tokens": 6303,
+        "total_tokens": 95719,
+        "observed_input_tokens": 89416,
+        "observed_output_tokens": 6303,
+        "observed_total_tokens": 95719,
+        "cache_read_tokens": 65024,
+        "observed_cache_read_tokens": 65024,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true,
+        "by_role": {
+          "central": {
+            "model_calls": 4,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 87181,
+            "output_tokens": 5463,
+            "total_tokens": 92644,
+            "observed_input_tokens": 87181,
+            "observed_output_tokens": 5463,
+            "observed_total_tokens": 92644,
+            "cache_read_tokens": 65024,
+            "observed_cache_read_tokens": 65024,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "memory_updater": {
+            "model_calls": 1,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 2235,
+            "output_tokens": 840,
+            "total_tokens": 3075,
+            "observed_input_tokens": 2235,
+            "observed_output_tokens": 840,
+            "observed_total_tokens": 3075,
+            "cache_read_tokens": 0,
+            "observed_cache_read_tokens": 0,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        },
+        "by_turn": {
+          "5": {
+            "model_calls": 5,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 89416,
+            "output_tokens": 6303,
+            "total_tokens": 95719,
+            "observed_input_tokens": 89416,
+            "observed_output_tokens": 6303,
+            "observed_total_tokens": 95719,
+            "cache_read_tokens": 65024,
+            "observed_cache_read_tokens": 65024,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        }
+      },
+      "trial_billing_complete": true,
+      "known_cumulative_peak_cny": "19.62340080",
+      "held_cny": "2.162688",
+      "wall_seconds": 44.658,
+      "process_exit_code": 0,
+      "planned_followups": 1
+    },
+    {
+      "case_id": "paraphrase-1",
+      "topic": "lowcode",
+      "style": "paraphrase",
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-readonly-provenance-01/paraphrase-1",
+      "completed": true,
+      "attempted": 1,
+      "attempted_user_turns": [
+        5
+      ],
+      "succeeded": 1,
+      "tool_errors": 0,
+      "subagent_guard_stops": 0,
+      "subagent_stop_reasons": [],
+      "tool_trace_complete": true,
+      "tool_error_codes": {},
+      "tool_observation_errors": [],
+      "stop_reason": null,
+      "turns": [
+        {
+          "user_turn": 5,
+          "message_id": "readonly.paraphrase-1.t5",
+          "runtime_message_id": "readonly.paraphrase-1.t5__user",
+          "operation_contract": null,
+          "native_report_id": "r10",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0005",
+          "roles": [
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 4,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 4,
+          "version_binding_ok": true
+        }
+      ],
+      "tokens": {
+        "model_calls": 6,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 125488,
+        "output_tokens": 13629,
+        "total_tokens": 139117,
+        "observed_input_tokens": 125488,
+        "observed_output_tokens": 13629,
+        "observed_total_tokens": 139117,
+        "cache_read_tokens": 91776,
+        "observed_cache_read_tokens": 91776,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true,
+        "by_role": {
+          "central": {
+            "model_calls": 5,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 123096,
+            "output_tokens": 12444,
+            "total_tokens": 135540,
+            "observed_input_tokens": 123096,
+            "observed_output_tokens": 12444,
+            "observed_total_tokens": 135540,
+            "cache_read_tokens": 91776,
+            "observed_cache_read_tokens": 91776,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "memory_updater": {
+            "model_calls": 1,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 2392,
+            "output_tokens": 1185,
+            "total_tokens": 3577,
+            "observed_input_tokens": 2392,
+            "observed_output_tokens": 1185,
+            "observed_total_tokens": 3577,
+            "cache_read_tokens": 0,
+            "observed_cache_read_tokens": 0,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        },
+        "by_turn": {
+          "5": {
+            "model_calls": 6,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 125488,
+            "output_tokens": 13629,
+            "total_tokens": 139117,
+            "observed_input_tokens": 125488,
+            "observed_output_tokens": 13629,
+            "observed_total_tokens": 139117,
+            "cache_read_tokens": 91776,
+            "observed_cache_read_tokens": 91776,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        }
+      },
+      "trial_billing_complete": true,
+      "known_cumulative_peak_cny": "19.80352784",
+      "held_cny": "2.162688",
+      "wall_seconds": 82.037,
+      "process_exit_code": 0,
+      "planned_followups": 1
+    },
+    {
+      "case_id": "paraphrase-2",
+      "topic": "lowcode",
+      "style": "paraphrase",
+      "directory": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/pilot-live/20261123-readonly-provenance-01/paraphrase-2",
+      "completed": true,
+      "attempted": 1,
+      "attempted_user_turns": [
+        5
+      ],
+      "succeeded": 1,
+      "tool_errors": 1,
+      "subagent_guard_stops": 0,
+      "subagent_stop_reasons": [],
+      "tool_trace_complete": true,
+      "tool_error_codes": {
+        "tool_error": 1
+      },
+      "tool_observation_errors": [],
+      "stop_reason": null,
+      "turns": [
+        {
+          "user_turn": 5,
+          "message_id": "readonly.paraphrase-2.t5",
+          "runtime_message_id": "readonly.paraphrase-2.t5__user",
+          "operation_contract": null,
+          "native_report_id": "r10",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0005",
+          "roles": [
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 4,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 4,
+          "version_binding_ok": true
+        }
+      ],
+      "tokens": {
+        "model_calls": 6,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 118644,
+        "output_tokens": 10965,
+        "total_tokens": 129609,
+        "observed_input_tokens": 118644,
+        "observed_output_tokens": 10965,
+        "observed_total_tokens": 129609,
+        "cache_read_tokens": 106496,
+        "observed_cache_read_tokens": 106496,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true,
+        "by_role": {
+          "central": {
+            "model_calls": 5,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 116264,
+            "output_tokens": 9576,
+            "total_tokens": 125840,
+            "observed_input_tokens": 116264,
+            "observed_output_tokens": 9576,
+            "observed_total_tokens": 125840,
+            "cache_read_tokens": 106496,
+            "observed_cache_read_tokens": 106496,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "memory_updater": {
+            "model_calls": 1,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 2380,
+            "output_tokens": 1389,
+            "total_tokens": 3769,
+            "observed_input_tokens": 2380,
+            "observed_output_tokens": 1389,
+            "observed_total_tokens": 3769,
+            "cache_read_tokens": 0,
+            "observed_cache_read_tokens": 0,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        },
+        "by_turn": {
+          "5": {
+            "model_calls": 6,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 118644,
+            "output_tokens": 10965,
+            "total_tokens": 129609,
+            "observed_input_tokens": 118644,
+            "observed_output_tokens": 10965,
+            "observed_total_tokens": 129609,
+            "cache_read_tokens": 106496,
+            "observed_cache_read_tokens": 106496,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        }
+      },
+      "trial_billing_complete": true,
+      "known_cumulative_peak_cny": "19.91980368",
+      "held_cny": "2.162688",
+      "wall_seconds": 69.055,
+      "process_exit_code": 0,
+      "planned_followups": 1
+    }
+  ]
+}
