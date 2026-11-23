@@ -64,11 +64,12 @@ def test_unknown_operation_fails_before_recording_attempt(tmp_path):
         bind(tmp_path, "unrestricted")
 
 
-def test_patch_graph_reserves_native_guard_steps(tmp_path):
+@pytest.mark.parametrize("operation", ["patch", "exact_reuse", "read_only"])
+def test_explicit_operation_graph_reserves_native_guard_steps(tmp_path, operation):
     import importlib
     import sys
 
-    _, cfg, _ = bind(tmp_path, "patch")
+    _, cfg, _ = bind(tmp_path, operation)
     key = "deerflow.subagents.executor"
     previous = sys.modules.pop(key, None)
     try:
@@ -80,3 +81,13 @@ def test_patch_graph_reserves_native_guard_steps(tmp_path):
             sys.modules[key] = previous
         else:
             sys.modules.pop(key, None)
+
+
+def test_bound_readonly_default_cannot_switch_versions(tmp_path):
+    ctx, cfg, tools = bind(tmp_path, "read_only")
+    store, _, head = adapter.session(ctx.state, thread_id="t1")
+    before = store.index()["active_version"]
+    reuse = next(t for t in tools if t.name == "report_reuse_version")
+    result = json.loads(reuse.invoke({"version_id": head["turn_id"], "response": "Read-only answer"}))
+    assert result["status"] == "read_only"
+    assert store.index()["active_version"] == before

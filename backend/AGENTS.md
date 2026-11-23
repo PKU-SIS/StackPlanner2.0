@@ -118,3 +118,9 @@ padding restores the intended bounded tool capacity; exact/read-only/legacy
 profiles, shared executor, token limits and first-turn generation are unchanged.
 Use a terminal-tool-specific loop warning so inspection cannot consume the
 handoff allowance. Retain capped real trials as failures, never relabel them.
+
+The same step-cap consistency fix now covers all explicit operation contracts
+(patch/exact_reuse/read_only): 60 graph steps, unchanged 8-tool cap, with one
+terminal call reserved by the scoped warning. Legacy auto remains unchanged.
+A host-bound read_only tool defaults to read_only even when mode is omitted,
+and rejects explicit mode changes. Failed budget trials remain archived.

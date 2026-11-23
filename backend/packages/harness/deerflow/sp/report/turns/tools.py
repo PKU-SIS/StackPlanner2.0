@@ -94,7 +94,7 @@ def build_tools(store, message, *, operation="auto"):
         return json.dumps(store.prepare(base_version_id, message_id=message_id, raw_query=raw, resolved_query=resolved_query, change_hint=change_hint), ensure_ascii=False)
 
     @tool("report_reuse_version", return_direct=True)
-    def reuse(version_id: str, mode: str = "exact_reuse", response: str = "") -> str:
+    def reuse(version_id: str, mode: str = "read_only" if operation == "read_only" else "exact_reuse", response: str = "") -> str:
         """EXACT_REUSE restores an accepted whole version by switching active_version only; accepted head does not advance. READ_ONLY archives an answer without switching versions. Neither mode starts Outline, Researcher or Writer."""
         if operation in {"exact_reuse", "read_only"} and mode != operation:
             raise ReportValidationError("reuse mode differs from Central's bound operation")
@@ -164,11 +164,13 @@ def configure(task, state, config):
         tools=[t.name for t in selected],
         disallowed_tools=[],
         skills=[],
-        max_turns=60 if operation == "patch" else min(config.max_turns, 50),
+        max_turns=60 if operation != "auto" else min(config.max_turns, 50),
         tool_call_limit=8,
         loop_warning_instruction=(
-            "Use the history and active state already supplied; avoid duplicate inspection. Reserve the next available call for report_prepare_turn and do not return before a terminal version-tool handoff."
-            if operation == "patch"
+            "Use the history and active state already supplied; avoid duplicate inspection. Keep at most six inspection calls and reserve one terminal version-tool call. When resolved, finish with "
+            + ("report_prepare_turn" if operation == "patch" else "report_reuse_version")
+            + "; do not return findings prose without the terminal handoff. Do not invent missing state if resolution is impossible."
+            if operation != "auto"
             else config.loop_warning_instruction
         ),
         finalize_after_tool_calls=None,
