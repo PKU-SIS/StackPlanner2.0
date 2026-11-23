@@ -1,0 +1,10 @@
+{
+  "original_public_case": "docs/research-report/seeded-lowcode-20261122/requests.json",
+  "public_sha256": "3ce84b097475d761994dfc88b3052af75a55b9823cd30f5b43b0139cbd331dfc",
+  "retest_user_turns": [
+    6,
+    7
+  ],
+  "prefix_through_user_turn": 5,
+  "original_failure_preserved": true
+}

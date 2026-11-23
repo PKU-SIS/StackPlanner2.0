@@ -100,3 +100,13 @@ itself was not the successful path in this run. Runtime message IDs must come
 from actual HumanMessage objects, and the pilot builds a fresh native graph per
 user run like Gateway while retaining the checkpoint. Successful paid turns
 were validated/recovered without replay; the known mode-selection defect remains.
+
+Follow-up Central delegates may now bind metadata.report_operation to patch,
+exact_reuse or read_only. Runtime persists this per source message and narrows
+GitAgent's available terminal tools; reuse mode and terminal handoff must match.
+Legacy absent/auto retains prior tools. ExactReuse must not fork/activate native
+resume or advance head. The two conditional dialogue/version Skills distinguish
+whole-version restoration from ancestor-based partial editing; default Skills
+and first-turn routing remain unchanged. The pilot's --prefix-source imports a
+verified linear history prefix into a fresh owner/thread, retaining raw transfer
+archives and rebasing native paths; never rewind or edit old experiment results.

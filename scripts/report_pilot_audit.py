@@ -365,11 +365,11 @@ class BudgetGuard:
 
 def native_role(name, tool_names=()):
     if name == "sp-perception":
-        if set(tool_names) == {
-            "report_inspect_version",
-            "report_prepare_turn",
-            "report_reuse_version",
-        }:
+        if set(tool_names) in (
+            {"report_inspect_version", "report_prepare_turn", "report_reuse_version"},
+            {"report_inspect_version", "report_prepare_turn"},
+            {"report_inspect_version", "report_reuse_version"},
+        ):
             return "git_agent"
         raise AuditError("perception is not the host-bound GitAgent profile")
     roles = {

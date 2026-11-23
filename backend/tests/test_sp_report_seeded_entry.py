@@ -41,3 +41,22 @@ def test_inspection_binds_native_normalized_source_id(tmp_path):
     assert row["passed"]
     assert row["dialogue_turn_id"] == turn["turn_id"]
     assert row["runtime_message_id"] == "read-query__user"
+
+
+def test_prefix_clone_has_independent_owner_and_preserves_source(tmp_path):
+    from report_pilot_entry import import_prefix
+
+    ctx, store = accepted(tmp_path / "old")
+    origin = store.freeze("r1", resolved_query="Accepted requirement")
+    store.reuse(origin["turn_id"], message_id="read", raw_query="Read only", mode="read_only", response="Saved reply")
+    before = file_manifest(store.outputs)
+    target = ReportTurnStore(tmp_path / "new", user_id="new-owner", thread_id="new-thread")
+    result = import_prefix(store.outputs, target, tmp_path / "prefix-provenance", through=2)
+    assert file_manifest(store.outputs) == before
+    assert result["starts_at_user_turn"] == 3
+    assert len(target.index()["versions"]) == 1
+    assert target.index()["head"] == origin["turn_id"]
+    assert len(target.index()["requests"]) == 2
+    assert target.inspect("t0002")["status"] == "read_only"
+    assert target.verify("t0002")["owner"] == target.owner
+    assert target._accepted(target._paths(result["report_id"]))

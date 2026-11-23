@@ -277,3 +277,10 @@ P5已完成首次真实首轮尝试：全文估算11423超出11000，原生转bl
 每轮独立恢复通过；源230文件与未改canonical SHA保持。新增峰值费率上估3.43721368元，连同首轮尝试累计6.21026880元，对账完整、预留残留0。
 修复入口真实消息ID和逐运行建图适配，未重放已成功的付费轮次。最终1125项离线回归通过，不能替代真实ExactReuse失败。
 见 [成稿后真实验收结果](docs/research-report/seeded-lowcode-20261122/RESULT.md)。P5仍未全部通过，P6未执行。
+
+## 19. ExactReuse操作契约与独立复测（2026-11-23）
+
+用户授权继续修复并扩大真实实验。中枢沿用sp_delegate，在同一决策中声明patch/exact_reuse/read_only；宿主按声明限制GitAgent工具和handoff，legacy auto兼容保留。
+修正两份独立多轮Skill对整版恢复与部分恢复的歧义，不改默认Skill或首轮路径。
+从已成功1–5轮前缀创建全新独立会话重测6–7，原失败记录保留。1130项离线回归通过，独立Skill验证通过。
+详见 [ExactReuse复测](docs/research-report/exactreuse-retest-20261123/PLAN.md)。

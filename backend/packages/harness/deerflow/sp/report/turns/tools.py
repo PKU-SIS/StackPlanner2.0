@@ -12,10 +12,12 @@ from deerflow.sp.report.ledger import ReportValidationError
 from deerflow.sp.report.turns.adapter import activate, current_turn, requirement_state, skill
 
 
-def build_tools(store, message):
+def build_tools(store, message, *, operation="auto"):
     from deerflow.sp.report.hooks import _message_id
     from deerflow.utils.messages import message_to_text
 
+    if not isinstance(operation, str) or operation not in {"auto", "patch", "exact_reuse", "read_only"}:
+        raise ReportValidationError("invalid host report operation")
     message_id = _message_id(message)
     raw = message_to_text(message)
 
@@ -85,7 +87,7 @@ def build_tools(store, message):
 
     @tool("report_prepare_turn", return_direct=True)
     def prepare(base_version_id: str, resolved_query: str, change_hint: str = "") -> str:
-        """Prepare an isolated native report copy using the complete current requirement; return to Central."""
+        """PATCH ONLY: fork a report for requirements different from the selected base. Never use for unchanged whole-version restoration; use report_reuse_version instead."""
         previous = previous_decision()
         if previous is not None:
             return json.dumps(previous, ensure_ascii=False)
@@ -93,12 +95,18 @@ def build_tools(store, message):
 
     @tool("report_reuse_version", return_direct=True)
     def reuse(version_id: str, mode: str = "exact_reuse", response: str = "") -> str:
-        """Archive ExactReuse or a read_only answer without Researcher/Writer; return to Central."""
+        """EXACT_REUSE restores an accepted whole version by switching active_version only; accepted head does not advance. READ_ONLY archives an answer without switching versions. Neither mode starts Outline, Researcher or Writer."""
+        if operation in {"exact_reuse", "read_only"} and mode != operation:
+            raise ReportValidationError("reuse mode differs from Central's bound operation")
         previous = previous_decision()
         if previous is not None:
             return json.dumps(previous, ensure_ascii=False)
         return json.dumps(store.reuse(version_id, message_id=message_id, raw_query=raw, response=response, mode=mode), ensure_ascii=False)
 
+    if operation == "patch":
+        return [inspect, prepare]
+    if operation in {"exact_reuse", "read_only"}:
+        return [inspect, reuse]
     return [inspect, prepare, reuse]
 
 
@@ -107,6 +115,9 @@ def bind_profile(action, context, metadata, refs):
         return False
     if action.target_agent != "perception":
         raise ReportValidationError("GitAgent must use the perception executor")
+    operation = action.metadata.get("report_operation", "auto")
+    if not isinstance(operation, str) or operation not in {"auto", "patch", "exact_reuse", "read_only"}:
+        raise ReportValidationError("invalid Central report_operation")
     active = current_turn(context.state, thread_id=context.thread_id)
     if active is None:
         raise ReportValidationError("GitAgent requires explicit opt-in and accepted report baseline")
@@ -121,9 +132,9 @@ def bind_profile(action, context, metadata, refs):
         identity = _message_id(message)
         if identity in attempts:
             raise ReportValidationError("GitAgent already dispatched for this source message")
-        attempts[identity] = {"status": "dispatched", "action_id": action.action_id, "run_id": context.run_id}
+        attempts[identity] = {"operation": operation, "status": "dispatched", "action_id": action.action_id, "run_id": context.run_id}
         store._save(index)
-    metadata.update(report_role="git_agent", report_profile="git_agent")
+    metadata.update(report_role="git_agent", report_profile="git_agent", report_operation=operation)
     refs["report_dialogue"] = {"active_state": requirement_state(head), "history_index": store.inspect(), "current_request": str(message.content)}
     return True
 
@@ -137,8 +148,17 @@ def configure(task, state, config):
     store, message, _, turn = active
     if turn is not None:
         raise ReportValidationError("duplicate GitAgent execution")
-    selected = build_tools(store, message)
-    config = replace(config, system_prompt=skill("report-version-management"), tools=[t.name for t in selected], disallowed_tools=[], skills=[], max_turns=min(config.max_turns, 50), tool_call_limit=8, finalize_after_tool_calls=None)
+    from deerflow.sp.report.hooks import _message_id
+
+    operation = (store.index().get("git_attempts", {}).get(_message_id(message)) or {}).get("operation", "auto")
+    selected = build_tools(store, message, operation=operation)
+    contract = (
+        "Legacy operation is not narrowed; choose the terminal operation from the user intent."
+        if operation == "auto"
+        else f"Host-bound report operation: {operation}. The available terminal tools and reuse mode enforce this Central decision. Do not switch operations."
+    )
+    prompt = skill("report-version-management") + "\n" + contract
+    config = replace(config, system_prompt=prompt, tools=[t.name for t in selected], disallowed_tools=[], skills=[], max_turns=min(config.max_turns, 50), tool_call_limit=8, finalize_after_tool_calls=None)
     return config, selected, "git_agent"
 
 
@@ -149,7 +169,13 @@ def accept(action, context, result):
     if active is None or active[3] is None:
         fail_profile(context, result)
         raise ReportValidationError("GitAgent returned without a version-tool terminal decision")
-    store, _, _, turn = active
+    store, message, _, turn = active
+    from deerflow.sp.report.hooks import _message_id
+
+    operation = (store.index().get("git_attempts", {}).get(_message_id(message)) or {}).get("operation", "auto")
+    expected = {"patch": {"prepared", "executing"}, "exact_reuse": {"exact_reuse"}, "read_only": {"read_only"}}.get(operation)
+    if expected is not None and turn["status"] not in expected:
+        raise ReportValidationError("version-tool handoff violates Central operation contract")
     if turn["status"] == "prepared":
         turn = activate(store, turn, context)
     if turn["status"] not in {"executing", "exact_reuse", "read_only"}:

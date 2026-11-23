@@ -1081,3 +1081,7 @@ Real seeded follow-up tests passed local edits, retained/withdrawn requirements,
 ancestor selection and read-only answering. Whole-version reuse exposed an
 operation-selection defect: identical content was unnecessarily published as a
 new version. See [the measured results and limits](docs/research-report/seeded-lowcode-20261122/RESULT.md).
+
+Follow-up delegation can bind an explicit patch/reuse/read-only operation to
+GitAgent's tool permissions. This addresses whole-version restoration being
+misrouted into a redundant revision. First-turn generation is unchanged.

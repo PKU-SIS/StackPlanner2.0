@@ -264,6 +264,128 @@ def import_seed(source_outputs, target, provenance):
     return result
 
 
+def import_prefix(source_outputs, target, provenance, *, through=5):
+    """Clone a verified historical prefix for an independent counterfactual test.
+
+    Never rewinds the source index or changes an old experiment outcome. All
+    imported versions get independent native copies and newly bound snapshots.
+    """
+    import shutil
+    from deerflow.sp.report import store as native
+    from deerflow.sp.report.turns.store import ReportTurnStore, file_manifest
+
+    source_outputs = Path(source_outputs).resolve()
+    source_owner = native.read_json(source_outputs / "report_dialogue/index.json")[
+        "owner"
+    ]
+    source = ReportTurnStore(source_outputs, **source_owner)
+    src_index = source.index()
+    if target.root.exists() or (target.outputs / "report").exists() or through < 1:
+        raise ValueError("prefix import requires a fresh target and positive prefix")
+    ids = [f"t{n:04d}" for n in range(1, through + 1)]
+    source_rows = {t: source.inspect(t) for t in ids}
+    if any(
+        row["status"] not in {"accepted", "read_only", "exact_reuse"}
+        for row in source_rows.values()
+    ):
+        raise ValueError("prefix contains unfinished or failed turn")
+    versions = {
+        t: dict(src_index["versions"][t]) for t in ids if t in src_index["versions"]
+    }
+    if not versions:
+        raise ValueError("prefix has no accepted version")
+    provenance = Path(provenance)
+    provenance.mkdir(parents=True, exist_ok=False)
+    native_before = {
+        ref["report_id"]: file_manifest(source._paths(ref["report_id"]).directory)
+        for ref in versions.values()
+    }
+    with target.locked():
+        for tid in ids:
+            manifest = source.verify(tid)
+            shutil.copytree(source.directory(tid), target.directory(tid))
+            row = {
+                **source_rows[tid],
+                "owner": target.owner,
+                "imported_from_owner": source_owner,
+            }
+            target._record(row)
+            native.write_json_atomic(
+                target.directory(tid) / "manifest.json",
+                {**manifest, "owner": target.owner},
+            )
+        head = next(reversed(versions))
+        active = head
+        for tid in ids:
+            row = source_rows[tid]
+            if row["status"] == "accepted":
+                active = tid
+            elif row["status"] == "exact_reuse":
+                active = row["reused_version_id"]
+        index = target.index()
+        index.update(
+            head=head,
+            active_version=active,
+            versions=versions,
+            requests={
+                key: tid for key, tid in src_index["requests"].items() if tid in ids
+            },
+        )
+        target._save(index)
+    restored = {tid: target.restore(tid) for tid in versions}
+    mapping = {
+        versions[tid]["report_id"]: path.report_id for tid, path in restored.items()
+    }
+    # Retain imported raw archives untouched as evidence, then snapshot the
+    # rebased verified native copies for the actual new conversation.
+    for tid in ids:
+        target.directory(tid).rename(provenance / tid)
+    with target.locked():
+        index = target.index()
+        for tid in ids:
+            row = {
+                **source_rows[tid],
+                "owner": target.owner,
+                "report_id": mapping[source_rows[tid]["report_id"]],
+                "imported_from_owner": source_owner,
+            }
+            target._record(row)
+            paths = target._paths(row["report_id"])
+            ledger = target._accepted(paths)
+            row["delivery"] = ledger.payload["delivered"]
+            target._record(row)
+            target._snapshot(row, paths)
+            for child in (provenance / tid).iterdir():
+                if child.name not in {"artifacts", "manifest.json", "turn.json"}:
+                    dest = target.directory(tid) / child.name
+                    shutil.copytree(child, dest) if child.is_dir() else shutil.copy2(
+                        child, dest
+                    )
+        index["versions"] = {
+            tid: {**ref, "report_id": mapping[ref["report_id"]]}
+            for tid, ref in versions.items()
+        }
+        target._save(index)
+        native.write_json_atomic(
+            native.pointer_path(target.outputs),
+            {"report_id": index["versions"][active]["report_id"]},
+        )
+    for rid, hashes in native_before.items():
+        if file_manifest(source._paths(rid).directory) != hashes:
+            raise ValueError("source version changed during prefix import")
+    result = {
+        "report_id": mapping[source_rows[ids[0]]["report_id"]],
+        "source_outputs": str(source_outputs),
+        "through_user_turn": through,
+        "starts_at_user_turn": through + 1,
+        "versions_by_user_turn": {int(t[1:]): p.report_id for t, p in restored.items()},
+        "source_unchanged": True,
+        "new_model_calls": 0,
+    }
+    dump(provenance / "import.json", result)
+    return result
+
+
 def dump(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
 
@@ -306,6 +428,8 @@ def _execute_child(
     prior_usage=None,
     evaluator_checks=None,
     resume_run=None,
+    prefix_source=None,
+    prefix_through=5,
 ):
     """Executed only under the spawn supervisor, after the CLI execution gate."""
     import logging
@@ -478,6 +602,26 @@ def _execute_child(
                 "replayed_model_turns": 0,
             },
         )
+    elif prefix_source is not None:
+        seed = import_prefix(
+            prefix_source,
+            store,
+            directory / "prefix-provenance",
+            through=prefix_through,
+        )
+        original_report = seed["report_id"]
+        generated_reports.update(seed["versions_by_user_turn"])
+        first_user_turn = seed["starts_at_user_turn"]
+        public_requests = [
+            r for r in public_requests if r["turn_index"] >= first_user_turn
+        ]
+        from deerflow.sp.report.turns.store import file_manifest
+
+        for ref in store.index()["versions"].values():
+            frozen[ref["report_id"]] = file_manifest(
+                outputs / "report" / ref["report_id"]
+            )
+        dump(directory / "seed.json", seed)
     elif seed_source is not None:
         first_user_turn = 2
         seed = import_seed(seed_source, store, directory / "seed-provenance")
@@ -628,6 +772,18 @@ def validate_turn_checks(row, store, checks, generated_reports):
     }
     row.update(actual)
     row["version_binding_ok"] = all(actual[k] == expected[k] for k in actual)
+    if "expected_operation" in expected:
+        actual_operation = (
+            index.get("git_attempts", {}).get(row.get("runtime_message_id")) or {}
+        ).get("operation", "auto")
+        row["operation_contract"] = actual_operation
+        row["passed"] = (
+            row["passed"] and actual_operation == expected["expected_operation"]
+        )
+    if expected.get("forbidden_roles"):
+        row["passed"] = row["passed"] and not set(row["roles"]) & set(
+            expected["forbidden_roles"]
+        )
     row["passed"] = (
         row["passed"]
         and row["version_binding_ok"]
@@ -726,6 +882,8 @@ def main():
     parser.add_argument("--prior-usage", type=Path)
     parser.add_argument("--evaluator-checks", type=Path)
     parser.add_argument("--resume-run", type=Path)
+    parser.add_argument("--prefix-source", type=Path)
+    parser.add_argument("--prefix-through", type=int, default=5)
     parser.add_argument("--billing-currency", choices=["CNY"])
     args = parser.parse_args()
     from report_multiturn_preflight import verify_packet
@@ -781,6 +939,8 @@ def main():
         if args.evaluator_checks
         else None,
         resume_run=args.resume_run.resolve() if args.resume_run else None,
+        prefix_source=args.prefix_source.resolve() if args.prefix_source else None,
+        prefix_through=args.prefix_through,
     )
     result = supervise(
         target, directory / "numeric-events.jsonl", api_execution_authorized=True
