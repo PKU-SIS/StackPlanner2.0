@@ -1049,6 +1049,9 @@ See [Writer-first behavior and offline checks](docs/research-report/WRITER_FIRST
 The [first live results](docs/research-report/writer-first-api-20261123/RESULT.md)
 retain both a completed six-turn conversation and a wrong-section failure; Writer
 now receives actual section titles instead of relying on guessed delegate IDs.
+[Post-fix replication](docs/research-report/writer-first-retest-20261123/RESULT.md)
+completes manufacturing but exposes a remaining empty-output failure in a
+lowcode read-only provenance question; multi-turn quality is not fully accepted.
 
 The follow-up code has also passed an offline review covering sealed-version
 protection, native HITL provenance and Central routing. Two seven-turn evaluation

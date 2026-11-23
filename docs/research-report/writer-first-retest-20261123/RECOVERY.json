@@ -1,0 +1,76 @@
+[
+  {
+    "case_id": "manufacturing-concise",
+    "verified_archives": [
+      "t0002",
+      "t0003",
+      "t0004",
+      "t0005",
+      "t0006",
+      "t0007",
+      "t0001"
+    ],
+    "restored_versions": [
+      {
+        "turn_id": "t0001",
+        "restored_report_id": "r8",
+        "native_delivered_valid": true
+      },
+      {
+        "turn_id": "t0002",
+        "restored_report_id": "r9",
+        "native_delivered_valid": true
+      },
+      {
+        "turn_id": "t0003",
+        "restored_report_id": "r10",
+        "native_delivered_valid": true
+      },
+      {
+        "turn_id": "t0004",
+        "restored_report_id": "r11",
+        "native_delivered_valid": true
+      },
+      {
+        "turn_id": "t0007",
+        "restored_report_id": "r12",
+        "native_delivered_valid": true
+      }
+    ],
+    "source_native_files_unchanged": true,
+    "source_index_unchanged": true
+  },
+  {
+    "case_id": "lowcode-concise",
+    "verified_archives": [
+      "t0002",
+      "t0003",
+      "t0004",
+      "t0001"
+    ],
+    "restored_versions": [
+      {
+        "turn_id": "t0001",
+        "restored_report_id": "r7",
+        "native_delivered_valid": true
+      },
+      {
+        "turn_id": "t0002",
+        "restored_report_id": "r8",
+        "native_delivered_valid": true
+      },
+      {
+        "turn_id": "t0003",
+        "restored_report_id": "r9",
+        "native_delivered_valid": true
+      },
+      {
+        "turn_id": "t0004",
+        "restored_report_id": "r10",
+        "native_delivered_valid": true
+      }
+    ],
+    "source_native_files_unchanged": true,
+    "source_index_unchanged": true
+  }
+]

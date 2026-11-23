@@ -1,0 +1,21 @@
+[
+  {
+    "case_id": "manufacturing-concise",
+    "turn2_original_body_exact_prefix": true,
+    "turn3_original_conclusion_exact_prefix": true,
+    "turn4_retained_checklist_exact": true,
+    "turn4_withdrawn_table_absent": true,
+    "turn7_outside_target_row_unchanged": true,
+    "turn7_other_cells_unchanged": true,
+    "turn7_withdrawn_checklist_absent": true,
+    "old_target_row": "| 验收放行 | 尺寸公差、配合余量等可测量项可写成检验规程与判定限值（例如纵向观察中配合余量由约 ±0.05mm 收窄到约 ±0.03mm 的收紧趋势）[S91] | 模具组装与精修的最终调整仍由技能工完成，精修是否到位、余量分配是否合适依赖经验判断[S91] | 建议对规则化项取自动化判定，对精修与配合环节保留人工终检记录；以“自动判定与人工终检的一致性”作为验证线索，仅作参考，不设为放行门槛 |",
+    "new_target_row": "| 验收放行 | 尺寸公差、配合余量等可测量项可写成检验规程与判定限值（例如纵向观察中配合余量由约 ±0.05mm 收窄到约 ±0.03mm 的收紧趋势）[S91] | 模具组装与精修的最终调整仍由技能工完成，精修是否到位、余量分配是否合适依赖经验判断[S91] | 建议对规则化项取自动化判定，对精修与配合环节保留人工终检记录；以“自动判定与人工终检的一致性”作为验证线索，仅作参考，不设为放行门槛。分工上建议：放行标准（判定限值、检验规程覆盖的项与不覆盖的项）由工艺/质量部门确认并签署，自动判定规则的变更同由此确认；人工接管由现场技能工负责——精修与配合环节的终检判断、以及自动判定出现与人工经验不符时的处置，均由当班技能工承担并在终检记录中留痕，质量部门只按已确认的标准核查记录完整性 |"
+  },
+  {
+    "case_id": "lowcode-concise",
+    "turn2_original_body_exact_prefix": true,
+    "turn3_original_conclusion_exact_prefix": true,
+    "turn4_retained_checklist_exact": true,
+    "turn4_withdrawn_table_absent": true
+  }
+]

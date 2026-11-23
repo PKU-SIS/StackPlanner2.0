@@ -185,3 +185,12 @@ packets now include host-read section_catalog and reads return actual titles;
 original user location outranks guessed delegate IDs. This is context repair,
 not a new LLM, retry loop or rejection gate. Rehearsal covers the catalog/title
 contract; real post-fix trials require separate frozen packets and fresh runs.
+
+
+Post-location-fix live replication (`writer-first-retest-20261123/RESULT.md`):
+manufacturing 6/6; lowcode edits 2–4 pass, readonly turn 5 ends with empty visible
+content and finish_reason=length after ten inspections, no response archive;
+turns 6–7 were not attempted. Do not report both conversations complete.
+Preserve three recovered Central tool errors and the missing failed-turn archive
+as known limitations. Next focus is concise scoped provenance reads and honest
+empty-output diagnostics, not mandatory extra agents or guard relaxation.

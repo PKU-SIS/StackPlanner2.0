@@ -1,0 +1,39 @@
+[
+  {
+    "case_id": "manufacturing-concise",
+    "tool_errors": [
+      {
+        "tool": "sp_delegate",
+        "response": "{\"action_type\": \"DELEGATE\", \"next_step\": \"error_recoverable\", \"error\": \"DELEGATE metadata.report_action must be 'start'\", \"result\": null, \"completion_status\": null, \"stop_reason\": null}"
+      },
+      {
+        "tool": "sp_replan",
+        "response": "{\"action_type\": \"REPLAN\", \"next_step\": \"error_recoverable\", \"error\": \"Report lifecycle action rejected: only accepted versions can be inspected\"}"
+      },
+      {
+        "tool": "sp_delegate",
+        "response": "{\"action_type\": \"DELEGATE\", \"next_step\": \"error_recoverable\", \"error\": \"Report delegation rejected: bound report follow-ups require GitAgent and native report roles\", \"result\": null, \"completion_status\": null, \"stop_reason\": null}"
+      }
+    ],
+    "last_visible_ai_chars": 19,
+    "last_finish_reason": null
+  },
+  {
+    "case_id": "lowcode-concise",
+    "tool_errors": [],
+    "last_visible_ai_chars": 0,
+    "last_finish_reason": "length",
+    "readonly_inspection_views": [
+      "report",
+      "tree",
+      "draft:n14",
+      "evidence:n14",
+      "sources",
+      "draft:n13",
+      "draft:n11",
+      "draft:n9",
+      "draft:n8",
+      "draft:n6"
+    ]
+  }
+]
