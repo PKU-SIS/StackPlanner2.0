@@ -80,6 +80,7 @@ class ReplanHandler:
             state_update={"sp_active_delegate_id": None, "sp_current_stage": stage},
             memory_entries=[entry],
             idempotency_key=action.idempotency_key,
+            tool_observation=result if report_action == "inspect_version" else None,
             run_events=[
                 make_sp_event(
                     event_type,

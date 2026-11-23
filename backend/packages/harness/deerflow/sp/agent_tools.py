@@ -2193,7 +2193,9 @@ class SPControlActionMiddleware(AgentMiddleware[AgentState]):
                 (entry for entry in reversed(result.memory_entries) if isinstance(entry, StackMemoryEntry) and entry.action == "replan"),
                 None,
             )
-            if report_entry is not None:
+            if result.tool_observation is not None:
+                content_payload["result"] = json.dumps(result.tool_observation, ensure_ascii=False)
+            elif report_entry is not None:
                 content_payload["result"] = report_entry.content
 
         content = json.dumps(content_payload, ensure_ascii=False)

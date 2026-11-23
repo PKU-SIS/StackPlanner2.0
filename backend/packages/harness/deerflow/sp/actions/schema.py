@@ -275,9 +275,12 @@ class HandlerResult:
     run_events: list[dict[str, Any]] = field(default_factory=list)
     idempotency_key: str | None = None
     error: str | None = None
+    # Per-call tool data must not be reconstructed from truncated task memory.
+    tool_observation: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            **({"tool_observation": _json_safe(self.tool_observation)} if self.tool_observation is not None else {}),
             "next_step": self.next_step,
             "state_update": _json_safe(self.state_update),
             "memory_entries": [entry.to_dict() for entry in self.memory_entries],

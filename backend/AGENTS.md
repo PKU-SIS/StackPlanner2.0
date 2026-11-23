@@ -205,3 +205,9 @@ follow-up answers are archived as failed baseline snapshots; TaskMemory's
 existing after_agent returns a user-visible notice without model retries.
 Normal first turns and successful readonly archives retain their existing path.
 See `../docs/research-report/READONLY_PROVENANCE_20261123.md`.
+
+Report version reads return the actual per-call payload through optional
+HandlerResult.tool_observation; SPControlActionMiddleware must not substitute
+its 2000-character task-memory summary as the read result. This is scoped to
+inspect_version; absent observations retain the original serialization and
+first-turn behavior. Keep compact source views and the global memory bound.
