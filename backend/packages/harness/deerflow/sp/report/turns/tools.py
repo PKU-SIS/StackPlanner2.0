@@ -29,7 +29,7 @@ def build_tools(store, message, *, operation="auto"):
 
     @tool("report_inspect_version")
     def inspect(version_id: str | None = None, view: str = "requirements", start_line: int = 1, end_line: int | None = None) -> str:
-        """Read accepted snapshots: requirements, manifest, report, draft:<node_id>, tree, sources, material:<material_id>. Material views accept original source line ranges."""
+        """Read accepted snapshots: requirements, manifest, report, draft:<node_id>, tree, sources, evidence:<node_id>, material:<material_id>. Evidence bundles a section with saved reference excerpts; material accepts line ranges."""
         if version_id is None:
             return json.dumps(store.inspect(), ensure_ascii=False)
         if version_id not in store.index()["versions"]:
@@ -42,6 +42,46 @@ def build_tools(store, message, *, operation="auto"):
         elif view != "requirements":
             directory = store.directory(version_id) / "artifacts"
             ledger = native.read_json(directory / "ledger.json")
+            if view.startswith("evidence:"):
+                from deerflow.sp.report.citations import CITATION_RE
+
+                node_id = view.removeprefix("evidence:")
+                draft = next((d for d in ledger.get("drafts", []) if d.get("is_current") and d.get("node_id") == node_id), None)
+                if not draft:
+                    raise ReportValidationError("unknown snapshot evidence node")
+
+                def saved_text(ref):
+                    relative = Path(ref["path"]).relative_to(manifest["origin_directory"]).as_posix()
+                    if relative not in manifest["files"] or manifest["files"][relative] != ref["sha256"]:
+                        raise ReportValidationError("unbound snapshot evidence reference")
+                    return native.read_text(directory / relative)
+
+                content = saved_text(draft)
+                ids = list(dict.fromkeys(m.group("source_id") for m in CITATION_RE.finditer(content)))
+                evidence = []
+                for identity in ids[:8]:
+                    source = next((r for r in ledger.get("sources", []) if r.get("source_id") == identity), {})
+                    item = {k: source.get(k) for k in ("source_id", "url", "title")}
+                    item["source_id"] = identity
+                    material = next((r for r in reversed(ledger.get("materials", [])) if r.get("source_id") == identity), None)
+                    if material:
+                        text = saved_text(material)
+                        excerpt = text[:4000]
+                        item.update(material_id=material["material_id"], material_sha256=material["sha256"], content_excerpt=excerpt, char_range=[1, len(excerpt)], total_chars=len(text), truncated=len(excerpt) < len(text))
+                    else:
+                        item.update(content_excerpt=None, missing_saved_material=True)
+                    evidence.append(item)
+                result = {
+                    "version": {k: turn.get(k) for k in ("turn_id", "report_id", "status", "requirements_status")},
+                    "node_id": node_id,
+                    "content": content[:16000],
+                    "draft_sha256": draft["sha256"],
+                    "truncated": len(content) > 16000,
+                    "evidence_sources": evidence,
+                    "omitted_sources": ids[8:],
+                    "scope": "verified saved snapshot excerpts; not fresh research or factual verification",
+                }
+                return json.dumps(result, ensure_ascii=False)
             if view == "sources":
                 result["sources"] = [{k: row.get(k) for k in ("source_id", "url", "title")} for row in ledger.get("sources", [])]
                 result["materials"] = [{k: row.get(k) for k in ("material_id", "source_id", "sha256", "lines", "title")} for row in ledger.get("materials", [])]

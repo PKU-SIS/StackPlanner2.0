@@ -124,3 +124,15 @@ The same step-cap consistency fix now covers all explicit operation contracts
 terminal call reserved by the scoped warning. Legacy auto remains unchanged.
 A host-bound read_only tool defaults to read_only even when mode is omitted,
 and rejects explicit mode changes. Failed budget trials remain archived.
+
+Readonly version inspection supports evidence:<node_id>: a bound section plus
+bounded saved reference excerpts, source/material IDs, SHA and character ranges.
+It performs no network or writing; truncated/missing evidence must be disclosed.
+This avoids spending the finite GitAgent call budget on repeated full catalogs.
+The pilot official DNS guard refreshes only api.deepseek.com:443 public answers;
+TCP still requires audited wire scope and TLS/credential binding. It does not
+open arbitrary DNS/hosts. Prior uncertain requests remain stopped and reserved.
+Only an explicit --carry-unknown-exposure on a fresh --prefix-source trial may
+carry original journal-backed reservations; --resume-run cannot use it, unknown
+requests are not replayed, and global_billing_complete stays false until holds
+are reconciled. Never call held exposure zero or count it as an actual invoice.

@@ -681,6 +681,8 @@ class OfflinePilotWorker:
                 "live_network_enabled": False,
                 "native_delivery_verified": False,
                 "usage": self.audit.snapshot(),
+                "global_billing_complete": self.audit.snapshot()["billing_complete"]
+                and not self.guard.pending,
                 "budget": self.guard.snapshot(),
                 "http_attempts": list(self.receipts),
                 "stop_reason": self.stop_reason,
@@ -754,6 +756,7 @@ def supervise(
                         "ready",
                         "turn_started",
                         "reservation",
+                        "carried_reservation",
                         "settlement",
                         "unknown",
                         "completed",

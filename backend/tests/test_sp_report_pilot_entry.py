@@ -98,3 +98,53 @@ def test_frozen_turn_sequence_stops_on_native_failure_and_never_replays():
     seen.clear()
     result = run_turn_sequence(requests, lambda row: seen.append(row["turn_index"]) or {"passed": True})
     assert result["completed"] and seen == list(range(1, 8))
+
+
+def test_official_dns_rotation_keeps_verified_public_ips_without_opening_other_hosts(monkeypatch):
+    import socket
+
+    import report_pilot_entry as entry
+
+    w = official()
+    monkeypatch.setattr(entry, "_NATIVE_GETADDRINFO", lambda *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.35", 443))])
+    dialled = []
+    monkeypatch.setattr(entry, "_NATIVE_CONNECT", lambda sock, address: dialled.append(address))
+    with w.installed():
+        socket.getaddrinfo("api.deepseek.com", 443)
+        with w._wire_scope():
+            with socket.socket() as sock:
+                sock.connect(("93.184.216.35", 443))
+        with pytest.raises(Exception):
+            socket.getaddrinfo("unapproved.example", 443)
+    assert dialled == [("93.184.216.35", 443)]
+
+
+def test_unknown_wallet_exposure_is_never_released_or_replayed(tmp_path):
+    from report_pilot_audit import BudgetGuard
+    from report_pilot_entry import carry_prior_usage
+
+    prior = {"usage": {"billing_complete": False}, "budget": {"spent_cost_cny": "2", "input_tokens": 100, "output_tokens": 10, "inflight": ["http-00000000000000000000000000000000-1"], "reserved_cost_cny": "0.5"}}
+    (tmp_path / "usage.json").write_text(json.dumps(prior))
+    event = {"event": "reservation", "identity": prior["budget"]["inflight"][0], "cost_cny": "0.5", "input_tokens": 1000, "output_tokens": 100}
+    (tmp_path / "numeric-events.jsonl").write_text(json.dumps(event) + "\n")
+    guard = BudgetGuard(max_cost_cny="3", max_input_tokens=2000, max_output_tokens=1000)
+    with pytest.raises(ValueError):
+        carry_prior_usage(guard, tmp_path / "usage.json")
+    emitted = []
+    carry_prior_usage(guard, tmp_path / "usage.json", allow_unknown=True, emit=emitted.append)
+    assert str(guard.spent) == "2" and guard.snapshot()["reserved_cost_cny"] == "0.5"
+    assert emitted[0]["event"] == "carried_reservation"
+    with pytest.raises(Exception):
+        guard.reserve("new", input_tokens=1, output_tokens=1, cost_cny="0.6")
+    assert guard.snapshot()["reserved_cost_cny"] == "0.5"
+
+
+def test_unbounded_unreconciled_wallet_cannot_be_carried(tmp_path):
+    from report_pilot_audit import BudgetGuard
+    from report_pilot_entry import carry_prior_usage
+
+    prior = {"usage": {"billing_complete": False}, "budget": {"spent_cost_cny": "2", "input_tokens": 100, "output_tokens": 10, "inflight": [], "reserved_cost_cny": "0"}}
+    (tmp_path / "usage.json").write_text(json.dumps(prior))
+    guard = BudgetGuard(max_cost_cny="50", max_input_tokens=2000, max_output_tokens=1000)
+    with pytest.raises(ValueError):
+        carry_prior_usage(guard, tmp_path / "usage.json", allow_unknown=True)

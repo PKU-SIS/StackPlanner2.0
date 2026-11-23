@@ -29,6 +29,7 @@ from report_pilot_worker import OfflinePilotWorker, supervise
 
 _NATIVE_CONNECT = socket.socket.connect
 _NATIVE_CONNECT_EX = socket.socket.connect_ex
+_NATIVE_GETADDRINFO = socket.getaddrinfo
 
 
 @dataclass(frozen=True)
@@ -154,6 +155,22 @@ class OfficialPilotWorker(OfflinePilotWorker):
         ):
             raise AuditError("official DNS did not resolve exclusively to public IPs")
 
+        def lookup(host, port, *args, **kwargs):
+            name = host.decode("ascii") if isinstance(host, bytes) else host
+            if name != "api.deepseek.com" or str(port) != "443":
+                raise AuditError("non-official DNS lookup blocked")
+            records = _NATIVE_GETADDRINFO(host, port, *args, **kwargs)
+            refreshed = {record[4][0] for record in records}
+            if not refreshed or any(
+                not ipaddress.ip_address(value).is_global for value in refreshed
+            ):
+                raise AuditError("official DNS returned a non-public address")
+            # Async DNS may run in an executor without ContextVars. DNS is
+            # restricted by hostname; actual connect still requires wire scope.
+            with self.lock:
+                addresses.update(refreshed)
+            return records
+
         def check(address):
             if (
                 not self.wire_allowed.get()
@@ -176,6 +193,7 @@ class OfficialPilotWorker(OfflinePilotWorker):
         with (
             patch.object(socket.socket, "connect", connect),
             patch.object(socket.socket, "connect_ex", connect_ex),
+            patch.object(socket, "getaddrinfo", lookup),
         ):
             yield
 
@@ -185,6 +203,68 @@ class OfficialPilotWorker(OfflinePilotWorker):
             api_experiments_authorized=self.permit.start, live_network_enabled=True
         )
         return result
+
+
+def carry_prior_usage(guard, path, *, allow_unknown=False, emit=None):
+    from report_pilot_audit import money, integer
+
+    prior = json.loads(Path(path).read_text())
+    budget = prior["budget"]
+    pending = budget["inflight"]
+    if (not prior["usage"]["billing_complete"] or pending) and not allow_unknown:
+        raise ValueError(
+            "prior cost must be fully reconciled or explicitly held at maximum exposure"
+        )
+    if not prior["usage"]["billing_complete"] and not pending:
+        raise ValueError("unreconciled usage has no bounded original reservation")
+    guard.spent = money(budget["spent_cost_cny"])
+    guard.inp = integer(budget["input_tokens"])
+    guard.out = integer(budget["output_tokens"])
+    if pending:
+        records = [
+            json.loads(line)
+            for line in Path(path)
+            .with_name("numeric-events.jsonl")
+            .read_text()
+            .splitlines()
+            if line.strip()
+        ]
+        reservations = {
+            r["identity"]: r
+            for r in records
+            if r.get("event") in {"reservation", "carried_reservation"}
+        }
+        for identity in pending:
+            row = reservations.get(identity)
+            if row is None:
+                raise ValueError("missing original unknown-exposure reservation")
+            guard.pending[identity] = {
+                "input_tokens": integer(row["input_tokens"]),
+                "output_tokens": integer(row["output_tokens"]),
+                "cost": money(row["cost_cny"]),
+            }
+        if sum((r["cost"] for r in guard.pending.values()), money(0)) != money(
+            budget["reserved_cost_cny"]
+        ):
+            raise ValueError("unknown exposure does not reconcile")
+        for identity in pending:
+            if emit:
+                emit({**reservations[identity], "event": "carried_reservation"})
+    if (
+        guard.maximum is None
+        or guard.spent + sum((row["cost"] for row in guard.pending.values()), money(0))
+        > guard.maximum
+        or guard.inp + sum(row["input_tokens"] for row in guard.pending.values())
+        > guard.max_input
+        or guard.out + sum(row["output_tokens"] for row in guard.pending.values())
+        > guard.max_output
+    ):
+        raise ValueError("prior known and held exposure already exceeds limits")
+    return {
+        "prior_file": str(Path(path).resolve()),
+        "unknown_identities": list(pending),
+        "unknown_requests_replayed": 0,
+    }
 
 
 def run_turn_sequence(requests, execute, *, first_turn=1):
@@ -430,6 +510,7 @@ def _execute_child(
     resume_run=None,
     prefix_source=None,
     prefix_through=5,
+    carry_unknown_exposure=False,
 ):
     """Executed only under the spawn supervisor, after the CLI execution gate."""
     import logging
@@ -478,15 +559,18 @@ def _execute_child(
         emit=channel.send,
     )
     worker.memory_drain_timeout = 180
+    if carry_unknown_exposure and (resume_run is not None or prefix_source is None):
+        raise ValueError(
+            "unknown exposure may only carry to a fresh independent prefix trial"
+        )
     if prior_usage is not None:
-        prior = json.loads(Path(prior_usage).read_text())
-        if not prior["usage"]["billing_complete"] or prior["budget"]["inflight"]:
-            raise ValueError("prior cost must be fully reconciled")
-        from report_pilot_audit import money
-
-        worker.guard.spent = money(prior["budget"]["spent_cost_cny"])
-        worker.guard.inp = prior["budget"]["input_tokens"]
-        worker.guard.out = prior["budget"]["output_tokens"]
+        carry = carry_prior_usage(
+            worker.guard,
+            prior_usage,
+            allow_unknown=carry_unknown_exposure,
+            emit=channel.send,
+        )
+        dump(directory / "prior-wallet.json", carry)
     packet = json.loads((packet_dir / "preflight.json").read_text())
     public = packet["profile"]
     from deerflow.config.app_config import AppConfig, set_app_config
@@ -903,6 +987,7 @@ def main():
     parser.add_argument("--resume-run", type=Path)
     parser.add_argument("--prefix-source", type=Path)
     parser.add_argument("--prefix-through", type=int, default=5)
+    parser.add_argument("--carry-unknown-exposure", action="store_true")
     parser.add_argument("--billing-currency", choices=["CNY"])
     args = parser.parse_args()
     from report_multiturn_preflight import verify_packet
@@ -938,6 +1023,7 @@ def main():
         directory / "launch.json",
         {
             "api_execution_requested": True,
+            "unknown_exposure_carry_requested": args.carry_unknown_exposure,
             "currency": "CNY",
             "total_ceiling_cny": "50",
             "operating_ceiling_cny": "48",
@@ -960,6 +1046,7 @@ def main():
         resume_run=args.resume_run.resolve() if args.resume_run else None,
         prefix_source=args.prefix_source.resolve() if args.prefix_source else None,
         prefix_through=args.prefix_through,
+        carry_unknown_exposure=args.carry_unknown_exposure,
     )
     result = supervise(
         target, directory / "numeric-events.jsonl", api_execution_authorized=True

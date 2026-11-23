@@ -38,7 +38,15 @@ read view and archive response with mode="read_only". Neither action starts
 research or writing, changes accepted head, or claims new factual verification.
 Runtime owns IDs, paths and publishing. Preparation is not report delivery.
 
-For source questions use report_inspect_version(view="tree") or "sources" to
+For a read-only question about a known section, prefer one
+report_inspect_version(view="evidence:<node_id>") call: it returns the section
+and bounded saved reference excerpts with source/material identity and character
+ranges. Do not re-resolve already supplied requirements or repeatedly read the
+whole history/catalog. Disclose truncated/missing excerpts and distinguish report
+statements from source verification; use material line views only if needed.
+Finish with report_reuse_version(mode="read_only", response=...) within the
+bounded tool budget. Never substitute a new research run for missing evidence.
+For other source questions use report_inspect_version(view="tree") or "sources" to
 find saved evidence identities, then view="material:<material_id>" with
 start_line/end_line. Cite original source IDs and line ranges, distinguish source
 text from recommendations, and state missing evidence instead of researching or
