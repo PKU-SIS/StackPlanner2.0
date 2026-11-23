@@ -221,3 +221,12 @@ single-cell guidance passes one fresh isolated turn-7 retest, not a new full-six
 quality claim. Some citation/paragraph phrasing remains imprecise. Successful
 readonly/reuse runs also retain actual final UI text as visible_response.md
 separately from model-supplied response.md; do not rewrite frozen old results.
+
+
+Three-topic fixed stability evaluation is described in
+`../docs/research-report/three-topic-stability-20261123/PLAN.md`.
+Its optional canonical_sha256_by_node checks are evaluator-only, after graph
+execution; never send expected hashes to agents. Same-node extra edits fail.
+The pilot inherits the source's native length contract, including its historical
+absence; reports with a contract retain all original length checks. This changes
+only the experiment adapter, not production acceptance or first-turn generation.

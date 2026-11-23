@@ -155,3 +155,31 @@ def test_targeted_turn_scope_executes_only_the_frozen_requested_turn():
     seen = []
     result = run_turn_sequence(requests, lambda row: seen.append(row["turn_index"]) or {"passed": True}, first_turn=5, last_turn=5)
     assert result["completed"] and seen == [5]
+
+
+def test_native_delivery_without_length_contract_keeps_its_original_acceptance(tmp_path):
+    from types import SimpleNamespace
+
+    from report_pilot_entry import inspect_turn
+    from test_sp_report_turns import accepted
+
+    ctx, store = accepted(tmp_path)
+    row = inspect_turn(tmp_path, store, {"turn_index": 2, "message_id": "m2"}, ctx.run_id, "r1", {}, SimpleNamespace(calls={}), set())
+    assert row["passed"] and row["native_delivery_created"]
+
+
+def test_external_exact_scope_rejects_an_extra_cell_change_in_same_node(tmp_path):
+    import hashlib
+
+    from report_pilot_entry import validate_canonical_scope
+    from test_sp_report_turns import accepted
+
+    ctx, store = accepted(tmp_path)
+    path = tmp_path / "report/r1/drafts/n2/d1.md"
+    expected = {"n2": hashlib.sha256(path.read_bytes()).hexdigest()}
+    row = {"native_report_id": "r1", "passed": True}
+    assert validate_canonical_scope(row, store, expected)["canonical_scope_ok"]
+    path.write_text("Changed one more table cell than requested.\n")
+    row = {"native_report_id": "r1", "passed": True, "scope_ok": True}
+    checked = validate_canonical_scope(row, store, expected)
+    assert not checked["passed"] and checked["canonical_mismatch_nodes"] == ["n2"]

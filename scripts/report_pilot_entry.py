@@ -925,6 +925,28 @@ def validate_turn_checks(row, store, checks, generated_reports):
             and not changes["removed_nodes"]
         )
         row["passed"] = row["passed"] and row["scope_ok"]
+    if "canonical_sha256_by_node" in expected:
+        validate_canonical_scope(row, store, expected["canonical_sha256_by_node"])
+    return row
+
+
+def validate_canonical_scope(row, store, expected):
+    """Evaluator-only exact byte scope, never injected into the model."""
+    from deerflow.sp.report.ledger import ReportLedger
+
+    ledger = ReportLedger.load(store._paths(row["native_report_id"]))
+    actual = {
+        d["node_id"]: hashlib.sha256(Path(d["path"]).read_bytes()).hexdigest()
+        for d in ledger.payload.get("drafts", [])
+        if d.get("is_current")
+    }
+    row["canonical_scope_ok"] = actual == expected
+    row["canonical_mismatch_nodes"] = sorted(
+        node
+        for node in set(actual) | set(expected)
+        if actual.get(node) != expected.get(node)
+    )
+    row["passed"] = row["passed"] and row["canonical_scope_ok"]
     return row
 
 
@@ -988,7 +1010,10 @@ def inspect_turn(
     if delivered:
         valid = not final_binding_error(ledger)
         length = ledger.payload.get("final_report", {}).get("length", {})
-        valid = valid and length.get("in_estimated_range") is True
+        valid = valid and (
+            not ledger.payload.get("length_contract")
+            or length.get("in_estimated_range") is True
+        )
     else:
         valid = (
             number in (5, 6)
