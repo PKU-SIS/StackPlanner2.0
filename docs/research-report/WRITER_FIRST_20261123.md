@@ -82,3 +82,8 @@ DEER_FLOW_HOME 位于独立 `/tmp`。真实异步执行器测试需放行本机�
 - 显式检查 hooks、local_edit、turns.adapter、dr2_adapter 的 `__file__`，均来自新 checkout。
 - 受限沙箱中一次异步测试挂起、一次 45 秒限时诊断退出；放行本机通信后正常通过。
   中枢图测试最初用错 checkpoint 消息规范化顺序，已按原生入口修正；未放宽预算或校验。
+
+
+后续实际 API 测试见 [首批结果](writer-first-api-20261123/RESULT.md)。
+首遍发现中枢猜错章节ID、Writer未识别冲突；补丁为 Writer 增加真实章节目录，
+读取返回真实标题，原始用户要求优先于委派中的猜测。没有增加角色、拒绝门槛或自动重试。

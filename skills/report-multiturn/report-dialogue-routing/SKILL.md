@@ -8,7 +8,10 @@ For an edit of existing report content, prefer
 sp_delegate(target_agent="reporter", metadata={"report_task":"local_edit"}).
 The program copies/resumes the active accepted version; no GitAgent or Outline
 call is needed. Optional base_version_id selects an accepted historical version.
-Give Writer the actual edit and what must remain. Writer finds the section and
+Give Writer the actual edit and what must remain; do not guess chapter IDs.
+For provenance questions prefer evidence:<node_id> and bounded material:<id>
+reads. If excerpts are incomplete, disclose the limit; do not delegate an unscoped
+Coder to inspect report files. Writer finds the section and
 replaces the requested text. Follow a ready observation with ordinary sp_finish.
 The program checks assembly, citations, length and hashes; no independent
 Outline semantic review or factual verification is implied for this simple path.

@@ -1046,6 +1046,9 @@ and whole-version reuse can run as program operations without another agent.
 Old versions remain isolated; native assembly, citation, length and hash checks
 still apply. Simple edits do not include an independent semantic review.
 See [Writer-first behavior and offline checks](docs/research-report/WRITER_FIRST_20261123.md).
+The [first live results](docs/research-report/writer-first-api-20261123/RESULT.md)
+retain both a completed six-turn conversation and a wrong-section failure; Writer
+now receives actual section titles instead of relying on guessed delegate IDs.
 
 The follow-up code has also passed an offline review covering sealed-version
 protection, native HITL provenance and Central routing. Two seven-turn evaluation

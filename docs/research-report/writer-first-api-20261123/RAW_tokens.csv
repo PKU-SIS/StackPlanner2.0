@@ -1,0 +1,16 @@
+case_id,topic,style,level,key,model_calls,input_tokens,output_tokens,total_tokens,cache_read_tokens,observed_total_tokens,usage_complete,cache_missing_calls
+lowcode-concise,lowcode,concise,case,all,42,424871,26277,451148,334976,451148,True,0
+lowcode-concise,lowcode,concise,role,central,11,211219,16053,227272,183040,227272,True,0
+lowcode-concise,lowcode,concise,role,writer,25,193126,4354,197480,151936,197480,True,0
+lowcode-concise,lowcode,concise,role,memory_updater,6,20526,5870,26396,0,26396,True,0
+lowcode-concise,lowcode,concise,turn,2,7,54079,2401,56480,38016,56480,True,0
+lowcode-concise,lowcode,concise,turn,3,9,71724,3556,75280,53888,75280,True,0
+lowcode-concise,lowcode,concise,turn,4,10,101844,4962,106806,77824,106806,True,0
+lowcode-concise,lowcode,concise,turn,5,6,111554,8299,119853,98688,119853,True,0
+lowcode-concise,lowcode,concise,turn,6,3,40093,3085,43178,32640,43178,True,0
+lowcode-concise,lowcode,concise,turn,7,7,45577,3974,49551,33920,49551,True,0
+manufacturing-concise,manufacturing,concise,case,all,6,50839,2653,53492,40704,53492,True,0
+manufacturing-concise,manufacturing,concise,role,central,2,35250,1149,36399,31232,36399,True,0
+manufacturing-concise,manufacturing,concise,role,writer,3,13733,1017,14750,9472,14750,True,0
+manufacturing-concise,manufacturing,concise,role,memory_updater,1,1856,487,2343,0,2343,True,0
+manufacturing-concise,manufacturing,concise,turn,2,6,50839,2653,53492,40704,53492,True,0

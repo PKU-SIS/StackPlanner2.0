@@ -1,0 +1,585 @@
+{
+  "metrics": {
+    "conversation_completed": 1,
+    "conversation_denominator": 2,
+    "clean_conversation_completed": 0,
+    "planned_turns": 12,
+    "attempted_turns": 7,
+    "successful_turns": 6,
+    "not_attempted_turns": 5,
+    "planned_conversations": 2
+  },
+  "cases": [
+    {
+      "case_id": "lowcode-concise",
+      "topic": "lowcode",
+      "style": "concise",
+      "directory": ".deer-flow/pilot-live/20261123-writer-first-api-01/lowcode-concise",
+      "completed": true,
+      "attempted": 6,
+      "attempted_user_turns": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "succeeded": 6,
+      "tool_errors": 1,
+      "subagent_guard_stops": 0,
+      "subagent_stop_reasons": [],
+      "tool_trace_complete": true,
+      "tool_error_codes": {
+        "tool_error": 1
+      },
+      "tool_observation_errors": [],
+      "stop_reason": null,
+      "turns": [
+        {
+          "user_turn": 2,
+          "message_id": "firstpass.lowcode-concise.t2",
+          "runtime_message_id": "firstpass.lowcode-concise.t2__user",
+          "operation_contract": null,
+          "native_report_id": "r4",
+          "native_delivery_created": true,
+          "dialogue_turn_id": "t0002",
+          "roles": [
+            "central",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 1,
+          "accepted_head_user_turn": 2,
+          "active_user_turn": 2,
+          "version_binding_ok": true,
+          "canonical_changes": {
+            "added_nodes": [],
+            "changed_nodes": [
+              "n11"
+            ],
+            "factual_correctness_verified": false,
+            "kept_nodes": [
+              "n8",
+              "n2",
+              "n4",
+              "n9",
+              "n14",
+              "n6",
+              "n13"
+            ],
+            "removed_nodes": [],
+            "scope": "canonical node bytes; final citation display and assembly may change"
+          },
+          "scope_ok": true
+        },
+        {
+          "user_turn": 3,
+          "message_id": "firstpass.lowcode-concise.t3",
+          "runtime_message_id": "firstpass.lowcode-concise.t3",
+          "operation_contract": null,
+          "native_report_id": "r5",
+          "native_delivery_created": true,
+          "dialogue_turn_id": "t0003",
+          "roles": [
+            "central",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 2,
+          "accepted_head_user_turn": 3,
+          "active_user_turn": 3,
+          "version_binding_ok": true,
+          "canonical_changes": {
+            "added_nodes": [],
+            "changed_nodes": [
+              "n14"
+            ],
+            "factual_correctness_verified": false,
+            "kept_nodes": [
+              "n8",
+              "n2",
+              "n4",
+              "n9",
+              "n6",
+              "n13",
+              "n11"
+            ],
+            "removed_nodes": [],
+            "scope": "canonical node bytes; final citation display and assembly may change"
+          },
+          "scope_ok": true
+        },
+        {
+          "user_turn": 4,
+          "message_id": "firstpass.lowcode-concise.t4",
+          "runtime_message_id": "firstpass.lowcode-concise.t4",
+          "operation_contract": null,
+          "native_report_id": "r6",
+          "native_delivery_created": true,
+          "dialogue_turn_id": "t0004",
+          "roles": [
+            "central",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 1,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 4,
+          "version_binding_ok": true,
+          "canonical_changes": {
+            "added_nodes": [],
+            "changed_nodes": [
+              "n14"
+            ],
+            "factual_correctness_verified": false,
+            "kept_nodes": [
+              "n8",
+              "n2",
+              "n4",
+              "n11",
+              "n9",
+              "n6",
+              "n13"
+            ],
+            "removed_nodes": [],
+            "scope": "canonical node bytes; final citation display and assembly may change"
+          },
+          "scope_ok": true
+        },
+        {
+          "user_turn": 5,
+          "message_id": "firstpass.lowcode-concise.t5",
+          "runtime_message_id": "firstpass.lowcode-concise.t5",
+          "operation_contract": null,
+          "native_report_id": "r6",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0005",
+          "roles": [
+            "central",
+            "central",
+            "central",
+            "central",
+            "central",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 4,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 4,
+          "version_binding_ok": true
+        },
+        {
+          "user_turn": 6,
+          "message_id": "firstpass.lowcode-concise.t6",
+          "runtime_message_id": "firstpass.lowcode-concise.t6",
+          "operation_contract": null,
+          "native_report_id": "r4",
+          "native_delivery_created": false,
+          "dialogue_turn_id": "t0006",
+          "roles": [
+            "central",
+            "central",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 2,
+          "accepted_head_user_turn": 4,
+          "active_user_turn": 2,
+          "version_binding_ok": true
+        },
+        {
+          "user_turn": 7,
+          "message_id": "firstpass.lowcode-concise.t7",
+          "runtime_message_id": "firstpass.lowcode-concise.t7",
+          "operation_contract": null,
+          "native_report_id": "r7",
+          "native_delivery_created": true,
+          "dialogue_turn_id": "t0007",
+          "roles": [
+            "central",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "writer",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": true,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 2,
+          "accepted_head_user_turn": 7,
+          "active_user_turn": 7,
+          "version_binding_ok": true,
+          "canonical_changes": {
+            "added_nodes": [],
+            "changed_nodes": [
+              "n11"
+            ],
+            "factual_correctness_verified": false,
+            "kept_nodes": [
+              "n8",
+              "n2",
+              "n4",
+              "n9",
+              "n14",
+              "n6",
+              "n13"
+            ],
+            "removed_nodes": [],
+            "scope": "canonical node bytes; final citation display and assembly may change"
+          },
+          "scope_ok": true
+        }
+      ],
+      "tokens": {
+        "model_calls": 42,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 424871,
+        "output_tokens": 26277,
+        "total_tokens": 451148,
+        "observed_input_tokens": 424871,
+        "observed_output_tokens": 26277,
+        "observed_total_tokens": 451148,
+        "cache_read_tokens": 334976,
+        "observed_cache_read_tokens": 334976,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true,
+        "by_role": {
+          "central": {
+            "model_calls": 11,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 211219,
+            "output_tokens": 16053,
+            "total_tokens": 227272,
+            "observed_input_tokens": 211219,
+            "observed_output_tokens": 16053,
+            "observed_total_tokens": 227272,
+            "cache_read_tokens": 183040,
+            "observed_cache_read_tokens": 183040,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "writer": {
+            "model_calls": 25,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 193126,
+            "output_tokens": 4354,
+            "total_tokens": 197480,
+            "observed_input_tokens": 193126,
+            "observed_output_tokens": 4354,
+            "observed_total_tokens": 197480,
+            "cache_read_tokens": 151936,
+            "observed_cache_read_tokens": 151936,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "memory_updater": {
+            "model_calls": 6,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 20526,
+            "output_tokens": 5870,
+            "total_tokens": 26396,
+            "observed_input_tokens": 20526,
+            "observed_output_tokens": 5870,
+            "observed_total_tokens": 26396,
+            "cache_read_tokens": 0,
+            "observed_cache_read_tokens": 0,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        },
+        "by_turn": {
+          "2": {
+            "model_calls": 7,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 54079,
+            "output_tokens": 2401,
+            "total_tokens": 56480,
+            "observed_input_tokens": 54079,
+            "observed_output_tokens": 2401,
+            "observed_total_tokens": 56480,
+            "cache_read_tokens": 38016,
+            "observed_cache_read_tokens": 38016,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "3": {
+            "model_calls": 9,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 71724,
+            "output_tokens": 3556,
+            "total_tokens": 75280,
+            "observed_input_tokens": 71724,
+            "observed_output_tokens": 3556,
+            "observed_total_tokens": 75280,
+            "cache_read_tokens": 53888,
+            "observed_cache_read_tokens": 53888,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "4": {
+            "model_calls": 10,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 101844,
+            "output_tokens": 4962,
+            "total_tokens": 106806,
+            "observed_input_tokens": 101844,
+            "observed_output_tokens": 4962,
+            "observed_total_tokens": 106806,
+            "cache_read_tokens": 77824,
+            "observed_cache_read_tokens": 77824,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "5": {
+            "model_calls": 6,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 111554,
+            "output_tokens": 8299,
+            "total_tokens": 119853,
+            "observed_input_tokens": 111554,
+            "observed_output_tokens": 8299,
+            "observed_total_tokens": 119853,
+            "cache_read_tokens": 98688,
+            "observed_cache_read_tokens": 98688,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "6": {
+            "model_calls": 3,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 40093,
+            "output_tokens": 3085,
+            "total_tokens": 43178,
+            "observed_input_tokens": 40093,
+            "observed_output_tokens": 3085,
+            "observed_total_tokens": 43178,
+            "cache_read_tokens": 32640,
+            "observed_cache_read_tokens": 32640,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "7": {
+            "model_calls": 7,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 45577,
+            "output_tokens": 3974,
+            "total_tokens": 49551,
+            "observed_input_tokens": 45577,
+            "observed_output_tokens": 3974,
+            "observed_total_tokens": 49551,
+            "cache_read_tokens": 33920,
+            "observed_cache_read_tokens": 33920,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        }
+      },
+      "trial_billing_complete": true,
+      "known_cumulative_peak_cny": "18.46030128",
+      "held_cny": "2.162688",
+      "process_exit_code": 0,
+      "wall_seconds": 170.058
+    },
+    {
+      "case_id": "manufacturing-concise",
+      "topic": "manufacturing",
+      "style": "concise",
+      "directory": ".deer-flow/pilot-live/20261123-writer-first-api-01/manufacturing-concise",
+      "completed": false,
+      "attempted": 1,
+      "attempted_user_turns": [
+        2
+      ],
+      "succeeded": 0,
+      "tool_errors": 0,
+      "subagent_guard_stops": 0,
+      "subagent_stop_reasons": [],
+      "tool_trace_complete": true,
+      "tool_error_codes": {},
+      "tool_observation_errors": [],
+      "stop_reason": "delivered",
+      "turns": [
+        {
+          "user_turn": 2,
+          "message_id": "firstpass.manufacturing-concise.t2",
+          "runtime_message_id": "firstpass.manufacturing-concise.t2__user",
+          "operation_contract": null,
+          "native_report_id": "r4",
+          "native_delivery_created": true,
+          "dialogue_turn_id": "t0002",
+          "roles": [
+            "central",
+            "central",
+            "writer",
+            "writer",
+            "writer",
+            "memory_updater"
+          ],
+          "old_version_sha_unchanged": true,
+          "passed": false,
+          "semantic_intent_verified": false,
+          "factual_quality_verified": false,
+          "base_user_turn": 1,
+          "accepted_head_user_turn": 2,
+          "active_user_turn": 2,
+          "version_binding_ok": true,
+          "canonical_changes": {
+            "added_nodes": [],
+            "changed_nodes": [
+              "n5"
+            ],
+            "factual_correctness_verified": false,
+            "kept_nodes": [
+              "n1",
+              "n3",
+              "n4",
+              "n8",
+              "n2",
+              "n7",
+              "n6"
+            ],
+            "removed_nodes": [],
+            "scope": "canonical node bytes; final citation display and assembly may change"
+          },
+          "scope_ok": false
+        }
+      ],
+      "tokens": {
+        "model_calls": 6,
+        "usage_complete": true,
+        "missing_usage_calls": 0,
+        "input_tokens": 50839,
+        "output_tokens": 2653,
+        "total_tokens": 53492,
+        "observed_input_tokens": 50839,
+        "observed_output_tokens": 2653,
+        "observed_total_tokens": 53492,
+        "cache_read_tokens": 40704,
+        "observed_cache_read_tokens": 40704,
+        "cache_missing_calls": 0,
+        "cache_is_subset_of_input": true,
+        "by_role": {
+          "central": {
+            "model_calls": 2,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 35250,
+            "output_tokens": 1149,
+            "total_tokens": 36399,
+            "observed_input_tokens": 35250,
+            "observed_output_tokens": 1149,
+            "observed_total_tokens": 36399,
+            "cache_read_tokens": 31232,
+            "observed_cache_read_tokens": 31232,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "writer": {
+            "model_calls": 3,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 13733,
+            "output_tokens": 1017,
+            "total_tokens": 14750,
+            "observed_input_tokens": 13733,
+            "observed_output_tokens": 1017,
+            "observed_total_tokens": 14750,
+            "cache_read_tokens": 9472,
+            "observed_cache_read_tokens": 9472,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          },
+          "memory_updater": {
+            "model_calls": 1,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 1856,
+            "output_tokens": 487,
+            "total_tokens": 2343,
+            "observed_input_tokens": 1856,
+            "observed_output_tokens": 487,
+            "observed_total_tokens": 2343,
+            "cache_read_tokens": 0,
+            "observed_cache_read_tokens": 0,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        },
+        "by_turn": {
+          "2": {
+            "model_calls": 6,
+            "usage_complete": true,
+            "missing_usage_calls": 0,
+            "input_tokens": 50839,
+            "output_tokens": 2653,
+            "total_tokens": 53492,
+            "observed_input_tokens": 50839,
+            "observed_output_tokens": 2653,
+            "observed_total_tokens": 53492,
+            "cache_read_tokens": 40704,
+            "observed_cache_read_tokens": 40704,
+            "cache_missing_calls": 0,
+            "cache_is_subset_of_input": true
+          }
+        }
+      },
+      "trial_billing_complete": true,
+      "known_cumulative_peak_cny": "18.50342344",
+      "held_cny": "2.162688",
+      "process_exit_code": 0,
+      "wall_seconds": 28.186
+    }
+  ],
+  "guard_false_positive_rate": "not inferred automatically; tool rejection is not necessarily a false positive",
+  "native_internal_retries_preserved": true,
+  "outer_restarts": 0
+}

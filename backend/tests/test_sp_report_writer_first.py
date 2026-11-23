@@ -329,3 +329,13 @@ def test_local_edit_requires_optin_and_cannot_fork_first_turn(tmp_path):
         hooks.prepare_delegation(action, ctx, {}, {})
     assert file_manifest(tmp_path / "report/r1") == before
     assert not (tmp_path / "report_dialogue").exists()
+
+
+def test_writer_receives_authoritative_titles_instead_of_guessed_delegate_ids(tmp_path):
+    ctx, action, task, tools, _ = setup_edit(tmp_path)
+    catalog = task.context_refs["report_local_edit"]["section_catalog"]
+    assert {"node_id": "n2", "title": "指标"} in catalog
+    assert {"node_id": "n3", "title": "Unchanged section"} in catalog
+    section = json.loads(tools["report_read_section"].invoke({"node_id": "n3"}))
+    assert section["title"] == "Unchanged section"
+    assert task.context_refs["report_local_edit"]["current_edit"] == ctx.state["messages"][-1].content

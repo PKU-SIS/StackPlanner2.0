@@ -1,0 +1,82 @@
+{
+  "case_id": "manufacturing-concise",
+  "turns": [
+    {
+      "user_turn": 2,
+      "base_user_turn": 1,
+      "accepted_head_user_turn": 2,
+      "active_user_turn": 2,
+      "changed_nodes": [
+        "n4"
+      ],
+      "native_delivery_required": true,
+      "forbidden_roles": [
+        "researcher"
+      ]
+    },
+    {
+      "user_turn": 3,
+      "base_user_turn": 2,
+      "accepted_head_user_turn": 3,
+      "active_user_turn": 3,
+      "changed_nodes": [
+        "n8"
+      ],
+      "native_delivery_required": true,
+      "forbidden_roles": [
+        "researcher"
+      ]
+    },
+    {
+      "user_turn": 4,
+      "base_user_turn": 1,
+      "accepted_head_user_turn": 4,
+      "active_user_turn": 4,
+      "changed_nodes": [
+        "n8"
+      ],
+      "native_delivery_required": true,
+      "forbidden_roles": [
+        "researcher"
+      ]
+    },
+    {
+      "user_turn": 5,
+      "base_user_turn": 4,
+      "accepted_head_user_turn": 4,
+      "active_user_turn": 4,
+      "changed_nodes": [],
+      "native_delivery_required": false,
+      "forbidden_roles": [
+        "researcher",
+        "writer"
+      ]
+    },
+    {
+      "user_turn": 6,
+      "base_user_turn": 2,
+      "accepted_head_user_turn": 4,
+      "active_user_turn": 2,
+      "changed_nodes": [],
+      "native_delivery_required": false,
+      "forbidden_roles": [
+        "researcher",
+        "writer",
+        "outline"
+      ]
+    },
+    {
+      "user_turn": 7,
+      "base_user_turn": 2,
+      "accepted_head_user_turn": 7,
+      "active_user_turn": 7,
+      "changed_nodes": [
+        "n4"
+      ],
+      "native_delivery_required": true,
+      "forbidden_roles": [
+        "researcher"
+      ]
+    }
+  ]
+}

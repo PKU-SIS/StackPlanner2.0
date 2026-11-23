@@ -59,6 +59,7 @@ def bind(action, context, metadata, refs):
     refs["report_local_edit"] = {
         "current_edit": raw,
         "base_version_id": base,
+        "section_catalog": [{"node_id": n["node_id"], "title": n.get("title", "")} for n in (packets.load_current_tree(ledger) or {}).get("nodes", []) if n.get("kind") == "writable"],
         "instruction": "Locate the section, read it, and replace only the requested text. Other sections remain byte-identical. Explain ambiguity or missing evidence rather than inventing facts.",
     }
     return True
@@ -112,6 +113,7 @@ def build_tools(paths, task, state):
         return json.dumps(
             {
                 "node_id": node_id,
+                "title": node.get("title", ""),
                 "content": content,
                 "sha256": draft["sha256"],
                 "evidence": node.get("evidence", []),

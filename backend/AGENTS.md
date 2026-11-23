@@ -175,3 +175,13 @@ loop_capped does not prove repeated identical calls. Do not tune this frozen
 batch or reclassify it with post-fix outcomes. All current batch usage/cache
 fields reconcile; old unknown exposure stays held. Token reports include failed
 work, background memory and cache as an input subset, not an additive category.
+
+
+Writer-first live first pass is frozen at
+`../docs/research-report/writer-first-api-20261123/RESULT.md`: lowcode 6/6,
+manufacturing 0/1 after Central guessed n5 for requested n4; native delivery
+succeeded but scope evaluation failed. Preserve this failure. Local Writer
+packets now include host-read section_catalog and reads return actual titles;
+original user location outranks guessed delegate IDs. This is context repair,
+not a new LLM, retry loop or rejection gate. Rehearsal covers the catalog/title
+contract; real post-fix trials require separate frozen packets and fresh runs.

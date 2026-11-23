@@ -1,0 +1,13 @@
+{
+  "case_id": "lowcode-concise",
+  "turn2_original_body_prefix_preserved": true,
+  "turn3_original_conclusion_prefix_preserved": true,
+  "turn4_checklist_byte_equal_turn3": true,
+  "turn4_table_chapter_equals_origin": true,
+  "turn7_outside_exit_row_unchanged": true,
+  "turn7_other_row_cells_unchanged": true,
+  "turn7_checklist_absent_conclusion_equals_origin": true,
+  "old_exit_row": "| 平台退出时 | 已建应用的存续与切换成本、业务连续性 | 业务逻辑与界面规格能否导出、重写量有多大、能否自动化迁移 | 预先留存可导出的资产清单与迁移方案，把迁移成本纳入总拥有成本，并明确退出责任方 |",
+  "new_exit_row": "| 平台退出时 | 已建应用的存续与切换成本、业务连续性 | 业务逻辑与界面规格能否导出、重写量有多大、能否自动化迁移 | 预先留存可导出的资产清单与迁移方案，把迁移成本纳入总拥有成本；资产导出由开发方核对、业务方确认，迁移交接由开发方牵头执行、业务方验收 |",
+  "manual_content_review": "Table has requested three time points and columns; checklist has three role-oriented advice items; readonly answer separates sourced claims from suggestions and missing evidence. Not an independent factual score."
+}
