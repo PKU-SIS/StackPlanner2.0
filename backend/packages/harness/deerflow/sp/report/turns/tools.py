@@ -29,11 +29,18 @@ def build_tools(store, message, *, operation="auto"):
 
     @tool("report_inspect_version")
     def inspect(version_id: str | None = None, view: str = "requirements", start_line: int = 1, end_line: int | None = None) -> str:
-        """Read accepted snapshots: requirements, manifest, report, draft:<node_id>, tree, sources, evidence:<node_id>, material:<material_id>. Evidence bundles a section with saved reference excerpts; material accepts line ranges."""
+        """Read accepted snapshots: requirements, manifest, report, draft:<node_id>, tree,
+        sources, provenance[:<node_id>], evidence:<node_id>, material:<material_id>.
+        Provenance uses saved evidence lines; material accepts line ranges.
+        """
         if version_id is None:
             return json.dumps(store.inspect(), ensure_ascii=False)
         if version_id not in store.index()["versions"]:
             raise ReportValidationError("only accepted versions can be inspected")
+        if view == "provenance" or view.startswith("provenance:"):
+            from deerflow.sp.report.turns.provenance import read_provenance
+
+            return json.dumps(read_provenance(store, version_id, view.partition(":")[2] or None), ensure_ascii=False)
         manifest = store.verify(version_id)
         turn = store.inspect(version_id)
         result = {"version": turn}

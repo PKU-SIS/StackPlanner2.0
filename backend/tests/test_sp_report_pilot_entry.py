@@ -148,3 +148,10 @@ def test_unbounded_unreconciled_wallet_cannot_be_carried(tmp_path):
     guard = BudgetGuard(max_cost_cny="50", max_input_tokens=2000, max_output_tokens=1000)
     with pytest.raises(ValueError):
         carry_prior_usage(guard, tmp_path / "usage.json", allow_unknown=True)
+
+
+def test_targeted_turn_scope_executes_only_the_frozen_requested_turn():
+    requests = [{"turn_index": i, "message_id": f"m{i}", "query": "fixture"} for i in range(5, 8)]
+    seen = []
+    result = run_turn_sequence(requests, lambda row: seen.append(row["turn_index"]) or {"passed": True}, first_turn=5, last_turn=5)
+    assert result["completed"] and seen == [5]

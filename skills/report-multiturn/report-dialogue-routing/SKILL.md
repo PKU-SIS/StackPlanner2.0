@@ -9,19 +9,24 @@ sp_delegate(target_agent="reporter", metadata={"report_task":"local_edit"}).
 The program copies/resumes the active accepted version; no GitAgent or Outline
 call is needed. Optional base_version_id selects an accepted historical version.
 Give Writer the actual edit and what must remain; do not guess chapter IDs.
-For provenance questions prefer evidence:<node_id> and bounded material:<id>
-reads. If excerpts are incomplete, disclose the limit; do not delegate an unscoped
-Coder to inspect report files. Writer finds the section and
-replaces the requested text. Follow a ready observation with ordinary sp_finish.
+Writer finds the section and replaces the requested text. Follow a ready observation with ordinary sp_finish.
 The program checks assembly, citations, length and hashes; no independent
 Outline semantic review or factual verification is implied for this simple path.
 
-For read-only questions, use sp_replan with metadata.report_action="inspect_version",
-optional version_id, and view="report", "tree", "evidence:<node_id>",
-"draft:<node_id>", or "sources". These are program reads without GitAgent.
-Answer from saved evidence and disclose missing/truncated material. Archive via
-sp_replan metadata={"report_action":"reuse_version", "mode":"read_only",
-"response":"<answer>"}, then sp_finish. Read-only never changes active version.
+For read-only questions, use sp_replan metadata.report_action="inspect_version"
+with view="provenance" (the default): it returns the recently changed section,
+actual source titles/URLs and short quotes at the accepted saved evidence lines.
+For another section, use view="provenance:<node_id>" from its section_catalog.
+Separate quoted source claims, report synthesis, and recommendations. Answer
+concisely once those distinctions are supported; say when evidence is missing.
+Do not expand a local provenance question into an audit of every chapter or the
+full source catalog. A suggested action need not have been prescribed by a source.
+If a specific quote is incomplete, use view="material:<id>" with start_line and
+end_line, only for that missing detail. Truncation must be disclosed.
+No GitAgent/Coder/Researcher/Writer is needed for these program reads.
+Archive via sp_replan metadata={"report_action":"reuse_version",
+"mode":"read_only", "response":"<answer>"}, then sp_finish. A direct answer
+also gets a response-only archive. Read-only never changes active version.
 
 For unchanged whole-version restoration use sp_replan with
 metadata={"report_action":"reuse_version", "mode":"exact_reuse",

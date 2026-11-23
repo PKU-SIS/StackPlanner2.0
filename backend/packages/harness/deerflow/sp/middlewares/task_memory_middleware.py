@@ -173,13 +173,14 @@ class TaskMemoryMiddleware(AgentMiddleware[ThreadState]):
     def after_agent(self, state: ThreadState, runtime: Runtime) -> dict[str, Any] | None:
         from deerflow.sp.report.turns.adapter import finalize_run, opted_request
 
+        dialogue_update = {}
         if opted_request(state) is not None:
             context = getattr(runtime, "context", None)
             abort = context.get("__run_abort_event") if isinstance(context, Mapping) else None
-            finalize_run(state, runtime, cancelled=bool(abort is not None and abort.is_set()))
+            dialogue_update = finalize_run(state, runtime, cancelled=bool(abort is not None and abort.is_set())) or {}
         stack = self._restore_stack(state, runtime)
         if stack.is_empty() and not self._has_raw_stack(state):
-            return None
+            return dialogue_update or None
         run_id = _run_id(runtime)
         auto_summarized = False
         source_entry_ids = stack.select_summarization_source_ids()
@@ -205,8 +206,8 @@ class TaskMemoryMiddleware(AgentMiddleware[ThreadState]):
         stack.prune(max_entries=self._max_active_entries, max_chars=self._max_active_chars)
         payload = stack.to_dict()
         if payload == state.get("sp_task_memory") and not auto_summarized:
-            return None
-        update: dict[str, Any] = {"sp_task_memory": payload}
+            return dialogue_update or None
+        update: dict[str, Any] = {"sp_task_memory": payload, **dialogue_update}
         if auto_summarized:
             update["sp_summarize_committed_run_id"] = run_id
         return update

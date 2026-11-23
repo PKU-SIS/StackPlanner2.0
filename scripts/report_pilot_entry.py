@@ -279,16 +279,20 @@ def apply_experiment_limits(guard, limits):
     guard.max_input, guard.max_output = inp, out
 
 
-def run_turn_sequence(requests, execute, *, first_turn=1):
+def run_turn_sequence(requests, execute, *, first_turn=1, last_turn=7):
+    if not 1 <= first_turn <= last_turn <= 7:
+        raise ValueError("invalid experiment turn range")
     results = []
     for number, request in enumerate(requests, first_turn):
+        if number > last_turn:
+            break
         if request["turn_index"] != number or not request.get("message_id"):
             raise ValueError("frozen turns must be ordered and uniquely identified")
         row = execute(request)
         results.append(row)
         if not row.get("passed"):
             return {"completed": False, "turns": results}
-    return {"completed": len(results) == 8 - first_turn, "turns": results}
+    return {"completed": len(results) == last_turn - first_turn + 1, "turns": results}
 
 
 def import_seed(source_outputs, target, provenance):
@@ -524,6 +528,7 @@ def _execute_child(
     prefix_through=5,
     carry_unknown_exposure=False,
     experiment_limits=None,
+    through_turn=7,
 ):
     """Executed only under the spawn supervisor, after the CLI execution gate."""
     import logging
@@ -853,6 +858,7 @@ def _execute_child(
                     public_requests,
                     execute,
                     first_turn=first_user_turn,
+                    last_turn=through_turn,
                 )
         except Exception as exc:
             worker.stop("case_execution_failed")
@@ -1028,6 +1034,7 @@ def main():
     parser.add_argument("--resume-run", type=Path)
     parser.add_argument("--prefix-source", type=Path)
     parser.add_argument("--prefix-through", type=int, default=5)
+    parser.add_argument("--through-turn", type=int, choices=range(1, 8), default=7)
     parser.add_argument("--carry-unknown-exposure", action="store_true")
     parser.add_argument("--experiment-limits", type=Path)
     parser.add_argument("--billing-currency", choices=["CNY"])
@@ -1088,6 +1095,7 @@ def main():
         resume_run=args.resume_run.resolve() if args.resume_run else None,
         prefix_source=args.prefix_source.resolve() if args.prefix_source else None,
         prefix_through=args.prefix_through,
+        through_turn=args.through_turn,
         carry_unknown_exposure=args.carry_unknown_exposure,
         experiment_limits=args.experiment_limits.resolve()
         if args.experiment_limits

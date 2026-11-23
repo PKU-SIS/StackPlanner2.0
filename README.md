@@ -1112,3 +1112,9 @@ See [the measurement protocol](docs/research-report/firstpass-frozen-20261123/PL
 The frozen two-theme first-pass batch completed 1/4 conversations (0/4 without
 visible errors/stops), consuming 734.4708万 total tokens including failures.
 See [the measured completion and token report](docs/research-report/firstpass-frozen-20261123/RESULT.md).
+
+
+Bound report provenance questions now have a compact saved-evidence view using
+accepted source line locators, and empty or truncated terminal follow-up answers
+retain a failed archive with a visible notice. See
+[readonly provenance changes](docs/research-report/READONLY_PROVENANCE_20261123.md).

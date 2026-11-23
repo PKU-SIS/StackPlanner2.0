@@ -194,3 +194,14 @@ turns 6–7 were not attempted. Do not report both conversations complete.
 Preserve three recovered Central tool errors and the missing failed-turn archive
 as known limitations. Next focus is concise scoped provenance reads and honest
 empty-output diagnostics, not mandatory extra agents or guard relaxation.
+
+
+Scoped readonly inspection now defaults to `provenance` (or
+`provenance:<node_id>`): `turns/provenance.py` reads the accepted tree's evidence
+locators, returning actual source metadata and compact quotes, with report_use
+kept separate. Missing/truncated evidence is explicit, not a trigger for a new
+agent. Direct material reads forward line bounds. Empty/truncated terminal
+follow-up answers are archived as failed baseline snapshots; TaskMemory's
+existing after_agent returns a user-visible notice without model retries.
+Normal first turns and successful readonly archives retain their existing path.
+See `../docs/research-report/READONLY_PROVENANCE_20261123.md`.

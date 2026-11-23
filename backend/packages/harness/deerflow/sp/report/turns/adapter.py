@@ -236,7 +236,7 @@ def finalize_run(state, runtime, *, cancelled=False, error=None):
                 store.archive_resolution_failure(
                     message_id=_message_id(message), raw_query=str(message.content), base_version_id=head["turn_id"], diagnostic={"error": str(error) if error else "Resolver did not prepare a turn", "cancelled": cancelled}
                 )
-            elif error is None and not cancelled:
+            elif error is None:
                 from langchain_core.messages import AIMessage
 
                 from deerflow.utils.messages import message_to_text
@@ -244,10 +244,40 @@ def finalize_run(state, runtime, *, cancelled=False, error=None):
                 report = native.load_report_context(state)
                 messages = list(state.get("messages") or [])
                 position = next((i for i in range(len(messages) - 1, -1, -1) if messages[i] is message), None)
-                final = next((m for m in reversed(messages[position + 1 :]) if isinstance(m, AIMessage) and not m.tool_calls and message_to_text(m).strip()), None) if position is not None else None
-                if report.status == "delivered" and report.report_id == head["report_id"] and final is not None and not final.additional_kwargs.get("deerflow_error_fallback"):
-                    # Observed response-only outcome, not a classifier or a new delivery.
-                    turn = store.reuse(head["turn_id"], message_id=_message_id(message), raw_query=message_to_text(message), response=message_to_text(final), mode="read_only")
+                final = next((m for m in reversed(messages[position + 1 :]) if isinstance(m, AIMessage)), None) if position is not None else None
+                if report.status != "delivered" or report.report_id != head["report_id"]:
+                    return None
+                finish_reason = final.response_metadata.get("finish_reason") if final is not None else None
+                visible = message_to_text(final).strip() if final is not None else ""
+                incomplete = final is not None and not final.tool_calls and (not visible or finish_reason in {"length", "max_tokens"} or final.additional_kwargs.get("deerflow_error_fallback"))
+                if cancelled or incomplete:
+                    # No model retry and no success archive for an empty/partial
+                    # terminal answer. Retain a full baseline and numeric diagnostics.
+                    turn = store.archive_resolution_failure(
+                        message_id=_message_id(message),
+                        raw_query=message_to_text(message),
+                        base_version_id=head["turn_id"],
+                        diagnostic={"phase": "dialogue_completion", "finish_reason": finish_reason, "visible_chars": len(visible), "cancelled": cancelled, "run_id": context.get("run_id"), "usage": state.get("sp_usage")},
+                    )
+                    turn.update(native_delivery_created=False)
+                    if cancelled:
+                        turn["status"] = "cancelled"
+                    store._record(turn)
+                    if cancelled:
+                        return None
+                    reason = "模型输出达到长度上限" if finish_reason in {"length", "max_tokens"} else "模型没有返回完整回答"
+                    notice = f"本轮未能完成回答：{reason}。报告未改动；失败记录与用量已保留。"
+                    text = (visible + "\n\n" if visible else "") + notice
+                    native.write_text_atomic(store.directory(turn["turn_id"]) / "response.md", text)
+                    return {
+                        "messages": [
+                            AIMessage(
+                                id=final.id, content=text, response_metadata=final.response_metadata, usage_metadata=final.usage_metadata, additional_kwargs={"deerflow_error_fallback": True, "report_dialogue_failure": turn["turn_id"]}
+                            )
+                        ]
+                    }
+                if final is not None and not final.tool_calls and visible:
+                    turn = store.reuse(head["turn_id"], message_id=_message_id(message), raw_query=message_to_text(message), response=visible, mode="read_only")
                     turn.update(response_only=True, native_delivery_created=False, user_intent_fulfilment="not_programmatically_verified")
                     store._record(turn)
         return
@@ -335,7 +365,9 @@ def direct_version_action(action, context):
     selected = str(action.metadata.get("version_id") or head["turn_id"])
     kind = str(action.metadata["report_action"]).strip().lower()
     if kind == "inspect_version":
-        return json.loads(build_tools(store, message)[0].invoke({"version_id": selected, "view": str(action.metadata.get("view") or "report")}))
+        return json.loads(
+            build_tools(store, message)[0].invoke({"version_id": selected, "view": str(action.metadata.get("view") or "provenance"), "start_line": action.metadata.get("start_line", 1), "end_line": action.metadata.get("end_line")})
+        )
     mode = str(action.metadata.get("mode") or "exact_reuse")
     if mode not in {"exact_reuse", "read_only"}:
         raise ReportValidationError("reuse mode must be exact_reuse or read_only")
