@@ -1,0 +1,54 @@
+[
+  {
+    "case_id": "manufacturing-explicit",
+    "topic": "manufacturing",
+    "style": "explicit",
+    "prepared_outputs": ".deer-flow/firstpass-baselines/20261123/manufacturing/outputs",
+    "public_case": "docs/research-report/firstpass-frozen-20261123/manufacturing-explicit/requests.json",
+    "checks": "docs/research-report/firstpass-frozen-20261123/manufacturing-explicit/evaluator_checks.json",
+    "source_estimated_words": 9610,
+    "expected_edit_nodes": [
+      "n4",
+      "n8"
+    ]
+  },
+  {
+    "case_id": "lowcode-explicit",
+    "topic": "lowcode",
+    "style": "explicit",
+    "prepared_outputs": ".deer-flow/firstpass-baselines/20261123/lowcode/outputs",
+    "public_case": "docs/research-report/firstpass-frozen-20261123/lowcode-explicit/requests.json",
+    "checks": "docs/research-report/firstpass-frozen-20261123/lowcode-explicit/evaluator_checks.json",
+    "source_estimated_words": 9234,
+    "expected_edit_nodes": [
+      "n11",
+      "n14"
+    ]
+  },
+  {
+    "case_id": "manufacturing-concise",
+    "topic": "manufacturing",
+    "style": "concise",
+    "prepared_outputs": ".deer-flow/firstpass-baselines/20261123/manufacturing/outputs",
+    "public_case": "docs/research-report/firstpass-frozen-20261123/manufacturing-concise/requests.json",
+    "checks": "docs/research-report/firstpass-frozen-20261123/manufacturing-concise/evaluator_checks.json",
+    "source_estimated_words": 9610,
+    "expected_edit_nodes": [
+      "n4",
+      "n8"
+    ]
+  },
+  {
+    "case_id": "lowcode-concise",
+    "topic": "lowcode",
+    "style": "concise",
+    "prepared_outputs": ".deer-flow/firstpass-baselines/20261123/lowcode/outputs",
+    "public_case": "docs/research-report/firstpass-frozen-20261123/lowcode-concise/requests.json",
+    "checks": "docs/research-report/firstpass-frozen-20261123/lowcode-concise/evaluator_checks.json",
+    "source_estimated_words": 9234,
+    "expected_edit_nodes": [
+      "n11",
+      "n14"
+    ]
+  }
+]

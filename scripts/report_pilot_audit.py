@@ -56,6 +56,9 @@ class PilotUsageAudit:
         self.abort_event = Event()
         self.calls, self.tools, self.anomalies = {}, {}, []
         self.http_coverage_verified = False
+        self.tool_events = []
+        self._seen_tool_messages = set()
+        self.observation_errors = []
         self.lock = RLock()
 
     def _error(self, code):
@@ -173,6 +176,108 @@ class PilotUsageAudit:
                 )
             self.http_coverage_verified = True
 
+    def observe_message(self, message, *, role, turn, execution_id, step):
+        """Passive numeric/error observation. Never stores prose or tool args."""
+        import hashlib
+        import json
+        import re
+
+        try:
+            kind = message.get("type")
+            if kind not in {"ai", "tool"}:
+                return
+            calls = message.get("tool_calls") or []
+            if kind == "ai" and not calls:
+                return
+            identity = (
+                message.get("id")
+                or hashlib.sha256(
+                    json.dumps(
+                        {
+                            "type": kind,
+                            "calls": calls,
+                            "call_id": message.get("tool_call_id"),
+                            "content": message.get("content")
+                            if kind == "tool"
+                            else None,
+                        },
+                        sort_keys=True,
+                        default=str,
+                    ).encode()
+                ).hexdigest()
+            )
+            key = (role, str(identity))
+            with self.lock:
+                if key in self._seen_tool_messages:
+                    return
+                self._seen_tool_messages.add(key)
+                event = {
+                    "role": role,
+                    "turn": turn,
+                    "execution_id": str(execution_id),
+                    "step": step,
+                    "type": kind,
+                }
+
+                def safe_name(value):
+                    return (
+                        value
+                        if isinstance(value, str)
+                        and re.fullmatch(r"[a-z][a-z0-9_:-]{0,79}", value)
+                        else "unregistered_tool"
+                    )
+
+                if kind == "ai":
+                    event["requests"] = [
+                        {
+                            "tool": safe_name(c.get("name")),
+                            "args_sha256": hashlib.sha256(
+                                json.dumps(
+                                    c.get("args"), sort_keys=True, default=str
+                                ).encode()
+                            ).hexdigest(),
+                        }
+                        for c in calls
+                    ]
+                else:
+                    text = message.get("content")
+                    payload = None
+                    if isinstance(text, str):
+                        try:
+                            payload = json.loads(text)
+                        except (ValueError, TypeError):
+                            pass
+                    failed = (
+                        message.get("status") == "error"
+                        or (
+                            isinstance(payload, dict)
+                            and (
+                                bool(payload.get("error"))
+                                or payload.get("saved") is False
+                                or payload.get("validation_ok") is False
+                            )
+                        )
+                        or (isinstance(text, str) and text.startswith("Error:"))
+                    )
+                    error = payload.get("error") if isinstance(payload, dict) else None
+                    code = (
+                        error
+                        if isinstance(error, str)
+                        and re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}", error)
+                        else "tool_error"
+                        if failed
+                        else None
+                    )
+                    event.update(
+                        tool=safe_name(message.get("name")),
+                        failed=bool(failed),
+                        error_code=code,
+                    )
+                self.tool_events.append(event)
+        except Exception as error:
+            with self.lock:
+                self.observation_errors.append(type(error).__name__)
+
     def snapshot(self):
         with self.lock:
             valid = [row for row in self.calls.values() if row["status"] == "complete"]
@@ -243,6 +348,17 @@ class PilotUsageAudit:
                 groups["tokens_by_" + field] = buckets
             return {
                 **groups,
+                "model_call_records": {
+                    key: {
+                        **row,
+                        "usage": dict(row["usage"])
+                        if row.get("usage") is not None
+                        else None,
+                    }
+                    for key, row in self.calls.items()
+                },
+                "tool_events": [dict(row) for row in self.tool_events],
+                "observation_errors": list(self.observation_errors),
                 "logical_model_calls": len(self.calls),
                 "calls_with_usage": len(valid),
                 "usage_complete": usage_complete,
@@ -435,9 +551,37 @@ def observe_native_subagents(executor_module, audit, *, turn):
     def execute(executor, *args, **kwargs):
         role = native_role(executor.config.name, executor.config.tools or ())
         token = scope.set(PilotCallback(audit, turn=turn, role=role))
+        previous_observer = executor.step_observer
+
+        def observed(message, index):
+            audit.observe_message(
+                message,
+                role=role,
+                turn=turn,
+                execution_id=executor.trace_id,
+                step=index,
+            )
+            if previous_observer is not None:
+                previous_observer(message, index)
+
+        executor.step_observer = observed
         try:
-            return original_execute(executor, *args, **kwargs)
+            result = original_execute(executor, *args, **kwargs)
+            with audit.lock:
+                audit.tool_events.append(
+                    {
+                        "type": "execution_end",
+                        "role": role,
+                        "turn": turn,
+                        "execution_id": str(executor.trace_id),
+                        "status": getattr(result.status, "value", str(result.status)),
+                        "stop_reason": getattr(result, "stop_reason", None),
+                        "had_error": bool(getattr(result, "error", None)),
+                    }
+                )
+            return result
         finally:
+            executor.step_observer = previous_observer
             scope.reset(token)
 
     class ObservedCollector(original_collector):

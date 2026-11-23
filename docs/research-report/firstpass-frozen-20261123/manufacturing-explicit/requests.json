@@ -1,0 +1,41 @@
+{
+  "case_id": "manufacturing-explicit",
+  "length_band": "10000",
+  "turns": [
+    {
+      "turn_index": 1,
+      "message_id": "firstpass.manufacturing-explicit.t1",
+      "query": "# Report request\n\n\n\n## User input 1\n\n制造业离散制造（单件小批）基本上靠人的技能才能完成的，为我调研实现自动化的难度有多大\n"
+    },
+    {
+      "turn_index": 2,
+      "message_id": "firstpass.manufacturing-explicit.t2",
+      "query": "仅修改“四、第三重难度：默会知识的编码边界”，在该节末尾增加一张名为“技能判断边界对照表”的简短对照表，三类内容为可显式规则化的部分、仍需人工判断的部分、验证建议，按装夹定位、异常判断、验收放行三个情形分行，明确这是对原报告的建议性归纳。保留该节原有正文、事实、结论与引用；其他章节正文逐字保留。只用已有材料，不新增检索，不新增事实，继续满足原有全部要求与篇幅合同。"
+    },
+    {
+      "turn_index": 3,
+      "message_id": "firstpass.manufacturing-explicit.t3",
+      "query": "上一轮的“技能判断边界对照表”保留。仅在“八、从难度到决策：可行路径、不应自动化的条件与总体判断”末尾增加“班前责任交接清单”，用三条简短建议分别说明工艺方、操作方、维护方应共同确认什么；保留该节原正文及引用。其他章节正文逐字保留，原有要求不变，不增加新事实或检索。"
+    },
+    {
+      "turn_index": 4,
+      "message_id": "firstpass.manufacturing-explicit.t4",
+      "query": "以最初导入的原版为工作基线，撤销第二轮的“技能判断边界对照表”，但保留第三轮的“班前责任交接清单”。其他未撤销要求继续有效。只修改结论中因此受影响的内容，其余原版章节逐字保留，不补充研究。"
+    },
+    {
+      "turn_index": 5,
+      "message_id": "firstpass.manufacturing-explicit.t5",
+      "query": "只读解释当前“班前责任交接清单”的三条建议与报告已有证据或论述分别有什么关系，区分资料原意与建议。不改报告，不研究、不写作，不新增外部检索；来源片段不够就明确说明。"
+    },
+    {
+      "turn_index": 6,
+      "message_id": "firstpass.manufacturing-explicit.t6",
+      "query": "直接完整恢复第二版，即第一次增加“技能判断边界对照表”后的已交付成稿。第三轮及之后增加的“班前责任交接清单”和其他改写都不保留；原样复用第二版，不检索、不写作、不重新生成报告。"
+    },
+    {
+      "turn_index": 7,
+      "message_id": "firstpass.manufacturing-explicit.t7",
+      "query": "继续当前恢复的第二版，仅把“技能判断边界对照表”中“验收放行”一行的建议写得更明确，说明由谁确认放行标准、谁负责人工接管，仍按建议表达。保留表格其他内容、该节其他正文及其余全部章节和引用；不要恢复第三轮“班前责任交接清单”，不新增事实或检索。"
+    }
+  ]
+}

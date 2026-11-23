@@ -1090,3 +1090,7 @@ The ExactReuse fix has now passed real original/paraphrased follow-up tests and
 partial-retention controls, including old-version recovery followed by a local
 edit. The retained stopped trials and one unresolved historical usage reservation
 are reported separately. See [the corrected real-test results](docs/research-report/exactreuse-retest-20261123/RESULT.md).
+
+A fixed first-pass batch now measures completion and visible tool/guard errors
+on two report themes, with token breakdowns by conversation, user turn and role.
+See [the measurement protocol](docs/research-report/firstpass-frozen-20261123/PLAN.md).

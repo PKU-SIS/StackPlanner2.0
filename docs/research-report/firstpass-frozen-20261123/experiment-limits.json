@@ -1,0 +1,4 @@
+{
+  "max_input_tokens": 50000000,
+  "max_output_tokens": 2000000
+}

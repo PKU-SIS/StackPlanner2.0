@@ -145,3 +145,14 @@ unknown memory request remains held at 2.162688 CNY and was not replayed;
 global_billing_complete remains false. Do not convert functional acceptance,
 standalone recovery, factual correctness or provider invoice reconciliation into
 one success flag. Shared/default first-turn behavior remains unchanged.
+
+The fixed first-pass batch observes the current runtime without tuning it:
+report_firstpass_batch.py freezes cases/code and starts each conversation once,
+records all failed/internal-recovery usage, and separates completion from clean
+completion. PilotUsageAudit now persists numeric source-ID/role/turn records
+and passive tool-name/error/argument-hash observations; no tool argument prose
+or hidden reasoning is stored. The original observer remains composed/restored.
+--experiment-limits changes only the predeclared whole-batch aggregate token
+capacity; native role budgets, routing, tools, Skills and acceptance are fixed.
+Cache is a subset of input. Missing usage/cache stays unknown. Do not infer a
+false-positive guard rate automatically from any rejected tool action.

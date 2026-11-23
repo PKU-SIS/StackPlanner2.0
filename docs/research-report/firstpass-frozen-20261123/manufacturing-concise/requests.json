@@ -1,0 +1,41 @@
+{
+  "case_id": "manufacturing-concise",
+  "length_band": "10000",
+  "turns": [
+    {
+      "turn_index": 1,
+      "message_id": "firstpass.manufacturing-concise.t1",
+      "query": "# Report request\n\n\n\n## User input 1\n\n制造业离散制造（单件小批）基本上靠人的技能才能完成的，为我调研实现自动化的难度有多大\n"
+    },
+    {
+      "turn_index": 2,
+      "message_id": "firstpass.manufacturing-concise.t2",
+      "query": "请在“四、第三重难度：默会知识的编码边界”最后加个小表，叫“技能判断边界对照表”，按装夹定位、异常判断、验收放行来比较可显式规则化的部分、仍需人工判断的部分、验证建议，作为建议。原文别改，别的章节也别动；用现在的材料就行，不要再查资料，原来的要求继续有效。"
+    },
+    {
+      "turn_index": 3,
+      "message_id": "firstpass.manufacturing-concise.t3",
+      "query": "刚才那张表还要。只在“八、从难度到决策：可行路径、不应自动化的条件与总体判断”最后加三条“班前责任交接清单”建议，说清工艺方、操作方、维护方各自要一起确认什么。原有正文和其他章节照旧，不加新事实，也不再检索。"
+    },
+    {
+      "turn_index": 4,
+      "message_id": "firstpass.manufacturing-concise.t4",
+      "query": "退回最早导入那版做底稿。第二轮那张表不要了，刚才的交接清单还要，其他有效要求照旧。只在结论补上要保留的清单，其他原稿别动，也别重新查资料。"
+    },
+    {
+      "turn_index": 5,
+      "message_id": "firstpass.manufacturing-concise.t5",
+      "query": "先别改任何东西。刚才清单里的三条，各是依据报告哪段论述或哪些资料归纳的？把原有资料的意思和你的建议分开说，缺证据就说缺证据，不研究、不写报告。"
+    },
+    {
+      "turn_index": 6,
+      "message_id": "firstpass.manufacturing-concise.t6",
+      "query": "还是第二版更合适，原样给我那一版，后面做的都不要了。直接用现成稿，别改字、别查资料，也别重新写。"
+    },
+    {
+      "turn_index": 7,
+      "message_id": "firstpass.manufacturing-concise.t7",
+      "query": "就接着刚恢复的那版，只把刚才表格“验收放行”那格的建议说清楚：由谁确认放行标准、谁负责人工接管。其他表格内容、正文和引用别动，后来那份交接清单不要带回来，不加新事实或检索。"
+    }
+  ]
+}

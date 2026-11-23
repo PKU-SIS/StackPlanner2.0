@@ -267,6 +267,18 @@ def carry_prior_usage(guard, path, *, allow_unknown=False, emit=None):
     }
 
 
+def apply_experiment_limits(guard, limits):
+    """Aggregate batch envelope only; no native role/request knobs changed."""
+    from report_pilot_audit import integer
+
+    if set(limits) != {"max_input_tokens", "max_output_tokens"}:
+        raise ValueError("only aggregate token limits may be set")
+    inp, out = integer(limits["max_input_tokens"]), integer(limits["max_output_tokens"])
+    if not inp or not out:
+        raise ValueError("aggregate limits must be positive")
+    guard.max_input, guard.max_output = inp, out
+
+
 def run_turn_sequence(requests, execute, *, first_turn=1):
     results = []
     for number, request in enumerate(requests, first_turn):
@@ -511,6 +523,7 @@ def _execute_child(
     prefix_source=None,
     prefix_through=5,
     carry_unknown_exposure=False,
+    experiment_limits=None,
 ):
     """Executed only under the spawn supervisor, after the CLI execution gate."""
     import logging
@@ -559,6 +572,19 @@ def _execute_child(
         emit=channel.send,
     )
     worker.memory_drain_timeout = 180
+    if experiment_limits is not None:
+        apply_experiment_limits(
+            worker.guard, json.loads(Path(experiment_limits).read_text())
+        )
+        dump(
+            directory / "effective-experiment-limits.json",
+            {
+                "max_input_tokens": worker.guard.max_input,
+                "max_output_tokens": worker.guard.max_output,
+                "max_cost_cny": str(worker.guard.maximum),
+                "per_request_input_bound": worker.input_upper_bound,
+            },
+        )
     if carry_unknown_exposure and (resume_run is not None or prefix_source is None):
         raise ValueError(
             "unknown exposure may only carry to a fresh independent prefix trial"
@@ -776,6 +802,15 @@ def _execute_child(
                     stream_mode="values",
                 ):
                     latest = value
+                    for step, item in enumerate(value.get("messages", [])):
+                        if getattr(item, "type", None) in {"ai", "tool"}:
+                            worker.audit.observe_message(
+                                item.model_dump(),
+                                role="central",
+                                turn=number,
+                                execution_id=run_id,
+                                step=step,
+                            )
                 return latest
 
             calls_before = set(worker.audit.calls)
@@ -964,6 +999,12 @@ def inspect_turn(
         "user_turn": number,
         "message_id": request["message_id"],
         "runtime_message_id": source_message_id or request["message_id"],
+        "operation_contract": (
+            store.index()
+            .get("git_attempts", {})
+            .get(source_message_id or request["message_id"])
+            or {}
+        ).get("operation"),
         "native_report_id": rid,
         "native_delivery_created": delivered,
         "dialogue_turn_id": turn_id,
@@ -988,6 +1029,7 @@ def main():
     parser.add_argument("--prefix-source", type=Path)
     parser.add_argument("--prefix-through", type=int, default=5)
     parser.add_argument("--carry-unknown-exposure", action="store_true")
+    parser.add_argument("--experiment-limits", type=Path)
     parser.add_argument("--billing-currency", choices=["CNY"])
     args = parser.parse_args()
     from report_multiturn_preflight import verify_packet
@@ -1047,6 +1089,9 @@ def main():
         prefix_source=args.prefix_source.resolve() if args.prefix_source else None,
         prefix_through=args.prefix_through,
         carry_unknown_exposure=args.carry_unknown_exposure,
+        experiment_limits=args.experiment_limits.resolve()
+        if args.experiment_limits
+        else None,
     )
     result = supervise(
         target, directory / "numeric-events.jsonl", api_execution_authorized=True
