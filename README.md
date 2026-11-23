@@ -1039,6 +1039,14 @@ native delivery. The current entry is internal runtime message metadata; a UI
 switch and real-model multi-turn validation are pending. See
 [the implementation and offline validation notes](docs/research-report/MULTITURN_IMPLEMENTATION.md).
 
+Simple follow-up edits now have a Writer-first path: Central delegates directly
+to Writer, which locates the existing section and replaces only the requested
+text. GitAgent and Outline are optional for complex changes. Read-only inspection
+and whole-version reuse can run as program operations without another agent.
+Old versions remain isolated; native assembly, citation, length and hash checks
+still apply. Simple edits do not include an independent semantic review.
+See [Writer-first behavior and offline checks](docs/research-report/WRITER_FIRST_20261123.md).
+
 The follow-up code has also passed an offline review covering sealed-version
 protection, native HITL provenance and Central routing. Two seven-turn evaluation
 fixtures are frozen with evaluator expectations kept out of model input. See

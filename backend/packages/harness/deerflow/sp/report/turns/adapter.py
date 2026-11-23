@@ -320,3 +320,25 @@ def record_response(context, response):
     path = store.directory(turn["turn_id"]) / "response.md"
     if not path.exists():
         native.write_text_atomic(path, response)
+
+
+def direct_version_action(action, context):
+    """Execute Central's version read/reuse decision without an agent loop."""
+    import json
+
+    from deerflow.sp.report.turns.tools import build_tools
+
+    active = current_turn(context.state, thread_id=context.thread_id)
+    if active is None:
+        raise ReportValidationError("version actions require an opted-in accepted report")
+    store, message, head, turn = active
+    selected = str(action.metadata.get("version_id") or head["turn_id"])
+    kind = str(action.metadata["report_action"]).strip().lower()
+    if kind == "inspect_version":
+        return json.loads(build_tools(store, message)[0].invoke({"version_id": selected, "view": str(action.metadata.get("view") or "report")}))
+    mode = str(action.metadata.get("mode") or "exact_reuse")
+    if mode not in {"exact_reuse", "read_only"}:
+        raise ReportValidationError("reuse mode must be exact_reuse or read_only")
+    if turn is not None and turn["status"] != mode:
+        raise ReportValidationError("this message already has a different execution/archive; do not fork or reuse it again")
+    return json.loads(build_tools(store, message, operation=mode)[1].invoke({"version_id": selected, "mode": mode, "response": str(action.metadata.get("response") or "")}))

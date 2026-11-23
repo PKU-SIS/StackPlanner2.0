@@ -4,6 +4,15 @@
 基线为远程 `sp2DeepResearch` 的 `f94e06612d363b6a46f3d4bf59b342f77b786729`。
 本次仅本地开发，不部署、不推送、不调用付费模型。首轮稳定性历史结果没有重跑或覆盖。
 
+## 2026-11-23 最新路径
+
+用户已批准简化为 Writer-first，覆盖下文早期“所有修订先 GitAgent/Outline”的规定。
+简单现有章节编辑直接由中枢派 Writer，程序完成 fork/resume；只读/整版复用可直接执行
+程序版本动作。复杂结构/研究需求沿用旧路径，GitAgent 可选。
+简单编辑使用诚实标记的程序检查记录，不再强制 Outline 独立语义审查。
+详见 [WRITER_FIRST_20261123.md](WRITER_FIRST_20261123.md)。
+下文为此前完整流程与已有回归记录，不应理解为所有后续轮必须经过所有角色。
+
 ## 入口与边界
 
 原用户消息先进入原 Central。显式后续轮在最新 `HumanMessage.additional_kwargs` 中提供：

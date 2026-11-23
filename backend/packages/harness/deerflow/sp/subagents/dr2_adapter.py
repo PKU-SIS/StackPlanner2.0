@@ -170,7 +170,9 @@ def render_sp_subagent_prompt(task: SPSubagentTask) -> str:
                 "recovery when the contract is not satisfied."
             ),
             *(
-                [
+                ["Finish with a short plain-language summary of saved edits and unresolved requests. The program reads saved drafts; no JSON artifact or task_result envelope is required."]
+                if task.metadata.get("report_writer_first")
+                else [
                     CONTINUE_INSTRUCTION
                     if task.metadata.get("report_output_continuation")
                     else REPAIR_INSTRUCTION

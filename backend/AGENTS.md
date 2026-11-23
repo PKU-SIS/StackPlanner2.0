@@ -15,8 +15,18 @@ Read `../docs/research-report/MULTITURN_IMPLEMENTATION.md` before changing it.
 Eligibility requires latest-message `report_dialogue.enabled=true`, a bound native
 report ID, authenticated runtime ownership, and a validated accepted delivery.
 Never infer eligibility from `report_task=revise`; first-round consolidation uses it.
-The Central still chooses the perception `git_agent` profile through `sp_delegate`.
-Four Skills live outside default public discovery in `skills/report-multiturn/` and
+For existing-section edits, Central now prefers reporter `report_task=local_edit`:
+`turns/local_edit.py` forks/activates in program code, exposes find/read/exact-span
+replacement tools, and accepts plain Writer summaries. Central can inspect or
+reuse accepted versions through existing `sp_replan` metadata.report_action
+`inspect_version` / `reuse_version`, without GitAgent. Complex reconciliation can
+still select the perception `git_agent` profile through `sp_delegate`.
+Simple edits use an explicitly labelled programmatic review receipt
+(`review_origin=programmatic_local_edit`, semantic/factual verification false),
+then native Finish. Never present it as an Outline semantic review. The original
+first-report path and all evidence/citation/length/file bindings remain intact.
+See `../docs/research-report/WRITER_FIRST_20261123.md`.
+Dialogue Skills live outside default public discovery in `skills/report-multiturn/` and
 are read only for validated follow-ups. Version metadata is not a second chapter
 ledger. Always fork before native resume; never resume an accepted historical
 version in place. Publish only from a new native delivered record and matching

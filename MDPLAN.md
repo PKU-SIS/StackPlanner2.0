@@ -5,6 +5,21 @@
 - 开发基线：远程 `sp2DeepResearch`，本次核对为 `f94e06612d363b6a46f3d4bf59b342f77b786729`。
 - 本文是当前统一开发计划。此前 `evaluation_runs/report_multiturn_design_20261122/` 下的文稿保留为分析依据；涉及中枢职责的冲突，以本文为准。
 
+## 最新实施调整：2026-11-23 Writer-first
+
+用户在固定首遍实验后明确要求简化：优先改得准，减少 agent 输出失败；
+GitAgent 尽量不调用，简单改稿由 Writer 定位并修改，Outline 按需要调用。
+这一最新决定优先于下文历史流程中“先 GitAgent、再 Outline”的固定顺序。
+
+- 简单局部编辑：原中枢 → 程序 fork/resume → Writer 查找/读取/精确替换 → 程序校验 → 原生 Finish 发布。
+- 只读/整版复用：原中枢 → 程序版本工具，不再强制 GitAgent。
+- 结构改变、缺证据、复杂需求协调：保留原生 Outline/Researcher 路径与可选 GitAgent。
+- 简单编辑不强制独立 Outline 语义审查；明确记录程序检查与语义/事实核验的区别。
+- 首轮流程、独立副本、来源留存、原生引用/证据/篇幅/哈希校验、成功后发布仍保留。
+
+实现和回归见 [WRITER_FIRST_20261123.md](docs/research-report/WRITER_FIRST_20261123.md)。
+旧固定首遍批次与其统计不改写，新路径的模型质量、成功率和 token 节省需另行实测。
+
 ## 1. 已确定的目标与边界
 
 1. 中枢仍是总入口，自主判断后续query是否需要调用GitAgent；不在中枢外另设LLM总路由。

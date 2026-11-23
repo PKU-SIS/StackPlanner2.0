@@ -410,8 +410,11 @@ def prepare_delegation(
     context_refs: dict[str, Any],
 ) -> None:
     """Bind report identity and input packets before the executor runs."""
+    from deerflow.sp.report.turns.local_edit import bind as bind_local_edit
     from deerflow.sp.report.turns.tools import bind_profile
 
+    if bind_local_edit(action, context, task_metadata, context_refs):
+        return
     if bind_profile(action, context, task_metadata, context_refs):
         return
     role = str(action.target_agent or "")
@@ -632,6 +635,10 @@ def configure_report_subagent(
 ) -> tuple[Any, list[Any], str | None]:
     """Assemble one report role's prompt, Skill, and tool set."""
     role = str(task.metadata.get("report_role") or "")
+    if task.metadata.get("report_writer_first"):
+        from deerflow.sp.report.turns.local_edit import configure
+
+        return configure(task, state, subagent_config)
     if role == "git_agent":
         from deerflow.sp.report.turns.tools import configure
 
@@ -908,6 +915,10 @@ def handle_success(
 
     record_result(context, task, result)
     role = str(task.metadata.get("report_role") or "")
+    if task.metadata.get("report_writer_first"):
+        from deerflow.sp.report.turns.local_edit import accept
+
+        return accept(action, context, result, task, artifact_adapter=artifact_adapter, delegate_entry=delegate_entry)
     if role == "git_agent":
         from deerflow.sp.report.turns.tools import accept
 
@@ -948,6 +959,11 @@ def handle_failure(
 
     record_result(context, task, result)
     report_role = str(task.metadata.get("report_role") or "")
+    if task.metadata.get("report_writer_first"):
+        from deerflow.sp.report.turns.local_edit import fail
+
+        fail(context, {"error": str(result.error), "stop_reason": result.stop_reason}, cancelled=result.status.value == "cancelled", action_id=action.action_id)
+        return
     if report_role == "git_agent":
         from deerflow.sp.report.turns.tools import fail_profile
 
@@ -1184,14 +1200,15 @@ def _finalize_integration_review(
         state=context.state,
         thread_id=context.thread_id,
         run_id=context.run_id,
-        created_by="outline",
+        created_by="writer" if review.get("review_origin") == "programmatic_local_edit" else "outline",
         stage=action.stage,
         source_entry_id=delegate_entry.id,
-        summary=f"Reviewed final report v{version}",
+        summary=f"Program-checked local edit v{version}" if review.get("review_origin") == "programmatic_local_edit" else f"Reviewed final report v{version}",
         metadata={
             "report_id": ledger.paths.report_id,
             "candidate_id": candidate.get("candidate_id"),
             "review_id": review.get("review_id"),
+            **({"review_origin": "programmatic_local_edit", "semantic_review_performed": False} if review.get("review_origin") == "programmatic_local_edit" else {}),
             "inputs_digest": review.get("inputs_digest"),
             "tree_version": candidate.get("tree_version"),
             "citation_numbering": citation_numbering,

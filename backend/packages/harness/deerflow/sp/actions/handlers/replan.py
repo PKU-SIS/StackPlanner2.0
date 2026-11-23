@@ -40,13 +40,19 @@ class ReplanHandler:
                 result = resume_report(context, action)
                 stage = "planning"
                 event_type = "sp.report.resumed"
+            elif report_action in {"inspect_version", "reuse_version"}:
+                from deerflow.sp.report.turns.adapter import direct_version_action
+
+                result = direct_version_action(action, context)
+                stage = "verification" if report_action == "inspect_version" else "finished"
+                event_type = "sp.report.version_inspected" if report_action == "inspect_version" else "sp.report.version_reused"
             elif report_action == "close":
                 reason = str(action.metadata.get("report_close_reason") or action.reason or "").strip()
                 result = close_report(context, action, reason=reason)
                 stage = "finished"
                 event_type = "sp.report.closed"
             else:
-                raise ReportValidationError("metadata.report_action must be start, resume, or close")
+                raise ReportValidationError("metadata.report_action must be start, resume, close, inspect_version, or reuse_version")
         except ReportValidationError as exc:
             return HandlerResult(
                 next_step="error_recoverable",
