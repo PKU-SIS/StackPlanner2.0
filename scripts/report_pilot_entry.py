@@ -837,10 +837,29 @@ def inspect_turn(
     turn_id = None
     turn = None
     if number > 1:
-        turn_id = store.index()["requests"].get(
+        current_index = store.index()
+        turn_id = current_index["requests"].get(
             source_message_id or request["message_id"]
         )
+        if turn_id is None and request.get("query") is not None:
+            # Runtime may normalize a model-visible HumanMessage ID. Recover
+            # only a unique host-recorded request with exact raw text and the
+            # current run binding (or its known native __user normalization).
+            candidates = []
+            for identity, tid in current_index["requests"].items():
+                record = store.inspect(tid)
+                attempt = current_index.get("git_attempts", {}).get(identity, {})
+                if record["raw_query"] == request["query"] and (
+                    attempt.get("run_id") == run_id
+                    or identity == request["message_id"] + "__user"
+                ):
+                    candidates.append(tid)
+            if len(candidates) > 1:
+                raise ValueError("ambiguous runtime report message identity")
+            turn_id = candidates[0] if candidates else None
         turn = store.inspect(turn_id) if turn_id else None
+        if turn is not None:
+            source_message_id = turn["message_id"]
     if delivered:
         valid = not final_binding_error(ledger)
         length = ledger.payload.get("final_report", {}).get("length", {})

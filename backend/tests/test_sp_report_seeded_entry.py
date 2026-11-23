@@ -60,3 +60,18 @@ def test_prefix_clone_has_independent_owner_and_preserves_source(tmp_path):
     assert target.inspect("t0002")["status"] == "read_only"
     assert target.verify("t0002")["owner"] == target.owner
     assert target._accepted(target._paths(result["report_id"]))
+
+
+def test_inspection_recovers_host_normalization_with_exact_source_text(tmp_path):
+    from types import SimpleNamespace
+
+    from report_pilot_entry import inspect_turn
+
+    ctx, store = accepted(tmp_path)
+    origin = store.freeze("r1", resolved_query="Accepted requirement")
+    turn = store.reuse(origin["turn_id"], message_id="read-query__user", raw_query="Read exactly this", response="Saved answer", mode="read_only")
+    request = {"turn_index": 5, "message_id": "read-query", "query": "Read exactly this"}
+    row = inspect_turn(tmp_path, store, request, "new-run", "r1", {}, SimpleNamespace(calls={}), set(), source_message_id="read-query")
+    assert row["passed"] and row["dialogue_turn_id"] == turn["turn_id"]
+    request["query"] = "Different source text"
+    assert not inspect_turn(tmp_path, store, request, "new-run", "r1", {}, SimpleNamespace(calls={}), set())["passed"]
