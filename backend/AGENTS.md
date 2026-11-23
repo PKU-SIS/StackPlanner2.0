@@ -156,3 +156,12 @@ or hidden reasoning is stored. The original observer remains composed/restored.
 capacity; native role budgets, routing, tools, Skills and acceptance are fixed.
 Cache is a subset of input. Missing usage/cache stays unknown. Do not infer a
 false-positive guard rate automatically from any rejected tool action.
+
+Frozen first-pass results (firstpass-frozen-20261123/RESULT.md): 1/4 conversations
+complete, 0/4 clean; 12/15 attempted follow-ups pass, 9/24 planned follow-ups were
+not attempted after prerequisites failed. Three GitAgent stops followed seven
+inspection results with no exact duplicate-argument hashes in that execution;
+loop_capped does not prove repeated identical calls. Do not tune this frozen
+batch or reclassify it with post-fix outcomes. All current batch usage/cache
+fields reconcile; old unknown exposure stays held. Token reports include failed
+work, background memory and cache as an input subset, not an additive category.

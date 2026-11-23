@@ -1,0 +1,9 @@
+{
+  "frozen_checksums": 266,
+  "all_frozen_files_unchanged": true,
+  "old_four_tracked_sha_unchanged": true,
+  "artifact_files": 10218,
+  "artifact_manifest_sha256": "a20fb1fa82e86e09b0e9ffe96ba6807cb1893e5698400ce67fc8894864844102",
+  "no_credential_value_in_committed_report": true,
+  "baseline_codegen_or_skill_changed_during_batch": false
+}

@@ -1094,3 +1094,7 @@ are reported separately. See [the corrected real-test results](docs/research-rep
 A fixed first-pass batch now measures completion and visible tool/guard errors
 on two report themes, with token breakdowns by conversation, user turn and role.
 See [the measurement protocol](docs/research-report/firstpass-frozen-20261123/PLAN.md).
+
+The frozen two-theme first-pass batch completed 1/4 conversations (0/4 without
+visible errors/stops), consuming 734.4708万 total tokens including failures.
+See [the measured completion and token report](docs/research-report/firstpass-frozen-20261123/RESULT.md).
