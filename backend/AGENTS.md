@@ -29,6 +29,12 @@ Writer can correct within the same task, without extra classification or review.
 The same exact-span patch tool supports a full passage or section replacement;
 for broad edits Writer drafts the complete replacement before saving, instead of
 serial micro-edits. Phrase/table-cell requests retain minimum-span edits.
+Readable files declared in the latest message are copied into the new report
+by turns/uploads.py using the native material writer; Writer receives their
+material/source IDs in report_local_edit.uploaded_materials. Original uploads
+and old report versions are unchanged. Existing document-to-Markdown conversions
+can be used; this path does not run a converter or OCR. Unavailable files return
+a diagnostic reference instead of granting arbitrary filesystem access.
 Only chapter-tree changes or new research need coordination. Reads do not write
 assembly files. On activation, only the independent follow-up copy drops its
 inherited length_contract, preserving it in dialogue_turn.baseline_length_contract
@@ -315,3 +321,8 @@ readonly-text-20261124/RESULT.md records 953 offline regressions and three real
 UI questions with exact quotation, no delegates and unchanged accepted SHA.
 The new local UI runs in tmux socket sp2-multiturn-read09; do not promise
 turn-managed exec sessions persist after the coding turn ends.
+
+Report citation recognition also accepts line-qualified markers such as `[S204:15-21]`.
+Canonical text retains locators, while the native export numbers source IDs. This
+recognizes syntax; it does not certify a quoted range or factual support. Historical
+exports are not regenerated or rewritten.

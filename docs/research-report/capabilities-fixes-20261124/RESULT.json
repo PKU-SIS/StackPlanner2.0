@@ -1,0 +1,244 @@
+{
+  "baseline_commit": "5a5172b",
+  "plan": {
+    "baseline_commit": "5a5172b",
+    "cases": [
+      {
+        "case": "uploaded_material",
+        "thread": "upload",
+        "expected_node": "n14",
+        "query": "根据本轮附件 new-material.md，只在“结论：分场景的条件式答案与三个落地检查点”末尾补一个“试点验收建议”段落，准确纳入其中三条建议和验收编号，并明确这是用户提供的内部建议，不是实证事实。把附件接入这份报告的保存材料并注明来源，其他原文、章节和引用不动；无需联网检索。"
+      },
+      {
+        "case": "citation_format",
+        "thread": "format",
+        "expected_node": "n16",
+        "query": "只在“官方说明：导出/导入与备份恢复的能力边界”的第一段，把“能够定位的内容”改为“能够定位并核对的内容”。其他正文、章节和事实不改，不检索。交付版应让这份现有报告中带行号的来源标记显示为正式引用编号，并把对应来源列入参考文献。"
+      }
+    ],
+    "citation_source": {
+      "thread_id": "capabilities-20261124-06-research",
+      "outputs": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-capabilities-06/runtime/users/default/threads/capabilities-20261124-06-research/user-data/outputs"
+    },
+    "upload_source_prefix_through": 7,
+    "citation_source_prefix_through": 8,
+    "worktree_sha256": {
+      "backend/packages/harness/deerflow/sp/report/citations.py": "5fd16ea0f11a16bc0eca29cb8f5f979027e615c6c4f7329b17f665dd9d2ed89d",
+      "backend/packages/harness/deerflow/sp/report/turns/uploads.py": "cb1fa6f1e09c275aaaf8d16d773026ec6762a8f3317d95ab376745826f1b2a68",
+      "backend/packages/harness/deerflow/sp/report/turns/adapter.py": "b3b197c315106e88e5183db858c93a873db340453baf0476d070b5da309e63a3",
+      "backend/packages/harness/deerflow/sp/report/turns/local_edit.py": "d41e8290df583ce8d4300b15e718f7aaffda065b2dd21a66e250629a0caf253e",
+      "skills/report-multiturn/report-node-revision/SKILL.md": "1a06db8780bb9402926b91414bcbc763762dc159bf111f285295256452f5b04d",
+      "skills/report-multiturn/report-local-edit/SKILL.md": "f3493518d9bef400e9a3f749e10af07c4737d385d55f32f6ed10702311bba280",
+      "skills/report-multiturn/report-dialogue-routing/SKILL.md": "e52f268d1a6005275ee2e02801a539a358b0ff0851db8278bf815e48f87c8726",
+      "skills/report-multiturn/report-revision-plan/SKILL.md": "ffcbb235a07c9cdb971262ec3a394f4613201d75abe6f4145474e047a7cd3ea9",
+      "skills/report-multiturn/report-version-management/SKILL.md": "7f133b9f839add60bdcf19f0e998f8e8c742717fc52a499c20e5203c14747e71"
+    },
+    "evaluation": "Same upload query and synthetic file as failed trial; citation test imports the real previous research archive, changes one phrase and checks automatic numeric references. No new research or replay of old query. No code tuning during batch."
+  },
+  "rows": [
+    {
+      "number": 1,
+      "case": "uploaded_material",
+      "thread": "upload",
+      "expected_node": "n14",
+      "query": "根据本轮附件 new-material.md，只在“结论：分场景的条件式答案与三个落地检查点”末尾补一个“试点验收建议”段落，准确纳入其中三条建议和验收编号，并明确这是用户提供的内部建议，不是实证事实。把附件接入这份报告的保存材料并注明来源，其他原文、章节和引用不动；无需联网检索。",
+      "thread_id": "capabilities-20261124-07",
+      "run_id": "a4c8b58b-73c6-421a-aa87-7b682997bbf3",
+      "message_id": "e763edf0-b813-4464-ad9f-de67f3da4f6b",
+      "turn_id": "t0008",
+      "turn_status": "accepted",
+      "run_status": "success",
+      "native_delivery_created": true,
+      "changed_nodes": [
+        "n14"
+      ],
+      "scope_ok": true,
+      "old_versions_unchanged": true,
+      "final_sha_matches": true,
+      "duration_seconds": 21.287,
+      "final_path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-capabilities-07/runtime/users/default/threads/capabilities-20261124-07/user-data/outputs/report/r34/final/report-4.md",
+      "diagnostic": null,
+      "new_uploaded_material_ids": [
+        "m207"
+      ],
+      "new_uploaded_source_ids": [
+        "S204"
+      ],
+      "upload_in_final_references": true,
+      "marker_in_report": true,
+      "synthetic_advice_label_present": true,
+      "tokens": {
+        "calls": 5,
+        "usage_complete": true,
+        "input_tokens": 38642,
+        "output_tokens": 2693,
+        "total_tokens": 41335,
+        "observed_input_tokens": 38642,
+        "observed_output_tokens": 2693,
+        "observed_total_tokens": 41335
+      },
+      "roles": [
+        "central",
+        "memory_updater",
+        "writer"
+      ],
+      "saved_edits": 1,
+      "original_body_retained": true,
+      "three_advice_items_present": true,
+      "attachment_exact_bytes_saved": true,
+      "source_is_user_upload": true
+    },
+    {
+      "number": 2,
+      "case": "citation_format",
+      "thread": "format",
+      "expected_node": "n16",
+      "query": "只在“官方说明：导出/导入与备份恢复的能力边界”的第一段，把“能够定位的内容”改为“能够定位并核对的内容”。其他正文、章节和事实不改，不检索。交付版应让这份现有报告中带行号的来源标记显示为正式引用编号，并把对应来源列入参考文献。",
+      "thread_id": "capabilities-20261124-07-format",
+      "run_id": "0d323e62-f1f7-4dff-9e7f-4a3027733f35",
+      "message_id": "dfe10985-320e-40ad-a7aa-6897a33fcd06",
+      "turn_id": "t0009",
+      "turn_status": "accepted",
+      "run_status": "success",
+      "native_delivery_created": true,
+      "changed_nodes": [
+        "n16"
+      ],
+      "scope_ok": true,
+      "old_versions_unchanged": true,
+      "final_sha_matches": true,
+      "duration_seconds": 36.297,
+      "final_path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-capabilities-07/runtime/users/default/threads/capabilities-20261124-07-format/user-data/outputs/report/r46/final/report-5.md",
+      "diagnostic": null,
+      "qualified_source_ids": [
+        "S204",
+        "S205",
+        "S225",
+        "S226",
+        "S244",
+        "S246"
+      ],
+      "all_qualified_sources_numbered": true,
+      "raw_line_qualified_markers_remaining": 0,
+      "single_phrase_change_only": true,
+      "new_references_count": 6,
+      "old_numbering_preserved": true,
+      "tokens": {
+        "calls": 7,
+        "usage_complete": true,
+        "input_tokens": 78954,
+        "output_tokens": 4829,
+        "total_tokens": 83783,
+        "observed_input_tokens": 78954,
+        "observed_output_tokens": 4829,
+        "observed_total_tokens": 83783
+      },
+      "roles": [
+        "central",
+        "memory_updater",
+        "writer"
+      ],
+      "saved_edits": 1,
+      "canonical_line_markers_retained": true,
+      "canonical_line_marker_count": 44
+    }
+  ],
+  "snapshots": {
+    "upload": {
+      "t0001": true,
+      "t0002": true,
+      "t0003": true,
+      "t0004": true,
+      "t0007": true,
+      "t0008": true
+    },
+    "format": {
+      "t0001": true,
+      "t0002": true,
+      "t0003": true,
+      "t0004": true,
+      "t0007": true,
+      "t0008": true,
+      "t0009": true
+    }
+  },
+  "frozen_code_sha_matches": true,
+  "usage": {
+    "tokens_by_role": {
+      "writer": {
+        "calls": 8,
+        "usage_complete": true,
+        "input_tokens": 77622,
+        "output_tokens": 1987,
+        "total_tokens": 79609,
+        "observed_input_tokens": 77622,
+        "observed_output_tokens": 1987,
+        "observed_total_tokens": 79609
+      },
+      "memory_updater": {
+        "calls": 2,
+        "usage_complete": true,
+        "input_tokens": 4551,
+        "output_tokens": 1372,
+        "total_tokens": 5923,
+        "observed_input_tokens": 4551,
+        "observed_output_tokens": 1372,
+        "observed_total_tokens": 5923
+      },
+      "central": {
+        "calls": 2,
+        "usage_complete": true,
+        "input_tokens": 35423,
+        "output_tokens": 4163,
+        "total_tokens": 39586,
+        "observed_input_tokens": 35423,
+        "observed_output_tokens": 4163,
+        "observed_total_tokens": 39586
+      }
+    },
+    "tokens_by_turn": {
+      "1": {
+        "calls": 5,
+        "usage_complete": true,
+        "input_tokens": 38642,
+        "output_tokens": 2693,
+        "total_tokens": 41335,
+        "observed_input_tokens": 38642,
+        "observed_output_tokens": 2693,
+        "observed_total_tokens": 41335
+      },
+      "2": {
+        "calls": 7,
+        "usage_complete": true,
+        "input_tokens": 78954,
+        "output_tokens": 4829,
+        "total_tokens": 83783,
+        "observed_input_tokens": 78954,
+        "observed_output_tokens": 4829,
+        "observed_total_tokens": 83783
+      }
+    },
+    "input_tokens": 117596,
+    "output_tokens": 7522,
+    "total_tokens": 125118,
+    "cache_read_tokens_observed": 77440,
+    "estimated_cost_cny_upper": "0.14358560",
+    "usage_complete": true,
+    "http_coverage_verified": true
+  },
+  "budget": {
+    "spent_cost_cny": "28.44249400",
+    "reserved_cost_cny": "6.488064",
+    "input_tokens": 33620067,
+    "output_tokens": 1379082,
+    "inflight": [
+      "http-1883efa84c6e4cf58bef90882c3671c5-1",
+      "http-6f416a52175d498a894bc2d92351936d-3",
+      "http-b05c246e0a0f49919d40ade6792240a2-12"
+    ],
+    "abort_requested": false
+  },
+  "new_unknown_identities": [],
+  "stop_reason": null,
+  "automatic_paid_restarts": 0
+}

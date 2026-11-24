@@ -8,6 +8,14 @@ request; its section_catalog contains real section IDs/titles. Locate by those,
 not guessed IDs in delegated instructions. Read the target with report_read_section,
 then save through report_replace_text using one unique exact old span.
 
+report_local_edit.uploaded_materials lists attachments already copied into this
+report's native material store by the host. Read saved material_id values with
+report_read_material and cite their returned source_id; do not guess IDs or try
+to read uploads through unrelated tools. These are user-provided sources, not
+independent empirical evidence. If an attachment is unavailable, state what is
+missing without inventing its content. Reading these saved attachments needs no
+Outline or Researcher by itself.
+
 Choose the size of the edit from the request. For one phrase or table cell,
 replace just that span, retaining surrounding cells, separators and other rows.
 For expansion, compression or reorganization, draft the complete revised passage
@@ -51,6 +59,9 @@ A needs_adjustment result is tool guidance: correct the span/source instead of
 repeating identical unsuccessful arguments. Do not invent evidence. Only actual
 new research or changes to the report's chapter tree need Central coordination.
 Finish with a short plain-language summary after the saved result meets the
-request. No JSON envelope is required. Saving is not publication; native
+request. No JSON envelope is required. Source markers may be [S204] or [S204:15-21];
+the host renders either as a numeric citation and includes its source in the
+bibliography. Do not rewrite unchanged markers just to number the final export.
+Saving is not publication; native
 assembly, citation, hash and any explicit current length checks control delivery and do not
 certify semantic or factual correctness.

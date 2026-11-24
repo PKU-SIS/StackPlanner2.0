@@ -12,6 +12,9 @@ sp_delegate(target_agent="reporter", metadata={"report_task":"local_edit"}).
 The program copies/resumes the active accepted version; no GitAgent or Outline
 call is needed. Optional base_version_id selects an accepted historical version.
 Give Writer the actual edit and what must remain; do not guess chapter IDs.
+Readable current-message attachments are saved into native materials when the
+copy is prepared. Existing-section edits using those files can also use Writer;
+do not send a Coder just to read an upload.
 Expansion, citation additions from saved material, compression and reorganization
 within existing sections also use this Writer path. Outline is for changes to
 the chapter tree, not merely different headings within a section.

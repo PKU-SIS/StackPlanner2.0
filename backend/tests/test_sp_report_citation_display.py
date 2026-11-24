@@ -36,9 +36,29 @@ def test_unrecognized_legacy_layout_is_preserved_without_a_delivery_gate():
 
 def test_escaped_citations_share_source_identity_and_leave_math_untouched():
     from deerflow.sp.report.assembly import _citation_ids
+
     body = r"Evidence \[S11\], plain [S19], repeat \[S11\]. Math \[x+y\] and [100]."
     assert _citation_ids(body) == {"S11", "S19"}
     rendered, mapping = render_final_citations(body + "\n## 来源\n", [{"source_id": "S11", "title": "One"}, {"source_id": "S19", "title": "Two"}])
     assert mapping == {"S11": 1, "S19": 2}
     assert r"Evidence [1], plain [2], repeat [1]. Math \[x+y\] and [100]." in rendered
     assert "S11" not in rendered and "S19" not in rendered
+
+
+def test_line_qualified_markers_share_source_identity_and_render_as_numbers():
+    from deerflow.sp.report.assembly import _citation_ids
+
+    body = r"Evidence [S204:15-21], escaped \[S225:4\], plain [S204]. Math \[x:1-2\] and [100]."
+    assert _citation_ids(body) == {"S204", "S225"}
+    rendered, mapping = render_final_citations(body + "\n## 来源\n", [{"source_id": "S204", "title": "Export"}, {"source_id": "S225", "title": "Variables"}])
+    assert mapping == {"S204": 1, "S225": 2}
+    assert r"Evidence [1], escaped [2], plain [1]. Math \[x:1-2\] and [100]." in rendered
+    assert "[2] Variables" in rendered
+    assert "[S204:15-21]" in body  # Reviewed canonical text is unchanged.
+
+
+def test_line_markers_missing_from_a_historical_table_are_left_unchanged():
+    text = "# Report\n\nOld [S1], legacy [S204:15-21].\n\n## 来源\n\n1. [S1] One\n"
+    rendered, mapping = render_final_citations(text, [{"source_id": "S1", "title": "One"}])
+    assert "Old [1], legacy [S204:15-21]." in rendered
+    assert mapping == {"S1": 1}

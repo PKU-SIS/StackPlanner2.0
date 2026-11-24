@@ -142,7 +142,11 @@ def activate(store, turn, context):
             ledger.payload["acceptance"] = {"status": "idle", "turn_namespace": f"{paths.report_id}-{turn['turn_id']}"}
             ledger.payload["outline_review_due"] = True
             ledger.payload["writer_pipeline"] = {"managed": False}
-            ledger.save()
+            from deerflow.sp.report.turns.uploads import ingest_message_uploads
+
+            with native.report_lock(paths):
+                ledger.payload["dialogue_turn"]["uploaded_materials"] = ingest_message_uploads(ledger, message, store.owner)
+                ledger.save()
             turn["status"] = "executing"
             store._record(turn)
             return turn

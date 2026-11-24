@@ -1,0 +1,3 @@
+case,input_tokens,output_tokens,total_tokens,duration_seconds,roles
+uploaded_material,38642,2693,41335,21.287,"central,memory_updater,writer"
+citation_format,78954,4829,83783,36.297,"central,memory_updater,writer"

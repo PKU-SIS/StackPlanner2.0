@@ -93,7 +93,7 @@ def test_writer_first_edits_without_git_outline_or_output_envelope(tmp_path):
     assert native.read_json(restored.ledger)["status"] == "delivered"
 
 
-@pytest.mark.parametrize("old,new", [("missing", "New"), ("Seed", "[S999]")])
+@pytest.mark.parametrize("old,new", [("missing", "New"), ("Seed", "[S999]"), ("Seed", "[S999:2-4]"), ("Seed", r"\[S999:2\]")])
 def test_edit_mismatch_or_unknown_citation_is_recoverable_without_mutation(tmp_path, old, new):
     ctx, action, task, tools, _ = setup_edit(tmp_path)
     paths = ReportLedger.load_for_context(hooks.report_context(ctx.state)).paths
