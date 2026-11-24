@@ -1,0 +1,1069 @@
+{
+  "code_commit": "d34dae1",
+  "rows": [
+    {
+      "number": 1,
+      "case": "paragraph_add",
+      "thread": "paragraphs",
+      "expected_node": "n14",
+      "query": "请在“结论：分场景的条件式答案与三个落地检查点”正文末尾原样追加下面这一整段，作为用户提供的内部建议，不增加标题或引用。原有正文、其他章节和引用原样不动，不检索。段落：作为内部试点建议，验收时应同时核对导出样本、回退步骤和交接责任人；三项均经业务方与开发方共同确认后，再安排扩大试点范围。",
+      "thread_id": "capabilities-20261124-06",
+      "message_id": "243b6c96-a6bf-4121-84fa-f0f479ff16fb",
+      "run_id": "51d8d60a-12ba-4e75-a9c3-ec54b66084bb",
+      "run_status": "success",
+      "turn_id": "t0008",
+      "turn_status": "accepted",
+      "native_delivery_created": true,
+      "existing_changed_nodes": [
+        "n14"
+      ],
+      "added_writable_nodes": [],
+      "removed_nodes": [],
+      "old_versions_unchanged": true,
+      "duration_seconds": 15.265,
+      "final_path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-capabilities-06/runtime/users/default/threads/capabilities-20261124-06/user-data/outputs/report/r34/final/report-4.md",
+      "final_sha_matches": true,
+      "new_saved_materials": [],
+      "new_sources": [],
+      "diagnostic": null,
+      "scope_ok": true,
+      "paragraph_exact_once": true,
+      "original_retained": true,
+      "tokens": {
+        "calls": 5,
+        "usage_complete": true,
+        "input_tokens": 33285,
+        "output_tokens": 1466,
+        "total_tokens": 34751,
+        "observed_input_tokens": 33285,
+        "observed_output_tokens": 1466,
+        "observed_total_tokens": 34751
+      },
+      "roles": [
+        "central",
+        "memory_updater",
+        "writer"
+      ],
+      "tools": {
+        "report_read_section": 1,
+        "report_replace_text": 1
+      },
+      "audited_tool_errors": 0,
+      "working_source_count": 203,
+      "working_material_count": 206
+    },
+    {
+      "number": 2,
+      "case": "paragraph_delete",
+      "thread": "paragraphs",
+      "expected_node": "n14",
+      "query": "只删除刚才追加的这一整段及专为它新增的分隔空行，恢复该处原文，其他正文、章节、表格和引用不动；不检索。要删的段落：作为内部试点建议，验收时应同时核对导出样本、回退步骤和交接责任人；三项均经业务方与开发方共同确认后，再安排扩大试点范围。",
+      "thread_id": "capabilities-20261124-06",
+      "message_id": "a96ca5ca-063d-4ff7-92da-747b6638802e",
+      "run_id": "973f522f-0edd-4f9e-b395-a8d3b953c6d2",
+      "run_status": "success",
+      "turn_id": "t0009",
+      "turn_status": "accepted",
+      "native_delivery_created": true,
+      "existing_changed_nodes": [
+        "n14"
+      ],
+      "added_writable_nodes": [],
+      "removed_nodes": [],
+      "old_versions_unchanged": true,
+      "duration_seconds": 15.397,
+      "final_path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-capabilities-06/runtime/users/default/threads/capabilities-20261124-06/user-data/outputs/report/r35/final/report-5.md",
+      "final_sha_matches": true,
+      "new_saved_materials": [],
+      "new_sources": [],
+      "diagnostic": null,
+      "scope_ok": true,
+      "all_canonical_bytes_restored": false,
+      "tokens": {
+        "calls": 5,
+        "usage_complete": true,
+        "input_tokens": 31864,
+        "output_tokens": 1366,
+        "total_tokens": 33230,
+        "observed_input_tokens": 31864,
+        "observed_output_tokens": 1366,
+        "observed_total_tokens": 33230
+      },
+      "roles": [
+        "central",
+        "memory_updater",
+        "writer"
+      ],
+      "tools": {
+        "report_read_section": 1,
+        "report_replace_text": 1
+      },
+      "audited_tool_errors": 0,
+      "working_source_count": 203,
+      "working_material_count": 206,
+      "final_report_bytes_restored": true,
+      "draft_only_trailing_whitespace_difference": true,
+      "functional_delete_ok": true,
+      "strict_draft_restoration_ok": false
+    },
+    {
+      "number": 3,
+      "case": "uploaded_material",
+      "thread": "upload",
+      "expected_node": "n14",
+      "query": "根据本轮附件 new-material.md，只在“结论：分场景的条件式答案与三个落地检查点”末尾补一个“试点验收建议”段落，准确纳入其中三条建议和验收编号，并明确这是用户提供的内部建议，不是实证事实。把附件接入这份报告的保存材料并注明来源，其他原文、章节和引用不动；无需联网检索。",
+      "thread_id": "capabilities-20261124-06-upload",
+      "message_id": "7e88723e-982f-44f1-bebc-54a27f93d019",
+      "run_id": "b9ebf1ba-85d1-4d65-bc6a-5f58344bdb60",
+      "run_status": "error",
+      "turn_id": "t0008",
+      "turn_status": "failed",
+      "native_delivery_created": false,
+      "existing_changed_nodes": [],
+      "added_writable_nodes": [],
+      "removed_nodes": [],
+      "old_versions_unchanged": true,
+      "duration_seconds": 60.572,
+      "final_path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-capabilities-06/runtime/users/default/threads/capabilities-20261124-06-upload/user-data/outputs/report/r38/final/report-3.md",
+      "final_sha_matches": true,
+      "new_saved_materials": [],
+      "new_sources": [],
+      "diagnostic": {
+        "phase": "local_edit",
+        "reason": "No changes saved",
+        "writer_response": "I must stop here rather than save a partial or invented edit. Here is the honest status. **Saved changes: none.** I did not call `report_replace_text`, so there is no saved receipt and no change to section n14 (\"结论：分场景的条件式答案与三个落地检查点\") or any other section. The baseline (t0007) remains byte-identical. **Why: the required source content is not available to me.** The edit contract requires that I reproduce *verbatim* the three recommendations and their corresponding 验收编号 from the uploaded file `/mnt/user-data/uploads/new-material.md`. I do not have a file-reading tool in this run — only report section/material tools. The file's outline appears in the request (`L1: 试点验收补充材料（测试用合成资料...<truncated>"
+      },
+      "scope_ok": false,
+      "upload_marker_in_report": false,
+      "upload_copied_to_materials": false,
+      "tokens": {
+        "calls": 31,
+        "usage_complete": true,
+        "input_tokens": 726296,
+        "output_tokens": 7123,
+        "total_tokens": 733419,
+        "observed_input_tokens": 726296,
+        "observed_output_tokens": 7123,
+        "observed_total_tokens": 733419
+      },
+      "roles": [
+        "central",
+        "memory_updater",
+        "writer"
+      ],
+      "tools": {
+        "report_read_section": 1,
+        "report_find_sections": 2,
+        "report_read_material": 27
+      },
+      "audited_tool_errors": 0,
+      "working_source_count": 203,
+      "working_material_count": 206
+    },
+    {
+      "number": 4,
+      "case": "research_new_section",
+      "thread": "research",
+      "expected_node": null,
+      "query": "请补研微软官方关于 Power Platform 解决方案导出导入与备份恢复的资料，并在结论之后新增一个独立小节“补充：上线前的交接与恢复验证”，说明哪些事情需要在试点里验证。请实际检索并保存至少一份此前未纳入本报告的官方资料，再据其写作并标注引用；区分官方说明与我们的建议。只新增这个小节，现有章节、表格和正文逐字保留；不改写整篇。",
+      "thread_id": "capabilities-20261124-06-research",
+      "message_id": "43180f74-7d6d-4393-8383-d6f684cefa4c",
+      "run_id": "8039f2e0-cc0f-498e-8937-edb21c94b894",
+      "run_status": "success",
+      "turn_id": "t0008",
+      "turn_status": "accepted",
+      "native_delivery_created": true,
+      "existing_changed_nodes": [],
+      "added_writable_nodes": [
+        "n16",
+        "n17"
+      ],
+      "removed_nodes": [],
+      "old_versions_unchanged": true,
+      "duration_seconds": 360.728,
+      "final_path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-capabilities-06/runtime/users/default/threads/capabilities-20261124-06-research/user-data/outputs/report/r39/final/report-4.md",
+      "final_sha_matches": true,
+      "new_saved_materials": [
+        {
+          "material_id": "m207",
+          "source_id": "S204",
+          "sha256": "e209cc52b95bddc19f574a0eb0f69d31599e683e44788fa47e39c5fc6fb048ec",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m208",
+          "source_id": "S205",
+          "sha256": "5544006fa1a153397422e8df92f70608720e8822bd2a40bb06320f21b8fbe638",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m209",
+          "source_id": "S206",
+          "sha256": "0233ef1a015bb78c1e197f7fd03d41e0af2d846a7c6e8cac0d39ee76f3061d4e",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m210",
+          "source_id": "S207",
+          "sha256": "4107ed19d9331e2692312dca456540602b717dd7f26514de9a5d7f50cd4a56b4",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m211",
+          "source_id": "S208",
+          "sha256": "7da8f5553563dc12ae4e7f95389f1c41634b5ce2dba6d40545f67361aa8ad2fd",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m212",
+          "source_id": "S209",
+          "sha256": "80fead2cc85f7b3822539a27f52bdecc3b042982877ea82843d76bfee2d09574",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m213",
+          "source_id": "S210",
+          "sha256": "85b9d23be2e92e655f835f304767a4355a18ffd354b332608f64dab8028d1486",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m214",
+          "source_id": "S211",
+          "sha256": "5e83e4d22e780b7ce0739364e1ed91a63797adad46f32ec6160b40a2dd3ea4e4",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m215",
+          "source_id": "S212",
+          "sha256": "c568834fc4c180e1c9a43ed95a2157fa749a884a51e0c1fb69f3d51b8d59e065",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m216",
+          "source_id": "S213",
+          "sha256": "df2e3d8511289fe6cfec243139c261e1755e1b63fcd06c264a2656347513a90f",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m217",
+          "source_id": "S214",
+          "sha256": "ab13dd41399a786071d330301fbbe357a18d3f1e44c4c38b921d942730eb5cb3",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m218",
+          "source_id": "S215",
+          "sha256": "07f1f344ce26a0196e53b5eb6229c842840ac53a23e907896001a3e8007aae87",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m219",
+          "source_id": "S216",
+          "sha256": "ed7f4848241819f242a95a44cb0ceda880dafefdbbf1526669d23e8ad23d7287",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m220",
+          "source_id": "S217",
+          "sha256": "a38f23e848c4d05615abb1b69bd6c8073b30709f1b42a28eb9400d2e9eaf976c",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m221",
+          "source_id": "S218",
+          "sha256": "e2569014997d6143927aa98528960ff426c8681c8fc9d8c5dd88583723505535",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m222",
+          "source_id": "S219",
+          "sha256": "bff916c46a9153c04211f4325a955488ff06dd271815fbaa309c30b7fc2b98f7",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m223",
+          "source_id": "S220",
+          "sha256": "dcc9bd9d21b5b12b6293fd539cef1cd998fb01ae0589ae1ac97ab9ae6ce123e6",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m224",
+          "source_id": "S221",
+          "sha256": "9e8d9795b50343bb1e5a4e44ca418021db230b7c8b87e779f1473aa794abe3f7",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m225",
+          "source_id": "S222",
+          "sha256": "76e50fc175acc85e13154d68d0c17f76f6680322ec098b7e17e700e710701162",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m226",
+          "source_id": "S223",
+          "sha256": "5ab31b6737ce19fcb79ff7084ab0b0a3824ec559b02e1238fec0e963d5b30cc8",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m227",
+          "source_id": "S224",
+          "sha256": "d1216b6cea083ec5063f20aafce95b5c03a6878232cbf6fd8f383ef163b9419a",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m228",
+          "source_id": "S225",
+          "sha256": "c62cad42e6fb655c8f8d60283d51aac6fa3e958953c7f0e075a4096160595bec",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m229",
+          "source_id": "S226",
+          "sha256": "e7065dc6b0459832f6e893ac908d6423a8b4c64e83e461989d28392e756371c0",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m230",
+          "source_id": "S227",
+          "sha256": "defb62ada56187f27d79a2258872d05ef3207adea0f644701af3dc4c33ab4e1f",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m231",
+          "source_id": "S228",
+          "sha256": "3f8bdb9d6f9c8289816511d4d2ac14e83f16e2ca3ee397b261be4948fd0c87cb",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m232",
+          "source_id": "S229",
+          "sha256": "1ccedef7193372b2b990976823e363504460362b78c091a3355d652574fc35a8",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m233",
+          "source_id": "S230",
+          "sha256": "c93c7c87652102d33bfaf18735f1531b0be777dbd23fd07841ac771513daf436",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m234",
+          "source_id": "S231",
+          "sha256": "0e4558bb8751ae579f0070e9f2c9bda4508237e6a756726d2de121762f0e3b2f",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m235",
+          "source_id": "S232",
+          "sha256": "72f7f547c5af8c4ca10a5f5d8fc640790bf86a3dfce5911d609bee9939586cb7",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m236",
+          "source_id": "S233",
+          "sha256": "b4b06a31618d14039b6067335617d2e4d62686700f25e5ead75cae62f1d0d044",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m237",
+          "source_id": "S234",
+          "sha256": "011ed13490a64cd4e7d575f848b3dd1238d9c2af356fcd474f568dd5b6cf4eb5",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m238",
+          "source_id": "S235",
+          "sha256": "0b62db1e210ba1882736aff9fbd46f8a6662b36fbb0f50734af12345db2d7299",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m239",
+          "source_id": "S236",
+          "sha256": "c371d17c8b3e0c4c048fbf961af39c7157acc8679e460ec17a6d91eb20b7e3f2",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m240",
+          "source_id": "S237",
+          "sha256": "805597c0c0a700d574537c2e06cdcf4a284d70c4e18096f49033f427c86476f7",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m241",
+          "source_id": "S238",
+          "sha256": "31c31306cd9019b4e0806bcdae5431b9ead59e88c265aafab5edde8e6570045d",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m242",
+          "source_id": "S239",
+          "sha256": "9eac0acbc5997388b39d7781a22ebc5f9532a2535526f73e499b73959408aba2",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m243",
+          "source_id": "S240",
+          "sha256": "46d544ba4ef6bd94bd6d3fec2fa28a101df0316e811c54100543b874d6eaa189",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m244",
+          "source_id": "S241",
+          "sha256": "c1ad99bbba653cb520b88346e44b028035c17e6454d1e0ae062ee557366bdc54",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m245",
+          "source_id": "S242",
+          "sha256": "f532bca37d89cbe1f107178585be15e94605a8ce8ed5e3450698847d0bf9908b",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m246",
+          "source_id": "S243",
+          "sha256": "bb1a2b81fbc3e47e755fcae2d75bf806d0e3adf8554ed255fd2081613ec650f9",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m247",
+          "source_id": "S244",
+          "sha256": "fe5d59172410c92d3194b4756e08ea949c8c5ff7062133aa45e43927da984b74",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m248",
+          "source_id": "S245",
+          "sha256": "e1156f4185a8edd7f6969b98131fd62a6af2531f1d7f0fbf95d0241b8076b05a",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m249",
+          "source_id": "S246",
+          "sha256": "391af21c3aac7e59facf4014cd51f0a3d0cec59c3d871c6b867ee551bff96bf0",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m250",
+          "source_id": "S247",
+          "sha256": "14365e52f9cd4d9dcb65d7de9508011ea77dc6734e3e0850f03127d50f872172",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m251",
+          "source_id": "S248",
+          "sha256": "997dea66af9cde7f3f248645cd60718089b615d4eaa4192d004ae3fc0b556d60",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m252",
+          "source_id": "S249",
+          "sha256": "5993ccf411624548cc0d206dd1273483f9f99488b259f98461427090111644cf",
+          "upload_marker_saved": false
+        },
+        {
+          "material_id": "m253",
+          "source_id": "S250",
+          "sha256": "8702e79e1c3fbf9966f2e8473e2e69b3d1f99dc150a7d985cb6854fa2904ebc2",
+          "upload_marker_saved": false
+        }
+      ],
+      "new_sources": [
+        {
+          "first_seen_at": "2026-11-24T10:45:07+00:00",
+          "normalized_url": "https://learn.microsoft.com/en-nz/power-platform/alm/solution-concepts-alm?WT.mc_id=power-182762-scottdurow",
+          "source_id": "S204",
+          "title": "Solution concepts with Power Platform - Power Platform - Skip to main content Skip to Ask Learn chat experience",
+          "url": "https://learn.microsoft.com/en-nz/power-platform/alm/solution-concepts-alm?WT.mc_id=power-182762-scottdurow#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:07+00:00",
+          "normalized_url": "https://learn.microsoft.com/en-us/training/modules/manage-operations-monitoring/5-perform-environment-operations",
+          "source_id": "S205",
+          "title": "Perform Environment Operations - Training - Skip to main content",
+          "url": "https://learn.microsoft.com/en-us/training/modules/manage-operations-monitoring/5-perform-environment-operations#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:07+00:00",
+          "normalized_url": "https://learn.microsoft.com/el-gr/training/modules/developer-tools-extend/solution-packager",
+          "source_id": "S206",
+          "title": "Solutions overview - Training - Παράλειψη και μετάβαση στο κύριο περιεχόμενο",
+          "url": "https://learn.microsoft.com/el-gr/training/modules/developer-tools-extend/solution-packager#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:07+00:00",
+          "normalized_url": "https://learn.microsoft.com/fr-fr/training/modules/manage-operations-monitoring/5-perform-environment-operations",
+          "source_id": "S207",
+          "title": "Effectuer des opérations d’environnement - Training - Passer directement au contenu principal",
+          "url": "https://learn.microsoft.com/fr-fr/training/modules/manage-operations-monitoring/5-perform-environment-operations#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:07+00:00",
+          "normalized_url": "https://learn.microsoft.com/lb-lu/power-platform/alm/solution-concepts-alm",
+          "source_id": "S208",
+          "title": "Solution concepts with Power Platform - Power Platform - Bis op den Haaptinhalt iwwersprangen Sprangt op d’Ask Learn-Chat-Experienz",
+          "url": "https://learn.microsoft.com/lb-lu/power-platform/alm/solution-concepts-alm#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:07+00:00",
+          "normalized_url": "https://learn.microsoft.com/ja-jp/training/modules/manage-operations-monitoring/5-perform-environment-operations",
+          "source_id": "S209",
+          "title": "環境操作の実行 - Training - メイン コンテンツにスキップ",
+          "url": "https://learn.microsoft.com/ja-jp/training/modules/manage-operations-monitoring/5-perform-environment-operations#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:07+00:00",
+          "normalized_url": "https://raw.githubusercontent.com/MicrosoftDocs/power-platform/refs/heads/main/power-platform/alm/move-from-unmanaged-managed-alm.md",
+          "source_id": "S210",
+          "title": "title: \"Move from unmanaged to managed solutions to support healthy ALM with Power Platform\" - title: \"Move from unmanaged to managed solutions to support healthy ALM with Power Platform\"",
+          "url": "https://raw.githubusercontent.com/MicrosoftDocs/power-platform/refs/heads/main/power-platform/alm/move-from-unmanaged-managed-alm.md#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:07+00:00",
+          "normalized_url": "https://raw.githubusercontent.com/MicrosoftDocs/power-platform/refs/heads/main/power-platform/admin/backup-restore-environments.md",
+          "source_id": "S211",
+          "title": "title: Back up and restore environments - title: Back up and restore environments",
+          "url": "https://raw.githubusercontent.com/MicrosoftDocs/power-platform/refs/heads/main/power-platform/admin/backup-restore-environments.md#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:07+00:00",
+          "normalized_url": "https://raw.githubusercontent.com/MicrosoftDocs/dynamics-365-contact-center/refs/heads/main/contact-center/administer/alm-best-practices.md",
+          "source_id": "S212",
+          "title": "title: Best practices for application lifecycle management - title: Best practices for application lifecycle management",
+          "url": "https://raw.githubusercontent.com/MicrosoftDocs/dynamics-365-contact-center/refs/heads/main/contact-center/administer/alm-best-practices.md#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:07+00:00",
+          "normalized_url": "https://github.com/microsoftdocs/powerapps-docs/blob/c348031067700b46faff75dcc197fad1e0e5c59c/powerapps-docs/maker/data-platform/fabric-link-retention-environment-lifecycle.md",
+          "source_id": "S213",
+          "title": "Environment lifecycle for link to Fabric and long-term retention",
+          "url": "https://github.com/microsoftdocs/powerapps-docs/blob/c348031067700b46faff75dcc197fad1e0e5c59c/powerapps-docs/maker/data-platform/fabric-link-retention-environment-lifecycle.md"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:07+00:00",
+          "normalized_url": "https://github.com/microsoftdocs/power-platform/blob/bd34cad7f6a5618d7889fd6d01df91736c25f79f/power-platform/alm/solution-concepts-alm.md",
+          "source_id": "S214",
+          "title": "Solution concepts",
+          "url": "https://github.com/microsoftdocs/power-platform/blob/bd34cad7f6a5618d7889fd6d01df91736c25f79f/power-platform/alm/solution-concepts-alm.md"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:07+00:00",
+          "normalized_url": "https://github.com/microsoftdocs/power-platform/blob/bd34cad7f6a5618d7889fd6d01df91736c25f79f/power-platform/admin/backup-restore-environments.md",
+          "source_id": "S215",
+          "title": "Back up and restore environments",
+          "url": "https://github.com/microsoftdocs/power-platform/blob/bd34cad7f6a5618d7889fd6d01df91736c25f79f/power-platform/admin/backup-restore-environments.md"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:07+00:00",
+          "normalized_url": "https://raw.githubusercontent.com/MicrosoftDocs/Dynamics-365-Unified-Operations-Public/main/articles/fin-ops-core/dev-itpro/data-entities/dual-write/app-lifecycle-management.md",
+          "source_id": "S216",
+          "title": "title: Application lifecycle management",
+          "url": "https://raw.githubusercontent.com/MicrosoftDocs/Dynamics-365-Unified-Operations-Public/main/articles/fin-ops-core/dev-itpro/data-entities/dual-write/app-lifecycle-management.md#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:07+00:00",
+          "normalized_url": "https://github.com/MicrosoftDocs/power-platform/blob/main/power-platform/admin/backup-restore-environments.md",
+          "source_id": "S217",
+          "title": "power-platform/power-platform/admin/backup-restore-environments.md at main · MicrosoftDocs/power-platform - Skip to content",
+          "url": "https://github.com/MicrosoftDocs/power-platform/blob/main/power-platform/admin/backup-restore-environments.md#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:07+00:00",
+          "normalized_url": "https://www.m365.fm/community/u/mirko-p/blog/power-platform-managed-vs-unmanaged-solutions-guide/",
+          "source_id": "S218",
+          "title": "Power Platform Managed vs Unmanaged Solutions: The Complete Guide – Mirko Peters",
+          "url": "https://www.m365.fm/community/u/mirko-p/blog/power-platform-managed-vs-unmanaged-solutions-guide/"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:07+00:00",
+          "normalized_url": "https://raw.githubusercontent.com/MicrosoftDocs/Dynamics-365-Unified-Operations-Public/main/articles/fin-ops-core/dev-itpro/power-platform/environment-lifecycle-core-concepts.md",
+          "source_id": "S219",
+          "title": "--- - ---",
+          "url": "https://raw.githubusercontent.com/MicrosoftDocs/Dynamics-365-Unified-Operations-Public/main/articles/fin-ops-core/dev-itpro/power-platform/environment-lifecycle-core-concepts.md#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:08+00:00",
+          "normalized_url": "https://github.com/microsoftdocs/power-automate-docs/blob/1101e087427a803d892404f97903ace342dd61b8/articles/desktop-flows/alm-schema.md",
+          "source_id": "S220",
+          "title": "Application lifecycle management (ALM) for Power Automate v2 schema",
+          "url": "https://github.com/microsoftdocs/power-automate-docs/blob/1101e087427a803d892404f97903ace342dd61b8/articles/desktop-flows/alm-schema.md"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:08+00:00",
+          "normalized_url": "https://raw.githubusercontent.com/MicrosoftDocs/customer-insights/refs/heads/main/ci-docs/journeys/copy-or-restore.md",
+          "source_id": "S221",
+          "title": "title: Copy or restore environments - title: Copy or restore environments",
+          "url": "https://raw.githubusercontent.com/MicrosoftDocs/customer-insights/refs/heads/main/ci-docs/journeys/copy-or-restore.md#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:08+00:00",
+          "normalized_url": "https://service.tamu.edu/TDClient/36/Portal/KB/Article/1404/Export-from-Default-Environment-Import-to-Your-New-Power-Platform-Environment",
+          "source_id": "S222",
+          "title": "Export from Default Environment → Import to Your New Power Platform Environment",
+          "url": "https://service.tamu.edu/TDClient/36/Portal/KB/Article/1404/Export-from-Default-Environment-Import-to-Your-New-Power-Platform-Environment"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:08+00:00",
+          "normalized_url": "https://communitypowerplatformprod.powerappsportals.com/forums/thread/details/?threadid=95632a7a-76c1-f111-aaad-000d3a54b202",
+          "source_id": "S223",
+          "title": "Guidance on Backing Up Dataverse Tables",
+          "url": "https://communitypowerplatformprod.powerappsportals.com/forums/thread/details/?threadid=95632a7a-76c1-f111-aaad-000d3a54b202"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:11+00:00",
+          "normalized_url": "https://learn.microsoft.com/fi-fi/training/modules/govern-data-policies/2-create-apply-data-policies",
+          "source_id": "S224",
+          "title": "Create and Apply Data Policies - Training - Siirry pääsisältöön",
+          "url": "https://learn.microsoft.com/fi-fi/training/modules/govern-data-policies/2-create-apply-data-policies#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:11+00:00",
+          "normalized_url": "https://learn.microsoft.com/zh-cn/training/modules/implement-alm-agents-power-platform/4-configure-environment-variables-connection-references",
+          "source_id": "S225",
+          "title": "配置环境变量和连接引用 - Training - 跳至主要内容",
+          "url": "https://learn.microsoft.com/zh-cn/training/modules/implement-alm-agents-power-platform/4-configure-environment-variables-connection-references#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:11+00:00",
+          "normalized_url": "https://learn.microsoft.com/bs-latn-ba/power-platform/guidance/adoption/dlp-strategy",
+          "source_id": "S226",
+          "title": "Implement a data policy strategy - Power Platform - Preskoči na glavni sadržaj Preskoči na iskustvo razgovora usluge Ask Learn",
+          "url": "https://learn.microsoft.com/bs-latn-ba/power-platform/guidance/adoption/dlp-strategy#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:11+00:00",
+          "normalized_url": "https://learn.microsoft.com/pt-br/training/modules/implement-alm-agents-power-platform/4-configure-environment-variables-connection-references",
+          "source_id": "S227",
+          "title": "Configurar variáveis de ambiente e referências de conexão - Training - Pular para o conteúdo principal",
+          "url": "https://learn.microsoft.com/pt-br/training/modules/implement-alm-agents-power-platform/4-configure-environment-variables-connection-references#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:11+00:00",
+          "normalized_url": "https://learn.microsoft.com/fil-ph/power-platform/guidance/adoption/dlp-strategy",
+          "source_id": "S228",
+          "title": "Implement a data policy strategy - Power Platform - Lumaktaw papuntang pangunahing nilalaman Lumaktaw sa karanasan sa chat ng Ask Learn",
+          "url": "https://learn.microsoft.com/fil-ph/power-platform/guidance/adoption/dlp-strategy#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:11+00:00",
+          "normalized_url": "https://learn.microsoft.com/es-es/training/modules/implement-alm-agents-power-platform/4-configure-environment-variables-connection-references",
+          "source_id": "S229",
+          "title": "Configuración de variables de entorno y referencias de conexión - Training - Ir al contenido principal",
+          "url": "https://learn.microsoft.com/es-es/training/modules/implement-alm-agents-power-platform/4-configure-environment-variables-connection-references#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:12+00:00",
+          "normalized_url": "https://raw.githubusercontent.com/MicrosoftDocs/power-platform/main/power-platform/guidance/adoption/dlp-strategy.md",
+          "source_id": "S230",
+          "title": "title: Implement a data policy strategy - title: Implement a data policy strategy",
+          "url": "https://raw.githubusercontent.com/MicrosoftDocs/power-platform/main/power-platform/guidance/adoption/dlp-strategy.md#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:12+00:00",
+          "normalized_url": "https://raw.githubusercontent.com/tertiarycourses/C1760-AB-620-Microsoft-Certified-AI-Agent-Builder-Associate/refs/heads/main/LG-AB-620%20AI%20Agent%20Builder%20Associate%20(C1760).md",
+          "source_id": "S231",
+          "title": "AB-620 Microsoft Certified AI Agent Builder Associate (C1760) — Learner Guide - - Results vary between runs",
+          "url": "https://raw.githubusercontent.com/tertiarycourses/C1760-AB-620-Microsoft-Certified-AI-Agent-Builder-Associate/refs/heads/main/LG-AB-620%20AI%20Agent%20Builder%20Associate%20(C1760).md#6"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:12+00:00",
+          "normalized_url": "https://raw.githubusercontent.com/MicrosoftDocs/power-platform/ecac99e20d3ac6d5ff401995bb21a6f3d9c4e217/power-platform/guidance/adoption/dlp-strategy.md",
+          "source_id": "S232",
+          "title": "title: Establish a DLP strategy",
+          "url": "https://raw.githubusercontent.com/MicrosoftDocs/power-platform/ecac99e20d3ac6d5ff401995bb21a6f3d9c4e217/power-platform/guidance/adoption/dlp-strategy.md#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:12+00:00",
+          "normalized_url": "https://raw.githubusercontent.com/tertiarycourses/C1760-AB-620-Microsoft-Certified-AI-Agent-Builder-Associate/refs/heads/main/labs/lab-18-configure-environment-variables-and-connection-references.md",
+          "source_id": "S233",
+          "title": "Lab 18 — Configure Environment Variables and Connection References - Lab 18 — Configure Environment Variables and Connection References",
+          "url": "https://raw.githubusercontent.com/tertiarycourses/C1760-AB-620-Microsoft-Certified-AI-Agent-Builder-Associate/refs/heads/main/labs/lab-18-configure-environment-variables-and-connection-references.md#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:12+00:00",
+          "normalized_url": "https://raw.githubusercontent.com/MicrosoftDocs/power-platform/refs/heads/main/power-platform/admin/advanced-connector-policies.md",
+          "source_id": "S234",
+          "title": "title: Advanced connector policies",
+          "url": "https://raw.githubusercontent.com/MicrosoftDocs/power-platform/refs/heads/main/power-platform/admin/advanced-connector-policies.md#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:12+00:00",
+          "normalized_url": "https://raw.githubusercontent.com/tertiarycourses/C1760-AB-620-Microsoft-Certified-AI-Agent-Builder-Associate/941360e11dfa677914a00281a8255404e8c848e0/LG-AB-620%20AI%20Agent%20Builder%20Associate%20(C1760).md",
+          "source_id": "S235",
+          "title": "AB-620 Microsoft Certified AI Agent Builder Associate (C1760) — Learner Guide - - Every issue is labelled a prompt problem",
+          "url": "https://raw.githubusercontent.com/tertiarycourses/C1760-AB-620-Microsoft-Certified-AI-Agent-Builder-Associate/941360e11dfa677914a00281a8255404e8c848e0/LG-AB-620%20AI%20Agent%20Builder%20Associate%20(C1760).md#6"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:12+00:00",
+          "normalized_url": "https://github.com/microsoftdocs/power-platform/blob/bd34cad7f6a5618d7889fd6d01df91736c25f79f/power-platform/guidance/adoption/dlp-strategy.md",
+          "source_id": "S236",
+          "title": "Implement a data policy strategy",
+          "url": "https://github.com/microsoftdocs/power-platform/blob/bd34cad7f6a5618d7889fd6d01df91736c25f79f/power-platform/guidance/adoption/dlp-strategy.md"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:12+00:00",
+          "normalized_url": "https://softchief.com/power-platform-alm-manage-connection-references-across-environments-without-deployment-breaks/",
+          "source_id": "S237",
+          "title": "Power Platform ALM: Manage Connection References Across Environments Without Deployment Breaks - Softchief Technologies",
+          "url": "https://softchief.com/power-platform-alm-manage-connection-references-across-environments-without-deployment-breaks/"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:12+00:00",
+          "normalized_url": "https://www.m365.fm/community/u/mirko-p/blog/data-loss-prevention-in-power-platform-designing-flows-that-survive-dlp-policies/",
+          "source_id": "S238",
+          "title": "Power Platform DLP Policies – Mirko Peters",
+          "url": "https://www.m365.fm/community/u/mirko-p/blog/data-loss-prevention-in-power-platform-designing-flows-that-survive-dlp-policies/"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:12+00:00",
+          "normalized_url": "https://stackoverflow.com/feeds/question/78901624",
+          "source_id": "S239",
+          "title": "Use deployment-setting file to update connection references for different environments in Power Platform - Use deployment-setting file to update connection references for different environments in Power Platform - Stack Overflowmost re...",
+          "url": "https://stackoverflow.com/feeds/question/78901624#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:12+00:00",
+          "normalized_url": "https://github.com/microsoftdocs/power-automate-docs/blob/1101e087427a803d892404f97903ace342dd61b8/articles/guidance/coding-guidelines/prevent-data-exfiltration.md",
+          "source_id": "S240",
+          "title": "Prevent unauthorized transfer of data",
+          "url": "https://github.com/microsoftdocs/power-automate-docs/blob/1101e087427a803d892404f97903ace342dd61b8/articles/guidance/coding-guidelines/prevent-data-exfiltration.md"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:12+00:00",
+          "normalized_url": "https://open-exam-prep.com/study-guides/pl-400/build-solutions/environment-variables",
+          "source_id": "S241",
+          "title": "Environment Variables & Connection Reference | Free Guide 2026",
+          "url": "https://open-exam-prep.com/study-guides/pl-400/build-solutions/environment-variables"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:12+00:00",
+          "normalized_url": "https://www.m365.fm/community/u/mirko-p/blog/power-platform-data-policies-guide/",
+          "source_id": "S242",
+          "title": "How to Build Data Policies in Power Platform Without Breaking User Apps – Mirko Peters",
+          "url": "https://www.m365.fm/community/u/mirko-p/blog/power-platform-data-policies-guide/"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:12+00:00",
+          "normalized_url": "https://stackoverflow.com/revisions/74af101f-6f85-4e88-a7cb-91663a19a3c5/view-source",
+          "source_id": "S243",
+          "title": "Revision 74af101f-6f85-4e88-a7cb-91663a19a3c5",
+          "url": "https://stackoverflow.com/revisions/74af101f-6f85-4e88-a7cb-91663a19a3c5/view-source"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:28+00:00",
+          "normalized_url": "https://learn.microsoft.com/en-us/power-platform/admin/backup-restore-environments",
+          "source_id": "S244",
+          "title": "Back up and restore environments - Power Platform | Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/power-platform/admin/backup-restore-environments"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:35+00:00",
+          "normalized_url": "https://learn.microsoft.com/zh-cn/training/modules/deliver-solutions-pipelines/4-deploy-power-platform-pipelines",
+          "source_id": "S245",
+          "title": "Deploy with Power Platform Pipelines - Training - 跳至主要内容",
+          "url": "https://learn.microsoft.com/zh-cn/training/modules/deliver-solutions-pipelines/4-deploy-power-platform-pipelines#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:35+00:00",
+          "normalized_url": "https://learn.microsoft.com/en-us/training/modules/deliver-solutions-pipelines/4-deploy-power-platform-pipelines?ns-enrollment-type=learningpath&ns-enrollment-id=learn.wwl.standardize-deployment-scale-business-impact-power-platform",
+          "source_id": "S246",
+          "title": "Deploy with Power Platform Pipelines - Training - Skip to main content",
+          "url": "https://learn.microsoft.com/en-us/training/modules/deliver-solutions-pipelines/4-deploy-power-platform-pipelines?ns-enrollment-type=learningpath&ns-enrollment-id=learn.wwl.standardize-deployment-scale-business-impact-power-platform#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:35+00:00",
+          "normalized_url": "https://learn.microsoft.com/es-es/training/modules/set-up-pipeline-environments/set-up-pipeline-environments-roles?ns-enrollment-type=learningpath&ns-enrollment-id=learn.simplify-power-platform-deployments",
+          "source_id": "S247",
+          "title": "Set Up Pipeline Environments and Roles - Training - Ir al contenido principal",
+          "url": "https://learn.microsoft.com/es-es/training/modules/set-up-pipeline-environments/set-up-pipeline-environments-roles?ns-enrollment-type=learningpath&ns-enrollment-id=learn.simplify-power-platform-deployments#1"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:35+00:00",
+          "normalized_url": "https://github.com/microsoftdocs/power-platform/blob/bd34cad7f6a5618d7889fd6d01df91736c25f79f/power-platform/alm/custom-host-pipelines.md",
+          "source_id": "S248",
+          "title": "Create a pipeline using a custom pipelines host",
+          "url": "https://github.com/microsoftdocs/power-platform/blob/bd34cad7f6a5618d7889fd6d01df91736c25f79f/power-platform/alm/custom-host-pipelines.md"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:35+00:00",
+          "normalized_url": "https://github.com/microsoftdocs/power-platform/blob/cb4d2d3f94e8096c8e7371eaf8dc13249663469b/power-platform/alm/run-pipeline.md",
+          "source_id": "S249",
+          "title": "Run pipelines in Power Platform",
+          "url": "https://github.com/microsoftdocs/power-platform/blob/cb4d2d3f94e8096c8e7371eaf8dc13249663469b/power-platform/alm/run-pipeline.md"
+        },
+        {
+          "first_seen_at": "2026-11-24T10:45:35+00:00",
+          "normalized_url": "https://raw.githubusercontent.com/MicrosoftDocs/power-platform/refs/heads/main/power-platform/alm/run-pipeline.md",
+          "source_id": "S250",
+          "title": null,
+          "url": "https://raw.githubusercontent.com/MicrosoftDocs/power-platform/refs/heads/main/power-platform/alm/run-pipeline.md#1"
+        }
+      ],
+      "diagnostic": null,
+      "scope_ok": false,
+      "new_section_after_conclusion": true,
+      "tokens": {
+        "calls": 39,
+        "usage_complete": true,
+        "input_tokens": 2148728,
+        "output_tokens": 80147,
+        "total_tokens": 2228875,
+        "observed_input_tokens": 2148728,
+        "observed_output_tokens": 80147,
+        "observed_total_tokens": 2228875
+      },
+      "roles": [
+        "central",
+        "git_agent",
+        "memory_updater",
+        "outline",
+        "researcher",
+        "writer"
+      ],
+      "tools": {
+        "report_inspect_version": 5,
+        "report_prepare_turn": 1,
+        "report_register_research_request": 1,
+        "report_submit_outline": 2,
+        "web_search": 5,
+        "report_read_material": 15,
+        "report_fetch_material": 1,
+        "read_file": 13,
+        "write_file": 2
+      },
+      "audited_tool_errors": 0,
+      "working_source_count": 250,
+      "working_material_count": 253,
+      "added_tree_nodes": [
+        {
+          "node_id": "n15",
+          "kind": "section",
+          "parent_id": null,
+          "title": "补充：上线前的交接与恢复验证"
+        },
+        {
+          "node_id": "n16",
+          "kind": "writable",
+          "parent_id": "n15",
+          "title": "官方说明：导出/导入与备份恢复的能力边界"
+        },
+        {
+          "node_id": "n17",
+          "kind": "writable",
+          "parent_id": "n15",
+          "title": "我们建议：试点阶段逐项验证的清单与通过判据"
+        }
+      ],
+      "single_new_section_branch": true,
+      "old_display_structure_unchanged": true,
+      "old_rendered_body_retained_as_prefix": true,
+      "branch_scope_ok": true,
+      "scope_checker_note": "Raw checker assumed one writable node equals one section; preserved raw scope_ok=false. Tree audit shows one new section with two writable children.",
+      "new_cited_microsoft_learn_sources": [],
+      "real_research_calls": 5,
+      "line_qualified_source_ids": [
+        "S204",
+        "S205",
+        "S225",
+        "S226",
+        "S244",
+        "S246"
+      ],
+      "line_qualified_marker_count": 87,
+      "new_sources_in_final_reference_list": false,
+      "citation_format_integration_ok": false,
+      "end_to_end_content_contract_pass": false,
+      "citation_format_issue": "Draft uses [S204:15-21] style; native CITATION_RE recognizes [S204] only. New source markers remain raw and all new sources are absent from final citation_numbering.",
+      "line_qualified_source_urls": [
+        {
+          "source_id": "S204",
+          "title": "Solution concepts with Power Platform - Power Platform - Skip to main content Skip to Ask Learn chat experience",
+          "url": "https://learn.microsoft.com/en-nz/power-platform/alm/solution-concepts-alm?WT.mc_id=power-182762-scottdurow#1"
+        },
+        {
+          "source_id": "S205",
+          "title": "Perform Environment Operations - Training - Skip to main content",
+          "url": "https://learn.microsoft.com/en-us/training/modules/manage-operations-monitoring/5-perform-environment-operations#1"
+        },
+        {
+          "source_id": "S225",
+          "title": "配置环境变量和连接引用 - Training - 跳至主要内容",
+          "url": "https://learn.microsoft.com/zh-cn/training/modules/implement-alm-agents-power-platform/4-configure-environment-variables-connection-references#1"
+        },
+        {
+          "source_id": "S226",
+          "title": "Implement a data policy strategy - Power Platform - Preskoči na glavni sadržaj Preskoči na iskustvo razgovora usluge Ask Learn",
+          "url": "https://learn.microsoft.com/bs-latn-ba/power-platform/guidance/adoption/dlp-strategy#1"
+        },
+        {
+          "source_id": "S244",
+          "title": "Back up and restore environments - Power Platform | Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/power-platform/admin/backup-restore-environments"
+        },
+        {
+          "source_id": "S246",
+          "title": "Deploy with Power Platform Pipelines - Training - Skip to main content",
+          "url": "https://learn.microsoft.com/en-us/training/modules/deliver-solutions-pipelines/4-deploy-power-platform-pipelines?ns-enrollment-type=learningpath&ns-enrollment-id=learn.wwl.standardize-deployment-scale-business-impact-power-platform#1"
+        }
+      ]
+    }
+  ],
+  "snapshots": {
+    "paragraphs": {
+      "t0001": true,
+      "t0002": true,
+      "t0003": true,
+      "t0004": true,
+      "t0007": true,
+      "t0008": true,
+      "t0009": true
+    },
+    "upload": {
+      "t0001": true,
+      "t0002": true,
+      "t0003": true,
+      "t0004": true,
+      "t0007": true
+    },
+    "research": {
+      "t0001": true,
+      "t0002": true,
+      "t0003": true,
+      "t0004": true,
+      "t0007": true,
+      "t0008": true
+    }
+  },
+  "usage": {
+    "tokens_by_role": {
+      "outline": {
+        "calls": 11,
+        "usage_complete": true,
+        "input_tokens": 1324901,
+        "output_tokens": 52226,
+        "total_tokens": 1377127,
+        "observed_input_tokens": 1324901,
+        "observed_output_tokens": 52226,
+        "observed_total_tokens": 1377127
+      },
+      "central": {
+        "calls": 9,
+        "usage_complete": true,
+        "input_tokens": 188229,
+        "output_tokens": 9817,
+        "total_tokens": 198046,
+        "observed_input_tokens": 188229,
+        "observed_output_tokens": 9817,
+        "observed_total_tokens": 198046
+      },
+      "git_agent": {
+        "calls": 4,
+        "usage_complete": true,
+        "input_tokens": 26704,
+        "output_tokens": 3654,
+        "total_tokens": 30358,
+        "observed_input_tokens": 26704,
+        "observed_output_tokens": 3654,
+        "observed_total_tokens": 30358
+      },
+      "writer": {
+        "calls": 44,
+        "usage_complete": true,
+        "input_tokens": 1036366,
+        "output_tokens": 10081,
+        "total_tokens": 1046447,
+        "observed_input_tokens": 1036366,
+        "observed_output_tokens": 10081,
+        "observed_total_tokens": 1046447
+      },
+      "researcher": {
+        "calls": 8,
+        "usage_complete": true,
+        "input_tokens": 353625,
+        "output_tokens": 11455,
+        "total_tokens": 365080,
+        "observed_input_tokens": 353625,
+        "observed_output_tokens": 11455,
+        "observed_total_tokens": 365080
+      },
+      "memory_updater": {
+        "calls": 4,
+        "usage_complete": true,
+        "input_tokens": 10348,
+        "output_tokens": 2869,
+        "total_tokens": 13217,
+        "observed_input_tokens": 10348,
+        "observed_output_tokens": 2869,
+        "observed_total_tokens": 13217
+      }
+    },
+    "tokens_by_turn": {
+      "1": {
+        "calls": 5,
+        "usage_complete": true,
+        "input_tokens": 33285,
+        "output_tokens": 1466,
+        "total_tokens": 34751,
+        "observed_input_tokens": 33285,
+        "observed_output_tokens": 1466,
+        "observed_total_tokens": 34751
+      },
+      "2": {
+        "calls": 5,
+        "usage_complete": true,
+        "input_tokens": 31864,
+        "output_tokens": 1366,
+        "total_tokens": 33230,
+        "observed_input_tokens": 31864,
+        "observed_output_tokens": 1366,
+        "observed_total_tokens": 33230
+      },
+      "3": {
+        "calls": 31,
+        "usage_complete": true,
+        "input_tokens": 726296,
+        "output_tokens": 7123,
+        "total_tokens": 733419,
+        "observed_input_tokens": 726296,
+        "observed_output_tokens": 7123,
+        "observed_total_tokens": 733419
+      },
+      "4": {
+        "calls": 39,
+        "usage_complete": true,
+        "input_tokens": 2148728,
+        "output_tokens": 80147,
+        "total_tokens": 2228875,
+        "observed_input_tokens": 2148728,
+        "observed_output_tokens": 80147,
+        "observed_total_tokens": 2228875
+      }
+    },
+    "input_tokens": 2940173,
+    "output_tokens": 90102,
+    "total_tokens": 3030275,
+    "cache_read_tokens_observed": 1963776,
+    "estimated_cost_cny_upper": "2.78216104",
+    "usage_complete": true,
+    "http_coverage_verified": true,
+    "http_tool_attempts": 6,
+    "direct_tool_successes": 6,
+    "direct_tool_cost_cny_observed": "0.030"
+  },
+  "budget": {
+    "spent_cost_cny": "28.29890840",
+    "reserved_cost_cny": "6.488064",
+    "input_tokens": 33502471,
+    "output_tokens": 1371560,
+    "inflight": [
+      "http-1883efa84c6e4cf58bef90882c3671c5-1",
+      "http-6f416a52175d498a894bc2d92351936d-3",
+      "http-b05c246e0a0f49919d40ade6792240a2-12"
+    ],
+    "abort_requested": false
+  },
+  "stop_reason": null,
+  "new_unknown_identities": [],
+  "planned_cases": 4,
+  "runtime_deliveries": 3,
+  "scope_checker_correction_no_rerun": true
+}
