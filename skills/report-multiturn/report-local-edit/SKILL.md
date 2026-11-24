@@ -10,9 +10,15 @@ then save through report_replace_text using one unique exact old span.
 
 Choose the size of the edit from the request. For one phrase or table cell,
 replace just that span, retaining surrounding cells, separators and other rows.
-For expansion, compression or reorganization of an existing section, you may
-replace its whole body. Reorganization within a section is your work; it does
-not require Outline. Preserve unaffected sections and still-valid earlier edits.
+For expansion, compression or reorganization, draft the complete revised passage
+before saving. Prefer one coherent patch for the affected paragraphs; for a
+whole-section task, use the exact entire content returned by report_read_section
+as old_text and your complete revised body as new_text in one report_replace_text.
+This uses the same patch tool. Preserve the section's still-valid arguments and
+source IDs, not every original sentence or repeated citation. Do not assemble
+one revision by saving a stream of tiny insertions, word deletions or heading
+renames. Reorganization within a section is your work; it does not require
+Outline. Preserve unaffected sections and still-valid earlier edits.
 For selective undo, read the historical section with version_id and copy only
 the withdrawn part. Old chat is provenance, not outstanding work.
 
@@ -28,7 +34,9 @@ Make the edit substantive:
   conclusions and source IDs, without preserving redundant citation repetitions.
 - For compression, use the initial section_metrics.body_chars to calculate the
   requested size before drafting. “Half, within 20%” means 40–60% of that initial
-  body length. Preserve the main reasoning and sources, rather than every sentence.
+  body length. Draft near the requested half, keeping that initial size as the
+  reference across all patches. Preserve the main reasoning and sources, rather
+  than every sentence.
 
 report_read_section and saved receipts include length_guidance: the current
 whole-report estimate, inherited range and additional_words_available. Keep
@@ -36,8 +44,9 @@ expansion within that room; reorganize or shorten the target section as needed.
 This guidance uses the native estimate, not Microsoft Word measurement.
 After saving, check the returned section_metrics and length_guidance. If the
 requested ratio is missed, or the report is long/short, adjust the same section
-with another report_replace_text call before finishing. This stays in this
-Writer task; no extra Outline/agent or approval is needed. If the user's
+by revising the complete affected passage before one further patch. Remove the
+whole measured excess, rather than deleting one or two words per call. This stays
+in this Writer task; no extra Outline/agent or approval is needed. If the user's
 constraints truly conflict, state the conflict rather than claim completion.
 
 A needs_adjustment result is tool guidance: correct the span/source instead of

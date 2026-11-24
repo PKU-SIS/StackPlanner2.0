@@ -119,7 +119,17 @@ def test_executor_failure_does_not_publish_partial_edits(tmp_path):
     assert file_manifest(tmp_path / "report/r1") == original
 
 
-def test_real_executor_writer_tools_and_native_finish(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "old_span,new_span",
+    [
+        ("Seed", "Revised"),
+        ("Seed body for n2.\n", "The mechanism develops through dependency and migration costs.\n\nA hypothetical scenario illustrates the tradeoff.\n"),
+        ("Seed body for n2.\n", "## Mechanism\nThe core explanation.\n\n## Cost\nThe tradeoff.\n\n## Response\nA conditional recommendation.\n"),
+        ("Seed body for n2.\n", "Short body.\n"),
+    ],
+    ids=["phrase", "paragraph-expansion", "section-reorganization", "section-compression"],
+)
+def test_real_executor_writer_tools_and_native_finish(tmp_path, monkeypatch, old_span, new_span):
     import importlib
     import sys
 
@@ -140,7 +150,7 @@ def test_real_executor_writer_tools_and_native_finish(tmp_path, monkeypatch):
             responses=[
                 AIMessage(content="", tool_calls=[{"name": "report_find_sections", "args": {"query": "指标"}, "id": "find"}]),
                 AIMessage(content="", tool_calls=[{"name": "report_read_section", "args": {"node_id": "n2"}, "id": "read"}]),
-                AIMessage(content="", tool_calls=[{"name": "report_replace_text", "args": {"node_id": "n2", "old_text": "Seed", "new_text": "Revised"}, "id": "edit"}]),
+                AIMessage(content="", tool_calls=[{"name": "report_replace_text", "args": {"node_id": "n2", "old_text": old_span, "new_text": new_span}, "id": "edit"}]),
                 AIMessage(content="Changed Seed to Revised; all other text retained."),
             ]
         )
@@ -163,6 +173,12 @@ def test_real_executor_writer_tools_and_native_finish(tmp_path, monkeypatch):
         assert not _finish(ctx).error
         assert file_manifest(tmp_path / "report/r1") == original
         assert adapter.current_turn(ctx.state, thread_id="t1")[3]["status"] == "accepted"
+        current = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+        assert len(current.payload["writer_first"]["edits"]) == 1
+        drafted = next(d for d in current.payload["drafts"] if d["node_id"] == "n2" and d["is_current"])
+        assert native.read_text(Path(drafted["path"])) == "Seed body for n2.\n".replace(old_span, new_span, 1)
+        untouched = next(d for d in current.payload["drafts"] if d["node_id"] == "n3" and d["is_current"])
+        assert native.read_text(Path(untouched["path"])) == "Do not change this section.\n"
     finally:
         if previous is not None:
             sys.modules[key] = previous

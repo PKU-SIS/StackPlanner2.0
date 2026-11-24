@@ -1,0 +1,327 @@
+{
+  "baseline_commit": "0a7f825",
+  "plan": {
+    "code_commit": "0a7f825",
+    "source_prefix_through": "t0007",
+    "queries": [
+      {
+        "case": "expand",
+        "expected_node": "n9",
+        "query": "报告里“锁定与工程能力缺口：从“拖拽快”到“改不动””这一部分讲得有些概括，请把平台锁定如何形成、为什么后续扩展和迁移会增加成本解释详细一些，补两个明确标为假设的具体场景。保留已有有效论点与引用，其他章节和表格保持原样。仅使用已保存的材料，不重新检索；全文仍满足原有篇幅要求。"
+      },
+      {
+        "case": "citations",
+        "expected_node": "n8",
+        "query": "“治理张力：灵活性与标准化之间的持续取舍”这一部分引用偏少，请为关键论断补充至少两处有实际依据的引用，优先选择不同来源，解释证据与论断的关系。只用已保存的材料，找不到充分依据就明确说明，不编造出处或行号。保留上一轮扩写，其他章节与表格不变。"
+      },
+      {
+        "case": "restructure",
+        "expected_node": "n9",
+        "query": "“锁定与工程能力缺口：从“拖拽快”到“改不动””现在还是有点散，请把这一部分按“形成机制—退出成本—应对办法”重新组织，可以用三个小标题。保留原有有效论点、引用和上一轮补充的两个假设场景，不额外添加事实。保留刚才补的引用，其他章节和表格不变，不检索。"
+      },
+      {
+        "case": "compress",
+        "expected_node": "n9",
+        "query": "刚才重组的“锁定与工程能力缺口”这一部分太长了，请压缩到重组后正文长度的大约一半，允许上下浮动百分之二十。保留“形成机制—退出成本—应对办法”的结构、关键结论与引用；两个假设场景可以缩短。治理张力部分刚补的引用和其他章节、表格保持原样，不检索。"
+      }
+    ],
+    "evaluation": "Compare canonical node bytes before/after; verify all historical manifests; inspect final markdown and source support; no tuning/retries during batch",
+    "budget_prior": "prior-usage.json",
+    "production_changes": false,
+    "purpose": "Prefer one coherent paragraph/full-section patch through existing exact-span tool; original four-query sequence, no code tuning within batch",
+    "worktree_sha256": {
+      "backend/packages/harness/deerflow/sp/report/turns/local_edit.py": "589f714481adb2f602717816511ea87f81bade2281a50c19b9c4f1e068307d88",
+      "skills/report-multiturn/report-local-edit/SKILL.md": "ad5800434914a614301e8d252fe9c128babfc25f2dd356597621b9e8305c3283",
+      "skills/report-multiturn/report-dialogue-routing/SKILL.md": "68e1dc9ff6bda92612b4a242f5707e55581a2cfd6e5589901a362786857877fc"
+    }
+  },
+  "attempted": 2,
+  "delivered": 1,
+  "dependent_cases_not_executed": [
+    "restructure",
+    "compress"
+  ],
+  "rows": [
+    {
+      "number": 1,
+      "case": "expand",
+      "expected_node": "n9",
+      "query": "报告里“锁定与工程能力缺口：从“拖拽快”到“改不动””这一部分讲得有些概括，请把平台锁定如何形成、为什么后续扩展和迁移会增加成本解释详细一些，补两个明确标为假设的具体场景。保留已有有效论点与引用，其他章节和表格保持原样。仅使用已保存的材料，不重新检索；全文仍满足原有篇幅要求。",
+      "message_id": "29126c44-78c8-41a6-a8f3-167940a6df7e",
+      "run_id": "6dede84a-4530-4a94-9d99-8d2f957fe310",
+      "run_status": "success",
+      "turn_id": "t0008",
+      "turn_status": "accepted",
+      "native_delivery_created": true,
+      "changed_nodes": [
+        "n9"
+      ],
+      "scope_ok": true,
+      "prior_files_unchanged": true,
+      "duration_seconds": 87.3,
+      "old_chars": 1715,
+      "new_chars": 3307,
+      "old_final_sha256": "94f3ec95325bb12e7f70f1d5dbbf6b3416237fc94778e65754d3406092cb1282",
+      "new_final_sha256": "e5f8acb436399a13011910fecdd47999f5ab56be3351a0da02dd1bb6f3ea4c49",
+      "final_path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-hard-04/runtime/users/default/threads/hard-revision-20261124-04/user-data/outputs/report/r34/final/report-4.md",
+      "final_receipt_matches": true,
+      "old_citations": [
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S40]",
+        "[S128]",
+        "[S70]",
+        "[S40]",
+        "[S113]",
+        "[S129]",
+        "[S188]",
+        "[S133]"
+      ],
+      "new_citations": [
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S40]",
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S40]",
+        "[S113]",
+        "[S128]",
+        "[S113]",
+        "[S113]",
+        "[S40]",
+        "[S40]",
+        "[S40]",
+        "[S40]",
+        "[S40]",
+        "[S128]",
+        "[S70]",
+        "[S40]",
+        "[S113]",
+        "[S129]",
+        "[S188]",
+        "[S133]"
+      ],
+      "saves": 13,
+      "working_counts": [
+        11847,
+        11262,
+        10836,
+        11172,
+        11146,
+        11057,
+        11055,
+        11047,
+        11044,
+        11039,
+        11024,
+        11001,
+        10998
+      ],
+      "tokens": {
+        "calls": 25,
+        "usage_complete": true,
+        "input_tokens": 631631,
+        "output_tokens": 15123,
+        "total_tokens": 646754,
+        "observed_input_tokens": 631631,
+        "observed_output_tokens": 15123,
+        "observed_total_tokens": 646754
+      },
+      "tool_error_count": 0,
+      "review_length_auto_revision": null,
+      "diagnostic": null,
+      "working_copy_changed_nodes": [
+        "n9"
+      ],
+      "all_original_source_ids_preserved": true
+    },
+    {
+      "number": 2,
+      "case": "citations",
+      "expected_node": "n8",
+      "query": "“治理张力：灵活性与标准化之间的持续取舍”这一部分引用偏少，请为关键论断补充至少两处有实际依据的引用，优先选择不同来源，解释证据与论断的关系。只用已保存的材料，找不到充分依据就明确说明，不编造出处或行号。保留上一轮扩写，其他章节与表格不变。",
+      "message_id": "065ef4ec-3572-42fe-b23b-36b807e40ae9",
+      "run_id": "9d96e71c-2786-4ef9-96be-9f72a7c7d6a4",
+      "run_status": "success",
+      "turn_id": "t0009",
+      "turn_status": "failed",
+      "native_delivery_created": false,
+      "changed_nodes": [],
+      "scope_ok": false,
+      "prior_files_unchanged": true,
+      "duration_seconds": 78.396,
+      "old_chars": 752,
+      "new_chars": 752,
+      "old_final_sha256": "e5f8acb436399a13011910fecdd47999f5ab56be3351a0da02dd1bb6f3ea4c49",
+      "new_final_sha256": "e5f8acb436399a13011910fecdd47999f5ab56be3351a0da02dd1bb6f3ea4c49",
+      "final_path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-hard-04/runtime/users/default/threads/hard-revision-20261124-04/user-data/outputs/report/r34/final/report-4.md",
+      "final_receipt_matches": true,
+      "old_citations": [
+        "[S26]",
+        "[S13]",
+        "[S29]",
+        "[S29]",
+        "[S29]"
+      ],
+      "new_citations": [
+        "[S26]",
+        "[S13]",
+        "[S29]",
+        "[S29]",
+        "[S29]"
+      ],
+      "saves": 13,
+      "working_counts": [
+        11329,
+        11172,
+        11764,
+        11901,
+        11337,
+        11309,
+        11447,
+        11309,
+        11220,
+        11211,
+        11204,
+        11200,
+        11196
+      ],
+      "tokens": {
+        "calls": 28,
+        "usage_complete": true,
+        "input_tokens": 637032,
+        "output_tokens": 11246,
+        "total_tokens": 648278,
+        "observed_input_tokens": 637032,
+        "observed_output_tokens": 11246,
+        "observed_total_tokens": 648278
+      },
+      "tool_error_count": 0,
+      "review_length_auto_revision": false,
+      "diagnostic": {
+        "error": "Run ended without native delivery",
+        "last_handler_result": {
+          "action_id": "spact_sp-fixed-r35-t0009-c0-ask-r1-rv5",
+          "action_type": "ASK_HUMAN",
+          "error": null,
+          "idempotency_key": "spidem_sp-fixed-r35-t0009-c0-ask-r1-rv5",
+          "loop_iteration": 3,
+          "next_step": "interrupt",
+          "run_id": "9d96e71c-2786-4ef9-96be-9f72a7c7d6a4",
+          "stage": "verification",
+          "target_agent": null
+        },
+        "run_id": "9d96e71c-2786-4ef9-96be-9f72a7c7d6a4",
+        "usage": null
+      },
+      "working_copy_changed_nodes": [
+        "n8"
+      ],
+      "all_original_source_ids_preserved": null
+    }
+  ],
+  "accepted_snapshot_checks": {
+    "t0001": true,
+    "t0002": true,
+    "t0003": true,
+    "t0004": true,
+    "t0007": true,
+    "t0008": true
+  },
+  "current_code_matches_plan": true,
+  "usage": {
+    "tokens_by_role": {
+      "writer": {
+        "calls": 46,
+        "usage_complete": true,
+        "input_tokens": 994544,
+        "output_tokens": 20032,
+        "total_tokens": 1014576,
+        "observed_input_tokens": 994544,
+        "observed_output_tokens": 20032,
+        "observed_total_tokens": 1014576
+      },
+      "central": {
+        "calls": 2,
+        "usage_complete": true,
+        "input_tokens": 35302,
+        "output_tokens": 2147,
+        "total_tokens": 37449,
+        "observed_input_tokens": 35302,
+        "observed_output_tokens": 2147,
+        "observed_total_tokens": 37449
+      },
+      "outline": {
+        "calls": 3,
+        "usage_complete": true,
+        "input_tokens": 234344,
+        "output_tokens": 2699,
+        "total_tokens": 237043,
+        "observed_input_tokens": 234344,
+        "observed_output_tokens": 2699,
+        "observed_total_tokens": 237043
+      },
+      "memory_updater": {
+        "calls": 2,
+        "usage_complete": true,
+        "input_tokens": 4473,
+        "output_tokens": 1491,
+        "total_tokens": 5964,
+        "observed_input_tokens": 4473,
+        "observed_output_tokens": 1491,
+        "observed_total_tokens": 5964
+      }
+    },
+    "tokens_by_turn": {
+      "1": {
+        "calls": 25,
+        "usage_complete": true,
+        "input_tokens": 631631,
+        "output_tokens": 15123,
+        "total_tokens": 646754,
+        "observed_input_tokens": 631631,
+        "observed_output_tokens": 15123,
+        "observed_total_tokens": 646754
+      },
+      "2": {
+        "calls": 28,
+        "usage_complete": true,
+        "input_tokens": 637032,
+        "output_tokens": 11246,
+        "total_tokens": 648278,
+        "observed_input_tokens": 637032,
+        "observed_output_tokens": 11246,
+        "observed_total_tokens": 648278
+      }
+    },
+    "input_tokens": 1268663,
+    "output_tokens": 26369,
+    "total_tokens": 1295032,
+    "cache_read_tokens_observed": 1138048,
+    "estimated_cost_cny_upper": "0.51770392",
+    "usage_complete": true,
+    "http_coverage_verified": true
+  },
+  "budget": {
+    "spent_cost_cny": "25.14427672",
+    "reserved_cost_cny": "6.488064",
+    "input_tokens": 29922951,
+    "output_tokens": 1261550,
+    "inflight": [
+      "http-1883efa84c6e4cf58bef90882c3671c5-1",
+      "http-6f416a52175d498a894bc2d92351936d-3",
+      "http-b05c246e0a0f49919d40ade6792240a2-12"
+    ],
+    "abort_requested": false
+  },
+  "no_new_unknown_exposure": true,
+  "no_automatic_paid_restarts": true,
+  "stop_reason": null
+}

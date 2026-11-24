@@ -25,6 +25,9 @@ Existing-section expansion, saved-material citation additions, reorganization an
 compression also use this Writer path. Section reads and saved receipts return
 non-blocking native whole-report length guidance and body character counts;
 Writer can correct within the same task, without extra classification or review.
+The same exact-span patch tool supports a full passage or section replacement;
+for broad edits Writer drafts the complete replacement before saving, instead of
+serial micro-edits. Phrase/table-cell requests retain minimum-span edits.
 Only chapter-tree changes or new research need coordination. Reads do not write
 assembly files, and the inherited final length threshold remains unchanged.
 Simple edits use an explicitly labelled programmatic review receipt
