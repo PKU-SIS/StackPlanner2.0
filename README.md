@@ -1046,6 +1046,12 @@ and whole-version reuse can run as program operations without another agent.
 Old versions remain isolated; native assembly, citation, length and hash checks
 still apply. Simple edits do not include an independent semantic review.
 See [Writer-first behavior and offline checks](docs/research-report/WRITER_FIRST_20261123.md).
+Normal Gateway run submissions preserve the explicit message binding. The read-only
+`GET /api/threads/{thread_id}/report-dialogue` exposes accepted/active versions and
+the latest bound message outcome, separately from native delivery status.
+The ordinary chat page offers an off-by-default “Continue this report” checkbox
+and displays the active version and turn outcome.
+See [Gateway dialogue API](docs/research-report/GATEWAY_DIALOGUE_API_20261124.md).
 The [first live results](docs/research-report/writer-first-api-20261123/RESULT.md)
 retain both a completed six-turn conversation and a wrong-section failure; Writer
 now receives actual section titles instead of relying on guessed delegate IDs.

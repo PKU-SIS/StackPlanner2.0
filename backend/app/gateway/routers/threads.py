@@ -1054,15 +1054,28 @@ async def compact_thread(thread_id: str, body: ThreadCompactRequest, request: Re
     return _thread_compact_response(result)
 
 
+@router.get("/{thread_id}/report-dialogue")
+@require_permission("threads", "read", owner_check=True, require_existing=True)
+async def get_thread_report_dialogue(thread_id: str, request: Request) -> dict[str, Any]:
+    """Read accepted versions and source-message turn status without mutating them."""
+    from deerflow.sp.report.turns.presentation import dialogue_view
+
+    checkpoint_tuple = await get_checkpointer(request).aget_tuple({"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}})
+    state = (getattr(checkpoint_tuple, "checkpoint", {}) or {}).get("channel_values", {})
+    try:
+        return dialogue_view(state, user_id=get_effective_user_id(), thread_id=thread_id)
+    except Exception:  # noqa: BLE001 - never disclose stored paths/private diagnostics
+        logger.warning("Unable to read report dialogue for thread %s", sanitize_log_param(thread_id))
+        raise HTTPException(status_code=409, detail="Report dialogue state is unavailable") from None
+
+
 @router.get("/{thread_id}/report-view", response_model=ReportViewResponse)
 @require_permission("threads", "read", owner_check=True)
 async def get_thread_report_view(thread_id: str, request: Request) -> ReportViewResponse:
     """Return only the derived report status for status polling."""
     checkpointer = get_checkpointer(request)
     try:
-        checkpoint_tuple = await checkpointer.aget_tuple(
-            {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
-        )
+        checkpoint_tuple = await checkpointer.aget_tuple({"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}})
     except Exception:
         logger.exception("Failed to get report view for thread %s", sanitize_log_param(thread_id))
         raise HTTPException(status_code=500, detail="Failed to get report view") from None

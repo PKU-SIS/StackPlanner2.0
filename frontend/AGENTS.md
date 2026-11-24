@@ -136,3 +136,12 @@ When adding features:
 When one logical subtask ID has a failed attempt followed by a successful retry, MessageList history can replay both terminal results during one render. `useUpdateSubtask` batches deferred terminal notifications by the first observed status and compares the final status before notifying; replay with no net change must not schedule another render. Successful completion clears stale failure text. MessageList deduplicates task counts/cards by task ID within each subagent group. Preserve existing live-step/backfill merging and keep the browser regression in `tests/e2e/subtask-retry-render.spec.ts`.
 
 `ReportWriterPipeline` renders host-dispatched Writers from the run-scoped report-view snapshot; SubtaskContext continues supplying live steps. The panel stays hidden until the first Writer is dispatched, then includes pending chapters and retains completed/failed history; accepted draft links survive refresh. `pipeline.ts` filters already-anchored task IDs (including the spact_ alias), hides stale report views during a new run and hydrates task snapshots idempotently in an effect, retaining live steps. Never seed these tasks during render or add synthetic model sp_delegate messages. The existing SubtaskCard supports a chapter-title override.
+
+
+The ordinary chat page owns the explicit report-dialogue opt-in selection, keyed
+by thread ID and off by default. `ReportDialogueControl` reads the Gateway's
+`/report-dialogue` projection through `useReportDialogue`; it displays the active
+version and source-message outcome without guessing native delivery. The helper
+`core/threads/report-dialogue.ts` preserves additional message fields and never
+forwards a selection to another thread. Mock/new/static pages do not poll.
+Do not automatically bind every later user message just because a report exists.

@@ -265,3 +265,14 @@ this is not a terminal failed turn. Two scripted Writer-failure production-graph
 probes stop after one Central request/delegation and preserve failed status/usage.
 831 offline regressions pass. Do not claim provider-failure experiments were run
 or that these few samples establish universal source-faithfulness accuracy.
+
+
+Gateway report-dialogue presentation is a read-only projection in
+`sp/report/turns/presentation.py`, exposed through authorized
+`GET /api/threads/{thread_id}/report-dialogue`. Never invoke `session()` from
+a read endpoint: it lazily freezes origins. The projection uses the checkpoint's
+server-owned outputs path, authenticated user and URL thread identity, never
+request-supplied paths/owners. Keep head, active version, current source-message
+turn status and native delivery creation separate. Preserve the original
+report-view/pipeline response and first-turn routing. No raw diagnostics/queries
+or host paths belong in status responses. See Gateway dialogue API notes.

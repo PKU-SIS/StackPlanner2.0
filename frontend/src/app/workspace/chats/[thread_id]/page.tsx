@@ -23,6 +23,7 @@ import {
   MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
 } from "@/components/workspace/messages";
 import { ThreadContext } from "@/components/workspace/messages/context";
+import { ReportDialogueControl } from "@/components/workspace/report-dialogue";
 import { ReportStatusBanner } from "@/components/workspace/report-status";
 import {
   SidecarProvider,
@@ -48,10 +49,15 @@ import { useNotification } from "@/core/notification/hooks";
 import { useLocalSettings, useThreadSettings } from "@/core/settings";
 import {
   useBranchThread,
+  useReportDialogue,
   useThreadMetadata,
   useThreadStream,
   useThreadTokenUsage,
 } from "@/core/threads/hooks";
+import {
+  dialogueMessageKwargs,
+  type ReportDialogueSelection,
+} from "@/core/threads/report-dialogue";
 import { threadTokenUsageToTokenUsage } from "@/core/threads/token-usage";
 import { textOfMessage } from "@/core/threads/utils";
 import { env } from "@/env";
@@ -142,6 +148,14 @@ export default function ChatPage() {
     },
   });
 
+  const [reportSelection, setReportSelection] =
+    useState<ReportDialogueSelection>(null);
+  const dialogue = useReportDialogue(
+    threadId,
+    !isNewThread && !isMock && env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true",
+    thread.isLoading,
+    thread.messages.at(-1)?.id,
+  );
   const hasThreadMessages = thread.messages.length > 0;
 
   useEffect(() => {
@@ -171,13 +185,20 @@ export default function ChatPage() {
 
   const handleSubmit = useCallback(
     (message: PromptInputMessage, options?: InputBoxSubmitOptions) => {
-      const sendPromise = sendMessage(threadId, message, undefined, options);
+      const sendPromise = sendMessage(threadId, message, undefined, {
+        ...options,
+        additionalKwargs: dialogueMessageKwargs(
+          threadId,
+          reportSelection,
+          options?.additionalKwargs,
+        ),
+      });
       if (message.files.length > 0) {
         return sendPromise;
       }
       void sendPromise;
     },
-    [sendMessage, threadId],
+    [sendMessage, threadId, reportSelection],
   );
   const handleSubmitHumanInput = useCallback(
     async (request: HumanInputRequest, response: HumanInputResponse) => {
@@ -354,6 +375,20 @@ export default function ChatPage() {
                       threadId={threadId}
                       isLoading={thread.isLoading}
                       isMock={isMock}
+                    />
+                  )}
+                  {!isWelcomeMode && dialogue.data?.available && (
+                    <ReportDialogueControl
+                      view={dialogue.data}
+                      selected={reportSelection?.threadId === threadId}
+                      running={thread.isLoading}
+                      onChange={(selected) =>
+                        setReportSelection(
+                          selected && dialogue.data?.binding
+                            ? { threadId, binding: dialogue.data.binding }
+                            : null,
+                        )
+                      }
                     />
                   )}
                   {(hasGoal || hasTodos) && (

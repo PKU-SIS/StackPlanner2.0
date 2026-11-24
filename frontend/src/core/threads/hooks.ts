@@ -29,6 +29,7 @@ import type { UploadedFileInfo } from "../uploads";
 import { promptInputFilePartToFile, uploadFiles } from "../uploads";
 
 import { branchThreadFromTurn, fetchThreadTokenUsage } from "./api";
+import type { ReportDialogueView } from "./report-dialogue";
 import {
   buildThreadsSearchQueryOptions,
   DEFAULT_THREAD_SEARCH_PARAMS,
@@ -2101,6 +2102,28 @@ export function useThreadMetadata(
     enabled: enabled && Boolean(threadId),
     retry: false,
     refetchOnWindowFocus: false,
+  });
+}
+
+export function useReportDialogue(
+  threadId: string,
+  enabled: boolean,
+  running: boolean,
+  lastMessageId?: string,
+) {
+  return useQuery<ReportDialogueView | null>({
+    queryKey: ["thread", "report-dialogue", threadId, running, lastMessageId],
+    queryFn: async () => {
+      const response = await fetch(
+        `${getBackendBaseURL()}/api/threads/${encodeURIComponent(threadId)}/report-dialogue`,
+        { credentials: "include" },
+      );
+      if (!response.ok) return null;
+      return (await response.json()) as ReportDialogueView;
+    },
+    enabled,
+    retry: false,
+    refetchInterval: running ? 2000 : false,
   });
 }
 
