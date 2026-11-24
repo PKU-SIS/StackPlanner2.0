@@ -1,0 +1,489 @@
+{
+  "implementation_commit": "07d9efe",
+  "plan": {
+    "code_commit": "07d9efe",
+    "cases": [
+      {
+        "case": "upload_and_extend",
+        "query": "根据本轮附件 mixed-material.md，只在“结论：分场景的条件式答案与三个落地检查点”末尾补一个以“试点验收建议”为小标题的正文段落，纳入三项建议和编号 MT-MIXED-20261124，明确是用户内部建议并注明来源。附件接入已保存报告材料，原有正文、章节、表格和引用保持原样。不检索。"
+      },
+      {
+        "case": "add_section",
+        "query": "保留刚才结论中的补充。只根据已保存的 mixed-material.md，在结论之后新增一个独立小节“补充：试点验收检查”，把附件三项建议整理成验证清单，引用这份用户资料并区分建议与事实；其他现有章节原文不动。该新增小节的最后原样追加下面这一段，不为它另列小标题：<新增段落>【观察记录建议】试点结束后，将导出样本、回退记录和交接签字放在同一份内部归档中，供下一轮试点复核；这是一项建议，不代表已经执行。</新增段落>。标签只界定段落原文，不写入报告。不检索，不扩展外部事实。"
+      },
+      {
+        "case": "delete_paragraph_keep_independent_edit",
+        "query": "本轮只做两处修改：一，删除新增小节末尾的整段“【观察记录建议】试点结束后，将导出样本、回退记录和交接签字放在同一份内部归档中，供下一轮试点复核；这是一项建议，不代表已经执行。”以及仅为它新增的分隔空行，保留该小节其余内容；二，把第一轮结论补充段落的小标题“试点验收建议”改为“内部试点验收建议”。其他文字、章节、表格与引用保持不变，不检索。"
+      },
+      {
+        "case": "undo_section_keep_other_edits",
+        "query": "撤销第二轮新增的整个“补充：试点验收检查”小节及它的全部内部内容，但保留已保存附件、第一轮结论补充，以及第三轮的小标题“内部试点验收建议”。其他原文、表格和引用一字不动。只撤销这个小节，不做整版回退，不检索；此前被删除的“【观察记录建议】”段落不要恢复。"
+      },
+      {
+        "case": "readonly_change_summary",
+        "query": "先不要改稿、不检索、不重新写作。只读说明前四轮最终保留了哪些修改、撤销了哪些修改：当前还有“【观察记录建议】”段落吗？还有“补充：试点验收检查”小节吗？附件和“内部试点验收建议”标题是否仍保留？请按当前已接受版本回答。"
+      }
+    ],
+    "observation_paragraph": "【观察记录建议】试点结束后，将导出样本、回退记录和交接签字放在同一份内部归档中，供下一轮试点复核；这是一项建议，不代表已经执行。",
+    "first_title": "试点验收建议",
+    "retained_title": "内部试点验收建议",
+    "new_section_title": "补充：试点验收检查",
+    "source_prefix_through": 7,
+    "runtime_storage": "Independent new-checkout data directory",
+    "scope": "Same five-query mixed chain after baseline and direct Outline fixes; no production changes or retries within batch",
+    "worktree_sha256": {
+      "backend/packages/harness/deerflow/sp/report/citations.py": "5fd16ea0f11a16bc0eca29cb8f5f979027e615c6c4f7329b17f665dd9d2ed89d",
+      "backend/packages/harness/deerflow/sp/report/acceptance.py": "271b20b994450702c4a2d248d9551697b16de32fcf57c4e9da056361df1d7e5d",
+      "backend/packages/harness/deerflow/sp/report/length.py": "c3312c274056d56f0ec37202014507fb7ffc1a6b5d12e5b940e101f02be46ab9",
+      "backend/packages/harness/deerflow/sp/report/writing.py": "ae2ffa66e50aa11f3f442b06e52a29e97efb53dba6f3d93f02cd2d5f258e9456",
+      "backend/packages/harness/deerflow/sp/report/task_card.py": "c17b4980b7d7868acf5f788087216eafee6a51d532f88cc5dc94dcb059bd7a4b",
+      "backend/packages/harness/deerflow/sp/report/read_material.py": "084061d6e8fe3c365caafd35cbe983d9a4713c7a41933275c033cec7a4a4ae58",
+      "backend/packages/harness/deerflow/sp/report/recovery.py": "d6e0a56a01bc37a2b4c194ab02b40f91457effb4467d43aa06423bf21442f860",
+      "backend/packages/harness/deerflow/sp/report/__init__.py": "91690ac0670412b706be66be31d0733b292851438f0cb47af9410cac4cd75c71",
+      "backend/packages/harness/deerflow/sp/report/store.py": "1b4b1635ed17cc73d9dd25f11ce475a9b60b59cd1464fa3e97fff4cf4c70190a",
+      "backend/packages/harness/deerflow/sp/report/supplement_delivery.py": "3cf1096f1eef021069232e1aa9daad28d1a01ebff7caf969675bdc01209f5915",
+      "backend/packages/harness/deerflow/sp/report/materials.py": "bcfe65c39aacaede960a085fc1ef18406b6cbc722e2431beb583c1d804085e98",
+      "backend/packages/harness/deerflow/sp/report/research_continuation.py": "92545d82d86bc44cda0996a9aebcfc35d358241e8a5439158f66f3d867048b98",
+      "backend/packages/harness/deerflow/sp/report/submit_outline.py": "09e4c46eea090eff5d4addef973c452e402f79f54db8a1530692ef9caa21ea4b",
+      "backend/packages/harness/deerflow/sp/report/research_delivery.py": "9ca5a92dbd734f1bf69756414a41113b1c3f0289cb80f2e843a33abb678bfe18",
+      "backend/packages/harness/deerflow/sp/report/writer_pipeline.py": "e3db69510d2c035e9812f08edc7c4987ad789ab392c596622895d7421841b86a",
+      "backend/packages/harness/deerflow/sp/report/prompts.py": "4720e5b2897a07578d5173bd4cfb41177b2773a120613e23f063f316129c93c4",
+      "backend/packages/harness/deerflow/sp/report/context.py": "febcb5f7a31548d5c797032bd234fb64e7b2b87e0776e05ba2f048c6b117470b",
+      "backend/packages/harness/deerflow/sp/report/search_materials.py": "209b9ad65d0a8756d0fefad2bdee76ed0b3d6c18780190b6072b7eb2445144d6",
+      "backend/packages/harness/deerflow/sp/report/citation_display.py": "bae4573ae721d1715aa9f9f0f48960c777c42f21f7c75655f4a48a8934d87b78",
+      "backend/packages/harness/deerflow/sp/report/entry.py": "9711cb0134bdf70b51ac864a1488a46aa3d978b5c4c7eb771daecfc7b27f0985",
+      "backend/packages/harness/deerflow/sp/report/hooks.py": "3b10bf92dfe50020d8e9686e3450fc7a6428e79ae46d117079c88a41e993990a",
+      "backend/packages/harness/deerflow/sp/report/assembly.py": "32f0611ef8d70f6fcc7feba9e87082f06ca7d4088f48afbad869d8a755347a7b",
+      "backend/packages/harness/deerflow/sp/report/writer_length.py": "ac38a55c31d45727a3ef31c95bfbba595cf8aa30254681096a629467f8f2946e",
+      "backend/packages/harness/deerflow/sp/report/ledger.py": "314fc21fcff0dc14aec565819028dd80d310015d063a8e8403fec1aa973e1334",
+      "backend/packages/harness/deerflow/sp/report/tree.py": "10dde8bd5b41145f02f4523465fddc7e5b793d9a085b3744337a0fc0e5d77ced",
+      "backend/packages/harness/deerflow/sp/report/presentation.py": "9fc56f1a693a809227e2fc0455f21ba383ffcb1529ce961befac96c41de9e213",
+      "backend/packages/harness/deerflow/sp/report/draft_choices.py": "c49365c8539b70a0fa5386c81c78d7781fb3f9359e6010fd642ab386340d2aa4",
+      "backend/packages/harness/deerflow/sp/report/tools.py": "eb4cbcba9a3c875196fa648d1195f8d845c071b85e4f6912d9b33d34e7350368",
+      "backend/packages/harness/deerflow/sp/report/packets.py": "1f1478dae53dab3416e035fafdb08b864e91a1218be7b4ccd517fe447dab38c1",
+      "backend/packages/harness/deerflow/sp/report/turns/__init__.py": "7dcaed366b9001b1cbb37a2fb53ad949054fc610764dcd19d1f77a595ceefd88",
+      "backend/packages/harness/deerflow/sp/report/turns/store.py": "70e77c66e97e999cebcbc2d29b95365b91c5f5584fc92b4c03bfb3def676de89",
+      "backend/packages/harness/deerflow/sp/report/turns/provenance.py": "4a3f2931066d47f218e6e89540884658734267ec8d38c8d631ce708254e758a6",
+      "backend/packages/harness/deerflow/sp/report/turns/adapter.py": "4985f94ff861386020a17c80ec1f69cbf1dc749b1c2ba69db9c614f62cad2bcf",
+      "backend/packages/harness/deerflow/sp/report/turns/local_edit.py": "fceff1e5ccebe62119d713d7376f9489e5d60f95058cc5198568f420dcc3d9a6",
+      "backend/packages/harness/deerflow/sp/report/turns/uploads.py": "cb1fa6f1e09c275aaaf8d16d773026ec6762a8f3317d95ab376745826f1b2a68",
+      "backend/packages/harness/deerflow/sp/report/turns/presentation.py": "86b96ef971238f4d6ce90e5583f65d25d1812e16bcb71d3f88d73fb4253c49c8",
+      "backend/packages/harness/deerflow/sp/report/turns/tools.py": "6c706ee35a0fe8aa8ef4d7b71dd6e1ade16f4bd45ca40eb6754802417fa20248",
+      "skills/report-multiturn/report-node-revision/SKILL.md": "1a06db8780bb9402926b91414bcbc763762dc159bf111f285295256452f5b04d",
+      "skills/report-multiturn/report-local-edit/SKILL.md": "d5a93830e813f839150f5ce5ad4490f20fbd129b4b531a4eae81170534ce040c",
+      "skills/report-multiturn/report-dialogue-routing/SKILL.md": "f1ae93f6fa52cb9b96d32198c7734c6742a3d3043e55a8d464e775deacb50785",
+      "skills/report-multiturn/report-revision-plan/SKILL.md": "722e7e26cb2e192af53246d1bef97d516349ae30cbfb608a174f82c732a1beee",
+      "skills/report-multiturn/report-version-management/SKILL.md": "7f133b9f839add60bdcf19f0e998f8e8c742717fc52a499c20e5203c14747e71"
+    }
+  },
+  "rows": [
+    {
+      "number": 1,
+      "case": "upload_and_extend",
+      "query": "根据本轮附件 mixed-material.md，只在“结论：分场景的条件式答案与三个落地检查点”末尾补一个以“试点验收建议”为小标题的正文段落，纳入三项建议和编号 MT-MIXED-20261124，明确是用户内部建议并注明来源。附件接入已保存报告材料，原有正文、章节、表格和引用保持原样。不检索。",
+      "message_id": "d7c1b0f8-df5c-4aef-9cc0-df57e55730c3",
+      "run_id": "7074e726-1cb0-44a8-914e-70474d978c7c",
+      "run_status": "success",
+      "turn_id": "t0008",
+      "turn_status": "accepted",
+      "base_version_id": "t0007",
+      "before_head": "t0007",
+      "after_head": "t0008",
+      "before_active": "t0007",
+      "after_active": "t0008",
+      "native_delivery_created": true,
+      "changed_nodes": [
+        "n14"
+      ],
+      "added_writable_nodes": [],
+      "removed_writable_nodes": [],
+      "old_versions_unchanged": true,
+      "final_sha_matches": true,
+      "duration_seconds": 21.322,
+      "final_path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-mixed-09/runtime/users/default/threads/mixed-dialogue-20261124-09/user-data/outputs/report/r34/final/report-4.md",
+      "diagnostic": null,
+      "uploaded_sources": [
+        "S204"
+      ],
+      "material_registered": true,
+      "original_body_retained": true,
+      "first_title_present": true,
+      "user_advice_label_present": true,
+      "scope_ok": true,
+      "content_ok": true,
+      "attachment_retained": true,
+      "attachment_in_final_references": true,
+      "tokens": {
+        "calls": 5,
+        "usage_complete": true,
+        "input_tokens": 39385,
+        "output_tokens": 2625,
+        "total_tokens": 42010,
+        "observed_input_tokens": 39385,
+        "observed_output_tokens": 2625,
+        "observed_total_tokens": 42010
+      },
+      "roles": [
+        "central",
+        "memory_updater",
+        "writer"
+      ],
+      "audited_tool_errors": 0
+    },
+    {
+      "number": 2,
+      "case": "add_section",
+      "query": "保留刚才结论中的补充。只根据已保存的 mixed-material.md，在结论之后新增一个独立小节“补充：试点验收检查”，把附件三项建议整理成验证清单，引用这份用户资料并区分建议与事实；其他现有章节原文不动。该新增小节的最后原样追加下面这一段，不为它另列小标题：<新增段落>【观察记录建议】试点结束后，将导出样本、回退记录和交接签字放在同一份内部归档中，供下一轮试点复核；这是一项建议，不代表已经执行。</新增段落>。标签只界定段落原文，不写入报告。不检索，不扩展外部事实。",
+      "message_id": "f4e0ea7e-7bc8-45da-babd-dbde772352c4",
+      "run_id": "3d68b622-3085-46f3-bc03-f7153c77f1bf",
+      "run_status": "success",
+      "turn_id": "t0009",
+      "turn_status": "accepted",
+      "base_version_id": "t0008",
+      "before_head": "t0008",
+      "after_head": "t0009",
+      "before_active": "t0008",
+      "after_active": "t0009",
+      "native_delivery_created": true,
+      "changed_nodes": [],
+      "added_writable_nodes": [
+        "n15"
+      ],
+      "removed_writable_nodes": [],
+      "old_versions_unchanged": true,
+      "final_sha_matches": true,
+      "duration_seconds": 111.357,
+      "final_path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-mixed-09/runtime/users/default/threads/mixed-dialogue-20261124-09/user-data/outputs/report/r35/final/report-5.md",
+      "diagnostic": null,
+      "new_tree_branch": [
+        {
+          "node_id": "n15",
+          "parent_id": null,
+          "kind": "writable",
+          "title": "补充：试点验收检查"
+        }
+      ],
+      "one_new_branch": true,
+      "observation_exact_once": true,
+      "old_display_preserved": true,
+      "scope_ok": true,
+      "content_ok": true,
+      "attachment_retained": true,
+      "attachment_in_final_references": true,
+      "tokens": {
+        "calls": 13,
+        "usage_complete": true,
+        "input_tokens": 730334,
+        "output_tokens": 26740,
+        "total_tokens": 757074,
+        "observed_input_tokens": 730334,
+        "observed_output_tokens": 26740,
+        "observed_total_tokens": 757074
+      },
+      "roles": [
+        "central",
+        "memory_updater",
+        "outline",
+        "writer"
+      ],
+      "audited_tool_errors": 1
+    },
+    {
+      "number": 3,
+      "case": "delete_paragraph_keep_independent_edit",
+      "query": "本轮只做两处修改：一，删除新增小节末尾的整段“【观察记录建议】试点结束后，将导出样本、回退记录和交接签字放在同一份内部归档中，供下一轮试点复核；这是一项建议，不代表已经执行。”以及仅为它新增的分隔空行，保留该小节其余内容；二，把第一轮结论补充段落的小标题“试点验收建议”改为“内部试点验收建议”。其他文字、章节、表格与引用保持不变，不检索。",
+      "message_id": "f28f0a08-5824-4ce8-a7c4-19191f22df65",
+      "run_id": "eaf364a2-2c05-45a4-bd51-f376f019f772",
+      "run_status": "success",
+      "turn_id": "t0010",
+      "turn_status": "accepted",
+      "base_version_id": "t0009",
+      "before_head": "t0009",
+      "after_head": "t0010",
+      "before_active": "t0009",
+      "after_active": "t0010",
+      "native_delivery_created": true,
+      "changed_nodes": [
+        "n14",
+        "n15"
+      ],
+      "added_writable_nodes": [],
+      "removed_writable_nodes": [],
+      "old_versions_unchanged": true,
+      "final_sha_matches": true,
+      "duration_seconds": 15.288,
+      "final_path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-mixed-09/runtime/users/default/threads/mixed-dialogue-20261124-09/user-data/outputs/report/r36/final/report-6.md",
+      "diagnostic": null,
+      "retained_title_exact_change": true,
+      "observation_absent": true,
+      "deleted_target_nodes": [
+        "n15"
+      ],
+      "exact_operations_except_trailing_whitespace": false,
+      "strict_operations_bytes_equal": false,
+      "scope_ok": true,
+      "content_ok": false,
+      "attachment_retained": true,
+      "attachment_in_final_references": true,
+      "tokens": {
+        "calls": 6,
+        "usage_complete": true,
+        "input_tokens": 47063,
+        "output_tokens": 2153,
+        "total_tokens": 49216,
+        "observed_input_tokens": 47063,
+        "observed_output_tokens": 2153,
+        "observed_total_tokens": 49216
+      },
+      "roles": [
+        "central",
+        "memory_updater",
+        "writer"
+      ],
+      "audited_tool_errors": 0,
+      "core_preservation_pass": true,
+      "additional_edit_removed_phrase": "与下述观察记录建议",
+      "only_additional_difference_is_dangling_reference_cleanup": true,
+      "strict_text_preservation_pass": false
+    },
+    {
+      "number": 4,
+      "case": "undo_section_keep_other_edits",
+      "query": "撤销第二轮新增的整个“补充：试点验收检查”小节及它的全部内部内容，但保留已保存附件、第一轮结论补充，以及第三轮的小标题“内部试点验收建议”。其他原文、表格和引用一字不动。只撤销这个小节，不做整版回退，不检索；此前被删除的“【观察记录建议】”段落不要恢复。",
+      "message_id": "60597730-5a1b-4b5e-a957-dc26aa282dab",
+      "run_id": "17a3247c-ee49-4959-98a7-7b0c0537f15c",
+      "run_status": "success",
+      "turn_id": "t0011",
+      "turn_status": "accepted",
+      "base_version_id": "t0010",
+      "before_head": "t0010",
+      "after_head": "t0011",
+      "before_active": "t0010",
+      "after_active": "t0011",
+      "native_delivery_created": true,
+      "changed_nodes": [
+        "n15"
+      ],
+      "added_writable_nodes": [],
+      "removed_writable_nodes": [
+        "n15"
+      ],
+      "old_versions_unchanged": true,
+      "final_sha_matches": true,
+      "duration_seconds": 69.368,
+      "final_path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-mixed-09/runtime/users/default/threads/mixed-dialogue-20261124-09/user-data/outputs/report/r37/final/report-7.md",
+      "diagnostic": null,
+      "all_remaining_canonical_bytes_kept": true,
+      "entire_branch_removed": true,
+      "retained_latest_conclusion": true,
+      "different_from_first_round": true,
+      "materials_kept": true,
+      "withdrawn_text_not_revived": true,
+      "scope_ok": true,
+      "content_ok": true,
+      "attachment_retained": true,
+      "attachment_in_final_references": true,
+      "tokens": {
+        "calls": 5,
+        "usage_complete": true,
+        "input_tokens": 378761,
+        "output_tokens": 15614,
+        "total_tokens": 394375,
+        "observed_input_tokens": 378761,
+        "observed_output_tokens": 15614,
+        "observed_total_tokens": 394375
+      },
+      "roles": [
+        "central",
+        "memory_updater",
+        "outline"
+      ],
+      "audited_tool_errors": 0,
+      "undo_target_present_before": true,
+      "actual_structure_removal_exercised": true
+    },
+    {
+      "number": 5,
+      "case": "readonly_change_summary",
+      "query": "先不要改稿、不检索、不重新写作。只读说明前四轮最终保留了哪些修改、撤销了哪些修改：当前还有“【观察记录建议】”段落吗？还有“补充：试点验收检查”小节吗？附件和“内部试点验收建议”标题是否仍保留？请按当前已接受版本回答。",
+      "message_id": "86387322-1ed2-4bc8-98a6-11266dc872f2",
+      "run_id": "b2cf50a3-e584-40db-a8d1-9fdfa0225103",
+      "run_status": "success",
+      "turn_id": "t0012",
+      "turn_status": "read_only",
+      "base_version_id": "t0011",
+      "before_head": "t0011",
+      "after_head": "t0011",
+      "before_active": "t0011",
+      "after_active": "t0011",
+      "native_delivery_created": false,
+      "changed_nodes": [],
+      "added_writable_nodes": [],
+      "removed_writable_nodes": [],
+      "old_versions_unchanged": true,
+      "final_sha_matches": true,
+      "duration_seconds": 45.379,
+      "final_path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-mixed-09/runtime/users/default/threads/mixed-dialogue-20261124-09/user-data/outputs/report/r37/final/report-7.md",
+      "diagnostic": null,
+      "readonly_head_unchanged": true,
+      "readonly_native_files_unchanged": true,
+      "scope_ok": true,
+      "archived_answer": "按当前已接受版本（t0011，final/report-7.md，215 行、8 个章节）作答，本轮未改稿、未检索、未重写。\n\n三个直接问题\n1）“【观察记录建议】”段落：已不存在。当前正文中找不到该段落，且本轮要求明确不恢复。\n2）“补充：试点验收检查”小节：已不存在。当前章节树只有 8 个节点，没有该小节；结论节点（n14）正文中也没有其任何内容。\n3）附件与“内部试点验收建议”标题：均保留。结论章节内仍有“### 内部试点验收建议”小标题，三条建议（导出覆盖异常路径、在隔离副本演练回退、明确双责任人交接）完整保留，并保留对附件 mixed-material.md 的引用 [S204]（参考文献编号 [32]），且仍注明其为用户内部建议、非外部实证结论。\n\n前四轮的保留 / 撤销\n- 保留：第一轮加入的结论补充内容（结论节点正文完整，除被撤销小节外未删改）；第三轮加入的“内部试点验收建议”小标题及其三条建议与附件引用；其余既有正文、表格与引用体系保持原样。\n- 撤销：第二轮新增的整个“补充：试点验收检查”小节及其全部内部内容——即第四轮的撤销范围；执行方式是局部删除，非整版回退。\n- 未恢复：此前被删除的“【观察记录建议】”段落，按要求继续处于删除状态。\n\n补充事实：本次撤销只动该小节，因此版本仍为 v7（由 t0010 递进为 t0011），引用编号维持 [1]–[32] 不变，共 32 个来源，其中 [32] 即附件 mixed-material.md。",
+      "content_ok": null,
+      "attachment_retained": true,
+      "attachment_in_final_references": true,
+      "tokens": {
+        "calls": 6,
+        "usage_complete": true,
+        "input_tokens": 113535,
+        "output_tokens": 7530,
+        "total_tokens": 121065,
+        "observed_input_tokens": 113535,
+        "observed_output_tokens": 7530,
+        "observed_total_tokens": 121065
+      },
+      "roles": [
+        "central",
+        "memory_updater"
+      ],
+      "audited_tool_errors": 0,
+      "visible_answer_matches_archive": true,
+      "current_state_answer_manual_check": "pass for required current-state claims"
+    }
+  ],
+  "accepted_snapshot_checks": {
+    "t0001": true,
+    "t0002": true,
+    "t0003": true,
+    "t0004": true,
+    "t0007": true,
+    "t0008": true,
+    "t0009": true,
+    "t0010": true,
+    "t0011": true
+  },
+  "readonly_archive_verified": true,
+  "baseline_loss_regression_fixed": true,
+  "structural_add_remove_regression_fixed": true,
+  "strict_whole_chain_pass": false,
+  "remaining_issue": "Round 3 removed an unrequested dangling-reference phrase in the preceding paragraph. Original strict text preservation check remains false.",
+  "frozen_source_matches": true,
+  "usage": {
+    "tokens_by_role": {
+      "writer": {
+        "calls": 12,
+        "usage_complete": true,
+        "input_tokens": 101699,
+        "output_tokens": 2468,
+        "total_tokens": 104167,
+        "observed_input_tokens": 101699,
+        "observed_output_tokens": 2468,
+        "observed_total_tokens": 104167
+      },
+      "outline": {
+        "calls": 9,
+        "usage_complete": true,
+        "input_tokens": 1010651,
+        "output_tokens": 37432,
+        "total_tokens": 1048083,
+        "observed_input_tokens": 1010651,
+        "observed_output_tokens": 37432,
+        "observed_total_tokens": 1048083
+      },
+      "central": {
+        "calls": 9,
+        "usage_complete": true,
+        "input_tokens": 180221,
+        "output_tokens": 10472,
+        "total_tokens": 190693,
+        "observed_input_tokens": 180221,
+        "observed_output_tokens": 10472,
+        "observed_total_tokens": 190693
+      },
+      "memory_updater": {
+        "calls": 5,
+        "usage_complete": true,
+        "input_tokens": 16507,
+        "output_tokens": 4290,
+        "total_tokens": 20797,
+        "observed_input_tokens": 16507,
+        "observed_output_tokens": 4290,
+        "observed_total_tokens": 20797
+      }
+    },
+    "tokens_by_turn": {
+      "1": {
+        "calls": 5,
+        "usage_complete": true,
+        "input_tokens": 39385,
+        "output_tokens": 2625,
+        "total_tokens": 42010,
+        "observed_input_tokens": 39385,
+        "observed_output_tokens": 2625,
+        "observed_total_tokens": 42010
+      },
+      "2": {
+        "calls": 13,
+        "usage_complete": true,
+        "input_tokens": 730334,
+        "output_tokens": 26740,
+        "total_tokens": 757074,
+        "observed_input_tokens": 730334,
+        "observed_output_tokens": 26740,
+        "observed_total_tokens": 757074
+      },
+      "3": {
+        "calls": 6,
+        "usage_complete": true,
+        "input_tokens": 47063,
+        "output_tokens": 2153,
+        "total_tokens": 49216,
+        "observed_input_tokens": 47063,
+        "observed_output_tokens": 2153,
+        "observed_total_tokens": 49216
+      },
+      "4": {
+        "calls": 5,
+        "usage_complete": true,
+        "input_tokens": 378761,
+        "output_tokens": 15614,
+        "total_tokens": 394375,
+        "observed_input_tokens": 378761,
+        "observed_output_tokens": 15614,
+        "observed_total_tokens": 394375
+      },
+      "5": {
+        "calls": 6,
+        "usage_complete": true,
+        "input_tokens": 113535,
+        "output_tokens": 7530,
+        "total_tokens": 121065,
+        "observed_input_tokens": 113535,
+        "observed_output_tokens": 7530,
+        "observed_total_tokens": 121065
+      }
+    },
+    "input_tokens": 1309078,
+    "output_tokens": 54662,
+    "total_tokens": 1363740,
+    "cache_read_tokens_observed": 752512,
+    "estimated_cost_cny_upper": "1.58052848",
+    "usage_complete": true,
+    "http_coverage_verified": true
+  },
+  "budget": {
+    "spent_cost_cny": "30.45917808",
+    "reserved_cost_cny": "6.488064",
+    "input_tokens": 35542366,
+    "output_tokens": 1454283,
+    "inflight": [
+      "http-1883efa84c6e4cf58bef90882c3671c5-1",
+      "http-6f416a52175d498a894bc2d92351936d-3",
+      "http-b05c246e0a0f49919d40ade6792240a2-12"
+    ],
+    "abort_requested": false
+  },
+  "new_unknown_identities": [],
+  "stop_reason": null,
+  "automatic_paid_restarts": 0
+}

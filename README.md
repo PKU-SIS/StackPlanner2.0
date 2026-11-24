@@ -1154,4 +1154,4 @@ local changes; the small sample is not a general factual-quality guarantee.
 
 报告后续轮可直接使用本轮上传的文本附件或已有 Markdown 转换结果：程序先保存为报告材料，Writer 再读取并引用。来源标记也支持 `[S204:15-21]`，交付时生成正式引用编号；这些处理不增加模型路由步骤。修改与验证见 [附件及引用格式修复](docs/research-report/capabilities-fixes-20261124/RESULT.md)。
 
-局部改稿默认在当前有效版本上继续，模型委派中的历史基线参数不会自动导致回退；用户显式选版仍支持。独立章节的增删由中枢直接交给 Outline，在新副本上更新大纲树，无需先调用 GitAgent。
+局部改稿默认在当前有效版本上继续，模型委派中的历史基线参数不会自动导致回退；用户显式选版仍支持。独立章节的增删由中枢直接交给 Outline，在新副本上更新大纲树，无需先调用 GitAgent。实现与已知限制见 [基线及结构修订复测](docs/research-report/mixed-dialogue-fixes-20261124/RESULT.md)。
