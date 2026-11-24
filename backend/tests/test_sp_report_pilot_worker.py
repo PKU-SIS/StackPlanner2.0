@@ -461,3 +461,34 @@ def test_supervisor_and_actual_sdk_worker_preserve_real_numeric_events(tmp_path)
     assert Decimal(settlement["cost_cny"]) < Decimal(reservation["cost_cny"])
     assert "fixture" not in path.read_text()
     assert result["billing_complete"] is False  # supervisor never invents acceptance
+
+
+@pytest.mark.parametrize("has_done", [True, False])
+def test_async_receipt_generator_close_uses_complete_wire_evidence(has_done):
+    """SDK may close the byte iterator immediately after consuming DONE."""
+    w = worker()
+    body = response(stream=True).content
+    if not has_done:
+        body = body.replace(b"data: [DONE]\n\n", b"")
+
+    class Stream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield body
+
+    async def run():
+        w.audit.start("close-source", turn=2, role="central", model="deepseek-flash")
+        w.source.set("close-source")
+        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, stream=Stream(), headers={"content-type": "text/event-stream"}))) as client:
+            request = client.build_request("POST", "https://api.deepseek.com/v1/chat/completions", json={"model": "deepseek-flash", "messages": [], "max_tokens": 100, "stream": True})
+            result = await client.send(request, stream=True)
+            iterator = result.stream.__aiter__()
+            assert await anext(iterator) == body
+            await iterator.aclose()
+            await result.aclose()
+        w.audit.end("close-source", {"input_tokens": 100, "output_tokens": 20, "total_tokens": 120}, reported_model="deepseek-flash")
+
+    with w.installed():
+        asyncio.run(run())
+    report = w.finalize()
+    assert (report["http_attempts"][0]["status"] == "complete") is has_done
+    assert bool(report["budget"]["inflight"]) is not has_done

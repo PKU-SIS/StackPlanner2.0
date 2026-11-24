@@ -1052,6 +1052,9 @@ the latest bound message outcome, separately from native delivery status.
 The ordinary chat page offers an off-by-default “Continue this report” checkbox
 and displays the active version and turn outcome.
 See [Gateway dialogue API](docs/research-report/GATEWAY_DIALOGUE_API_20261124.md).
+Report follow-ups keep a client message ID across transport retries. Full snapshot
+file lists open on demand instead of appearing as hundreds of inline edits.
+See [browser validation and the local manual-test entry](docs/research-report/ui-acceptance-20261124/RESULT.md).
 The [first live results](docs/research-report/writer-first-api-20261123/RESULT.md)
 retain both a completed six-turn conversation and a wrong-section failure; Writer
 now receives actual section titles instead of relying on guessed delegate IDs.

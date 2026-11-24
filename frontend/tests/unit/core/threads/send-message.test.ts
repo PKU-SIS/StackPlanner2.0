@@ -96,3 +96,26 @@ test("keeps human input response metadata on the hidden user message", () => {
     },
   ]);
 });
+
+test("bound report messages get one client identity per logical send", () => {
+  const input = {
+    text: "same edit",
+    additionalKwargs: { report_dialogue: { enabled: true, report_id: "r1" } },
+  };
+  const first = buildThreadSubmitMessages(input)[0]!;
+  const second = buildThreadSubmitMessages(input)[0]!;
+  expect(first.id).toEqual(expect.any(String));
+  expect(first.id).not.toBe(second.id);
+  expect(first.additional_kwargs).toEqual(input.additionalKwargs);
+  expect(
+    buildThreadSubmitMessages({ text: "ordinary" })[0]?.id,
+  ).toBeUndefined();
+  expect(
+    buildThreadSubmitMessages({
+      text: "disabled",
+      additionalKwargs: {
+        report_dialogue: { enabled: false, report_id: "r1" },
+      },
+    })[0]?.id,
+  ).toBeUndefined();
+});

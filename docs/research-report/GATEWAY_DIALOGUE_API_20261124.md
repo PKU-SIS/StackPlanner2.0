@@ -130,3 +130,10 @@ pnpm exec rstest run tests/unit/core/threads/report-dialogue.test.ts \
   tests/unit/components/workspace/report-status.test.ts
 pnpm check
 ```
+
+
+## 后续真实 UI 验收
+
+[真实浏览器、模型实验与手测入口](ui-acceptance-20261124/RESULT.md) 已补齐。
+显式绑定消息现在在客户端分配一次 UUID，网络重发保留同一来源；默认首轮/普通消息结构不变。
+完整报告文件列表按需展开。该记录包含中间失败及最终连续三轮结果，不能只引用完成率而省略工具误派工。

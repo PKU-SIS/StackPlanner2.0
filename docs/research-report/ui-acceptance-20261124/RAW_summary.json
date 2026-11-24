@@ -1,0 +1,919 @@
+{
+  "observed_tokens": 839095,
+  "observed_input_tokens": 803300,
+  "observed_output_tokens": 35795,
+  "known_http_cache_read_tokens": 618752,
+  "cache_is_input_subset": true,
+  "new_known_cost_cny": "0.59910208",
+  "global_known_cost_cny": "22.53989456",
+  "global_held_cny": "6.488064",
+  "new_unknown_reservation_cny": "4.325376",
+  "global_known_plus_held_cny": "29.02795856",
+  "global_billing_complete": false,
+  "final_trial_usage_complete": true,
+  "final_trial_stop_reason": null,
+  "final_trial_roles_by_turn": {
+    "7": [
+      "central",
+      "memory_updater",
+      "writer"
+    ],
+    "8": [
+      "central",
+      "memory_updater"
+    ],
+    "9": [
+      "central",
+      "memory_updater"
+    ]
+  },
+  "all_accepted_files_immutable": true,
+  "runs": [
+    {
+      "run": "20261124-01",
+      "stop_reason": null,
+      "observed_tokens": 0,
+      "logical_model_calls": 0,
+      "http_attempts": 0,
+      "known_spent_cny": "21.94079248",
+      "held_cny": "2.162688",
+      "accepted_files_immutable": true,
+      "outcomes": [],
+      "script_sha256": "74790d3e25fe887e877c3b4d6110a8ae998c798fc6b050292c9988ac54821cb3"
+    },
+    {
+      "run": "20261124-02",
+      "stop_reason": "unknown_http_outcome",
+      "observed_tokens": 38461,
+      "logical_model_calls": 10,
+      "http_attempts": 3,
+      "known_spent_cny": "21.96985008",
+      "held_cny": "4.325376",
+      "accepted_files_immutable": true,
+      "outcomes": [],
+      "script_sha256": "ca6bff2f9a1e48125244085d196cf0cfea7498c88b477e8f59d8b3f688088069"
+    },
+    {
+      "run": "20261124-03",
+      "stop_reason": "missing_source",
+      "observed_tokens": 42790,
+      "logical_model_calls": 10,
+      "http_attempts": 6,
+      "known_spent_cny": "22.01435120",
+      "held_cny": "4.325376",
+      "accepted_files_immutable": true,
+      "outcomes": [
+        {
+          "user_turn": 2,
+          "view": {
+            "available": true,
+            "binding": {
+              "enabled": true,
+              "report_id": "r7"
+            },
+            "head_version_id": "t0002",
+            "active_version_id": "t0002",
+            "versions": [
+              {
+                "version_id": "t0001",
+                "report_id": "r6",
+                "base_version_id": null,
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0002",
+                "report_id": "r7",
+                "base_version_id": "t0001",
+                "is_head": true,
+                "is_active": true
+              }
+            ],
+            "current_turn": {
+              "turn_id": "t0002",
+              "message_id": "376b6066-7c05-49ee-86c8-1991007a9b42",
+              "status": "accepted",
+              "mode": "revision",
+              "report_id": "r7",
+              "base_version_id": "t0001",
+              "native_delivery_created": true,
+              "response_only": false
+            }
+          },
+          "canonical": {
+            "n8": "ec11faced6d55d4770a397b2fd06ba1cab7c1d6b1b2fd1eb9238ba315d48dfe7",
+            "n2": "ba198657753ce29f031dd63df9986c9ffdb779daa9d0794b7e89d9907dee6a1c",
+            "n4": "fa09f504e6354cb36db6fb2098cb2412dea9d280e81fcc2b45174d46f3f5b733",
+            "n9": "f056b5d2a287a12be75e184e8e2004a5439119969e63bb8d1cd4fd5572438032",
+            "n14": "af3a1ee91e73ea523fd1cf801efb0345c9b1ce0d903972852bb33f734e3bf940",
+            "n6": "7774ca3b6f2a082c9aaec00cad3409b0cf50901eebea03e06349f4e240f5770b",
+            "n13": "27fc72e759c97b08729cebb392cb443cfc8e2019a5dcd7aad070b7342dc90cc2",
+            "n11": "fbcedbcbddc2682536357a4f20d65ef6492e745ce27c76967e2b5fadea8cb5d5"
+          },
+          "canonical_scope_ok": true
+        },
+        {
+          "user_turn": 3,
+          "view": {
+            "available": true,
+            "binding": {
+              "enabled": true,
+              "report_id": "r7"
+            },
+            "head_version_id": "t0002",
+            "active_version_id": "t0002",
+            "versions": [
+              {
+                "version_id": "t0001",
+                "report_id": "r6",
+                "base_version_id": null,
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0002",
+                "report_id": "r7",
+                "base_version_id": "t0001",
+                "is_head": true,
+                "is_active": true
+              }
+            ],
+            "current_turn": {
+              "turn_id": "t0003",
+              "message_id": "61038553-f061-4e93-a271-9f22d09d8574",
+              "status": "failed",
+              "mode": "resolution",
+              "report_id": null,
+              "base_version_id": "t0002",
+              "native_delivery_created": false,
+              "response_only": false
+            }
+          },
+          "canonical": {
+            "n8": "ec11faced6d55d4770a397b2fd06ba1cab7c1d6b1b2fd1eb9238ba315d48dfe7",
+            "n2": "ba198657753ce29f031dd63df9986c9ffdb779daa9d0794b7e89d9907dee6a1c",
+            "n4": "fa09f504e6354cb36db6fb2098cb2412dea9d280e81fcc2b45174d46f3f5b733",
+            "n9": "f056b5d2a287a12be75e184e8e2004a5439119969e63bb8d1cd4fd5572438032",
+            "n14": "af3a1ee91e73ea523fd1cf801efb0345c9b1ce0d903972852bb33f734e3bf940",
+            "n6": "7774ca3b6f2a082c9aaec00cad3409b0cf50901eebea03e06349f4e240f5770b",
+            "n13": "27fc72e759c97b08729cebb392cb443cfc8e2019a5dcd7aad070b7342dc90cc2",
+            "n11": "fbcedbcbddc2682536357a4f20d65ef6492e745ce27c76967e2b5fadea8cb5d5"
+          },
+          "canonical_scope_ok": false
+        }
+      ],
+      "script_sha256": "680a8f793f083f93afc2d90e4c982dac2a9a2d2e9109ac6f7641ff29d9fd91af"
+    },
+    {
+      "run": "20261124-04",
+      "stop_reason": "unknown_http_outcome",
+      "observed_tokens": 17691,
+      "logical_model_calls": 5,
+      "http_attempts": 1,
+      "known_spent_cny": "22.01435120",
+      "held_cny": "6.488064",
+      "accepted_files_immutable": true,
+      "outcomes": [
+        {
+          "user_turn": 3,
+          "view": {
+            "available": true,
+            "binding": {
+              "enabled": true,
+              "report_id": "r9"
+            },
+            "head_version_id": "t0002",
+            "active_version_id": "t0002",
+            "versions": [
+              {
+                "version_id": "t0001",
+                "report_id": "r8",
+                "base_version_id": null,
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0002",
+                "report_id": "r9",
+                "base_version_id": "t0001",
+                "is_head": true,
+                "is_active": true
+              }
+            ],
+            "current_turn": {
+              "turn_id": "t0003",
+              "message_id": "b266319a-7ba5-4d13-a404-be887450b7dc",
+              "status": "failed",
+              "mode": "revision",
+              "report_id": "r10",
+              "base_version_id": "t0002",
+              "native_delivery_created": false,
+              "response_only": false
+            }
+          },
+          "canonical": {
+            "n8": "ec11faced6d55d4770a397b2fd06ba1cab7c1d6b1b2fd1eb9238ba315d48dfe7",
+            "n2": "ba198657753ce29f031dd63df9986c9ffdb779daa9d0794b7e89d9907dee6a1c",
+            "n4": "fa09f504e6354cb36db6fb2098cb2412dea9d280e81fcc2b45174d46f3f5b733",
+            "n9": "f056b5d2a287a12be75e184e8e2004a5439119969e63bb8d1cd4fd5572438032",
+            "n14": "af3a1ee91e73ea523fd1cf801efb0345c9b1ce0d903972852bb33f734e3bf940",
+            "n6": "7774ca3b6f2a082c9aaec00cad3409b0cf50901eebea03e06349f4e240f5770b",
+            "n13": "27fc72e759c97b08729cebb392cb443cfc8e2019a5dcd7aad070b7342dc90cc2",
+            "n11": "fbcedbcbddc2682536357a4f20d65ef6492e745ce27c76967e2b5fadea8cb5d5"
+          },
+          "canonical_scope_ok": false
+        }
+      ],
+      "script_sha256": "63a648085e297f8f50f1397d8a9e3dd3de8d0779ee2997189a27b24c2ea71093"
+    },
+    {
+      "run": "20261124-05",
+      "stop_reason": "missing_source",
+      "observed_tokens": 50665,
+      "logical_model_calls": 11,
+      "http_attempts": 7,
+      "known_spent_cny": "22.05597344",
+      "held_cny": "6.488064",
+      "accepted_files_immutable": true,
+      "outcomes": [
+        {
+          "user_turn": 3,
+          "view": {
+            "available": true,
+            "binding": {
+              "enabled": true,
+              "report_id": "r10"
+            },
+            "head_version_id": "t0003",
+            "active_version_id": "t0003",
+            "versions": [
+              {
+                "version_id": "t0001",
+                "report_id": "r8",
+                "base_version_id": null,
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0002",
+                "report_id": "r9",
+                "base_version_id": "t0001",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0003",
+                "report_id": "r10",
+                "base_version_id": "t0002",
+                "is_head": true,
+                "is_active": true
+              }
+            ],
+            "current_turn": {
+              "turn_id": "t0003",
+              "message_id": "be4ac173-3eac-4955-a970-e255f0c5b7e7",
+              "status": "accepted",
+              "mode": "revision",
+              "report_id": "r10",
+              "base_version_id": "t0002",
+              "native_delivery_created": true,
+              "response_only": false
+            }
+          },
+          "canonical": {
+            "n8": "ec11faced6d55d4770a397b2fd06ba1cab7c1d6b1b2fd1eb9238ba315d48dfe7",
+            "n2": "ba198657753ce29f031dd63df9986c9ffdb779daa9d0794b7e89d9907dee6a1c",
+            "n4": "fa09f504e6354cb36db6fb2098cb2412dea9d280e81fcc2b45174d46f3f5b733",
+            "n9": "f056b5d2a287a12be75e184e8e2004a5439119969e63bb8d1cd4fd5572438032",
+            "n14": "af3a1ee91e73ea523fd1cf801efb0345c9b1ce0d903972852bb33f734e3bf940",
+            "n6": "7774ca3b6f2a082c9aaec00cad3409b0cf50901eebea03e06349f4e240f5770b",
+            "n13": "27fc72e759c97b08729cebb392cb443cfc8e2019a5dcd7aad070b7342dc90cc2",
+            "n11": "daf861fb117ce2c0d8e018e37598d0cd99b4962778112ec540de9afddf08c40f"
+          },
+          "canonical_scope_ok": true
+        },
+        {
+          "user_turn": 4,
+          "view": {
+            "available": true,
+            "binding": {
+              "enabled": true,
+              "report_id": "r10"
+            },
+            "head_version_id": "t0003",
+            "active_version_id": "t0003",
+            "versions": [
+              {
+                "version_id": "t0001",
+                "report_id": "r8",
+                "base_version_id": null,
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0002",
+                "report_id": "r9",
+                "base_version_id": "t0001",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0003",
+                "report_id": "r10",
+                "base_version_id": "t0002",
+                "is_head": true,
+                "is_active": true
+              }
+            ],
+            "current_turn": {
+              "turn_id": "t0004",
+              "message_id": "d1e97ebf-b2fe-4034-9580-c45e2b4eb019",
+              "status": "failed",
+              "mode": "resolution",
+              "report_id": null,
+              "base_version_id": "t0003",
+              "native_delivery_created": false,
+              "response_only": false
+            }
+          },
+          "canonical": {
+            "n8": "ec11faced6d55d4770a397b2fd06ba1cab7c1d6b1b2fd1eb9238ba315d48dfe7",
+            "n2": "ba198657753ce29f031dd63df9986c9ffdb779daa9d0794b7e89d9907dee6a1c",
+            "n4": "fa09f504e6354cb36db6fb2098cb2412dea9d280e81fcc2b45174d46f3f5b733",
+            "n9": "f056b5d2a287a12be75e184e8e2004a5439119969e63bb8d1cd4fd5572438032",
+            "n14": "af3a1ee91e73ea523fd1cf801efb0345c9b1ce0d903972852bb33f734e3bf940",
+            "n6": "7774ca3b6f2a082c9aaec00cad3409b0cf50901eebea03e06349f4e240f5770b",
+            "n13": "27fc72e759c97b08729cebb392cb443cfc8e2019a5dcd7aad070b7342dc90cc2",
+            "n11": "daf861fb117ce2c0d8e018e37598d0cd99b4962778112ec540de9afddf08c40f"
+          },
+          "canonical_scope_ok": false
+        }
+      ],
+      "script_sha256": "97e8c11bbb873cb361ea92a5b1f9068bf3db8227fd3540436271cc4034fda8e4"
+    },
+    {
+      "run": "20261124-06",
+      "stop_reason": "missing_source",
+      "observed_tokens": 73090,
+      "logical_model_calls": 13,
+      "http_attempts": 9,
+      "known_spent_cny": "22.11549904",
+      "held_cny": "6.488064",
+      "accepted_files_immutable": true,
+      "outcomes": [
+        {
+          "user_turn": 4,
+          "view": {
+            "available": true,
+            "binding": {
+              "enabled": true,
+              "report_id": "r14"
+            },
+            "head_version_id": "t0004",
+            "active_version_id": "t0004",
+            "versions": [
+              {
+                "version_id": "t0001",
+                "report_id": "r11",
+                "base_version_id": null,
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0002",
+                "report_id": "r12",
+                "base_version_id": "t0001",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0003",
+                "report_id": "r13",
+                "base_version_id": "t0002",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0004",
+                "report_id": "r14",
+                "base_version_id": "t0003",
+                "is_head": true,
+                "is_active": true
+              }
+            ],
+            "current_turn": {
+              "turn_id": "t0004",
+              "message_id": "6990fdaa-d885-4519-9050-5cd58e704c55",
+              "status": "accepted",
+              "mode": "revision",
+              "report_id": "r14",
+              "base_version_id": "t0003",
+              "native_delivery_created": true,
+              "response_only": false
+            }
+          },
+          "canonical": {
+            "n8": "ec11faced6d55d4770a397b2fd06ba1cab7c1d6b1b2fd1eb9238ba315d48dfe7",
+            "n2": "ba198657753ce29f031dd63df9986c9ffdb779daa9d0794b7e89d9907dee6a1c",
+            "n4": "fa09f504e6354cb36db6fb2098cb2412dea9d280e81fcc2b45174d46f3f5b733",
+            "n9": "f056b5d2a287a12be75e184e8e2004a5439119969e63bb8d1cd4fd5572438032",
+            "n14": "af3a1ee91e73ea523fd1cf801efb0345c9b1ce0d903972852bb33f734e3bf940",
+            "n6": "7774ca3b6f2a082c9aaec00cad3409b0cf50901eebea03e06349f4e240f5770b",
+            "n13": "27fc72e759c97b08729cebb392cb443cfc8e2019a5dcd7aad070b7342dc90cc2",
+            "n11": "ab4f75a241c144fc1d21c9dd41946da91b60e9ffd18cc2913a1283ec22a7a876"
+          },
+          "canonical_scope_ok": true
+        },
+        {
+          "user_turn": 5,
+          "view": {
+            "available": true,
+            "binding": {
+              "enabled": true,
+              "report_id": "r14"
+            },
+            "head_version_id": "t0004",
+            "active_version_id": "t0004",
+            "versions": [
+              {
+                "version_id": "t0001",
+                "report_id": "r11",
+                "base_version_id": null,
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0002",
+                "report_id": "r12",
+                "base_version_id": "t0001",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0003",
+                "report_id": "r13",
+                "base_version_id": "t0002",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0004",
+                "report_id": "r14",
+                "base_version_id": "t0003",
+                "is_head": true,
+                "is_active": true
+              }
+            ],
+            "current_turn": {
+              "turn_id": "t0005",
+              "message_id": "05338926-481b-4bc4-b7de-c7e694965fb9",
+              "status": "failed",
+              "mode": "resolution",
+              "report_id": null,
+              "base_version_id": "t0004",
+              "native_delivery_created": false,
+              "response_only": false
+            }
+          },
+          "canonical": {
+            "n8": "ec11faced6d55d4770a397b2fd06ba1cab7c1d6b1b2fd1eb9238ba315d48dfe7",
+            "n2": "ba198657753ce29f031dd63df9986c9ffdb779daa9d0794b7e89d9907dee6a1c",
+            "n4": "fa09f504e6354cb36db6fb2098cb2412dea9d280e81fcc2b45174d46f3f5b733",
+            "n9": "f056b5d2a287a12be75e184e8e2004a5439119969e63bb8d1cd4fd5572438032",
+            "n14": "af3a1ee91e73ea523fd1cf801efb0345c9b1ce0d903972852bb33f734e3bf940",
+            "n6": "7774ca3b6f2a082c9aaec00cad3409b0cf50901eebea03e06349f4e240f5770b",
+            "n13": "27fc72e759c97b08729cebb392cb443cfc8e2019a5dcd7aad070b7342dc90cc2",
+            "n11": "ab4f75a241c144fc1d21c9dd41946da91b60e9ffd18cc2913a1283ec22a7a876"
+          },
+          "canonical_scope_ok": true
+        }
+      ],
+      "script_sha256": "51b01ddf31f7aa7735deeac8645ab53b66526f03c182701f37c7b2638f12aa7e"
+    },
+    {
+      "run": "20261124-07",
+      "stop_reason": "usage_reconciliation_failed",
+      "observed_tokens": 392985,
+      "logical_model_calls": 23,
+      "http_attempts": 15,
+      "known_spent_cny": "22.35798080",
+      "held_cny": "6.488064",
+      "accepted_files_immutable": true,
+      "outcomes": [
+        {
+          "user_turn": 5,
+          "view": {
+            "available": true,
+            "binding": {
+              "enabled": true,
+              "report_id": "r18"
+            },
+            "head_version_id": "t0004",
+            "active_version_id": "t0004",
+            "versions": [
+              {
+                "version_id": "t0001",
+                "report_id": "r15",
+                "base_version_id": null,
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0002",
+                "report_id": "r16",
+                "base_version_id": "t0001",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0003",
+                "report_id": "r17",
+                "base_version_id": "t0002",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0004",
+                "report_id": "r18",
+                "base_version_id": "t0003",
+                "is_head": true,
+                "is_active": true
+              }
+            ],
+            "current_turn": {
+              "turn_id": "t0005",
+              "message_id": "65f749ca-e663-43a5-9824-95923be170b1",
+              "status": "read_only",
+              "mode": "read_only",
+              "report_id": "r18",
+              "base_version_id": "t0004",
+              "native_delivery_created": false,
+              "response_only": false
+            }
+          },
+          "canonical": {
+            "n8": "ec11faced6d55d4770a397b2fd06ba1cab7c1d6b1b2fd1eb9238ba315d48dfe7",
+            "n2": "ba198657753ce29f031dd63df9986c9ffdb779daa9d0794b7e89d9907dee6a1c",
+            "n4": "fa09f504e6354cb36db6fb2098cb2412dea9d280e81fcc2b45174d46f3f5b733",
+            "n9": "f056b5d2a287a12be75e184e8e2004a5439119969e63bb8d1cd4fd5572438032",
+            "n14": "af3a1ee91e73ea523fd1cf801efb0345c9b1ce0d903972852bb33f734e3bf940",
+            "n6": "7774ca3b6f2a082c9aaec00cad3409b0cf50901eebea03e06349f4e240f5770b",
+            "n13": "27fc72e759c97b08729cebb392cb443cfc8e2019a5dcd7aad070b7342dc90cc2",
+            "n11": "ab4f75a241c144fc1d21c9dd41946da91b60e9ffd18cc2913a1283ec22a7a876"
+          },
+          "canonical_scope_ok": true
+        },
+        {
+          "user_turn": 6,
+          "view": {
+            "available": true,
+            "binding": {
+              "enabled": true,
+              "report_id": "r15"
+            },
+            "head_version_id": "t0004",
+            "active_version_id": "t0001",
+            "versions": [
+              {
+                "version_id": "t0001",
+                "report_id": "r15",
+                "base_version_id": null,
+                "is_head": false,
+                "is_active": true
+              },
+              {
+                "version_id": "t0002",
+                "report_id": "r16",
+                "base_version_id": "t0001",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0003",
+                "report_id": "r17",
+                "base_version_id": "t0002",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0004",
+                "report_id": "r18",
+                "base_version_id": "t0003",
+                "is_head": true,
+                "is_active": false
+              }
+            ],
+            "current_turn": {
+              "turn_id": "t0006",
+              "message_id": "ed3ee925-f012-48a1-a6fa-aada607cad5b",
+              "status": "exact_reuse",
+              "mode": "exact_reuse",
+              "report_id": "r15",
+              "base_version_id": "t0001",
+              "native_delivery_created": false,
+              "response_only": false
+            }
+          },
+          "canonical": {
+            "n8": "ec11faced6d55d4770a397b2fd06ba1cab7c1d6b1b2fd1eb9238ba315d48dfe7",
+            "n2": "ba198657753ce29f031dd63df9986c9ffdb779daa9d0794b7e89d9907dee6a1c",
+            "n4": "fa09f504e6354cb36db6fb2098cb2412dea9d280e81fcc2b45174d46f3f5b733",
+            "n9": "f056b5d2a287a12be75e184e8e2004a5439119969e63bb8d1cd4fd5572438032",
+            "n14": "af3a1ee91e73ea523fd1cf801efb0345c9b1ce0d903972852bb33f734e3bf940",
+            "n6": "7774ca3b6f2a082c9aaec00cad3409b0cf50901eebea03e06349f4e240f5770b",
+            "n13": "27fc72e759c97b08729cebb392cb443cfc8e2019a5dcd7aad070b7342dc90cc2",
+            "n11": "6011ebefc825eb127d8b867c6cddb78a0d97108c354c8d92110432a8e1249b0e"
+          },
+          "canonical_scope_ok": true
+        },
+        {
+          "user_turn": 7,
+          "view": {
+            "available": true,
+            "binding": {
+              "enabled": true,
+              "report_id": "r15"
+            },
+            "head_version_id": "t0004",
+            "active_version_id": "t0001",
+            "versions": [
+              {
+                "version_id": "t0001",
+                "report_id": "r15",
+                "base_version_id": null,
+                "is_head": false,
+                "is_active": true
+              },
+              {
+                "version_id": "t0002",
+                "report_id": "r16",
+                "base_version_id": "t0001",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0003",
+                "report_id": "r17",
+                "base_version_id": "t0002",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0004",
+                "report_id": "r18",
+                "base_version_id": "t0003",
+                "is_head": true,
+                "is_active": false
+              }
+            ],
+            "current_turn": {
+              "turn_id": "t0007",
+              "message_id": "303cfa85-1b22-49e4-ae39-a5b248f0d872",
+              "status": "failed",
+              "mode": "resolution",
+              "report_id": null,
+              "base_version_id": "t0001",
+              "native_delivery_created": false,
+              "response_only": false
+            }
+          },
+          "canonical": {
+            "n8": "ec11faced6d55d4770a397b2fd06ba1cab7c1d6b1b2fd1eb9238ba315d48dfe7",
+            "n2": "ba198657753ce29f031dd63df9986c9ffdb779daa9d0794b7e89d9907dee6a1c",
+            "n4": "fa09f504e6354cb36db6fb2098cb2412dea9d280e81fcc2b45174d46f3f5b733",
+            "n9": "f056b5d2a287a12be75e184e8e2004a5439119969e63bb8d1cd4fd5572438032",
+            "n14": "af3a1ee91e73ea523fd1cf801efb0345c9b1ce0d903972852bb33f734e3bf940",
+            "n6": "7774ca3b6f2a082c9aaec00cad3409b0cf50901eebea03e06349f4e240f5770b",
+            "n13": "27fc72e759c97b08729cebb392cb443cfc8e2019a5dcd7aad070b7342dc90cc2",
+            "n11": "6011ebefc825eb127d8b867c6cddb78a0d97108c354c8d92110432a8e1249b0e"
+          },
+          "canonical_scope_ok": false
+        }
+      ],
+      "script_sha256": "0856911800635c5989618ceb62ca081e9c854c3391524962b9efd3ddbaed1b5b"
+    },
+    {
+      "run": "20261124-08",
+      "stop_reason": null,
+      "observed_tokens": 223413,
+      "logical_model_calls": 17,
+      "http_attempts": 17,
+      "known_spent_cny": "22.53989456",
+      "held_cny": "6.488064",
+      "accepted_files_immutable": true,
+      "outcomes": [
+        {
+          "user_turn": 7,
+          "view": {
+            "available": true,
+            "binding": {
+              "enabled": true,
+              "report_id": "r23"
+            },
+            "head_version_id": "t0007",
+            "active_version_id": "t0007",
+            "versions": [
+              {
+                "version_id": "t0001",
+                "report_id": "r19",
+                "base_version_id": null,
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0002",
+                "report_id": "r20",
+                "base_version_id": "t0001",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0003",
+                "report_id": "r21",
+                "base_version_id": "t0002",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0004",
+                "report_id": "r22",
+                "base_version_id": "t0003",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0007",
+                "report_id": "r23",
+                "base_version_id": "t0001",
+                "is_head": true,
+                "is_active": true
+              }
+            ],
+            "current_turn": {
+              "turn_id": "t0007",
+              "message_id": "cbc2222d-270c-44ea-b141-72b45cde9ada",
+              "status": "accepted",
+              "mode": "revision",
+              "report_id": "r23",
+              "base_version_id": "t0001",
+              "native_delivery_created": true,
+              "response_only": false
+            }
+          },
+          "canonical": {
+            "n8": "ec11faced6d55d4770a397b2fd06ba1cab7c1d6b1b2fd1eb9238ba315d48dfe7",
+            "n2": "ba198657753ce29f031dd63df9986c9ffdb779daa9d0794b7e89d9907dee6a1c",
+            "n4": "fa09f504e6354cb36db6fb2098cb2412dea9d280e81fcc2b45174d46f3f5b733",
+            "n9": "f056b5d2a287a12be75e184e8e2004a5439119969e63bb8d1cd4fd5572438032",
+            "n14": "af3a1ee91e73ea523fd1cf801efb0345c9b1ce0d903972852bb33f734e3bf940",
+            "n6": "7774ca3b6f2a082c9aaec00cad3409b0cf50901eebea03e06349f4e240f5770b",
+            "n13": "27fc72e759c97b08729cebb392cb443cfc8e2019a5dcd7aad070b7342dc90cc2",
+            "n11": "ab4f75a241c144fc1d21c9dd41946da91b60e9ffd18cc2913a1283ec22a7a876"
+          },
+          "canonical_scope_ok": true
+        },
+        {
+          "user_turn": 8,
+          "view": {
+            "available": true,
+            "binding": {
+              "enabled": true,
+              "report_id": "r23"
+            },
+            "head_version_id": "t0007",
+            "active_version_id": "t0007",
+            "versions": [
+              {
+                "version_id": "t0001",
+                "report_id": "r19",
+                "base_version_id": null,
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0002",
+                "report_id": "r20",
+                "base_version_id": "t0001",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0003",
+                "report_id": "r21",
+                "base_version_id": "t0002",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0004",
+                "report_id": "r22",
+                "base_version_id": "t0003",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0007",
+                "report_id": "r23",
+                "base_version_id": "t0001",
+                "is_head": true,
+                "is_active": true
+              }
+            ],
+            "current_turn": {
+              "turn_id": "t0008",
+              "message_id": "2ea899fd-39f8-4c18-9cdb-dd6d0f83ae4c",
+              "status": "read_only",
+              "mode": "read_only",
+              "report_id": "r23",
+              "base_version_id": "t0007",
+              "native_delivery_created": false,
+              "response_only": false
+            }
+          },
+          "canonical": {
+            "n8": "ec11faced6d55d4770a397b2fd06ba1cab7c1d6b1b2fd1eb9238ba315d48dfe7",
+            "n2": "ba198657753ce29f031dd63df9986c9ffdb779daa9d0794b7e89d9907dee6a1c",
+            "n4": "fa09f504e6354cb36db6fb2098cb2412dea9d280e81fcc2b45174d46f3f5b733",
+            "n9": "f056b5d2a287a12be75e184e8e2004a5439119969e63bb8d1cd4fd5572438032",
+            "n14": "af3a1ee91e73ea523fd1cf801efb0345c9b1ce0d903972852bb33f734e3bf940",
+            "n6": "7774ca3b6f2a082c9aaec00cad3409b0cf50901eebea03e06349f4e240f5770b",
+            "n13": "27fc72e759c97b08729cebb392cb443cfc8e2019a5dcd7aad070b7342dc90cc2",
+            "n11": "ab4f75a241c144fc1d21c9dd41946da91b60e9ffd18cc2913a1283ec22a7a876"
+          },
+          "canonical_scope_ok": true
+        },
+        {
+          "user_turn": 9,
+          "view": {
+            "available": true,
+            "binding": {
+              "enabled": true,
+              "report_id": "r23"
+            },
+            "head_version_id": "t0007",
+            "active_version_id": "t0007",
+            "versions": [
+              {
+                "version_id": "t0001",
+                "report_id": "r19",
+                "base_version_id": null,
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0002",
+                "report_id": "r20",
+                "base_version_id": "t0001",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0003",
+                "report_id": "r21",
+                "base_version_id": "t0002",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0004",
+                "report_id": "r22",
+                "base_version_id": "t0003",
+                "is_head": false,
+                "is_active": false
+              },
+              {
+                "version_id": "t0007",
+                "report_id": "r23",
+                "base_version_id": "t0001",
+                "is_head": true,
+                "is_active": true
+              }
+            ],
+            "current_turn": {
+              "turn_id": "t0009",
+              "message_id": "1cab8932-c356-4ecc-bc18-7f923b0a34ea",
+              "status": "read_only",
+              "mode": "read_only",
+              "report_id": "r23",
+              "base_version_id": "t0007",
+              "native_delivery_created": false,
+              "response_only": false
+            }
+          },
+          "canonical": {
+            "n8": "ec11faced6d55d4770a397b2fd06ba1cab7c1d6b1b2fd1eb9238ba315d48dfe7",
+            "n2": "ba198657753ce29f031dd63df9986c9ffdb779daa9d0794b7e89d9907dee6a1c",
+            "n4": "fa09f504e6354cb36db6fb2098cb2412dea9d280e81fcc2b45174d46f3f5b733",
+            "n9": "f056b5d2a287a12be75e184e8e2004a5439119969e63bb8d1cd4fd5572438032",
+            "n14": "af3a1ee91e73ea523fd1cf801efb0345c9b1ce0d903972852bb33f734e3bf940",
+            "n6": "7774ca3b6f2a082c9aaec00cad3409b0cf50901eebea03e06349f4e240f5770b",
+            "n13": "27fc72e759c97b08729cebb392cb443cfc8e2019a5dcd7aad070b7342dc90cc2",
+            "n11": "ab4f75a241c144fc1d21c9dd41946da91b60e9ffd18cc2913a1283ec22a7a876"
+          },
+          "canonical_scope_ok": true
+        }
+      ],
+      "script_sha256": "cd24ff5cb6bf609b03dd2f5776adec2162cb413de1ec7614933a87a794f89f61"
+    }
+  ]
+}

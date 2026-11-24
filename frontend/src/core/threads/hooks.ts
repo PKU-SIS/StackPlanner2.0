@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { v4 as uuidv4 } from "uuid";
 
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { PRODUCT_ASSISTANT_ID } from "@/core/branding";
@@ -109,9 +110,18 @@ export function buildThreadSubmitMessages({
   additionalInputMessages?: Message[];
   filesForSubmit?: FileInMessage[];
 }): Message[] {
+  const binding = additionalKwargs?.report_dialogue;
+  const boundReport =
+    binding !== null &&
+    typeof binding === "object" &&
+    "enabled" in binding &&
+    binding.enabled === true &&
+    "report_id" in binding &&
+    typeof binding.report_id === "string";
   return [
     ...additionalInputMessages,
     {
+      ...(boundReport ? { id: uuidv4() } : {}),
       type: "human",
       content: [
         {

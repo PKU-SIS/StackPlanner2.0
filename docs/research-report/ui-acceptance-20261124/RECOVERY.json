@@ -1,0 +1,90 @@
+{
+  "source_unchanged": true,
+  "snapshot_count": 9,
+  "accepted_report_versions": 5,
+  "turns": [
+    {
+      "turn_id": "t0001",
+      "status": "accepted",
+      "snapshot_valid": true,
+      "embedded_report_matches_version": "t0001",
+      "restored_from_version_id": "t0001",
+      "restored_report_id": "r33",
+      "native_binding_valid": true
+    },
+    {
+      "turn_id": "t0002",
+      "status": "accepted",
+      "snapshot_valid": true,
+      "embedded_report_matches_version": "t0002",
+      "restored_from_version_id": "t0002",
+      "restored_report_id": "r34",
+      "native_binding_valid": true
+    },
+    {
+      "turn_id": "t0003",
+      "status": "accepted",
+      "snapshot_valid": true,
+      "embedded_report_matches_version": "t0003",
+      "restored_from_version_id": "t0003",
+      "restored_report_id": "r35",
+      "native_binding_valid": true
+    },
+    {
+      "turn_id": "t0004",
+      "status": "accepted",
+      "snapshot_valid": true,
+      "embedded_report_matches_version": "t0004",
+      "restored_from_version_id": "t0004",
+      "restored_report_id": "r36",
+      "native_binding_valid": true
+    },
+    {
+      "turn_id": "t0005",
+      "status": "read_only",
+      "snapshot_valid": true,
+      "embedded_report_matches_version": "t0004",
+      "restored_from_version_id": "t0004",
+      "restored_report_id": "r37",
+      "native_binding_valid": true
+    },
+    {
+      "turn_id": "t0006",
+      "status": "exact_reuse",
+      "snapshot_valid": true,
+      "embedded_report_matches_version": "t0001",
+      "restored_from_version_id": "t0001",
+      "restored_report_id": "r38",
+      "native_binding_valid": true
+    },
+    {
+      "turn_id": "t0007",
+      "status": "accepted",
+      "snapshot_valid": true,
+      "embedded_report_matches_version": "t0007",
+      "restored_from_version_id": "t0007",
+      "restored_report_id": "r39",
+      "native_binding_valid": true
+    },
+    {
+      "turn_id": "t0008",
+      "status": "read_only",
+      "snapshot_valid": true,
+      "embedded_report_matches_version": "t0007",
+      "restored_from_version_id": "t0007",
+      "restored_report_id": "r40",
+      "native_binding_valid": true
+    },
+    {
+      "turn_id": "t0009",
+      "status": "read_only",
+      "snapshot_valid": true,
+      "embedded_report_matches_version": "t0007",
+      "restored_from_version_id": "t0007",
+      "restored_report_id": "r41",
+      "native_binding_valid": true
+    }
+  ],
+  "head": "t0007",
+  "active": "t0007"
+}

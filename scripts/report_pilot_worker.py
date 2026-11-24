@@ -204,6 +204,14 @@ class OfflinePilotWorker:
                 or source not in self.audit.calls
                 or self.audit.calls[source]["turn"] != self.turn
             ):
+                self.emit(
+                    {
+                        "event": "source_mismatch",
+                        "turn": self.turn,
+                        "source_id": source,
+                        "callback_turn": self.audit.calls.get(source, {}).get("turn"),
+                    }
+                )
                 self.stop("missing_source")
                 raise AuditError("model HTTP has no callback source")
             counts = sum(
@@ -491,6 +499,15 @@ class OfflinePilotWorker:
                         self.row, self.response, b"".join(chunks), encoded=True
                     )
                 except BaseException:
+                    # Async SDKs can close this iterator after receiving DONE,
+                    # before it resumes past the last yield. Settle complete
+                    # buffered wire evidence before treating closure as unknown.
+                    if self.row["status"] == "reserved" and worker._stream_has_done(
+                        self.response, self.chunks
+                    ):
+                        worker._received(
+                            self.row, self.response, b"".join(self.chunks), encoded=True
+                        )
                     worker._unknown(self.row)
                     raise
 

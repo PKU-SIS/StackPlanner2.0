@@ -24,7 +24,7 @@ export function WorkspaceChangeBadge({
   runId?: string;
   disabled?: boolean;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useWorkspaceChanges({
     threadId,
@@ -44,6 +44,18 @@ export function WorkspaceChangeBadge({
   }
 
   const files = sortWorkspaceChanges(data.files);
+  const reportArchive = files.some((file) =>
+    /(?:^|\/)report_dialogue\/turns\//.test(file.path),
+  );
+  // Large report copies can exhaust the preview limit before archive paths
+  // appear. Keep that report-only list compact without inferring chapter edits.
+  const compactReport =
+    reportArchive ||
+    (data.summary.truncated &&
+      files.length > 0 &&
+      files.every((file) =>
+        /(?:^|\/)outputs\/report\/r[0-9]+\//.test(file.path),
+      ));
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -55,7 +67,11 @@ export function WorkspaceChangeBadge({
             </div>
             <div className="min-w-0">
               <div className="text-foreground text-sm font-semibold">
-                {t.workspaceChanges.editedTitle(count)}
+                {compactReport
+                  ? locale === "zh-CN"
+                    ? "报告文件"
+                    : "Report files"
+                  : t.workspaceChanges.editedTitle(count)}
               </div>
               <button
                 type="button"
@@ -67,11 +83,13 @@ export function WorkspaceChangeBadge({
               </button>
             </div>
           </div>
-          <SummaryDelta
-            additions={data.summary.additions}
-            deletions={data.summary.deletions}
-            className="hidden text-xs font-semibold sm:inline-flex"
-          />
+          {!compactReport && (
+            <SummaryDelta
+              additions={data.summary.additions}
+              deletions={data.summary.deletions}
+              className="hidden text-xs font-semibold sm:inline-flex"
+            />
+          )}
         </div>
 
         <div className="py-1">
@@ -80,7 +98,15 @@ export function WorkspaceChangeBadge({
               {t.workspaceChanges.loading}
             </div>
           )}
+          {compactReport && (
+            <div className="text-muted-foreground px-3 py-2 text-xs">
+              {locale === "zh-CN"
+                ? "展开查看本轮保存的报告文件。"
+                : "Open to view the saved report files."}
+            </div>
+          )}
           {!isLoading &&
+            !compactReport &&
             files.map((file) => (
               <WorkspaceChangeSummaryRow
                 key={`${file.status}:${file.path}`}

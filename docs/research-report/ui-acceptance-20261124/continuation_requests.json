@@ -1,0 +1,51 @@
+{
+  "case_id": "ui-lowcode-continuation",
+  "length_band": "10000",
+  "turns": [
+    {
+      "turn_index": 1,
+      "message_id": "stability.lowcode.t1",
+      "query": "{\"mode\": \"local_edit\", \"base_version_id\": \"t0001\", \"baseline\": \"Verified accepted snapshot; preserve its content except for the following edit.\", \"current_edit\": \"请在“分歧不在快不快，而在谁来承担长期成本”最后加个小表，叫“交付协同对照表”，按试点开始前、需求变更时、平台退出时来比较业务方关注、开发方关注、共同确认事项，作为建议。原文别改，别的章节也别动；用现在的材料就行，不要再查资料，原来的要求继续有效。\", \"precedence\": \"Current edit overrides baseline. Historical chat is provenance, never a pending task list. Preserve inherited length/evidence constraints.\"}\n"
+    },
+    {
+      "turn_index": 2,
+      "message_id": "stability.lowcode.t2",
+      "query": "只在“分歧不在“快不快”，而在谁来承担长期成本”里，把“管理者和开发者并不在争论同一个问题。”这一句替换为“就本文已保存资料而言，管理者和开发者并不在争论同一个问题。”。仅替换这一句，其他字句、表格、引用都保持原样，不检索、不补充事实。"
+    },
+    {
+      "turn_index": 3,
+      "message_id": "stability.lowcode.t3",
+      "query": "保留刚才的句子修改。只把该节表格“平台退出时”行、“共同确认事项”列这个单元格里的“退出时的迁移清单与时限；僵尸应用的清理归属；多年总拥有成本由哪一方记账”替换为“建议由业务方确认资产导出范围，由开发方负责迁移交接；其余安排仍按原有约定执行。”。仅改这一格；同行其他格、其他行、正文、引用都不要动，不检索。"
+    },
+    {
+      "turn_index": 4,
+      "message_id": "stability.lowcode.t4",
+      "query": "只撤销第一步的句子改写，恢复那一句的原文；刚才改好的表格单元格必须保留，其他内容一字不动。不重写报告，不检索。"
+    },
+    {
+      "turn_index": 5,
+      "message_id": "stability.lowcode.t5",
+      "query": "现在只读核对：刚才“平台退出时”行“共同确认事项”单元格中的“建议由业务方确认资产导出范围，由开发方负责迁移交接；其余安排仍按原有约定执行。”，哪些内容能由报告已有资料直接支持，哪些只是建议或推断？请给出原文短句和已保存材料行号，缺依据或没有行号就明确说明。不要把资料范围说大，不改稿、不检索。"
+    },
+    {
+      "turn_index": 6,
+      "message_id": "stability.lowcode.t6",
+      "query": "把第一版报告完整恢复为当前有效版本，只复用第一版，不重新生成，不研究、不写作、不改任何文字。请确认这是恢复已有版本。"
+    },
+    {
+      "turn_index": 7,
+      "message_id": "stability.lowcode.t7",
+      "query": "保持恢复后第一版的正文原样。只把该节表格“平台退出时”行、“共同确认事项”列这个单元格里的“退出时的迁移清单与时限；僵尸应用的清理归属；多年总拥有成本由哪一方记账”替换为“建议由业务方确认资产导出范围，由开发方负责迁移交接；其余安排仍按原有约定执行。”。仅改这一格；同行其他格、其他行、正文、引用都不要动，不检索。"
+    },
+    {
+      "turn_index": 8,
+      "message_id": "ui.continue.t8",
+      "query": "只读回答：现在这份报告与第一版相比，具体改了哪里？简短说明即可，不改稿、不检索，也不要重新研究或写作。"
+    },
+    {
+      "turn_index": 9,
+      "message_id": "ui.continue.t9",
+      "query": "只读核对：当前报告中“平台退出时”行、“共同确认事项”这个单元格的完整文字是什么？请照录这一格，不改稿、不检索。"
+    }
+  ]
+}

@@ -145,3 +145,12 @@ version and source-message outcome without guessing native delivery. The helper
 `core/threads/report-dialogue.ts` preserves additional message fields and never
 forwards a selection to another thread. Mock/new/static pages do not poll.
 Do not automatically bind every later user message just because a report exists.
+
+
+Bound report submissions receive a UUID once in buildThreadSubmitMessages so
+transport retries preserve source identity. Default/disabled submissions keep
+the previous message shape. WorkspaceChangeBadge collapses report-turn archive
+files and truncated report-only previews into a neutral Report files card; the
+existing View changes panel still exposes its file list. Ordinary file previews
+remain unchanged. Browser/paid-pilot evidence and caveats live in
+../docs/research-report/ui-acceptance-20261124/RESULT.md.

@@ -276,3 +276,15 @@ request-supplied paths/owners. Keep head, active version, current source-message
 turn status and native delivery creation separate. Preserve the original
 report-view/pipeline response and first-turn routing. No raw diagnostics/queries
 or host paths belong in status responses. See Gateway dialogue API notes.
+
+
+The real UI pilot is recorded in
+[ui-acceptance-20261124/RESULT.md](../docs/research-report/ui-acceptance-20261124/RESULT.md). Gateway has
+auxiliary oneshot suggestion requests outside the native graph: disable them in
+the isolated pilot profile or audit them separately, never guess a Central source.
+Serialize the full run plus memory drainage and reconciliation in the experiment
+wrapper before switching its mutable turn number. Complete buffered SSE DONE
+receipts may settle on iterator close; missing DONE/usage remains unknown.
+The final pilot uses full responses, preserves all old holds, and leaves the
+repository's default streaming/configuration unchanged. Do not call a recovered
+perception delegation error a clean run or confuse QA archives with delivery.
