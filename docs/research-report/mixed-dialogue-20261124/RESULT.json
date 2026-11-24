@@ -1,0 +1,430 @@
+{
+  "code_commit": "dc9c598",
+  "fixed_queries": [
+    {
+      "case": "upload_and_extend",
+      "query": "根据本轮附件 mixed-material.md，只在“结论：分场景的条件式答案与三个落地检查点”末尾补一个以“试点验收建议”为小标题的正文段落，纳入三项建议和编号 MT-MIXED-20261124，明确是用户内部建议并注明来源。附件接入已保存报告材料，原有正文、章节、表格和引用保持原样。不检索。"
+    },
+    {
+      "case": "add_section",
+      "query": "保留刚才结论中的补充。只根据已保存的 mixed-material.md，在结论之后新增一个独立小节“补充：试点验收检查”，把附件三项建议整理成验证清单，引用这份用户资料并区分建议与事实；其他现有章节原文不动。该新增小节的最后原样追加下面这一段，不为它另列小标题：<新增段落>【观察记录建议】试点结束后，将导出样本、回退记录和交接签字放在同一份内部归档中，供下一轮试点复核；这是一项建议，不代表已经执行。</新增段落>。标签只界定段落原文，不写入报告。不检索，不扩展外部事实。"
+    },
+    {
+      "case": "delete_paragraph_keep_independent_edit",
+      "query": "本轮只做两处修改：一，删除新增小节末尾的整段“【观察记录建议】试点结束后，将导出样本、回退记录和交接签字放在同一份内部归档中，供下一轮试点复核；这是一项建议，不代表已经执行。”以及仅为它新增的分隔空行，保留该小节其余内容；二，把第一轮结论补充段落的小标题“试点验收建议”改为“内部试点验收建议”。其他文字、章节、表格与引用保持不变，不检索。"
+    },
+    {
+      "case": "undo_section_keep_other_edits",
+      "query": "撤销第二轮新增的整个“补充：试点验收检查”小节及它的全部内部内容，但保留已保存附件、第一轮结论补充，以及第三轮的小标题“内部试点验收建议”。其他原文、表格和引用一字不动。只撤销这个小节，不做整版回退，不检索；此前被删除的“【观察记录建议】”段落不要恢复。"
+    },
+    {
+      "case": "readonly_change_summary",
+      "query": "先不要改稿、不检索、不重新写作。只读说明前四轮最终保留了哪些修改、撤销了哪些修改：当前还有“【观察记录建议】”段落吗？还有“补充：试点验收检查”小节吗？附件和“内部试点验收建议”标题是否仍保留？请按当前已接受版本回答。"
+    }
+  ],
+  "rows": [
+    {
+      "number": 1,
+      "case": "upload_and_extend",
+      "query": "根据本轮附件 mixed-material.md，只在“结论：分场景的条件式答案与三个落地检查点”末尾补一个以“试点验收建议”为小标题的正文段落，纳入三项建议和编号 MT-MIXED-20261124，明确是用户内部建议并注明来源。附件接入已保存报告材料，原有正文、章节、表格和引用保持原样。不检索。",
+      "message_id": "886c474a-687c-42fb-a98c-40b7dc0f1b24",
+      "run_id": "2c5e1aef-532f-4a65-89ee-35a8c776c03d",
+      "run_status": "success",
+      "turn_id": "t0008",
+      "turn_status": "accepted",
+      "base_version_id": "t0007",
+      "before_head": "t0007",
+      "after_head": "t0008",
+      "before_active": "t0007",
+      "after_active": "t0008",
+      "native_delivery_created": true,
+      "changed_nodes": [
+        "n14"
+      ],
+      "added_writable_nodes": [],
+      "removed_writable_nodes": [],
+      "old_versions_unchanged": true,
+      "final_sha_matches": true,
+      "duration_seconds": 36.32,
+      "final_path": "/tmp/sp2-mixed-dialogue-20261124-08/runtime/users/default/threads/mixed-dialogue-20261124-08/user-data/outputs/report/r34/final/report-4.md",
+      "diagnostic": null,
+      "uploaded_sources": [
+        "S204"
+      ],
+      "material_registered": true,
+      "original_body_retained": true,
+      "first_title_present": true,
+      "user_advice_label_present": true,
+      "scope_ok": true,
+      "content_ok": true,
+      "attachment_retained": true,
+      "attachment_in_final_references": true,
+      "tokens": {
+        "calls": 8,
+        "usage_complete": true,
+        "input_tokens": 87577,
+        "output_tokens": 5025,
+        "total_tokens": 92602,
+        "observed_input_tokens": 87577,
+        "observed_output_tokens": 5025,
+        "observed_total_tokens": 92602
+      },
+      "roles": [
+        "central",
+        "memory_updater",
+        "writer"
+      ]
+    },
+    {
+      "number": 2,
+      "case": "add_section",
+      "query": "保留刚才结论中的补充。只根据已保存的 mixed-material.md，在结论之后新增一个独立小节“补充：试点验收检查”，把附件三项建议整理成验证清单，引用这份用户资料并区分建议与事实；其他现有章节原文不动。该新增小节的最后原样追加下面这一段，不为它另列小标题：<新增段落>【观察记录建议】试点结束后，将导出样本、回退记录和交接签字放在同一份内部归档中，供下一轮试点复核；这是一项建议，不代表已经执行。</新增段落>。标签只界定段落原文，不写入报告。不检索，不扩展外部事实。",
+      "message_id": "4eb305a1-2e82-46b8-821f-f61d4b450239",
+      "run_id": "d1bb7c8b-7f11-4485-9ec8-78fa992cc07e",
+      "run_status": "success",
+      "turn_id": "t0009",
+      "turn_status": "accepted",
+      "base_version_id": "t0008",
+      "before_head": "t0008",
+      "after_head": "t0009",
+      "before_active": "t0008",
+      "after_active": "t0009",
+      "native_delivery_created": true,
+      "changed_nodes": [
+        "n14"
+      ],
+      "added_writable_nodes": [],
+      "removed_writable_nodes": [],
+      "old_versions_unchanged": true,
+      "final_sha_matches": true,
+      "duration_seconds": 30.351,
+      "final_path": "/tmp/sp2-mixed-dialogue-20261124-08/runtime/users/default/threads/mixed-dialogue-20261124-08/user-data/outputs/report/r35/final/report-5.md",
+      "diagnostic": null,
+      "new_tree_branch": [],
+      "one_new_branch": false,
+      "observation_exact_once": true,
+      "old_display_preserved": true,
+      "scope_ok": false,
+      "content_ok": true,
+      "attachment_retained": true,
+      "attachment_in_final_references": true,
+      "tokens": {
+        "calls": 7,
+        "usage_complete": true,
+        "input_tokens": 61063,
+        "output_tokens": 4319,
+        "total_tokens": 65382,
+        "observed_input_tokens": 61063,
+        "observed_output_tokens": 4319,
+        "observed_total_tokens": 65382
+      },
+      "roles": [
+        "central",
+        "memory_updater",
+        "writer"
+      ],
+      "markdown_heading_depth": 4,
+      "conclusion_heading_depth": 2,
+      "independent_outline_section_created": false,
+      "structural_requirement_pass": false,
+      "observer_initial_pause": true
+    },
+    {
+      "number": 3,
+      "case": "delete_paragraph_keep_independent_edit",
+      "query": "本轮只做两处修改：一，删除新增小节末尾的整段“【观察记录建议】试点结束后，将导出样本、回退记录和交接签字放在同一份内部归档中，供下一轮试点复核；这是一项建议，不代表已经执行。”以及仅为它新增的分隔空行，保留该小节其余内容；二，把第一轮结论补充段落的小标题“试点验收建议”改为“内部试点验收建议”。其他文字、章节、表格与引用保持不变，不检索。",
+      "message_id": "bb1d7cb7-c4f3-4513-9833-514a092bf7e4",
+      "run_id": "9198a6f6-3b5a-45df-b5e7-dd1da91a6e7d",
+      "run_status": "success",
+      "turn_id": "t0010",
+      "turn_status": "accepted",
+      "base_version_id": "t0008",
+      "before_head": "t0009",
+      "after_head": "t0010",
+      "before_active": "t0009",
+      "after_active": "t0010",
+      "native_delivery_created": true,
+      "changed_nodes": [
+        "n14"
+      ],
+      "added_writable_nodes": [],
+      "removed_writable_nodes": [],
+      "old_versions_unchanged": true,
+      "final_sha_matches": true,
+      "duration_seconds": 30.291,
+      "final_path": "/tmp/sp2-mixed-dialogue-20261124-08/runtime/users/default/threads/mixed-dialogue-20261124-08/user-data/outputs/report/r36/final/report-5.md",
+      "diagnostic": null,
+      "retained_title_present": true,
+      "observation_absent": true,
+      "deleted_target_nodes": [
+        "n14"
+      ],
+      "combined_edit_exact_except_trailing_whitespace": false,
+      "strict_combined_edit_bytes_equal": false,
+      "scope_ok": true,
+      "content_ok": false,
+      "attachment_retained": true,
+      "attachment_in_final_references": true,
+      "tokens": {
+        "calls": 17,
+        "usage_complete": true,
+        "input_tokens": 231705,
+        "output_tokens": 2624,
+        "total_tokens": 234329,
+        "observed_input_tokens": 231705,
+        "observed_output_tokens": 2624,
+        "observed_total_tokens": 234329
+      },
+      "roles": [
+        "central",
+        "memory_updater",
+        "writer"
+      ],
+      "new_section_lost_prematurely": true,
+      "latest_content_preservation_pass": false
+    },
+    {
+      "number": 4,
+      "case": "undo_section_keep_other_edits",
+      "query": "撤销第二轮新增的整个“补充：试点验收检查”小节及它的全部内部内容，但保留已保存附件、第一轮结论补充，以及第三轮的小标题“内部试点验收建议”。其他原文、表格和引用一字不动。只撤销这个小节，不做整版回退，不检索；此前被删除的“【观察记录建议】”段落不要恢复。",
+      "message_id": "35d3e314-423c-4c96-8aea-0cf23bfac6a9",
+      "run_id": "546ea5f4-2212-4aaf-9ab0-2d111d93e8b1",
+      "run_status": "success",
+      "turn_id": "t0011",
+      "turn_status": "accepted",
+      "base_version_id": "t0008",
+      "before_head": "t0010",
+      "after_head": "t0011",
+      "before_active": "t0010",
+      "after_active": "t0011",
+      "native_delivery_created": true,
+      "changed_nodes": [],
+      "added_writable_nodes": [],
+      "removed_writable_nodes": [],
+      "old_versions_unchanged": true,
+      "final_sha_matches": true,
+      "duration_seconds": 21.316,
+      "final_path": "/tmp/sp2-mixed-dialogue-20261124-08/runtime/users/default/threads/mixed-dialogue-20261124-08/user-data/outputs/report/r37/final/report-5.md",
+      "diagnostic": null,
+      "undo_representation": "Markdown block inside n14; no structural Outline branch was created in round 2",
+      "tree_branch_undo_exercised": false,
+      "strict_expected_canonical_bytes_equal": true,
+      "expected_text_equal_except_trailing_whitespace": true,
+      "retained_latest_title": true,
+      "different_from_first_round": true,
+      "materials_kept": true,
+      "withdrawn_text_not_revived": true,
+      "scope_ok": true,
+      "content_ok": true,
+      "attachment_retained": true,
+      "attachment_in_final_references": true,
+      "tokens": {
+        "calls": 9,
+        "usage_complete": true,
+        "input_tokens": 85203,
+        "output_tokens": 2036,
+        "total_tokens": 87239,
+        "observed_input_tokens": 85203,
+        "observed_output_tokens": 2036,
+        "observed_total_tokens": 87239
+      },
+      "roles": [
+        "central",
+        "memory_updater",
+        "writer"
+      ],
+      "undo_target_present_before": false,
+      "actual_removal_exercised": false,
+      "independent_undo_validation_pass": false
+    },
+    {
+      "number": 5,
+      "case": "readonly_change_summary",
+      "query": "先不要改稿、不检索、不重新写作。只读说明前四轮最终保留了哪些修改、撤销了哪些修改：当前还有“【观察记录建议】”段落吗？还有“补充：试点验收检查”小节吗？附件和“内部试点验收建议”标题是否仍保留？请按当前已接受版本回答。",
+      "message_id": "bc2ae0aa-3597-4ec1-ab4a-b50d6816b378",
+      "run_id": "e916dfc0-eb6b-4de8-b95f-9d09e9e680c1",
+      "run_status": "success",
+      "turn_id": "t0012",
+      "turn_status": "read_only",
+      "base_version_id": "t0011",
+      "before_head": "t0011",
+      "after_head": "t0011",
+      "before_active": "t0011",
+      "after_active": "t0011",
+      "native_delivery_created": false,
+      "changed_nodes": [],
+      "added_writable_nodes": [],
+      "removed_writable_nodes": [],
+      "old_versions_unchanged": true,
+      "final_sha_matches": true,
+      "duration_seconds": 39.719,
+      "final_path": "/tmp/sp2-mixed-dialogue-20261124-08/runtime/users/default/threads/mixed-dialogue-20261124-08/user-data/outputs/report/r37/final/report-5.md",
+      "diagnostic": null,
+      "readonly_head_unchanged": true,
+      "readonly_native_files_unchanged": true,
+      "scope_ok": true,
+      "archived_answer": "按当前已接受版本 r37 / t0011（最终版 report-5.md，tree_version 2）只读核对结果：\n\n1) “【观察记录建议】”段落：已不存在。正文各节（一至六章与结论）中均无该段落，此前删除的状态保持不变，未被恢复。\n2) “补充：试点验收检查”小节：已不存在。结论节中唯一的四级小标题是“#### 内部试点验收建议”，没有“补充：试点验收检查”标题及其任何内部条目。\n3) 附件仍然保留：结论节“内部试点验收建议”下的段落明确引用本轮上传的附件《混合多轮试点建议（测试合成资料）》（来源：mixed-material.md，用户内部建议编号 MT-MIXED-20261124），且来源清单末尾列有 [32] mixed-material.md。\n4) “内部试点验收建议”标题仍保留：位于结论节“三个检查点”段之后，其下三项验收细项（导出样本覆盖至少一种异常审批状态；在隔离试点副本中回退并记录恢复检查点；交接记录列明业务确认人与技术执行人）完整存在。\n5) 第一轮结论补充仍保留，未因本次撤销而回退；第五章的设计建议性表格“交付协同对照表（建议）”三行（试点开始前／需求变更时／平台退出时）与全文引用编号均未改动，没有发生整版回退。\n\n汇总：保留＝第一轮结论补充、第三轮“内部试点验收建议”小标题及其内容、已保存附件引用（[32]）、其余原文与表格与引用；撤销＝第二轮新增的整个“补充：试点验收检查”小节，以及此前已删除的“【观察记录建议】”段落（保持删除）。本轮未改稿、未检索、未重新写作，当前接受版本未被改动。",
+      "content_ok": true,
+      "attachment_retained": true,
+      "attachment_in_final_references": true,
+      "tokens": {
+        "calls": 7,
+        "usage_complete": true,
+        "input_tokens": 147673,
+        "output_tokens": 6535,
+        "total_tokens": 154208,
+        "observed_input_tokens": 147673,
+        "observed_output_tokens": 6535,
+        "observed_total_tokens": 154208
+      },
+      "roles": [
+        "central",
+        "memory_updater"
+      ],
+      "current_state_answer_manual_check": "pass for current-state claims only; does not prove previous edits were correct",
+      "visible_answer_matches_archive": true
+    }
+  ],
+  "accepted_snapshot_checks": {
+    "t0001": true,
+    "t0002": true,
+    "t0003": true,
+    "t0004": true,
+    "t0007": true,
+    "t0008": true,
+    "t0009": true,
+    "t0010": true,
+    "t0011": true
+  },
+  "readonly_archive_verified": true,
+  "model_module_files": {
+    "deerflow.sp.report.turns.adapter": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/backend/packages/harness/deerflow/sp/report/turns/adapter.py",
+    "deerflow.sp.report.turns.local_edit": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/backend/packages/harness/deerflow/sp/report/turns/local_edit.py",
+    "deerflow.sp.report.turns.uploads": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/backend/packages/harness/deerflow/sp/report/turns/uploads.py"
+  },
+  "production_code_unchanged": true,
+  "planned_rounds": 5,
+  "executed_rounds": 5,
+  "new_native_deliveries": 4,
+  "readonly_archives": 1,
+  "whole_chain_semantic_pass": false,
+  "observer_pause_and_continuation": {
+    "completed_requests_replayed": 0,
+    "continuing_from_version": "t0009",
+    "reason": "Round 2 created a Markdown subsection in n14 rather than a tree branch. Preserve structural failure and continue unchanged queries 3-5 against actual accepted body. Observer combines deletion/title edit when both affect n14. No production code or Skill changed."
+  },
+  "handler_recoverable_errors": [
+    {
+      "tool": "sp_delegate",
+      "error": "Report delegation rejected: bound report follow-ups require GitAgent and native report roles"
+    }
+  ],
+  "usage": {
+    "tokens_by_role": {
+      "writer": {
+        "calls": 31,
+        "usage_complete": true,
+        "input_tokens": 344516,
+        "output_tokens": 4182,
+        "total_tokens": 348698,
+        "observed_input_tokens": 344516,
+        "observed_output_tokens": 4182,
+        "observed_total_tokens": 348698
+      },
+      "memory_updater": {
+        "calls": 5,
+        "usage_complete": true,
+        "input_tokens": 16583,
+        "output_tokens": 3773,
+        "total_tokens": 20356,
+        "observed_input_tokens": 16583,
+        "observed_output_tokens": 3773,
+        "observed_total_tokens": 20356
+      },
+      "central": {
+        "calls": 12,
+        "usage_complete": true,
+        "input_tokens": 252122,
+        "output_tokens": 12584,
+        "total_tokens": 264706,
+        "observed_input_tokens": 252122,
+        "observed_output_tokens": 12584,
+        "observed_total_tokens": 264706
+      }
+    },
+    "tokens_by_turn": {
+      "1": {
+        "calls": 8,
+        "usage_complete": true,
+        "input_tokens": 87577,
+        "output_tokens": 5025,
+        "total_tokens": 92602,
+        "observed_input_tokens": 87577,
+        "observed_output_tokens": 5025,
+        "observed_total_tokens": 92602
+      },
+      "2": {
+        "calls": 7,
+        "usage_complete": true,
+        "input_tokens": 61063,
+        "output_tokens": 4319,
+        "total_tokens": 65382,
+        "observed_input_tokens": 61063,
+        "observed_output_tokens": 4319,
+        "observed_total_tokens": 65382
+      },
+      "3": {
+        "calls": 17,
+        "usage_complete": true,
+        "input_tokens": 231705,
+        "output_tokens": 2624,
+        "total_tokens": 234329,
+        "observed_input_tokens": 231705,
+        "observed_output_tokens": 2624,
+        "observed_total_tokens": 234329
+      },
+      "4": {
+        "calls": 9,
+        "usage_complete": true,
+        "input_tokens": 85203,
+        "output_tokens": 2036,
+        "total_tokens": 87239,
+        "observed_input_tokens": 85203,
+        "observed_output_tokens": 2036,
+        "observed_total_tokens": 87239
+      },
+      "5": {
+        "calls": 7,
+        "usage_complete": true,
+        "input_tokens": 147673,
+        "output_tokens": 6535,
+        "total_tokens": 154208,
+        "observed_input_tokens": 147673,
+        "observed_output_tokens": 6535,
+        "observed_total_tokens": 154208
+      }
+    },
+    "input_tokens": 613221,
+    "output_tokens": 20539,
+    "total_tokens": 633760,
+    "cache_read_tokens_observed": 487040,
+    "estimated_cost_cny_upper": "0.43615560",
+    "usage_complete": true,
+    "http_coverage_verified": true
+  },
+  "budget": {
+    "spent_cost_cny": "28.87864960",
+    "reserved_cost_cny": "6.488064",
+    "input_tokens": 34233288,
+    "output_tokens": 1399621,
+    "inflight": [
+      "http-1883efa84c6e4cf58bef90882c3671c5-1",
+      "http-6f416a52175d498a894bc2d92351936d-3",
+      "http-b05c246e0a0f49919d40ade6792240a2-12"
+    ],
+    "abort_requested": false
+  },
+  "new_unknown_identities": [],
+  "automatic_paid_restarts": 0,
+  "stop_reason": null
+}

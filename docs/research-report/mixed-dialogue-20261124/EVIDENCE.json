@@ -1,0 +1,7 @@
+{
+  "archive": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-mixed-08/report-evidence.tar.gz",
+  "sha256": "b922199da156288c5ca5b988d233edc990d9d68bb4abbbfcc10c0fe2ef103502",
+  "original_outputs": "/tmp/sp2-mixed-dialogue-20261124-08/runtime/users/default/threads/mixed-dialogue-20261124-08/user-data/outputs",
+  "restore_prefix": "/tmp",
+  "contains": "report outputs and version snapshots only; no runtime DB, private provider reasoning or credentials"
+}

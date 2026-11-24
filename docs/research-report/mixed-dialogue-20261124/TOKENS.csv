@@ -1,0 +1,6 @@
+round,case,input_tokens,output_tokens,total_tokens,duration_seconds,roles
+1,upload_and_extend,87577,5025,92602,36.32,"central,memory_updater,writer"
+2,add_section,61063,4319,65382,30.351,"central,memory_updater,writer"
+3,delete_paragraph_keep_independent_edit,231705,2624,234329,30.291,"central,memory_updater,writer"
+4,undo_section_keep_other_edits,85203,2036,87239,21.316,"central,memory_updater,writer"
+5,readonly_change_summary,147673,6535,154208,39.719,"central,memory_updater"
