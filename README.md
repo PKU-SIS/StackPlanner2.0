@@ -1153,3 +1153,5 @@ local changes; the small sample is not a general factual-quality guarantee.
 显式开启报告后续轮后，现有章节的扩写、基于已保存材料补引用、局部重组与压缩可直接由 Writer 完成。大范围改稿优先先形成完整替换稿，再用现有 patch 一次更新对应段落或章节；小句和单元格仍精确修改。后续轮默认不继承首轮总字数上下限，可按需求扩写；本轮明确的压缩或篇幅要求仍应遵守，API 可用本轮 report_length 设置新合同。首轮篇幅验收不变，引用、文件校验与旧版本隔离继续生效。最新政策与实测见 [后续轮篇幅策略](docs/research-report/followup-length-20261124/RESULT.md)。
 
 报告后续轮可直接使用本轮上传的文本附件或已有 Markdown 转换结果：程序先保存为报告材料，Writer 再读取并引用。来源标记也支持 `[S204:15-21]`，交付时生成正式引用编号；这些处理不增加模型路由步骤。修改与验证见 [附件及引用格式修复](docs/research-report/capabilities-fixes-20261124/RESULT.md)。
+
+局部改稿默认在当前有效版本上继续，模型委派中的历史基线参数不会自动导致回退；用户显式选版仍支持。独立章节的增删由中枢直接交给 Outline，在新副本上更新大纲树，无需先调用 GitAgent。

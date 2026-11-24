@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from collections.abc import Mapping
 from functools import wraps
 from pathlib import Path
@@ -84,6 +86,56 @@ def current_turn(state, *, thread_id):
         if turn["raw_query"] != message_to_text(message):
             raise ReportValidationError("source message identity was reused with different content")
     return store, message, head, turn
+
+
+def select_edit_base(message, active):
+    """Only a current user selection overrides the active accepted body."""
+    from deerflow.utils.messages import get_original_user_content_text
+
+    binding = message.additional_kwargs.get("report_dialogue") or {}
+    chosen = binding.get("base_version_id")
+    if chosen:
+        return str(chosen), "message_binding"
+    raw = get_original_user_content_text(message.content, message.additional_kwargs)
+    directive = re.match(r"^\s*(?:请在\s*|在\s*)?base_version_id\s*[:=]\s*(t\d{4,})(?![A-Za-z0-9_])", raw)
+    if directive:
+        return directive.group(1), "leading_user_directive"
+    return active["turn_id"], "active_version"
+
+
+def bind_outline_revision(action, context, metadata, refs):
+    """Prepare a native structural revision directly, without a resolver agent."""
+    if action.target_agent != "outline" or action.metadata.get("report_task") != "revise":
+        return
+    active = current_turn(context.state, thread_id=context.thread_id)
+    if active is None or active[3] is not None:
+        return  # First-report revisions and already-prepared continuations are native.
+    from deerflow.sp.report.hooks import _message_id
+    from deerflow.utils.messages import message_to_text
+
+    store, message, head, _ = active
+    base, source = select_edit_base(message, head)
+    raw = message_to_text(message)
+    resolved = json.dumps(
+        {
+            "mode": "outline_revision",
+            "base_version_id": base,
+            "baseline": "Current accepted body; preserve unaffected sections.",
+            "current_edit": raw,
+            "precedence": "Latest user edit wins. Prior operation metadata is history, not a baseline selection or pending work.",
+        },
+        ensure_ascii=False,
+    )
+    turn = store.prepare(base, message_id=_message_id(message), raw_query=raw, resolved_query=resolved, change_hint="Outline structural revision")
+    activate(store, turn, context)
+    paths = store._paths(turn["report_id"])
+    with native.report_lock(paths):
+        ledger = ReportLedger.load(paths)
+        ledger.payload["dialogue_historical_draft_dispositions"] = ledger.payload.pop("draft_dispositions", [])
+        ledger.save()
+    metadata.update(report_id=paths.report_id, base_version_id=base)
+    refs.clear()
+    refs["report_baseline_selection"] = {"version_id": base, "source": source}
 
 
 def activate(store, turn, context):
@@ -263,6 +315,10 @@ def central_context(state, runtime):
         "skill": skill("report-dialogue-routing"),
         "active_state": {"version_id": head["turn_id"], "resolved_query": turn["resolved_query"], "requirements_status": "resolved"} if turn and turn["status"] == "executing" else requirement_state(head),
         "history_index": store.inspect(),
+        "baseline_policy": {
+            "active_version_id": head["turn_id"],
+            "instruction": "Default new edits to this active version. A previous resolved_query.base_version_id records historical work; do not copy it as the next baseline. User-selected older versions require a current user selection.",
+        },
         "current_request": {"message_id": _message_id(message), "text": str(message.content)},
         "length_policy": {
             "inherit_baseline_word_limits": False,

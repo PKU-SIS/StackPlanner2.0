@@ -21,6 +21,17 @@ replacement tools, and accepts plain Writer summaries. Central can inspect or
 reuse accepted versions through existing `sp_replan` metadata.report_action
 `inspect_version` / `reuse_version`, without GitAgent. Complex reconciliation can
 still select the perception `git_agent` profile through `sp_delegate`.
+Local edits now default to the program-validated active version, ignoring stale
+base_version_id in model delegation metadata. A current-message
+report_dialogue.base_version_id or leading user base_version_id=... directive
+can explicitly select an older accepted version. Historical operation metadata
+is not a new selection. Natural-language version reconciliation retains the
+existing version-management path.
+Outline report_task=revise can prepare/resume the same isolated copy directly
+for an opted-in delivered report; no GitAgent is required just to add/remove an
+independent chapter. Existing prepared continuations and first-report revise
+retain their original paths. Structural requests must update the native tree;
+Writer remains responsible for local bodies and headings within existing nodes.
 Existing-section expansion, saved-material citation additions, reorganization and
 compression also use this Writer path. Section reads and saved receipts return
 body character counts; whole-report length guidance applies only to an explicit

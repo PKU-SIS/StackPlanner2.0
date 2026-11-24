@@ -5,11 +5,19 @@
 用户最新要求：优先改得准、减少输出失败，简单修改不强制 GitAgent/Outline。
 这取代早期固定串行角色流程的要求。首轮报告路径不变。
 
+## 2026-11-24 基线与结构修订更新
+
+普通 local_edit 默认当前 active_version，不再信任中枢委派中残留的旧 base_version_id。
+本轮用户的 report_dialogue.base_version_id 或开头的 base_version_id=... 指令可明确选旧版；
+自然语言旧版需求的复杂协调仍可走原版本管理流程。历史 resolved_query 的 mode/base 是溯源信息。
+独立章节的增删可直接派 Outline report_task=revise，由宿主 fork/resume，无需先派 GitAgent；
+章内段落／小标题调整仍由 Writer 处理，首轮及既有已准备修订路径不变。
+
 ## 实际流程
 
 1. 原中枢接收最新原始消息；仍须显式 opt-in 并有已接受报告。
 2. 小修改直接 `sp_delegate(target_agent="reporter", metadata={"report_task":"local_edit"})`。
-   默认使用当前有效版本，可选 `base_version_id` 指定已接受旧版。
+   默认使用当前有效版本；用户显式选版方式见上方更新，不从历史委派参数继承基线。
 3. 程序复用版本 store 完整复制、路径/哈希恢复和原生 resume，随后启动一次 Writer。
 4. Writer 用 `report_find_sections` 定位，`report_read_section` 读章节，
    `report_replace_text(node_id, old_text, new_text)` 精确替换唯一片段。

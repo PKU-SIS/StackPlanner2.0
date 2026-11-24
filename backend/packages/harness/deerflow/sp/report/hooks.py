@@ -417,6 +417,9 @@ def prepare_delegation(
         return
     if bind_profile(action, context, task_metadata, context_refs):
         return
+    from deerflow.sp.report.turns.adapter import bind_outline_revision
+
+    bind_outline_revision(action, context, task_metadata, context_refs)
     role = str(action.target_agent or "")
     from deerflow.sp.report.turns.adapter import current_turn
 

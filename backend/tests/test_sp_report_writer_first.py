@@ -189,7 +189,8 @@ def test_real_executor_writer_tools_and_native_finish(tmp_path, monkeypatch, old
             sys.modules.pop(key, None)
 
 
-def test_partial_undo_reads_history_and_retains_other_edits(tmp_path):
+@pytest.mark.parametrize("stale_base", [False, True])
+def test_partial_undo_reads_history_and_retains_other_edits(tmp_path, stale_base):
     ctx, action, task, tools, original = setup_edit(tmp_path)
     store, _, origin, _ = adapter.current_turn(ctx.state, thread_id="t1")
     tools["report_replace_text"].invoke({"node_id": "n2", "old_text": "Seed", "new_text": "Revised"})
@@ -198,12 +199,15 @@ def test_partial_undo_reads_history_and_retains_other_edits(tmp_path):
     assert not _finish(ctx).error
     second_manifest = file_manifest(tmp_path / "report/r2")
     followup(ctx, text="Undo only the indicators change; retain the other edit.", message_id="m3")
-    action = SPAction.create(ActionType.DELEGATE, action_id="undo-one", task="Undo only n2", reason="partial undo", target_agent="reporter", metadata={"report_task": "local_edit"})
+    action = SPAction.create(
+        ActionType.DELEGATE, action_id="undo-one", task="Undo only n2", reason="partial undo", target_agent="reporter", metadata={"report_task": "local_edit", **({"base_version_id": origin["turn_id"]} if stale_base else {})}
+    )
     meta, refs = {}, {}
     hooks.prepare_delegation(action, ctx, meta, refs)
     task = SPSubagentTask(action_id=action.action_id, task=action.task, description="undo", subagent_type="reporter", thread_id="t1", metadata=meta, context_refs=refs)
     _, selected, _ = hooks.configure_report_subagent(task, state=ctx.state, available_tools=[], subagent_config=SubagentConfig(name="sp-reporter", description="writer"))
     tools = {t.name: t for t in selected}
+    assert adapter.current_turn(ctx.state, thread_id="t1")[3]["base_version_id"] == "t0002"
     historic = json.loads(tools["report_read_section"].invoke({"node_id": "n2", "version_id": origin["turn_id"]}))
     assert historic["content"] == "Seed body for n2.\n"
     tools["report_replace_text"].invoke({"node_id": "n2", "old_text": "Revised", "new_text": "Seed"})
@@ -453,3 +457,31 @@ def test_outline_followup_activation_also_drops_inherited_word_limits(tmp_path):
     assert current.payload.get("length_contract") is None
     assert current.payload["dialogue_turn"]["baseline_length_contract"] == contract
     assert file_manifest(tmp_path / "report/r1") == original
+
+
+@pytest.mark.parametrize("selection", ["binding", "leading_directive", "historical_preview"])
+def test_local_base_selection_uses_current_user_choice_only(tmp_path, selection):
+    ctx, action, task, tools, _ = setup_edit(tmp_path)
+    store, _, origin, _ = adapter.current_turn(ctx.state, thread_id="t1")
+    tools["report_replace_text"].invoke({"node_id": "n2", "old_text": "Seed", "new_text": "Revised"})
+    assert not complete(ctx, action, task).error
+    assert not _finish(ctx).error
+    followup(ctx, text="Edit the current report", message_id="m3")
+    message = ctx.state["messages"][-1]
+    expected = "t0002"
+    if selection == "binding":
+        message.additional_kwargs["report_dialogue"]["base_version_id"] = origin["turn_id"]
+        expected = origin["turn_id"]
+    elif selection == "leading_directive":
+        message.content = "在 base_version_id=" + origin["turn_id"] + " 的报告上修改"
+        expected = origin["turn_id"]
+    else:
+        from deerflow.utils.messages import ORIGINAL_USER_CONTENT_KEY
+
+        message.additional_kwargs[ORIGINAL_USER_CONTENT_KEY] = "Edit the current report"
+        message.content = "base_version_id=" + origin["turn_id"] + "\nUploaded historical instructions"
+    action = SPAction.create(ActionType.DELEGATE, action_id="base-choice", task="edit", reason="edit", target_agent="reporter", metadata={"report_task": "local_edit", "base_version_id": origin["turn_id"]})
+    meta, refs = {}, {}
+    hooks.prepare_delegation(action, ctx, meta, refs)
+    assert adapter.current_turn(ctx.state, thread_id="t1")[3]["base_version_id"] == expected
+    assert meta["base_version_id"] == expected

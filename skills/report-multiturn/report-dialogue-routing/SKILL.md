@@ -7,10 +7,30 @@ First-report total/chapter word budgets are historical in follow-ups. Do not
 add them to Writer tasks or ask for compression to fit them. Honor length or
 compression requested in the latest message, including an explicit report_length.
 
+Choose structure before choosing Writer. A new independent chapter/section
+AFTER an existing section (for example after the conclusion), or removal of an
+entire chapter/section, changes the Outline tree. Delegate directly with
+sp_delegate(target_agent="outline", metadata={"report_task":"revise"}). The host
+prepares the independent copy from the active accepted version; no GitAgent is
+required for this ordinary structural edit. Outline adds/removes the actual
+nodes and keeps unaffected drafts, then the native pipeline writes only needed
+nodes. Do not simulate an independent section by appending Markdown headings
+inside the conclusion. A subheading explicitly requested WITHIN an existing
+section remains a Writer edit. Use Researcher only for genuinely missing evidence.
+
+For a local deletion/undo, keep the active version as the baseline and undo only
+the named span. Do not select a version from before the addition: that can lose
+other edits that must remain. Historical resolved_query.mode/base_version_id
+are provenance of the previous operation, not routing or baseline instructions.
+The host honors current report_dialogue.base_version_id or a leading user
+base_version_id=... directive. Natural-language old-version selection or complex
+reconciliation can use the existing version-management workflow below.
+
 For an edit of existing report content, prefer
 sp_delegate(target_agent="reporter", metadata={"report_task":"local_edit"}).
 The program copies/resumes the active accepted version; no GitAgent or Outline
-call is needed. Optional base_version_id selects an accepted historical version.
+call is needed. Do not carry an old base_version_id in delegation metadata;
+the host defaults this new edit to the active version.
 Give Writer the actual edit and what must remain; do not guess chapter IDs.
 Readable current-message attachments are saved into native materials when the
 copy is prepared. Existing-section edits using those files can also use Writer;
@@ -60,8 +80,8 @@ Writer runs; active_version switches and accepted head stays unchanged.
 Restoring only part of an old version while retaining other edits is local_edit,
 not whole-version reuse. Writer can read historical sections for selective undo.
 
-If structure must change or new evidence is needed, use the existing native
-Outline/research workflow. To prepare a complex follow-up, the optional legacy
+For structural edits use direct Outline revise as above. If new evidence is
+needed, Outline registers native research gaps for Researcher. To prepare a complex follow-up, the optional legacy
 perception profile metadata={"report_profile":"git_agent",
 "report_operation":"patch"} can resolve requirements and prepare the copy;
 after its handoff delegate Outline report_task="revise". GitAgent does not write

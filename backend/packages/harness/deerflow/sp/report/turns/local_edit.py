@@ -25,7 +25,7 @@ def bind(action, context, metadata, refs):
     store, message, head, turn = active
     if turn is not None:
         raise ReportValidationError("This message already has a report turn; continue or read its archive instead of dispatching another Writer")
-    base = str(action.metadata.get("base_version_id") or head["turn_id"])
+    base, base_source = adapter.select_edit_base(message, head)
     store.verify(base)
     from deerflow.sp.report.hooks import _message_id
     from deerflow.utils.messages import message_to_text
@@ -53,14 +53,15 @@ def bind(action, context, metadata, refs):
         ledger.register_run(context.run_id)
         # Previous Outline keep/rewrite decisions describe the old turn only.
         ledger.payload["dialogue_historical_draft_dispositions"] = ledger.payload.pop("draft_dispositions", [])
-        ledger.payload["writer_first"] = {"action_id": action.action_id, "run_id": context.run_id, "base_version_id": base, "edits": []}
+        ledger.payload["writer_first"] = {"action_id": action.action_id, "run_id": context.run_id, "base_version_id": base, "baseline_selection_source": base_source, "edits": []}
         ledger.save()
     metadata.pop("tool_names", None)
-    metadata.update(report_id=paths.report_id, report_role="writer", report_writer_first=True, report_delegate_action_id=action.action_id)
+    metadata.update(report_id=paths.report_id, base_version_id=base, report_role="writer", report_writer_first=True, report_delegate_action_id=action.action_id)
     refs.clear()
     refs["report_local_edit"] = {
         "current_edit": raw,
         "base_version_id": base,
+        "baseline_selection_source": base_source,
         "uploaded_materials": ledger.payload["dialogue_turn"].get("uploaded_materials", []),
         "section_catalog": [{"node_id": n["node_id"], "title": n.get("title", "")} for n in (packets.load_current_tree(ledger) or {}).get("nodes", []) if n.get("kind") == "writable"],
         "instruction": "Locate the section, read it, and replace only the requested text. Other sections remain byte-identical. Explain ambiguity or missing evidence rather than inventing facts.",

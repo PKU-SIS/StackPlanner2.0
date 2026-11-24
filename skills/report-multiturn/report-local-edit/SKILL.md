@@ -26,7 +26,8 @@ This uses the same patch tool. Preserve the section's still-valid arguments and
 source IDs, not every original sentence or repeated citation. Do not assemble
 one revision by saving a stream of tiny insertions, word deletions or heading
 renames. Reorganization within a section is your work; it does not require
-Outline. Preserve unaffected sections and still-valid earlier edits.
+Outline. A new independent section after the conclusion belongs in the Outline
+tree, not as another heading appended to the conclusion body. Preserve unaffected sections and still-valid earlier edits.
 For selective undo, read the historical section with version_id and copy only
 the withdrawn part. Old chat is provenance, not outstanding work.
 
