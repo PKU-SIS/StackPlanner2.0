@@ -288,3 +288,15 @@ receipts may settle on iterator close; missing DONE/usage remains unknown.
 The final pilot uses full responses, preserves all old holds, and leaves the
 repository's default streaming/configuration unchanged. Do not call a recovered
 perception delegation error a clean run or confuse QA archives with delivery.
+
+
+Literal report reads now use inspect_version view=sections followed by draft:<node_id>
+through existing Central sp_replan. Data views have compact version headers; full
+turn requirements remain explicitly available in requirements/manifest views.
+Body reads support line ranges, preserve line endings and expose full_text_sha256
+for the complete saved body; truncated/last_line_complete describe the returned
+window. Keep the source-grounding provenance view distinct from report wording.
+readonly-text-20261124/RESULT.md records 953 offline regressions and three real
+UI questions with exact quotation, no delegates and unchanged accepted SHA.
+The new local UI runs in tmux socket sp2-multiturn-read09; do not promise
+turn-managed exec sessions persist after the coding turn ends.

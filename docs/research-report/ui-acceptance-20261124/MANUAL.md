@@ -1,8 +1,13 @@
 # 手动测试
 
+入口更新：当前后台会话地址为
+<http://127.0.0.1:3324/workspace/chats/ui-report-readonly-20261124>。
+旧 08 实例的聊天和报告未删除；以下操作步骤仍适用。
+最新状态见 [只读复测与后台会话](../readonly-text-20261124/RESULT.md)。
+
 隔离系统已启动，服务器本机地址：
 
-http://127.0.0.1:3324/workspace/chats/ui-report-lowcode-20261124
+http://127.0.0.1:3324/workspace/chats/ui-report-readonly-20261124
 
 如果在自己的电脑浏览器访问，请在现有服务器 SSH 连接中映射 3324，例如：
 

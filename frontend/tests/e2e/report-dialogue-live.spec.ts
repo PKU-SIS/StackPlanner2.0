@@ -45,6 +45,7 @@ test("real Gateway native report dialogue through browser", async ({
     user_turn: number;
     canonical_sha256_by_node: Record<string, string>;
     expected_status?: string;
+    expected_quote?: string;
   }[];
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -159,6 +160,27 @@ test("real Gateway native report dialogue through browser", async ({
     );
     expect(actual).toEqual(expected);
     await expect(checkbox).toBeEnabled({ timeout: 30000 });
+    const expectedQuote = checks.find(
+      (item) => item.user_turn === request.turn_index,
+    )?.expected_quote;
+    if (expectedQuote) {
+      const visible = readFileSync(
+        resolve(
+          binding.outputs,
+          `report_dialogue/turns/${view.current_turn!.turn_id}/visible_response.md`,
+        ),
+        "utf8",
+      );
+      const quoteOk = visible.includes(expectedQuote);
+      Object.assign(outcomes.at(-1) as Record<string, unknown>, {
+        exact_quote_ok: quoteOk,
+      });
+      writeFileSync(
+        recordsPath,
+        JSON.stringify({ outcomes, page_errors: errors }, null, 2),
+      );
+      expect(quoteOk).toBe(true);
+    }
     await page.screenshot({
       path: info.outputPath(`real-turn-${request.turn_index}.png`),
       fullPage: true,

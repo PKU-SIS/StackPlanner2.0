@@ -1,0 +1,323 @@
+{
+  "base_commit": "ee2e389",
+  "observed_tokens": 238195,
+  "input_tokens": 232273,
+  "output_tokens": 5922,
+  "known_cache_read_tokens": 194432,
+  "new_cost_cny": "0.13083528",
+  "global_known_cost_cny": "22.67072984",
+  "global_held_cny": "6.488064",
+  "global_billing_complete": false,
+  "current_usage_complete": true,
+  "current_stop_reason": null,
+  "head": "t0007",
+  "active": "t0007",
+  "accepted_versions": 5,
+  "all_accepted_sha_unchanged": true,
+  "delegate_actions": 0,
+  "handler_errors": 0,
+  "outcomes": [
+    {
+      "user_turn": 10,
+      "message_id": "8c9b18cd-677d-4119-a1ab-e137bcf7188c",
+      "view": {
+        "available": true,
+        "binding": {
+          "enabled": true,
+          "report_id": "r28"
+        },
+        "head_version_id": "t0007",
+        "active_version_id": "t0007",
+        "versions": [
+          {
+            "version_id": "t0001",
+            "report_id": "r24",
+            "base_version_id": null,
+            "is_head": false,
+            "is_active": false
+          },
+          {
+            "version_id": "t0002",
+            "report_id": "r25",
+            "base_version_id": "t0001",
+            "is_head": false,
+            "is_active": false
+          },
+          {
+            "version_id": "t0003",
+            "report_id": "r26",
+            "base_version_id": "t0002",
+            "is_head": false,
+            "is_active": false
+          },
+          {
+            "version_id": "t0004",
+            "report_id": "r27",
+            "base_version_id": "t0003",
+            "is_head": false,
+            "is_active": false
+          },
+          {
+            "version_id": "t0007",
+            "report_id": "r28",
+            "base_version_id": "t0001",
+            "is_head": true,
+            "is_active": true
+          }
+        ],
+        "current_turn": {
+          "turn_id": "t0010",
+          "message_id": "8c9b18cd-677d-4119-a1ab-e137bcf7188c",
+          "status": "read_only",
+          "mode": "read_only",
+          "report_id": "r28",
+          "base_version_id": "t0007",
+          "native_delivery_created": false,
+          "response_only": false
+        }
+      },
+      "canonical": {
+        "n8": "ec11faced6d55d4770a397b2fd06ba1cab7c1d6b1b2fd1eb9238ba315d48dfe7",
+        "n2": "ba198657753ce29f031dd63df9986c9ffdb779daa9d0794b7e89d9907dee6a1c",
+        "n4": "fa09f504e6354cb36db6fb2098cb2412dea9d280e81fcc2b45174d46f3f5b733",
+        "n9": "f056b5d2a287a12be75e184e8e2004a5439119969e63bb8d1cd4fd5572438032",
+        "n14": "af3a1ee91e73ea523fd1cf801efb0345c9b1ce0d903972852bb33f734e3bf940",
+        "n6": "7774ca3b6f2a082c9aaec00cad3409b0cf50901eebea03e06349f4e240f5770b",
+        "n13": "27fc72e759c97b08729cebb392cb443cfc8e2019a5dcd7aad070b7342dc90cc2",
+        "n11": "ab4f75a241c144fc1d21c9dd41946da91b60e9ffd18cc2913a1283ec22a7a876"
+      },
+      "canonical_scope_ok": true,
+      "exact_quote_ok": true
+    },
+    {
+      "user_turn": 11,
+      "message_id": "c885dfe2-7ab1-4af9-b0e9-323043a2e0b8",
+      "view": {
+        "available": true,
+        "binding": {
+          "enabled": true,
+          "report_id": "r28"
+        },
+        "head_version_id": "t0007",
+        "active_version_id": "t0007",
+        "versions": [
+          {
+            "version_id": "t0001",
+            "report_id": "r24",
+            "base_version_id": null,
+            "is_head": false,
+            "is_active": false
+          },
+          {
+            "version_id": "t0002",
+            "report_id": "r25",
+            "base_version_id": "t0001",
+            "is_head": false,
+            "is_active": false
+          },
+          {
+            "version_id": "t0003",
+            "report_id": "r26",
+            "base_version_id": "t0002",
+            "is_head": false,
+            "is_active": false
+          },
+          {
+            "version_id": "t0004",
+            "report_id": "r27",
+            "base_version_id": "t0003",
+            "is_head": false,
+            "is_active": false
+          },
+          {
+            "version_id": "t0007",
+            "report_id": "r28",
+            "base_version_id": "t0001",
+            "is_head": true,
+            "is_active": true
+          }
+        ],
+        "current_turn": {
+          "turn_id": "t0011",
+          "message_id": "c885dfe2-7ab1-4af9-b0e9-323043a2e0b8",
+          "status": "read_only",
+          "mode": "read_only",
+          "report_id": "r28",
+          "base_version_id": "t0007",
+          "native_delivery_created": false,
+          "response_only": false
+        }
+      },
+      "canonical": {
+        "n8": "ec11faced6d55d4770a397b2fd06ba1cab7c1d6b1b2fd1eb9238ba315d48dfe7",
+        "n2": "ba198657753ce29f031dd63df9986c9ffdb779daa9d0794b7e89d9907dee6a1c",
+        "n4": "fa09f504e6354cb36db6fb2098cb2412dea9d280e81fcc2b45174d46f3f5b733",
+        "n9": "f056b5d2a287a12be75e184e8e2004a5439119969e63bb8d1cd4fd5572438032",
+        "n14": "af3a1ee91e73ea523fd1cf801efb0345c9b1ce0d903972852bb33f734e3bf940",
+        "n6": "7774ca3b6f2a082c9aaec00cad3409b0cf50901eebea03e06349f4e240f5770b",
+        "n13": "27fc72e759c97b08729cebb392cb443cfc8e2019a5dcd7aad070b7342dc90cc2",
+        "n11": "ab4f75a241c144fc1d21c9dd41946da91b60e9ffd18cc2913a1283ec22a7a876"
+      },
+      "canonical_scope_ok": true,
+      "exact_quote_ok": true
+    },
+    {
+      "user_turn": 12,
+      "message_id": "fb101f35-a386-43dd-8a13-8f45c150f9fd",
+      "view": {
+        "available": true,
+        "binding": {
+          "enabled": true,
+          "report_id": "r28"
+        },
+        "head_version_id": "t0007",
+        "active_version_id": "t0007",
+        "versions": [
+          {
+            "version_id": "t0001",
+            "report_id": "r24",
+            "base_version_id": null,
+            "is_head": false,
+            "is_active": false
+          },
+          {
+            "version_id": "t0002",
+            "report_id": "r25",
+            "base_version_id": "t0001",
+            "is_head": false,
+            "is_active": false
+          },
+          {
+            "version_id": "t0003",
+            "report_id": "r26",
+            "base_version_id": "t0002",
+            "is_head": false,
+            "is_active": false
+          },
+          {
+            "version_id": "t0004",
+            "report_id": "r27",
+            "base_version_id": "t0003",
+            "is_head": false,
+            "is_active": false
+          },
+          {
+            "version_id": "t0007",
+            "report_id": "r28",
+            "base_version_id": "t0001",
+            "is_head": true,
+            "is_active": true
+          }
+        ],
+        "current_turn": {
+          "turn_id": "t0012",
+          "message_id": "fb101f35-a386-43dd-8a13-8f45c150f9fd",
+          "status": "read_only",
+          "mode": "read_only",
+          "report_id": "r28",
+          "base_version_id": "t0007",
+          "native_delivery_created": false,
+          "response_only": false
+        }
+      },
+      "canonical": {
+        "n8": "ec11faced6d55d4770a397b2fd06ba1cab7c1d6b1b2fd1eb9238ba315d48dfe7",
+        "n2": "ba198657753ce29f031dd63df9986c9ffdb779daa9d0794b7e89d9907dee6a1c",
+        "n4": "fa09f504e6354cb36db6fb2098cb2412dea9d280e81fcc2b45174d46f3f5b733",
+        "n9": "f056b5d2a287a12be75e184e8e2004a5439119969e63bb8d1cd4fd5572438032",
+        "n14": "af3a1ee91e73ea523fd1cf801efb0345c9b1ce0d903972852bb33f734e3bf940",
+        "n6": "7774ca3b6f2a082c9aaec00cad3409b0cf50901eebea03e06349f4e240f5770b",
+        "n13": "27fc72e759c97b08729cebb392cb443cfc8e2019a5dcd7aad070b7342dc90cc2",
+        "n11": "ab4f75a241c144fc1d21c9dd41946da91b60e9ffd18cc2913a1283ec22a7a876"
+      },
+      "canonical_scope_ok": true,
+      "exact_quote_ok": true
+    }
+  ],
+  "traces": [
+    {
+      "run_id": "68297e79-6c88-42e3-8d33-6ffc44819cbb",
+      "status": "success",
+      "actions": [
+        {
+          "type": "REPLAN",
+          "target": null,
+          "view": "sections"
+        },
+        {
+          "type": "REPLAN",
+          "target": null,
+          "view": "draft:n11"
+        },
+        {
+          "type": "REPLAN",
+          "target": null,
+          "view": null
+        },
+        {
+          "type": "FINISH",
+          "target": null,
+          "view": null
+        }
+      ],
+      "handler_errors": []
+    },
+    {
+      "run_id": "4ac05b09-6414-4b6c-a7ad-4a38802e4402",
+      "status": "success",
+      "actions": [
+        {
+          "type": "REPLAN",
+          "target": null,
+          "view": "sections"
+        },
+        {
+          "type": "REPLAN",
+          "target": null,
+          "view": "draft:n11"
+        },
+        {
+          "type": "REPLAN",
+          "target": null,
+          "view": null
+        },
+        {
+          "type": "FINISH",
+          "target": null,
+          "view": null
+        }
+      ],
+      "handler_errors": []
+    },
+    {
+      "run_id": "21c3390d-938c-4c07-9c9a-46d3c5284bf4",
+      "status": "success",
+      "actions": [
+        {
+          "type": "REPLAN",
+          "target": null,
+          "view": "sections"
+        },
+        {
+          "type": "REPLAN",
+          "target": null,
+          "view": "draft:n11"
+        },
+        {
+          "type": "REPLAN",
+          "target": null,
+          "view": null
+        },
+        {
+          "type": "FINISH",
+          "target": null,
+          "view": null
+        }
+      ],
+      "handler_errors": []
+    }
+  ],
+  "bootstrap_sha256": "ee01a2c603e0c51c2418deaba21c2d3419799f9b78a6108edb3671cc5f4e18ea",
+  "tool_messages": 12,
+  "tool_errors": []
+}

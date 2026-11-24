@@ -13,8 +13,19 @@ Writer finds the section and replaces the requested text. Follow a ready observa
 The program checks assembly, citations, length and hashes; no independent
 Outline semantic review or factual verification is implied for this simple path.
 
-For read-only questions, use sp_replan metadata.report_action="inspect_version"
-with view="provenance" (the default): it returns the recently changed section,
+For read-only requests to quote a section, sentence or table cell, read the report
+text directly with sp_replan metadata={"report_action":"inspect_version",
+"view":"sections"} to locate the node ID, then view="draft:<node_id>".
+Use start_line/end_line for a short window if needed. view="report" reads the
+assembled report; it is usually unnecessary for one cell. These body views return
+report text, not source evidence. Skip the catalog if the node ID is known; an
+unchanged body already read in this conversation need not be read again. Quote
+saved body text, not the resolved requirement alone. Central performs these reads itself; no
+perception/read_file delegation, GitAgent or Writer is needed to copy saved text.
+
+For questions about evidence or source support, use sp_replan
+metadata.report_action="inspect_version" with view="provenance" (the default):
+it returns the recently changed section,
 actual source titles/URLs and short quotes at the accepted saved evidence lines.
 For another section, use view="provenance:<node_id>" from its section_catalog.
 saved_line_range/saved_total_lines describe the entire locally saved file;

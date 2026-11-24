@@ -30,8 +30,8 @@ def build_tools(store, message, *, operation="auto"):
     @tool("report_inspect_version")
     def inspect(version_id: str | None = None, view: str = "requirements", start_line: int = 1, end_line: int | None = None) -> str:
         """Read accepted snapshots: requirements, manifest, report, draft:<node_id>, tree,
-        sources, provenance[:<node_id>], evidence:<node_id>, material:<material_id>.
-        Provenance uses saved evidence lines; material accepts line ranges.
+        sections, sources, provenance[:<node_id>], evidence:<node_id>, material:<material_id>.
+        Provenance uses saved evidence lines; body/material reads accept line ranges.
         """
         if version_id is None:
             return json.dumps(store.inspect(), ensure_ascii=False)
@@ -43,7 +43,7 @@ def build_tools(store, message, *, operation="auto"):
             return json.dumps(read_provenance(store, version_id, view.partition(":")[2] or None), ensure_ascii=False)
         manifest = store.verify(version_id)
         turn = store.inspect(version_id)
-        result = {"version": turn}
+        result = {"version": turn if view in {"requirements", "manifest"} else {k: turn.get(k) for k in ("turn_id", "report_id", "status", "requirements_status")}}
         if view == "manifest":
             result["manifest"] = manifest
         elif view != "requirements":
@@ -89,6 +89,20 @@ def build_tools(store, message, *, operation="auto"):
                     "scope": "verified saved snapshot excerpts; not fresh research or factual verification",
                 }
                 return json.dumps(result, ensure_ascii=False)
+            if view == "sections":
+                ref = ledger["tree"]
+                relative = Path(ref["path"]).relative_to(manifest["origin_directory"]).as_posix()
+                if manifest["files"].get(relative) != ref["sha256"]:
+                    raise ReportValidationError("snapshot tree reference is not bound")
+                tree = native.read_json(directory / relative)
+                current = {d["node_id"] for d in ledger.get("drafts", []) if d.get("is_current")}
+                return json.dumps(
+                    {
+                        "version": {k: turn.get(k) for k in ("turn_id", "report_id", "status", "requirements_status")},
+                        "section_catalog": [{"node_id": node["node_id"], "title": node.get("title", "")} for node in tree.get("nodes", []) if node.get("kind") == "writable" and node["node_id"] in current],
+                    },
+                    ensure_ascii=False,
+                )
             if view == "sources":
                 result["sources"] = [{k: row.get(k) for k in ("source_id", "url", "title")} for row in ledger.get("sources", [])]
                 result["materials"] = [{k: row.get(k) for k in ("material_id", "source_id", "sha256", "lines", "title")} for row in ledger.get("materials", [])]
@@ -128,11 +142,27 @@ def build_tools(store, message, *, operation="auto"):
             if not ref:
                 raise ReportValidationError("unknown snapshot view")
             relative = Path(ref["path"]).relative_to(manifest["origin_directory"]).as_posix()
-            if relative not in manifest["files"]:
+            if manifest["files"].get(relative) != ref["sha256"]:
                 raise ReportValidationError("snapshot reference is not bound")
             text = native.read_text(directory / relative)
-            result["content"] = text[:50000]
-            result["truncated"] = len(text) > 50000
+            lines = text.splitlines(keepends=True)
+            # Preserve the legacy complete-body read when no range is supplied.
+            end = len(lines) if start_line == 1 and end_line is None else min(len(lines), start_line + 119) if end_line is None else end_line
+            if type(start_line) is not int or type(end) is not int or start_line < 1 or end < start_line or end > len(lines):
+                raise ReportValidationError("invalid saved report line range")
+            selected = "".join(lines[start_line - 1 : end])
+            content = selected[:50000]
+            result = {
+                "version": {k: turn.get(k) for k in ("turn_id", "report_id", "status", "requirements_status")},
+                "content": content,
+                "full_text_sha256": ref["sha256"],
+                "lines": [start_line, start_line + len(content.splitlines()) - 1],
+                "total_lines": len(lines),
+                "last_line_complete": len(content) == len(selected) or content.endswith(("\n", "\r")),
+                "truncated": start_line != 1 or end != len(lines) or len(content) < len(selected),
+            }
+            if view != "report":
+                result["node_id"] = ref["node_id"]
         return json.dumps(result, ensure_ascii=False)
 
     @tool("report_prepare_turn", return_direct=True)
