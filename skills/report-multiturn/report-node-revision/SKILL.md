@@ -7,7 +7,8 @@ requirement. Write only the assigned node to the host-assigned new draft path.
 Retain unaffected content within the node where compatible. Do not edit other
 nodes or historical snapshots. Remove withdrawn claims, including stale values
 in examples, tables and conclusions. Preserve native evidence/locator/source
-identity, citations and chapter budget checks. State necessary dependencies
+identity and citations. Historical chapter word budgets do not constrain this
+follow-up; honor only current explicit length instructions. State necessary dependencies
 outside your node for Outline; do not edit them yourself. A whole-node rewrite
 is not a promise of byte preservation outside a requested paragraph. Return
 the normal native saved-draft completion envelope after successful saving.

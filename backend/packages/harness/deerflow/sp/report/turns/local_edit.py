@@ -39,7 +39,9 @@ def bind(action, context, metadata, refs):
             "base_version_id": base,
             "baseline": "Verified accepted snapshot; preserve its content except for the following edit.",
             "current_edit": raw,
-            "precedence": "Current edit overrides baseline. Historical chat is provenance, never a pending task list. Preserve inherited length/evidence constraints.",
+            "precedence": (
+                "Current edit overrides baseline. Historical chat is provenance, never a pending task list. Preserve evidence and citation constraints. Baseline word limits are historical; honor only the current user request for length."
+            ),
         },
         ensure_ascii=False,
     )

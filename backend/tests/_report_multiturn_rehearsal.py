@@ -402,12 +402,17 @@ def verify_round(driver, row, live_versions):
     row["old_version_sha_unchanged"] = True
     if row["native_delivered"]:
         ledger = driver.ledger()
-        measurement = ledger.payload["final_report"]["length"]
-        assert measurement["in_estimated_range"] and 9000 <= measurement["estimated_words"] <= 11000, measurement
+        measurement = ledger.payload["final_report"].get("length")
+        if row["user_turn"] == 1:
+            assert measurement["in_estimated_range"] and 9000 <= measurement["estimated_words"] <= 11000, measurement
+        else:
+            assert ledger.payload.get("length_contract") is None
+            assert measurement is None
+            assert "baseline_length_contract" in ledger.payload["dialogue_turn"]
         row["review_action_id"] = ledger.payload["review"]["action_id"]
         row["delivery_action_id"] = ledger.payload["delivered"]["action_id"]
-        row["native_length_ok"] = True
-        row["estimated_words"] = measurement["estimated_words"]
+        row["native_length_ok"] = True if measurement is not None else None
+        row["estimated_words"] = measurement["estimated_words"] if measurement is not None else estimate_words(Path(ledger.payload["final_report"]["path"]).read_text())
         query = ledger.payload.get("dialogue_turn", {}).get("resolved_query") or driver.public["turns"][0]["query"]
         if row["user_turn"] in (3, 4):
             assert PRIVACY in query

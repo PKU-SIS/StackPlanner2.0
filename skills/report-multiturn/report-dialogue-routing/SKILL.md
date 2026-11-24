@@ -3,6 +3,9 @@ name: report-dialogue-routing
 description: Route explicitly bound follow-up report requests after an accepted native delivery.
 ---
 Keep Central in control. Decide within your existing turn; no extra classifier.
+First-report total/chapter word budgets are historical in follow-ups. Do not
+add them to Writer tasks or ask for compression to fit them. Honor length or
+compression requested in the latest message, including an explicit report_length.
 
 For an edit of existing report content, prefer
 sp_delegate(target_agent="reporter", metadata={"report_task":"local_edit"}).

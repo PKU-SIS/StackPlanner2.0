@@ -18,7 +18,7 @@ from deerflow.sp.subagents import SPSubagentResult, SPSubagentStatus, SPSubagent
 from deerflow.subagents.config import SubagentConfig
 
 
-def setup_edit(tmp_path, *, bind=True):
+def setup_edit(tmp_path, *, bind=True, baseline_contract=None, followup_kwargs=None):
     ctx, ledger = _seed(tmp_path)
     tree = json.loads(ledger.paths.tree_file(1).read_text())
     other = deepcopy(tree["nodes"][1])
@@ -33,10 +33,13 @@ def setup_edit(tmp_path, *, bind=True):
     ledger.payload["drafts"].append(draft)
     ledger.payload["draft_dispositions"] = [{"node_id": "n2", "draft_id": "d1", "action": "keep", "reason": "Prior turn decision"}]
     ledger.save()
+    if baseline_contract is not None:
+        ledger.payload["length_contract"] = baseline_contract
+        ledger.save()
     assert not _send_review(ctx, status="ready", outcome="deliver").error
     assert not _finish(ctx).error
     original = file_manifest(tmp_path / "report/r1")
-    followup(ctx, text="Change Seed to Revised in the indicators section; keep everything else.")
+    followup(ctx, text="Change Seed to Revised in the indicators section; keep everything else.", **(followup_kwargs or {}))
     if bind:
         adapter.session(ctx.state, thread_id="t1")
     action = SPAction.create(ActionType.DELEGATE, action_id="local-edit", task="Change Seed to Revised", reason="local edit", target_agent="reporter", metadata={"report_task": "local_edit"})
@@ -228,7 +231,7 @@ def test_cancel_or_truncation_never_publishes_saved_partial_edits(tmp_path, canc
     assert file_manifest(tmp_path / "report/r1") == original
 
 
-def test_native_length_constraint_is_not_relaxed(tmp_path):
+def test_explicit_current_turn_length_constraint_is_enforced(tmp_path):
     ctx, action, task, tools, _ = setup_edit(tmp_path)
     ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
     ledger.payload["length_contract"] = {"min_words": 10, "target_words": 15, "max_words": 20}
@@ -412,3 +415,41 @@ def test_local_writer_body_metrics_make_compression_checkable_without_new_gate(t
     assert receipt["section_metrics"]["body_ratio_to_previous"] == pytest.approx(0.5, abs=0.01)
     assert receipt["length_guidance"] is None
     assert not complete(ctx, action, task).error
+
+
+def test_followup_does_not_inherit_first_report_word_limits(tmp_path):
+    contract = {"min_words": 1, "target_words": 100, "max_words": 200}
+    ctx, action, task, tools, original = setup_edit(tmp_path, baseline_contract=contract)
+    current = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert current.payload.get("length_contract") is None
+    assert current.payload["dialogue_turn"]["baseline_length_contract"] == contract
+    assert native.read_json(tmp_path / "report/r1/ledger.json")["length_contract"] == contract
+    tools["report_replace_text"].invoke({"node_id": "n2", "old_text": "Seed", "new_text": "Detailed mechanism " * 300})
+    assert not complete(ctx, action, task).error
+    assert not _finish(ctx).error
+    assert file_manifest(tmp_path / "report/r1") == original
+
+
+def test_followup_can_explicitly_set_its_own_word_contract(tmp_path):
+    contract = {"min_words": 1, "target_words": 100, "max_words": 200}
+    new = {**contract, "max_words": 150, "reference_reserve_words": 0, "heading_reserve_words": 0, "safety_margin_words": 0}
+    ctx, action, task, tools, original = setup_edit(tmp_path, baseline_contract=contract, followup_kwargs={"report_length": new})
+    current = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert current.payload["length_contract"]["max_words"] == 150
+    assert current.payload["dialogue_turn"]["baseline_length_contract"] == contract
+    tools["report_replace_text"].invoke({"node_id": "n2", "old_text": "Seed", "new_text": "Detailed explanation " * 300})
+    response = complete(ctx, action, task)
+    assert response.error and "length contract" in response.error
+    assert file_manifest(tmp_path / "report/r1") == original
+
+
+def test_outline_followup_activation_also_drops_inherited_word_limits(tmp_path):
+    contract = {"min_words": 1, "target_words": 100, "max_words": 200}
+    ctx, _, original = setup_edit(tmp_path, bind=False, baseline_contract=contract)
+    store, message, head = adapter.session(ctx.state, thread_id="t1")
+    turn = store.prepare(head["turn_id"], message_id=message.id, raw_query=message.content, resolved_query=message.content)
+    adapter.activate(store, turn, ctx)
+    current = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    assert current.payload.get("length_contract") is None
+    assert current.payload["dialogue_turn"]["baseline_length_contract"] == contract
+    assert file_manifest(tmp_path / "report/r1") == original

@@ -21,7 +21,8 @@ def test_seven_turn_native_rehearsal(tmp_path, monkeypatch, inject_cancel):
     assert result["rounds"][5]["roles"] == ["git_agent"]
     assert result["rounds"][6]["base_user_turn"] == 2
     assert all(row["old_version_sha_unchanged"] for row in result["rounds"])
-    assert all(row["native_length_ok"] for row in result["rounds"] if row["native_delivered"])
+    assert all(row["native_length_ok"] for row in result["rounds"] if row["native_delivered"] and row["user_turn"] == 1)
+    assert all(row["native_length_ok"] is None for row in result["rounds"] if row["native_delivered"] and row["user_turn"] > 1)
     assert all(row["restorable"] for row in result["rounds"])
     if inject_cancel:
         assert result["cancelled_attempt_preserved"]

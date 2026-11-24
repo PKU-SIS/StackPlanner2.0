@@ -23,13 +23,17 @@ reuse accepted versions through existing `sp_replan` metadata.report_action
 still select the perception `git_agent` profile through `sp_delegate`.
 Existing-section expansion, saved-material citation additions, reorganization and
 compression also use this Writer path. Section reads and saved receipts return
-non-blocking native whole-report length guidance and body character counts;
+body character counts; whole-report length guidance applies only to an explicit
+current-turn report_length contract.
 Writer can correct within the same task, without extra classification or review.
 The same exact-span patch tool supports a full passage or section replacement;
 for broad edits Writer drafts the complete replacement before saving, instead of
 serial micro-edits. Phrase/table-cell requests retain minimum-span edits.
 Only chapter-tree changes or new research need coordination. Reads do not write
-assembly files, and the inherited final length threshold remains unchanged.
+assembly files. On activation, only the independent follow-up copy drops its
+inherited length_contract, preserving it in dialogue_turn.baseline_length_contract
+for provenance. Default follow-ups have no inherited total/chapter word bounds;
+latest-message report_length can set a new contract. First-turn checks are unchanged.
 Simple edits use an explicitly labelled programmatic review receipt
 (`review_origin=programmatic_local_edit`, semantic/factual verification false),
 then native Finish. Never present it as an Outline semantic review. The original
@@ -39,7 +43,8 @@ Dialogue Skills live outside default public discovery in `skills/report-multitur
 are read only for validated follow-ups. Version metadata is not a second chapter
 ledger. Always fork before native resume; never resume an accepted historical
 version in place. Publish only from a new native delivered record and matching
-turn/run/head bindings. Preserve evidence, length, citation and file-hash checks.
+turn/run/head bindings. Preserve evidence, citation, file-hash and explicit
+current-turn length checks.
 Use the new checkout's explicit PYTHONPATH when borrowing an existing environment.
 No paid experiment or deployment is implied by offline test success.
 
@@ -236,9 +241,10 @@ Three-topic fixed stability evaluation is described in
 `../docs/research-report/three-topic-stability-20261123/PLAN.md`.
 Its optional canonical_sha256_by_node checks are evaluator-only, after graph
 execution; never send expected hashes to agents. Same-node extra edits fail.
-The pilot inherits the source's native length contract, including its historical
-absence; reports with a contract retain all original length checks. This changes
-only the experiment adapter, not production acceptance or first-turn generation.
+Historical pilot results inherited the source's native length contract. Under
+the user's 2026-11-24 policy update, imports still preserve accepted baselines;
+newly activated follow-up copies drop inherited word bounds by default. Do not
+rewrite historical results to claim they used this new policy.
 
 Imported report baselines may already contain completed local-tNNNN-* write
 requests. Writer-first must allocate new local keys from all existing native

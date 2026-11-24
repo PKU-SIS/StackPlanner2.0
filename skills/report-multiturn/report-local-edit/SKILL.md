@@ -38,21 +38,19 @@ Make the edit substantive:
   reference across all patches. Preserve the main reasoning and sources, rather
   than every sentence.
 
-report_read_section and saved receipts include length_guidance: the current
-whole-report estimate, inherited range and additional_words_available. Keep
-expansion within that room; reorganize or shorten the target section as needed.
-This guidance uses the native estimate, not Microsoft Word measurement.
-After saving, check the returned section_metrics and length_guidance. If the
-requested ratio is missed, or the report is long/short, adjust the same section
-by revising the complete affected passage before one further patch. Remove the
-whole measured excess, rather than deleting one or two words per call. This stays
-in this Writer task; no extra Outline/agent or approval is needed. If the user's
-constraints truly conflict, state the conflict rather than claim completion.
+The first report's total/chapter word limits do not constrain this follow-up.
+Expand or reorganize as needed for the current request; do not trim text just
+to fit historical bounds. A compression ratio or length explicitly requested
+in this turn still applies. section_metrics reports body characters for that
+check. length_guidance is null by default; only an explicit current-turn
+report_length enables its whole-report range. If that current constraint is
+missed, revise the complete affected passage rather than shaving words across
+many saves. State genuinely conflicting current requirements to Central.
 
 A needs_adjustment result is tool guidance: correct the span/source instead of
 repeating identical unsuccessful arguments. Do not invent evidence. Only actual
 new research or changes to the report's chapter tree need Central coordination.
 Finish with a short plain-language summary after the saved result meets the
 request. No JSON envelope is required. Saving is not publication; native
-assembly, citation, length and hash checks still control delivery and do not
+assembly, citation, hash and any explicit current length checks control delivery and do not
 certify semantic or factual correctness.

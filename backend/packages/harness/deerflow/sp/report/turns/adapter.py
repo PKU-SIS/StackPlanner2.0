@@ -105,6 +105,16 @@ def activate(store, turn, context):
             resume_report(context, SPAction.create(ActionType.REPLAN, reason="Resume isolated report turn", task="resume", metadata={"report_action": "resume"}))
             ledger = ReportLedger.load(paths)
             ledger.payload["dialogue_turn"] = {"turn_id": turn["turn_id"], "resolved_query": turn["resolved_query"], "message_id": turn["message_id"], "owner": store.owner, "run_id": context.run_id}
+            # First-report size bounds are historical for post-delivery edits.
+            # Apply only a contract explicitly supplied for this user turn.
+            from deerflow.sp.report.length import normalize_contract
+
+            message, _ = opted_request(context.state)
+            baseline_length = ledger.payload.pop("length_contract", None)
+            ledger.payload["dialogue_turn"]["baseline_length_contract"] = baseline_length
+            current_length = normalize_contract(message.additional_kwargs.get("report_length"))
+            if current_length is not None:
+                ledger.payload["length_contract"] = current_length
             # Preserve raw inputs and their files for provenance; project only
             # the complete derived requirement into the native execution inputs.
             ledger.payload["dialogue_historical_inputs"] = ledger.payload["inputs"]
@@ -250,6 +260,11 @@ def central_context(state, runtime):
         "active_state": {"version_id": head["turn_id"], "resolved_query": turn["resolved_query"], "requirements_status": "resolved"} if turn and turn["status"] == "executing" else requirement_state(head),
         "history_index": store.inspect(),
         "current_request": {"message_id": _message_id(message), "text": str(message.content)},
+        "length_policy": {
+            "inherit_baseline_word_limits": False,
+            "current_report_length": message.additional_kwargs.get("report_length"),
+            "instruction": "First-report word bounds are historical, not current follow-up constraints. Apply only the latest user request for length; do not add inherited total/chapter word budgets to delegations.",
+        },
         "turn": turn,
         "execution": execution_binding(state),
     }

@@ -11,8 +11,8 @@ only the initial native request. It may predate first-report HITL corrections.
 Resolve the current baseline from native_requirement_context.requirements and
 its applied user_decisions. Consult input text and source IDs as provenance,
 never as an unconditional list of active demands. Exclude superseded/withdrawn
-clauses; accepted chapter layout is not a user requirement. Include the inherited
-length contract. A patch follow-up must produce a complete resolved_query; exact reuse instead
+clauses; accepted chapter layout is not a user requirement. Treat inherited total/chapter length bounds as historical, not current
+requirements. Only the latest user message can set a new length constraint. A patch follow-up must produce a complete resolved_query; exact reuse instead
 retains the selected version's accepted requirement state.
 For later versions marked "resolved", use active_state.resolved_query as the
 source of cumulative requirements for ordinary edits. Replace every stale occurrence of the changed semantic slot;

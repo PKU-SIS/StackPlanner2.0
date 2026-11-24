@@ -1150,4 +1150,4 @@ records three corrected A2A provenance answers, an unchanged normal-edit path,
 and scripted graph failures ending without automatic redelegation. These remain
 local changes; the small sample is not a general factual-quality guarantee.
 
-显式开启报告后续轮后，现有章节的扩写、基于已保存材料补引用、局部重组与压缩可直接由 Writer 完成。大范围改稿优先先形成完整替换稿，再用现有 patch 一次更新对应段落或章节；小句和单元格仍精确修改。读取及保存反馈提供篇幅余量和正文长度，便于在同次任务中调整；最终交付仍沿用原生引用、篇幅与文件校验。最新策略与实测限制见 [段落与章节 patch 复测](docs/research-report/coherent-patch-20261124/RESULT.md)。
+显式开启报告后续轮后，现有章节的扩写、基于已保存材料补引用、局部重组与压缩可直接由 Writer 完成。大范围改稿优先先形成完整替换稿，再用现有 patch 一次更新对应段落或章节；小句和单元格仍精确修改。后续轮默认不继承首轮总字数上下限，可按需求扩写；本轮明确的压缩或篇幅要求仍应遵守，API 可用本轮 report_length 设置新合同。首轮篇幅验收不变，引用、文件校验与旧版本隔离继续生效。最新政策与实测见 [后续轮篇幅策略](docs/research-report/followup-length-20261124/RESULT.md)。

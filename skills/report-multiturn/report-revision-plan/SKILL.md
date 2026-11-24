@@ -11,6 +11,7 @@ the native node choices or draft_dispositions protocol. Give a reason and issue
 write_requests only for affected nodes. Register native research gaps only
 where changed claims require new evidence. Keep valid material/source IDs.
 List dependent summary/conclusion/cross-reference edits explicitly. Use native
-submission, evidence, citation, budget and final review checks unchanged.
-If deletion conflicts with inherited length or strict preservation, surface
-that conflict; do not silently expand other chapters or relax acceptance.
+submission, evidence, citation and final review checks. First-report total and
+node word budgets are historical in this follow-up; honor only current explicit
+length instructions. Do not expand other chapters to satisfy obsolete budgets.
+Surface conflicts with the current request or strict preservation.
