@@ -65,6 +65,34 @@ def bind(action, context, metadata, refs):
     return True
 
 
+def _body_chars(content):
+    return len("\n".join(line for line in content.splitlines() if line.strip() and not line.startswith("#")))
+
+
+def _length_guidance(ledger):
+    """Preview the native rendered count without creating assembly files or gates."""
+    contract = ledger.payload.get("length_contract")
+    if not contract:
+        return None
+    from deerflow.sp.report.citation_display import render_final_citations
+    from deerflow.sp.report.length import COUNTER_VERSION, estimate_words
+
+    tree = packets.load_current_tree(ledger)
+    sections = assembly._sections(ledger, tree)
+    sources, _ = assembly._source_table(ledger, sections)
+    rendered, _ = render_final_citations(assembly._candidate_text(tree, sections, sources), sources)
+    count = estimate_words(rendered)
+    return {
+        "estimated_words": count,
+        "min_words": contract["min_words"],
+        "max_words": contract["max_words"],
+        "additional_words_available": contract["max_words"] - count,
+        "direction": "long" if count > contract["max_words"] else "short" if count < contract["min_words"] else "within",
+        "counter_version": COUNTER_VERSION,
+        "word_verified": False,
+    }
+
+
 def build_tools(paths, task, state):
     def load():
         ledger = ReportLedger.load(paths)
@@ -116,6 +144,8 @@ def build_tools(paths, task, state):
                 "title": node.get("title", ""),
                 "content": content,
                 "sha256": draft["sha256"],
+                "section_metrics": {"body_chars": _body_chars(content)},
+                "length_guidance": _length_guidance(ledger),
                 "evidence": node.get("evidence", []),
                 "sources": [{k: s.get(k) for k in ("source_id", "title", "url")} for s in ledger.payload.get("sources", []) if s.get("source_id") in cited],
             },
@@ -161,7 +191,15 @@ def build_tools(paths, task, state):
                 ledger, key=key, action_id=task.action_id, node_id=node_id, draft_id=attempt["draft_id"], virtual_path=attempt["virtual_path"], host_path=str(attempt["draft_path"]), content=changed, basis=basis, feedback_wanted=False
             )
             assembly.invalidate_review(ledger, reason="Writer local edit")
-            receipt = {"status": "saved", "node_id": node_id, "sha256": native.sha256_text(changed), "old_span_sha256": native.sha256_text(old_text), "new_span_sha256": native.sha256_text(new_text)}
+            receipt = {
+                "status": "saved",
+                "node_id": node_id,
+                "sha256": native.sha256_text(changed),
+                "old_span_sha256": native.sha256_text(old_text),
+                "new_span_sha256": native.sha256_text(new_text),
+                "section_metrics": {"previous_body_chars": _body_chars(content), "body_chars": _body_chars(changed), "body_ratio_to_previous": _body_chars(changed) / max(1, _body_chars(content))},
+                "length_guidance": _length_guidance(ledger),
+            }
             edits.append({"request_hash": request_hash, "receipt": receipt})
             ledger.save()
             return json.dumps(receipt, ensure_ascii=False)

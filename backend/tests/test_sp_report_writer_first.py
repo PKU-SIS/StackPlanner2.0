@@ -358,3 +358,41 @@ def test_imported_completed_writer_keys_do_not_collide_with_new_turn(tmp_path, e
     assert not complete(ctx, action, task).error
     assert not _finish(ctx).error
     assert file_manifest(tmp_path / "report/r1") == original
+
+
+def test_local_writer_sees_native_length_room_and_can_correct_before_finishing(tmp_path):
+    ctx, action, task, tools, original = setup_edit(tmp_path)
+    ledger = ReportLedger.load_for_context(hooks.report_context(ctx.state))
+    ledger.payload["length_contract"] = {"min_words": 10, "target_words": 30, "max_words": 60}
+    ledger.save()
+    before = file_manifest(ledger.paths.directory)
+    read = json.loads(tools["report_read_section"].invoke({"node_id": "n2"}))
+    assert file_manifest(ledger.paths.directory) == before  # Guidance reads never assemble or write.
+    assert read["length_guidance"]["max_words"] == 60
+    assert read["length_guidance"]["additional_words_available"] > 0
+    long_text = "Detailed mechanism and hypothetical example. " * 40
+    saved = json.loads(tools["report_replace_text"].invoke({"node_id": "n2", "old_text": read["content"], "new_text": long_text}))
+    assert saved["status"] == "saved"  # Length is feedback, not a new save rejection.
+    assert saved["length_guidance"]["direction"] == "long"
+    assert saved["length_guidance"]["additional_words_available"] < 0
+    assert saved["section_metrics"]["previous_body_chars"] < saved["section_metrics"]["body_chars"]
+    corrected = "Revised explanation with one compact hypothetical example.\n"
+    fixed = json.loads(tools["report_replace_text"].invoke({"node_id": "n2", "old_text": long_text, "new_text": corrected}))
+    assert fixed["length_guidance"]["direction"] == "within"
+    assert not complete(ctx, action, task).error
+    accepted = ReportLedger.load(ledger.paths)
+    assert accepted.payload["review"]["length"]["estimated_words"] == fixed["length_guidance"]["estimated_words"]
+    assert not _finish(ctx).error
+    assert file_manifest(tmp_path / "report/r1") == original
+
+
+def test_local_writer_body_metrics_make_compression_checkable_without_new_gate(tmp_path):
+    ctx, action, task, tools, _ = setup_edit(tmp_path)
+    old = json.loads(tools["report_read_section"].invoke({"node_id": "n2"}))["content"]
+    full = "## Mechanism\n\n" + "explanation " * 40
+    tools["report_replace_text"].invoke({"node_id": "n2", "old_text": old, "new_text": full})
+    short = "## Mechanism\n\n" + "explanation " * 20
+    receipt = json.loads(tools["report_replace_text"].invoke({"node_id": "n2", "old_text": full, "new_text": short}))
+    assert receipt["section_metrics"]["body_ratio_to_previous"] == pytest.approx(0.5, abs=0.01)
+    assert receipt["length_guidance"] is None
+    assert not complete(ctx, action, task).error

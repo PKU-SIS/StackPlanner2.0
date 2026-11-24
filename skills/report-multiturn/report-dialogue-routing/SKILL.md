@@ -9,6 +9,9 @@ sp_delegate(target_agent="reporter", metadata={"report_task":"local_edit"}).
 The program copies/resumes the active accepted version; no GitAgent or Outline
 call is needed. Optional base_version_id selects an accepted historical version.
 Give Writer the actual edit and what must remain; do not guess chapter IDs.
+Expansion, citation additions from saved material, compression and reorganization
+within existing sections also use this Writer path. Outline is for changes to
+the chapter tree, not merely different headings within a section.
 Writer finds the section and replaces the requested text. Follow a ready observation with ordinary sp_finish.
 The program checks assembly, citations, length and hashes; no independent
 Outline semantic review or factual verification is implied for this simple path.

@@ -21,6 +21,12 @@ replacement tools, and accepts plain Writer summaries. Central can inspect or
 reuse accepted versions through existing `sp_replan` metadata.report_action
 `inspect_version` / `reuse_version`, without GitAgent. Complex reconciliation can
 still select the perception `git_agent` profile through `sp_delegate`.
+Existing-section expansion, saved-material citation additions, reorganization and
+compression also use this Writer path. Section reads and saved receipts return
+non-blocking native whole-report length guidance and body character counts;
+Writer can correct within the same task, without extra classification or review.
+Only chapter-tree changes or new research need coordination. Reads do not write
+assembly files, and the inherited final length threshold remains unchanged.
 Simple edits use an explicitly labelled programmatic review receipt
 (`review_origin=programmatic_local_edit`, semantic/factual verification false),
 then native Finish. Never present it as an Outline semantic review. The original

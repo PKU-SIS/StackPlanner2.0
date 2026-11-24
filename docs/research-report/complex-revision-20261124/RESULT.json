@@ -1,0 +1,444 @@
+{
+  "code_commit": "6e843cea7c180987630b66379ffb6f9b160b5bf3",
+  "attempts": 4,
+  "native_deliveries": 3,
+  "rows": [
+    {
+      "number": 1,
+      "case": "expand",
+      "expected_node": "n9",
+      "query": "报告里“锁定与工程能力缺口：从“拖拽快”到“改不动””这一部分讲得有些概括，请把平台锁定如何形成、为什么后续扩展和迁移会增加成本解释详细一些，补两个明确标为假设的具体场景。保留已有有效论点与引用，其他章节和表格保持原样。仅使用已保存的材料，不重新检索；全文仍满足原有篇幅要求。",
+      "message_id": "b1beb328-8c3f-482b-b033-27233db40d80",
+      "run_id": "f946dad8-1a54-40b0-85d8-e8bcd9f18261",
+      "run_status": "success",
+      "turn_id": "t0008",
+      "turn_status": "failed",
+      "native_delivery_created": false,
+      "changed_nodes": [],
+      "scope_ok": false,
+      "prior_files_unchanged": true,
+      "duration_seconds": 51.202,
+      "old_chars": 1715,
+      "new_chars": 1715,
+      "old_final_sha256": "94f3ec95325bb12e7f70f1d5dbbf6b3416237fc94778e65754d3406092cb1282",
+      "new_final_sha256": "94f3ec95325bb12e7f70f1d5dbbf6b3416237fc94778e65754d3406092cb1282",
+      "final_path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-hard-01/runtime/users/default/threads/hard-revision-20261124-01/user-data/outputs/report/r33/final/report-3.md",
+      "final_receipt_matches": true,
+      "old_citations": [
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S40]",
+        "[S128]",
+        "[S70]",
+        "[S40]",
+        "[S113]",
+        "[S129]",
+        "[S188]",
+        "[S133]"
+      ],
+      "new_citations": [
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S40]",
+        "[S128]",
+        "[S70]",
+        "[S40]",
+        "[S113]",
+        "[S129]",
+        "[S188]",
+        "[S133]"
+      ],
+      "tokens": {
+        "calls": 8,
+        "usage_complete": true,
+        "input_tokens": 205980,
+        "output_tokens": 6880,
+        "total_tokens": 212860,
+        "observed_input_tokens": 205980,
+        "observed_output_tokens": 6880,
+        "observed_total_tokens": 212860
+      },
+      "tool_error_count": 0
+    },
+    {
+      "number": 2,
+      "case": "citations",
+      "expected_node": "n8",
+      "query": "“治理张力：灵活性与标准化之间的持续取舍”这一部分引用偏少，请为关键论断补充至少两处有实际依据的引用，优先选择不同来源，解释证据与论断的关系。只用已保存的材料，找不到充分依据就明确说明，不编造出处或行号。其他章节与表格不变。",
+      "message_id": "bc160017-7202-4139-9935-4e2ad98ce96b",
+      "run_id": "c47a8f81-1c3f-4a26-9458-c39785d33406",
+      "run_status": "success",
+      "turn_id": "t0008",
+      "turn_status": "accepted",
+      "native_delivery_created": true,
+      "changed_nodes": [
+        "n8"
+      ],
+      "scope_ok": true,
+      "prior_files_unchanged": true,
+      "duration_seconds": 45.207,
+      "old_chars": 752,
+      "new_chars": 1705,
+      "old_final_sha256": "94f3ec95325bb12e7f70f1d5dbbf6b3416237fc94778e65754d3406092cb1282",
+      "new_final_sha256": "91cc0bc9438f4995a59ab0f4657a177feaab825b5586fcf9cf5b77075a7ac8cc",
+      "final_path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-hard-01/runtime/users/default/threads/hard-revision-20261124-independent-02/user-data/outputs/report/r34/final/report-4.md",
+      "final_receipt_matches": true,
+      "old_citations": [
+        "[S26]",
+        "[S13]",
+        "[S29]",
+        "[S29]",
+        "[S29]"
+      ],
+      "new_citations": [
+        "[S26]",
+        "[S13]",
+        "[S13]",
+        "[S13]",
+        "[S29]",
+        "[S29]",
+        "[S26]",
+        "[S29]",
+        "[S29]",
+        "[S27]"
+      ],
+      "observer_correction": "First message ID normalized to __user by native DynamicContext; verified query and delivery run ID. No repeat request.",
+      "tokens": {
+        "calls": 18,
+        "usage_complete": true,
+        "input_tokens": 259051,
+        "output_tokens": 5325,
+        "total_tokens": 264376,
+        "observed_input_tokens": 259051,
+        "observed_output_tokens": 5325,
+        "observed_total_tokens": 264376
+      },
+      "tool_error_count": 0
+    },
+    {
+      "number": 3,
+      "case": "restructure",
+      "expected_node": "n9",
+      "query": "“锁定与工程能力缺口：从“拖拽快”到“改不动””现在还是有点散，请把这一部分按“形成机制—退出成本—应对办法”重新组织，可以用三个小标题。保留原有有效论点、引用，不额外添加事实。保留刚才补的引用，其他章节和表格不变，不检索。",
+      "message_id": "277d609b-21f3-4f1c-9c76-7bc0b7f34738",
+      "run_id": "9a788b24-4af8-4299-90ed-5db25293018c",
+      "run_status": "success",
+      "turn_id": "t0009",
+      "turn_status": "accepted",
+      "native_delivery_created": true,
+      "changed_nodes": [
+        "n9"
+      ],
+      "scope_ok": true,
+      "prior_files_unchanged": true,
+      "duration_seconds": 24.233,
+      "old_chars": 1715,
+      "new_chars": 1890,
+      "old_final_sha256": "91cc0bc9438f4995a59ab0f4657a177feaab825b5586fcf9cf5b77075a7ac8cc",
+      "new_final_sha256": "adbdaa0ed149ee19ed2e71d3d91ba9af36c8900376a03c5d3efe230be7389544",
+      "final_path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-hard-01/runtime/users/default/threads/hard-revision-20261124-independent-02/user-data/outputs/report/r35/final/report-5.md",
+      "final_receipt_matches": true,
+      "old_citations": [
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S40]",
+        "[S128]",
+        "[S70]",
+        "[S40]",
+        "[S113]",
+        "[S129]",
+        "[S188]",
+        "[S133]"
+      ],
+      "new_citations": [
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S40]",
+        "[S128]",
+        "[S70]",
+        "[S70]",
+        "[S40]",
+        "[S113]",
+        "[S129]",
+        "[S188]",
+        "[S133]"
+      ],
+      "tokens": {
+        "calls": 9,
+        "usage_complete": true,
+        "input_tokens": 64388,
+        "output_tokens": 2774,
+        "total_tokens": 67162,
+        "observed_input_tokens": 64388,
+        "observed_output_tokens": 2774,
+        "observed_total_tokens": 67162
+      },
+      "tool_error_count": 0
+    },
+    {
+      "number": 4,
+      "case": "compress",
+      "expected_node": "n9",
+      "query": "刚才重组的“锁定与工程能力缺口”这一部分太长了，请压缩到重组后正文长度的大约一半，允许上下浮动百分之二十。保留“形成机制—退出成本—应对办法”的结构、关键结论与引用；治理张力部分刚补的引用和其他章节、表格保持原样，不检索。",
+      "message_id": "244245a5-4392-4dab-96b1-c6b702ae93c7",
+      "run_id": "10587d22-ba07-4c51-9ac2-cb663a7e9723",
+      "run_status": "success",
+      "turn_id": "t0010",
+      "turn_status": "accepted",
+      "native_delivery_created": true,
+      "changed_nodes": [
+        "n9"
+      ],
+      "scope_ok": true,
+      "prior_files_unchanged": true,
+      "duration_seconds": 30.186,
+      "old_chars": 1890,
+      "new_chars": 1332,
+      "old_final_sha256": "adbdaa0ed149ee19ed2e71d3d91ba9af36c8900376a03c5d3efe230be7389544",
+      "new_final_sha256": "a3e3ec2bca6fb230821241624575a046cf1417cbd7ce6721aae3e53e42889c11",
+      "final_path": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261124-hard-01/runtime/users/default/threads/hard-revision-20261124-independent-02/user-data/outputs/report/r36/final/report-6.md",
+      "final_receipt_matches": true,
+      "old_citations": [
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S40]",
+        "[S128]",
+        "[S70]",
+        "[S70]",
+        "[S40]",
+        "[S113]",
+        "[S129]",
+        "[S188]",
+        "[S133]"
+      ],
+      "new_citations": [
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S113]",
+        "[S40]",
+        "[S128]",
+        "[S70]",
+        "[S70]",
+        "[S40]",
+        "[S113]",
+        "[S129]",
+        "[S188]",
+        "[S133]"
+      ],
+      "tokens": {
+        "calls": 6,
+        "usage_complete": true,
+        "input_tokens": 48035,
+        "output_tokens": 4423,
+        "total_tokens": 52458,
+        "observed_input_tokens": 48035,
+        "observed_output_tokens": 4423,
+        "observed_total_tokens": 52458
+      },
+      "tool_error_count": 0,
+      "body_char_ratio": 0.6927343316694399,
+      "requested_relative_range": [
+        0.4,
+        0.6
+      ],
+      "compression_target_met": false
+    }
+  ],
+  "snapshot_validation": {
+    "runtime-binding.json": {
+      "t0001": {
+        "archive_verified": true,
+        "native_matches_seal": true
+      },
+      "t0002": {
+        "archive_verified": true,
+        "native_matches_seal": true
+      },
+      "t0003": {
+        "archive_verified": true,
+        "native_matches_seal": true
+      },
+      "t0004": {
+        "archive_verified": true,
+        "native_matches_seal": true
+      },
+      "t0007": {
+        "archive_verified": true,
+        "native_matches_seal": true
+      }
+    },
+    "independent-binding.json": {
+      "t0001": {
+        "archive_verified": true,
+        "native_matches_seal": true
+      },
+      "t0002": {
+        "archive_verified": true,
+        "native_matches_seal": true
+      },
+      "t0003": {
+        "archive_verified": true,
+        "native_matches_seal": true
+      },
+      "t0004": {
+        "archive_verified": true,
+        "native_matches_seal": true
+      },
+      "t0007": {
+        "archive_verified": true,
+        "native_matches_seal": true
+      },
+      "t0008": {
+        "archive_verified": true,
+        "native_matches_seal": true
+      },
+      "t0009": {
+        "archive_verified": true,
+        "native_matches_seal": true
+      },
+      "t0010": {
+        "archive_verified": true,
+        "native_matches_seal": true
+      }
+    }
+  },
+  "usage": {
+    "tokens_by_role": {
+      "outline": {
+        "calls": 2,
+        "usage_complete": true,
+        "input_tokens": 154204,
+        "output_tokens": 2941,
+        "total_tokens": 157145,
+        "observed_input_tokens": 154204,
+        "observed_output_tokens": 2941,
+        "observed_total_tokens": 157145
+      },
+      "memory_updater": {
+        "calls": 4,
+        "usage_complete": true,
+        "input_tokens": 10623,
+        "output_tokens": 2544,
+        "total_tokens": 13167,
+        "observed_input_tokens": 10623,
+        "observed_output_tokens": 2544,
+        "observed_total_tokens": 13167
+      },
+      "central": {
+        "calls": 4,
+        "usage_complete": true,
+        "input_tokens": 69570,
+        "output_tokens": 5719,
+        "total_tokens": 75289,
+        "observed_input_tokens": 69570,
+        "observed_output_tokens": 5719,
+        "observed_total_tokens": 75289
+      },
+      "writer": {
+        "calls": 31,
+        "usage_complete": true,
+        "input_tokens": 343057,
+        "output_tokens": 8198,
+        "total_tokens": 351255,
+        "observed_input_tokens": 343057,
+        "observed_output_tokens": 8198,
+        "observed_total_tokens": 351255
+      }
+    },
+    "tokens_by_turn": {
+      "1": {
+        "calls": 8,
+        "usage_complete": true,
+        "input_tokens": 205980,
+        "output_tokens": 6880,
+        "total_tokens": 212860,
+        "observed_input_tokens": 205980,
+        "observed_output_tokens": 6880,
+        "observed_total_tokens": 212860
+      },
+      "2": {
+        "calls": 18,
+        "usage_complete": true,
+        "input_tokens": 259051,
+        "output_tokens": 5325,
+        "total_tokens": 264376,
+        "observed_input_tokens": 259051,
+        "observed_output_tokens": 5325,
+        "observed_total_tokens": 264376
+      },
+      "3": {
+        "calls": 9,
+        "usage_complete": true,
+        "input_tokens": 64388,
+        "output_tokens": 2774,
+        "total_tokens": 67162,
+        "observed_input_tokens": 64388,
+        "observed_output_tokens": 2774,
+        "observed_total_tokens": 67162
+      },
+      "4": {
+        "calls": 6,
+        "usage_complete": true,
+        "input_tokens": 48035,
+        "output_tokens": 4423,
+        "total_tokens": 52458,
+        "observed_input_tokens": 48035,
+        "observed_output_tokens": 4423,
+        "observed_total_tokens": 52458
+      }
+    },
+    "input_tokens": 577454,
+    "output_tokens": 19402,
+    "total_tokens": 596856,
+    "cache_read_tokens_observed": 431232,
+    "estimated_cost_cny_upper": "0.46490928",
+    "usage_complete": true,
+    "http_coverage_verified": true
+  },
+  "budget": {
+    "spent_cost_cny": "23.22672824",
+    "reserved_cost_cny": "6.488064",
+    "input_tokens": 24283143,
+    "output_tokens": 1149843,
+    "inflight": [
+      "http-1883efa84c6e4cf58bef90882c3671c5-1",
+      "http-6f416a52175d498a894bc2d92351936d-3",
+      "http-b05c246e0a0f49919d40ade6792240a2-12"
+    ],
+    "abort_requested": false
+  },
+  "no_production_code_changes": true,
+  "outer_paid_restarts": 0,
+  "new_unknown_exposure": false,
+  "limitations": [
+    "One topic; saved materials only; no fresh Researcher retrieval tested",
+    "Semantic review is manual local comparison, no independent paid judge",
+    "Per-run elapsed includes API polling and 3 second completion grace; background memory drain may extend beyond it"
+  ],
+  "failed_expansion_working_copy": {
+    "changed_nodes": [
+      "n9"
+    ],
+    "original_node_chars": 1715,
+    "working_node_chars": 4129,
+    "estimated_document_words": 11937,
+    "accepted_head_unchanged": true
+  },
+  "semantic_assessment": {
+    "expand": "Not delivered: exceeds inherited 11000 maximum; no autonomous bounded length correction completed. Working copy changed n9 only.",
+    "citations": "Citation addition and scope pass; all four cited saved sources spot checked, but S27 is weakly attached as independent corroboration of preceding CoE sentence. Partial content pass.",
+    "restructure": "Three headings and original source IDs retained; S128 overall option score is framed as exit cost and substantive organization remains uneven. Partial content pass.",
+    "compress": "Retains structure, unique citation IDs and n8, but body character ratio 0.692734 exceeds requested 0.4-0.6. Quantitative request failed."
+  }
+}
