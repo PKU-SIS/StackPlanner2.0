@@ -1,0 +1,22 @@
+[
+  {
+    "path": "/api/threads/fresh-report-e2e-20261125-02/report-dialogue",
+    "status": 200,
+    "bytes": 936,
+    "sha256": "cd1a1d0afc751a9cfb803762c57dfee2db25225a9629f4fa5c7634c75fb4c443",
+    "head": "t0009"
+  },
+  {
+    "path": "/api/threads/fresh-report-e2e-20261125-02/artifacts/mnt/user-data/outputs/report/r9/final/report-6.md",
+    "status": 200,
+    "bytes": 47654,
+    "sha256": "7acf52b7ab662967dd9a01acb0ba5bf757bdd416c8d4270c3e9e7d09a61f80a3",
+    "native_sha_matches": true
+  },
+  {
+    "path": "/test-guide/test-cases.md",
+    "status": 200,
+    "bytes": 3991,
+    "sha256": "966f7430c19a20486664401794b982134fab497f6d54f7ed6912f3086f6bd03a"
+  }
+]

@@ -1,0 +1,5 @@
+phase,case,run_status,new_report_delivered,readonly_visible_answer_complete,observed_input_tokens_including_memory,observed_output_tokens_including_memory,observed_cost_cny,search_requests,fetch_requests
+05,5,success,True,False,2596662,97549,2.91939728,6,0
+05,6,success,True,False,569079,19327,0.92122072,0,0
+05,7,success,False,False,182664,14066,0.15823488,0,0
+06,7,success,False,True,241814,11929,0.18266960,0,0

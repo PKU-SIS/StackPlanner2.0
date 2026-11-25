@@ -1,0 +1,46 @@
+{
+  "accepted_head": "t0009",
+  "source_native_unchanged": true,
+  "temporary_outputs_only": true,
+  "restored_versions": [
+    {
+      "turn_id": "t0001",
+      "restored_native_accepted": true
+    },
+    {
+      "turn_id": "t0002",
+      "restored_native_accepted": true
+    },
+    {
+      "turn_id": "t0004",
+      "restored_native_accepted": true
+    },
+    {
+      "turn_id": "t0006",
+      "restored_native_accepted": true
+    },
+    {
+      "turn_id": "t0008",
+      "restored_native_accepted": true
+    },
+    {
+      "turn_id": "t0009",
+      "restored_native_accepted": true
+    }
+  ],
+  "readonly_archives": [
+    {
+      "turn_id": "t0010",
+      "archive_verified": true,
+      "response_preserved": true,
+      "selectable_as_edit_baseline": false
+    },
+    {
+      "turn_id": "t0011",
+      "archive_verified": true,
+      "response_preserved": true,
+      "selectable_as_edit_baseline": false
+    }
+  ],
+  "provider_calls": 0
+}

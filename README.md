@@ -1160,6 +1160,6 @@ Report dialogue UI keeps saved report-file details behind **View changes**, avoi
 duplicate final-report cards, and limits follow-up chapter progress to the current
 run. Original report files and diagnostic details remain available on demand.
 
-Fresh-report and complex-dialogue validation, including failures, current budget pause, and limitations: [2026-11-25 results](docs/research-report/fresh-e2e-20261125/RESULT.md).
+Fresh-report and complex-dialogue validation, including failures, current budget pause, and limitations: [2026-11-25 results](docs/research-report/fresh-e2e-20261125/CONTINUATION_RESULT.md).
 
 Bound report source-list questions can read selected saved citations directly and return their titles, URLs and use in the report, without delegating a file-parsing task.
