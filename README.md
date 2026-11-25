@@ -1159,3 +1159,5 @@ local changes; the small sample is not a general factual-quality guarantee.
 Report dialogue UI keeps saved report-file details behind **View changes**, avoids
 duplicate final-report cards, and limits follow-up chapter progress to the current
 run. Original report files and diagnostic details remain available on demand.
+
+Fresh-report and complex-dialogue validation, including failures, current budget pause, and limitations: [2026-11-25 results](docs/research-report/fresh-e2e-20261125/RESULT.md).

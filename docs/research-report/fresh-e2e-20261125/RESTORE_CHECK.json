@@ -1,0 +1,27 @@
+{
+  "temporary_outputs_only": true,
+  "provider_calls": 0,
+  "source_accepted_head_unchanged": "t0006",
+  "versions": [
+    {
+      "version_id": "t0001",
+      "restored_report_id": "r8",
+      "native_accepted": true
+    },
+    {
+      "version_id": "t0002",
+      "restored_report_id": "r9",
+      "native_accepted": true
+    },
+    {
+      "version_id": "t0004",
+      "restored_report_id": "r10",
+      "native_accepted": true
+    },
+    {
+      "version_id": "t0006",
+      "restored_report_id": "r11",
+      "native_accepted": true
+    }
+  ]
+}

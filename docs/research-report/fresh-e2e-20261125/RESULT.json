@@ -1,0 +1,589 @@
+{
+  "source_heads": [
+    "0e8a7d4",
+    "a33665a"
+  ],
+  "fresh_first_report_no_import": true,
+  "same_thread_and_storage_continued": true,
+  "single_frozen_batch": false,
+  "failed_attempts_retained": [
+    "fresh01 first report",
+    "t0003 HTTP404",
+    "t0005 aggregate token envelope"
+  ],
+  "turns": [
+    {
+      "turn": 1,
+      "run_id": "95b87816-ce95-46c2-bb69-9a18c852a1bd",
+      "run_status": "success",
+      "seconds": 478.661,
+      "report_id": "r1",
+      "native_delivered": true,
+      "accepted_or_readonly": true,
+      "old_native_files_unchanged": true,
+      "head": null,
+      "active_version": null,
+      "input_tokens": 2714648,
+      "output_tokens": 95552,
+      "total_tokens": 2810200,
+      "roles": [],
+      "search_calls": 0,
+      "fetch_calls": 0,
+      "phase": "02",
+      "roles_from_numeric_callbacks": [
+        "central",
+        "memory_recaller",
+        "memory_updater",
+        "outline",
+        "researcher",
+        "writer"
+      ],
+      "input_tokens_including_memory": 2716541,
+      "output_tokens_including_memory": 96402,
+      "all_model_usage_present": true,
+      "observed_cost_cny": "2.07566280",
+      "actual_search_requests": 23,
+      "actual_fetch_requests": 0,
+      "received_tool_errors": 0,
+      "changed_existing_nodes": [],
+      "new_nodes": [],
+      "removed_nodes": [],
+      "markers": {
+        "【迁移演练建议】": 0,
+        "【新资料核对】": 0,
+        "【迁移边界核对】": 0
+      },
+      "comparison_chapter_nodes": [],
+      "new_source_ids": [],
+      "new_sources_cited_in_target": [],
+      "unrelated_canonical_drafts_preserved": true,
+      "new_native_delivery_created": true,
+      "factual_accuracy_fully_judged": false
+    },
+    {
+      "turn": 2,
+      "run_id": "c4a4eb38-01a9-498e-8860-3f924f8a0f0e",
+      "run_status": "success",
+      "seconds": 24.149,
+      "report_id": "r2",
+      "native_delivered": true,
+      "accepted_or_readonly": true,
+      "old_native_files_unchanged": true,
+      "head": "t0002",
+      "active_version": "t0002",
+      "input_tokens": 35221,
+      "output_tokens": 1637,
+      "total_tokens": 36858,
+      "roles": [],
+      "search_calls": 0,
+      "fetch_calls": 0,
+      "phase": "02",
+      "roles_from_numeric_callbacks": [
+        "central",
+        "memory_updater",
+        "writer"
+      ],
+      "input_tokens_including_memory": 48287,
+      "output_tokens_including_memory": 3067,
+      "all_model_usage_present": true,
+      "observed_cost_cny": "0.06240408",
+      "actual_search_requests": 0,
+      "actual_fetch_requests": 0,
+      "received_tool_errors": 0,
+      "changed_existing_nodes": [
+        "n9"
+      ],
+      "new_nodes": [],
+      "removed_nodes": [],
+      "markers": {
+        "【迁移演练建议】": 1,
+        "【新资料核对】": 0,
+        "【迁移边界核对】": 0
+      },
+      "comparison_chapter_nodes": [],
+      "new_source_ids": [],
+      "new_sources_cited_in_target": [],
+      "unrelated_canonical_drafts_preserved": true,
+      "new_native_delivery_created": true,
+      "factual_accuracy_fully_judged": false
+    },
+    {
+      "turn": 3,
+      "run_id": "0381d031-1aba-452f-a052-f569ce87aff3",
+      "run_status": "success",
+      "seconds": 401.715,
+      "report_id": "r4",
+      "native_delivered": true,
+      "accepted_or_readonly": true,
+      "old_native_files_unchanged": true,
+      "head": "t0004",
+      "active_version": "t0004",
+      "input_tokens": 2624620,
+      "output_tokens": 73467,
+      "total_tokens": 2698087,
+      "roles": [
+        "memory_recaller",
+        "outline",
+        "reporter",
+        "researcher"
+      ],
+      "search_calls": 9,
+      "fetch_calls": 0,
+      "phase": "03",
+      "roles_from_numeric_callbacks": [
+        "central",
+        "memory_recaller",
+        "memory_updater",
+        "outline",
+        "researcher",
+        "writer"
+      ],
+      "input_tokens_including_memory": 2628536,
+      "output_tokens_including_memory": 74737,
+      "all_model_usage_present": true,
+      "observed_cost_cny": "2.02084384",
+      "actual_search_requests": 9,
+      "actual_fetch_requests": 1,
+      "received_tool_errors": 0,
+      "changed_existing_nodes": [
+        "n9"
+      ],
+      "new_nodes": [],
+      "removed_nodes": [],
+      "markers": {
+        "【迁移演练建议】": 1,
+        "【新资料核对】": 1,
+        "【迁移边界核对】": 0
+      },
+      "comparison_chapter_nodes": [],
+      "new_source_ids": [
+        "S212",
+        "S213",
+        "S214",
+        "S215",
+        "S216",
+        "S217",
+        "S218",
+        "S219",
+        "S220",
+        "S221",
+        "S222",
+        "S223",
+        "S224",
+        "S225",
+        "S226",
+        "S227",
+        "S228",
+        "S229",
+        "S230",
+        "S231",
+        "S232",
+        "S233",
+        "S234",
+        "S235",
+        "S236",
+        "S237",
+        "S238",
+        "S239",
+        "S240",
+        "S241",
+        "S242",
+        "S243",
+        "S244",
+        "S245",
+        "S246",
+        "S247",
+        "S248",
+        "S249",
+        "S250",
+        "S251",
+        "S252",
+        "S253",
+        "S254",
+        "S255",
+        "S256",
+        "S257",
+        "S258",
+        "S259",
+        "S260",
+        "S261",
+        "S262",
+        "S263",
+        "S264",
+        "S265",
+        "S266",
+        "S267",
+        "S268",
+        "S269",
+        "S270",
+        "S271",
+        "S272",
+        "S273",
+        "S274",
+        "S275",
+        "S276",
+        "S277",
+        "S278",
+        "S279",
+        "S280",
+        "S281",
+        "S282",
+        "S283",
+        "S284",
+        "S285",
+        "S286",
+        "S287",
+        "S288"
+      ],
+      "new_sources_cited_in_target": [
+        "S213",
+        "S219",
+        "S224",
+        "S227",
+        "S232",
+        "S237",
+        "S242",
+        "S246",
+        "S268",
+        "S275",
+        "S288"
+      ],
+      "unrelated_canonical_drafts_preserved": true,
+      "new_native_delivery_created": true,
+      "factual_accuracy_fully_judged": false,
+      "mandatory_new_research_observed": true,
+      "new_official_sources": [
+        {
+          "source_id": "S212",
+          "title": "Export data to Excel - Training - Skip to main content",
+          "url": "https://learn.microsoft.com/en-ie/training/modules/export-dataverse-excel/export-data?ns-enrollment-type=learningpath&ns-enrollment-id=learn-bizapps.visualize-import-export-data#1"
+        },
+        {
+          "source_id": "S213",
+          "title": "Dataverse data export options - Training - მთავარ შიგთავსზე გადასვლა",
+          "url": "https://learn.microsoft.com/ka-ge/training/modules/load-export-data-create-data-views/export-options#1"
+        },
+        {
+          "source_id": "S222",
+          "title": "Exercise - Import and export solutions - Training - Consider a scenario where you have a solution that includes an app, table, and a flow",
+          "url": "https://learn.microsoft.com/ka-ge/training/modules/manage-solutions-power-automate/4-import-export-solutions#1"
+        },
+        {
+          "source_id": "S223",
+          "title": "Export solutions - Power Apps - Skip to main content Skip to Ask Learn chat experience",
+          "url": "https://learn.microsoft.com/en-us/power-apps/maker/data-platform/export-solutions?WT.mc_id=DX-MVP-5004772#1"
+        },
+        {
+          "source_id": "S227",
+          "title": "Export solutions - Power Apps - Skip to main content",
+          "url": "https://learn.microsoft.com/en-us/power-apps/maker/data-platform/export-solutions?azure-portal=true#1"
+        },
+        {
+          "source_id": "S232",
+          "title": "Migrating Data in Mendix on Kubernetes Environments (Preview)",
+          "url": "https://docs.mendix.com/developerportal/deploy/private-cloud-data-transfer/"
+        },
+        {
+          "source_id": "S242",
+          "title": "导出应用程序包",
+          "url": "https://docs.mendix.com/refguide/export-app-package-dialog/"
+        },
+        {
+          "source_id": "S243",
+          "title": "Module Settings",
+          "url": "https://docs.mendix.com/refguide10/module-settings/"
+        },
+        {
+          "source_id": "S245",
+          "title": "导入和导出应用程序、模块、小部件和文档",
+          "url": "https://docs.mendix.com/refguide/import-and-export/"
+        },
+        {
+          "source_id": "S254",
+          "title": "Microsoft Learn: Build with answers in reach",
+          "url": "https://learn.microsoft.com/en-us/"
+        },
+        {
+          "source_id": "S255",
+          "title": "चैलेंज - आपको अपने Microsoft Learn प्रोफ़ाइल का उपयोग करके इस चुनौती के लिए पंजीकरण करना होगा। एक बार चुनौती शुरू होने के बाद, आप उन मॉड्...",
+          "url": "https://learn.microsoft.com/hi-in/training/challenges?id=ee91a690-08e2-4692-8b7b-57a65217baf4&WT.mc_id=cloudskillschallenge_ee91a690-08e2-4692-8b7b-57a65217baf4#2"
+        },
+        {
+          "source_id": "S257",
+          "title": "Create or edit a security role to manage access - Power Platform - მთავარ შიგთავსზე გადასვლა Ask Learn-ის საუბრის გამოცდილებაზე გადასვლა",
+          "url": "https://learn.microsoft.com/ka-ge/power-platform/admin/create-edit-security-role#1"
+        },
+        {
+          "source_id": "S275",
+          "title": "Migrate Your Mendix Database",
+          "url": "https://docs.mendix.com/howto/data-models/migrating-your-mendix-database/"
+        },
+        {
+          "source_id": "S278",
+          "title": "Data Storage",
+          "url": "https://docs.mendix.com/refguide8/data-storage/"
+        },
+        {
+          "source_id": "S279",
+          "title": "External Database Connection",
+          "url": "https://docs.mendix.com/refguide/external-database-connection/"
+        },
+        {
+          "source_id": "S281",
+          "title": "Components of model-driven apps - Training - मुख्य सामग्री पर जाएँ",
+          "url": "https://learn.microsoft.com/hi-in/training/modules/get-started-with-model-driven-apps-in-powerapps/2-building-blocks-of-model-driven-apps?ns-enrollment-type=learningpath&ns-enrollment-id=learn.wwl.validate-power-platform-functional-consultant-skills#1"
+        },
+        {
+          "source_id": "S285",
+          "title": "Tables and metadata in Microsoft Dataverse - Power Apps - Lumaktaw papuntang pangunahing nilalaman Lumaktaw sa karanasan sa chat ng Ask Learn",
+          "url": "https://learn.microsoft.com/fil-ph/power-apps/maker/data-platform/create-edit-metadata#1"
+        },
+        {
+          "source_id": "S288",
+          "title": "Solutions overview - Power Apps (Microsoft Learn)",
+          "url": "https://learn.microsoft.com/en-us/power-apps/maker/data-platform/solutions-overview"
+        }
+      ],
+      "single_paragraph_request_strictly_met": false,
+      "quality_notes": [
+        "New evidence expansion contains multiple paragraphs; the request said one paragraph.",
+        "Some cited official repository documents are historical versions; current applicability is not fully verified."
+      ],
+      "all_new_target_citations_formally_numbered": true,
+      "new_cited_source_records": [
+        {
+          "source_id": "S213",
+          "title": "Dataverse data export options - Training - მთავარ შიგთავსზე გადასვლა",
+          "url": "https://learn.microsoft.com/ka-ge/training/modules/load-export-data-create-data-views/export-options#1"
+        },
+        {
+          "source_id": "S219",
+          "title": "Export to an Excel static worksheet",
+          "url": "https://github.com/microsoftdocs/powerapps-docs/blob/c348031067700b46faff75dcc197fad1e0e5c59c/powerapps-docs/user/export-excel-static-worksheet.md"
+        },
+        {
+          "source_id": "S224",
+          "title": "Distribute a model-driven app using a solution",
+          "url": "https://github.com/microsoftdocs/powerapps-docs/blob/c348031067700b46faff75dcc197fad1e0e5c59c/powerapps-docs/maker/model-driven-apps/distribute-model-driven-app.md"
+        },
+        {
+          "source_id": "S227",
+          "title": "Export solutions - Power Apps - Skip to main content",
+          "url": "https://learn.microsoft.com/en-us/power-apps/maker/data-platform/export-solutions?azure-portal=true#1"
+        },
+        {
+          "source_id": "S232",
+          "title": "Migrating Data in Mendix on Kubernetes Environments (Preview)",
+          "url": "https://docs.mendix.com/developerportal/deploy/private-cloud-data-transfer/"
+        },
+        {
+          "source_id": "S237",
+          "title": "Restoring a Backup",
+          "url": "https://github.com/mendix/docs/blob/41032f1a4999694a1041dc06786856132befed57/content/en/docs/deployment/mendix-cloud-deploy/backups/restore-backup.md"
+        },
+        {
+          "source_id": "S242",
+          "title": "导出应用程序包",
+          "url": "https://docs.mendix.com/refguide/export-app-package-dialog/"
+        },
+        {
+          "source_id": "S246",
+          "title": null,
+          "url": "https://raw.githubusercontent.com/mendix/docs/52a409e6a7ce227f0e6f4ed953a6b311b8c967bd/content/refguide/export-project-package-dialog.md"
+        },
+        {
+          "source_id": "S268",
+          "title": "title: \"FAQ\"",
+          "url": "https://raw.githubusercontent.com/mendix/docs/6570f6d6592864afa1bf2b191d6f3885e315cff9/MXSDK/faq.md#1"
+        },
+        {
+          "source_id": "S275",
+          "title": "Migrate Your Mendix Database",
+          "url": "https://docs.mendix.com/howto/data-models/migrating-your-mendix-database/"
+        },
+        {
+          "source_id": "S288",
+          "title": "Solutions overview - Power Apps (Microsoft Learn)",
+          "url": "https://learn.microsoft.com/en-us/power-apps/maker/data-platform/solutions-overview"
+        }
+      ],
+      "all_new_target_citations_from_first_party_documentation": true,
+      "prior_recommendation_full_text_unchanged": true
+    },
+    {
+      "turn": 4,
+      "run_id": "e90aaaf7-bf68-4c5d-849f-e2b44dbe3112",
+      "run_status": "success",
+      "seconds": 132.324,
+      "report_id": "r6",
+      "native_delivered": true,
+      "accepted_or_readonly": true,
+      "old_native_files_unchanged": true,
+      "head": "t0006",
+      "active_version": "t0006",
+      "input_tokens": 608502,
+      "output_tokens": 26555,
+      "total_tokens": 635057,
+      "roles": [
+        "outline",
+        "reporter"
+      ],
+      "search_calls": 0,
+      "fetch_calls": 0,
+      "phase": "04",
+      "roles_from_numeric_callbacks": [
+        "central",
+        "memory_updater",
+        "outline",
+        "writer"
+      ],
+      "input_tokens_including_memory": 613374,
+      "output_tokens_including_memory": 27852,
+      "all_model_usage_present": true,
+      "observed_cost_cny": "0.97590256",
+      "actual_search_requests": 0,
+      "actual_fetch_requests": 0,
+      "received_tool_errors": 0,
+      "changed_existing_nodes": [],
+      "new_nodes": [
+        "n13"
+      ],
+      "removed_nodes": [],
+      "markers": {
+        "【迁移演练建议】": 1,
+        "【新资料核对】": 1,
+        "【迁移边界核对】": 0
+      },
+      "comparison_chapter_nodes": [
+        {
+          "node_id": "n12",
+          "title": "补充：平台退出能力对照",
+          "parent_id": null,
+          "kind": "section"
+        }
+      ],
+      "new_source_ids": [],
+      "new_sources_cited_in_target": [],
+      "unrelated_canonical_drafts_preserved": true,
+      "new_native_delivery_created": true,
+      "factual_accuracy_fully_judged": false,
+      "independent_chapter_created": true
+    },
+    {
+      "turn": 5,
+      "run_id": "bb13867a-173b-46a8-b660-51b138ecd39d",
+      "run_status": "error",
+      "seconds": 348.128,
+      "report_id": "r6",
+      "native_delivered": true,
+      "accepted_or_readonly": false,
+      "old_native_files_unchanged": true,
+      "head": "t0006",
+      "active_version": "t0006",
+      "input_tokens": 1786593,
+      "output_tokens": 73321,
+      "total_tokens": 1859914,
+      "roles": [
+        "outline",
+        "researcher"
+      ],
+      "search_calls": 4,
+      "fetch_calls": 0,
+      "phase": "04",
+      "roles_from_numeric_callbacks": [
+        "central",
+        "memory_updater",
+        "outline",
+        "researcher"
+      ],
+      "input_tokens_including_memory": 1786593,
+      "output_tokens_including_memory": 73321,
+      "all_model_usage_present": false,
+      "observed_cost_cny": "1.83553128",
+      "actual_search_requests": 4,
+      "actual_fetch_requests": 0,
+      "received_tool_errors": 0,
+      "changed_existing_nodes": [],
+      "new_nodes": [],
+      "removed_nodes": [],
+      "markers": {
+        "【迁移演练建议】": 1,
+        "【新资料核对】": 1,
+        "【迁移边界核对】": 0
+      },
+      "comparison_chapter_nodes": [
+        {
+          "node_id": "n12",
+          "title": "补充：平台退出能力对照",
+          "parent_id": null,
+          "kind": "section"
+        }
+      ],
+      "new_source_ids": [],
+      "new_sources_cited_in_target": [],
+      "unrelated_canonical_drafts_preserved": true,
+      "new_native_delivery_created": false,
+      "factual_accuracy_fully_judged": false,
+      "mandatory_new_research_observed": false,
+      "new_official_sources": []
+    }
+  ],
+  "accepted_versions_verified": {
+    "t0001": {
+      "report_id": "r1",
+      "native_matches_snapshot": true
+    },
+    "t0002": {
+      "report_id": "r2",
+      "native_matches_snapshot": true
+    },
+    "t0004": {
+      "report_id": "r4",
+      "native_matches_snapshot": true
+    },
+    "t0006": {
+      "report_id": "r6",
+      "native_matches_snapshot": true
+    }
+  },
+  "old_event_endpoint_zero_counts_corrected_from_independent_http_and_role_receipts": true,
+  "native_delivered_means_not_factual_accuracy": true,
+  "status": "partial_api_validation_paused_at_authorized_budget",
+  "accepted_task_categories": [
+    "fresh first report",
+    "saved-material local expansion",
+    "new official research with local writing",
+    "independent chapter creation"
+  ],
+  "not_completed_api_tasks": [
+    "case5 research-backed correction delivery",
+    "case6 structural deletion retaining valid edits",
+    "case7 read-only final audit"
+  ],
+  "budget": {
+    "observed_global_cost_cny": "41.29689864",
+    "held_unsettled_cny": "6.493064",
+    "risk_with_holds_cny": "47.78996264",
+    "new_work_observed_cost_cny": "9.96459376",
+    "new_work_observed_input_tokens": 11759170,
+    "new_work_observed_output_tokens": 425809,
+    "authorized_ceiling_cny": 50,
+    "next_outline_reservation_cny": "2.359296",
+    "next_max_risk_cny": "50.14925864",
+    "billing_complete": false,
+    "proposed_ceiling_pending_user_approval_cny": 60
+  },
+  "offline_checks": {
+    "frontend_unit": 15,
+    "frontend_browser": 4,
+    "frontend_lint_typecheck": "passed",
+    "pilot_worker_admission_preflight_entry": 83,
+    "native_outline_rehearsal_turn_audit": 18,
+    "independent_accepted_version_restore": 4
+  },
+  "code_commits": [
+    "07cb3ad",
+    "0e8a7d4",
+    "a33665a"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "phase": "fresh-e2e-03",
+  "source_head": "a33665a",
+  "case3_retry_delivered": true,
+  "case3_search_calls": 9,
+  "case3_report_id": "r4",
+  "case3_head": "t0004",
+  "case4_delivered": false,
+  "case4_primary_stop": "aggregate input token reservation exceeded legacy 50000000 envelope",
+  "case4_not_report_acceptance_failure": true,
+  "financial_total_and_holds_cny": "44.97852880",
+  "next_input_reservation_total": 50023742,
+  "failed_case4_turn_retained": "t0005",
+  "later_cases_submitted": false,
+  "global_budget": {
+    "spent_cost_cny": "38.48546480",
+    "reserved_cost_cny": "6.493064",
+    "input_tokens": 45829438,
+    "output_tokens": 1827475,
+    "inflight": [
+      "http-1883efa84c6e4cf58bef90882c3671c5-1",
+      "http-6f416a52175d498a894bc2d92351936d-3",
+      "http-b05c246e0a0f49919d40ade6792240a2-12",
+      "http-c8c21233a8a1493892c8995ae59761ca-110"
+    ],
+    "abort_requested": true
+  },
+  "note": "Core report code and prompts unchanged; continuation phase 04 will use aggregate 80M/4M and full already-authorized 50 CNY instead of old 48 operating buffer."
+}

@@ -1,0 +1,9 @@
+phase,case,run_status,native_new_delivery,observed_input_tokens,observed_output_tokens,callback_usage_complete,observed_cost_cny,search_requests,fetch_requests
+01,1,success,False,2787394,90295,False,1.97899280,29,0
+02,1,success,True,2716541,96402,True,2.07566280,23,0
+02,2,success,True,48287,3067,True,0.06240408,0,0
+02,3,error,False,797164,39424,False,0.61485792,4,1
+03,3,success,True,2628536,74737,True,2.02084384,9,1
+03,4,error,False,381281,20711,False,0.40039848,0,0
+04,4,success,True,613374,27852,True,0.97590256,0,0
+04,5,error,False,1786593,73321,False,1.83553128,4,0
