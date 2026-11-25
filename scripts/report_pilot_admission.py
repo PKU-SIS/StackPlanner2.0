@@ -1,4 +1,4 @@
-"""Frozen public review for the <=50 CNY pilot; never authorizes execution."""
+"""Frozen public reviews for explicitly confirmed cumulative pilot ceilings; never authorizes execution."""
 
 from __future__ import annotations
 
@@ -14,16 +14,21 @@ REVIEW_PATH = (
 
 
 def reviewed_limits(root, budget_cny, public_profile, roles):
-    path = Path(root) / REVIEW_PATH
+    paths = {
+        money("50"): REVIEW_PATH,
+        money(
+            "100"
+        ): "docs/research-report/fresh-e2e-20261125/ADMISSION_REVIEW_100.json",
+    }
+    if budget_cny is None or money(budget_cny) not in paths:
+        raise ValueError("a separate frozen review is required for this ceiling")
+    review_path = paths[money(budget_cny)]
+    path = Path(root) / review_path
     raw = path.read_bytes()
     review = json.loads(raw)
     rates = RateCard()
-    if (
-        budget_cny is None
-        or money(budget_cny) != money("50")
-        or money(review["approved_total_ceiling_cny"]) != money(budget_cny)
-    ):
-        raise ValueError("frozen review requires the user's 50 CNY ceiling")
+    if money(review["approved_total_ceiling_cny"]) != money(budget_cny):
+        raise ValueError("frozen review does not match the confirmed ceiling")
     if (
         review["rates_cny"] != rates.__dict__
         or review["documented_context_length"] != "1M"
@@ -82,7 +87,7 @@ def reviewed_limits(root, budget_cny, public_profile, roles):
         "provider_input_context_ceiling_verified": True,
     }, {
         "review_id": review["review_id"],
-        "source_file": REVIEW_PATH,
+        "source_file": review_path,
         "source_sha256": hashlib.sha256(raw).hexdigest(),
         "context_bound_basis": review["context_interpretation"],
         "combined_envelope_cny": str(combined),

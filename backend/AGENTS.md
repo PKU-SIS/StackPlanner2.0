@@ -348,3 +348,8 @@ The experiment worker treats received Search/Fetch HTTP 4xx as bounded tool
 errors: native handlers receive the response, maximum tool fees remain reserved,
 and billing stays incomplete. It does not globally abort unrelated models.
 Unknown transports/model receipts and true budget overruns still stop as before.
+
+Pilot admission retains the original immutable 50 CNY review and selects a
+separate 100 CNY review after the user's explicit increase on 2026-11-25.
+Review packets remain offline; a budget review never authorizes execution.
+All carried fees and unknown reservations count against the cumulative ceiling.

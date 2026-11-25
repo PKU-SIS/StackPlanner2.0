@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "review_id": "deepseek-flash-100cny-20261125",
+  "checked_at_utc": "2026-11-25T07:53:06Z",
+  "pricing_source": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/",
+  "tool_billing_source": "https://api-docs.deepseek.com/zh-cn/guides/search/",
+  "request_model": "deepseek-flash",
+  "documented_model_version": "DeepSeek-V4.1-Flash-1017",
+  "documented_context_length": "1M",
+  "input_reservation_ceiling_tokens": 1048576,
+  "context_interpretation": "Conservative program bound: round 1M upward to 2^20 and reserve full input bound plus configured output separately; this is not a provider claim that 1M means 2^20.",
+  "rates_cny": {
+    "input_miss_per_million": "2",
+    "input_hit_per_million": "0.04",
+    "output_per_million": "8",
+    "direct_tool_per_success": "0.005"
+  },
+  "approved_total_ceiling_cny": "100",
+  "operating_ceiling_cny": "98",
+  "safety_margin_cny": "2",
+  "budget_source": "User: 可以啊,你 100 都行,接下来做啥.",
+  "max_input_tokens": 35000000,
+  "max_output_tokens": 2000000,
+  "max_direct_tool_attempts": 2000,
+  "stress_parallel_model_calls": 11,
+  "account_billing_currency_confirmed": false,
+  "api_experiments_authorized": false
+}

@@ -109,3 +109,15 @@ def test_gzip_stream_receipt_is_reconciled_before_sdk_close(asynchronous):
         else:
             assert m.invoke("fixture").content == "fixture"
     assert w.finalize()["usage"]["billing_complete"]
+
+
+def test_hundred_yuan_review_is_separate_and_still_never_authorizes_api(tmp_path):
+    packet = build_packet(ROOT, tmp_path / "packet100", budget_cny="100", admission_review=True)
+    assert packet["limits"]["max_cost_cny"] == "100"
+    assert packet["limits"]["operating_max_cost_cny"] == "98"
+    assert packet["admission_review"]["combined_envelope_cny"] == "96.000"
+    assert packet["api_experiments_authorized"] is False
+    assert not verify_packet(ROOT, tmp_path / "packet100")["api_execution_ready"]
+    assert packet["admission_review"]["source_file"] != "docs/research-report/multiturn-pilot-preparation-20261122/ADMISSION_REVIEW.json"
+    old = build_packet(ROOT, tmp_path / "packet50", budget_cny="50", admission_review=True)
+    assert old["limits"]["operating_max_cost_cny"] == "48"
