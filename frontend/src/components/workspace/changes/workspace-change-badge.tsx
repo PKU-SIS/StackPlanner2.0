@@ -44,18 +44,13 @@ export function WorkspaceChangeBadge({
   }
 
   const files = sortWorkspaceChanges(data.files);
-  const reportArchive = files.some((file) =>
-    /(?:^|\/)report_dialogue\/turns\//.test(file.path),
-  );
-  // Large report copies can exhaust the preview limit before archive paths
-  // appear. Keep that report-only list compact without inferring chapter edits.
+  // Pointer and archived/superseded files belong to the same report output.
+  // Mixed code/report runs retain the ordinary preview.
   const compactReport =
-    reportArchive ||
-    (data.summary.truncated &&
-      files.length > 0 &&
-      files.every((file) =>
-        /(?:^|\/)outputs\/report\/r[0-9]+\//.test(file.path),
-      ));
+    files.length > 0 &&
+    files.every((file) =>
+      /(?:^|\/)outputs\/(?:report|report_dialogue)\//.test(file.path),
+    );
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>

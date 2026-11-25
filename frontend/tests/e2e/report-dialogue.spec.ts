@@ -209,16 +209,17 @@ test("report snapshot files stay behind the existing view action", async ({
           available: true,
           version: 1,
           summary: {
-            created: 2,
+            created: 3,
             modified: 0,
             deleted: 0,
-            additions: 2,
+            additions: 3,
             deletions: 0,
             truncated: false,
           },
           limits: {},
           files: [
-            "/mnt/user-data/outputs/report_dialogue/turns/t0002/artifacts/materials/source.md",
+            "outputs/report/r39/materials/source.md",
+            "outputs/report/current.json",
             "/mnt/user-data/outputs/report/r2/final/report.md",
           ].map((path) => ({
             path,

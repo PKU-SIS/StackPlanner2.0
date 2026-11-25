@@ -44,6 +44,7 @@ export function SubtaskCard({
   runId,
   isLoading,
   descriptionOverride,
+  presentedReportPaths,
 }: {
   className?: string;
   taskId: string;
@@ -51,6 +52,7 @@ export function SubtaskCard({
   runId?: string;
   isLoading: boolean;
   descriptionOverride?: string;
+  presentedReportPaths?: ReadonlySet<string>;
 }) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(true);
@@ -62,6 +64,9 @@ export function SubtaskCard({
   // (AI text) interleaved with the tools it ran (by name). See stepsForDisplay
   // for what is kept/dropped.
   const displaySteps = stepsForDisplay(task.steps, task.status);
+  const visibleArtifacts = (task.artifacts ?? []).filter(
+    (path) => !collapsed || !presentedReportPaths?.has(path),
+  );
   const activeToolCall = latestActiveSubtaskToolCall(task.steps);
   const runningActivity = activeToolCall
     ? explainToolCall(activeToolCall, t)
@@ -275,10 +280,10 @@ export function SubtaskCard({
             ></ChainOfThoughtStep>
           )}
         </ChainOfThoughtContent>
-        {threadId && task.artifacts && task.artifacts.length > 0 && (
+        {threadId && visibleArtifacts.length > 0 && (
           <ArtifactFileList
             className="border-t px-4 py-4"
-            files={task.artifacts}
+            files={visibleArtifacts}
             threadId={threadId}
           />
         )}

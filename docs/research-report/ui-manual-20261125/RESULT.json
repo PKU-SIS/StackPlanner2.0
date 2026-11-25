@@ -1,0 +1,54 @@
+{
+  "source_head": "8448a80",
+  "source_binding": {
+    "git_head": "8448a80",
+    "adapter_file": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/backend/packages/harness/deerflow/sp/report/turns/adapter.py",
+    "root": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn"
+  },
+  "active_version": "t0007",
+  "accepted_head": "t0007",
+  "accepted_versions_verified": [
+    "t0001",
+    "t0002",
+    "t0003",
+    "t0004",
+    "t0007"
+  ],
+  "original_native_files_unchanged": true,
+  "browser_page_errors": [],
+  "read_only_ui_smoke_passed": true,
+  "download_checks": [
+    {
+      "name": "test-cases.md",
+      "status": 200,
+      "sha_matches_local": true
+    },
+    {
+      "name": "pilot-material.md",
+      "status": 200,
+      "sha_matches_local": true
+    }
+  ],
+  "usage": {
+    "input_tokens": 99625,
+    "output_tokens": 2075,
+    "total_tokens": 101700,
+    "estimated_cost_cny": "0.06933608",
+    "global_budget": {
+      "spent_cost_cny": "30.52851416",
+      "reserved_cost_cny": "6.488064",
+      "input_tokens": 35641991,
+      "output_tokens": 1456358,
+      "inflight": [
+        "http-1883efa84c6e4cf58bef90882c3671c5-1",
+        "http-6f416a52175d498a894bc2d92351936d-3",
+        "http-b05c246e0a0f49919d40ade6792240a2-12"
+      ],
+      "abort_requested": false
+    }
+  },
+  "public_url": "http://123.59.6.244:3325/workspace/chats/ui-report-latest-20261125",
+  "public_auth": "HTTP Basic + current SSH source IP allowlist; password omitted",
+  "original_demo_restarted": false,
+  "full_report_public_download_added": false
+}

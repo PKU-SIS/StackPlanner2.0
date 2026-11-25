@@ -288,7 +288,7 @@ export function MessageList({
   initialScroll?: ConversationProps["initial"];
   resizeScroll?: ConversationProps["resize"];
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const sidecar = useMaybeSidecar();
   const [selectionToolbar, setSelectionToolbar] =
     useState<SelectionToolbarState | null>(null);
@@ -324,6 +324,35 @@ export function MessageList({
     [messages],
   );
   const groupedMessages = getMessageGroups(messages);
+  const latestHumanFromEnd = [...messages]
+    .reverse()
+    .findIndex((message) => message.type === "human");
+  const latestHumanIndex =
+    latestHumanFromEnd < 0 ? -1 : messages.length - latestHumanFromEnd - 1;
+  const latestHuman = messages[latestHumanIndex];
+  const boundRevision = latestHuman?.additional_kwargs?.report_dialogue as
+    | { enabled?: boolean }
+    | undefined;
+  const revisionRunId = boundRevision?.enabled
+    ? (messages
+        .slice(latestHumanIndex)
+        .map(
+          (message) =>
+            (message as { run_id?: string }).run_id ??
+            (message.additional_kwargs?.run_id as string | undefined),
+        )
+        .find(Boolean) ?? null)
+    : undefined;
+  const presentedReportPaths = new Set(
+    messages.flatMap((message) =>
+      extractPresentFilesFromMessage(message).filter((path) =>
+        /^\/mnt\/user-data\/outputs\/report\/r[0-9]+\/final\/[^/]+\.md$/.test(
+          path,
+        ),
+      ),
+    ),
+  );
+
   const [regeneratingMessageId, setRegeneratingMessageId] = useState<
     string | null
   >(null);
@@ -760,6 +789,19 @@ export function MessageList({
             const turnUsageMessages = turnUsageMessagesByGroupIndex[groupIndex];
             const groupIsLoading =
               thread.isLoading && groupIndex === lastGroupIndex;
+            const priorHuman = groupedMessages
+              .slice(0, groupIndex + 1)
+              .reverse()
+              .find((candidate) => candidate.type === "human")
+              ?.messages.at(-1);
+            const foldReportSteps = Boolean(
+              (
+                priorHuman?.additional_kwargs?.report_dialogue as
+                  | { enabled?: boolean }
+                  | undefined
+              )?.enabled,
+            );
+            const StepsContainer = foldReportSteps ? "details" : "div";
             const groupKey =
               group.id ?? `${group.type}-${groupIndex.toString()}`;
 
@@ -1023,6 +1065,7 @@ export function MessageList({
                       key={"task-group-" + taskId}
                       taskId={taskId}
                       threadId={threadId}
+                      presentedReportPaths={presentedReportPaths}
                       runId={(message as { run_id?: string }).run_id}
                       isLoading={groupIsLoading}
                     />,
@@ -1045,18 +1088,27 @@ export function MessageList({
             }
             return (
               <div key={`group-${groupKey}`} className="w-full">
-                <MessageGroup
-                  messages={group.messages}
-                  isLoading={thread.isLoading}
-                  tokenDebugSteps={tokenDebugSteps.filter((step) =>
-                    group.messages.some(
-                      (message) => message.id === step.messageId,
-                    ),
+                <StepsContainer
+                  open={foldReportSteps && groupIsLoading ? true : undefined}
+                >
+                  {foldReportSteps && (
+                    <summary className="text-muted-foreground cursor-pointer text-xs">
+                      {locale === "zh-CN" ? "执行步骤" : "Execution steps"}
+                    </summary>
                   )}
-                  showTokenDebugSummaries={
-                    tokenUsageInlineMode === "step_debug"
-                  }
-                />
+                  <MessageGroup
+                    messages={group.messages}
+                    isLoading={thread.isLoading}
+                    tokenDebugSteps={tokenDebugSteps.filter((step) =>
+                      group.messages.some(
+                        (message) => message.id === step.messageId,
+                      ),
+                    )}
+                    showTokenDebugSummaries={
+                      tokenUsageInlineMode === "step_debug"
+                    }
+                  />
+                </StepsContainer>
                 {renderTokenUsage({
                   messages: group.messages,
                   turnUsageMessages,
@@ -1070,6 +1122,7 @@ export function MessageList({
               threadId={threadId}
               isLoading={thread.isLoading}
               anchoredTaskIds={anchoredTaskIds}
+              revisionRunId={revisionRunId}
             />
           )}
           {thread.isLoading && !hasActiveAssistantText && (

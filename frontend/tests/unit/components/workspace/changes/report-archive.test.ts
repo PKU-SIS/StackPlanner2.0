@@ -96,3 +96,23 @@ test("a truncated report-only preview is compact even before archive paths appea
   expect(html).toContain("Report files");
   expect(html).not.toContain("source.md");
 });
+
+test("current pointer and deleted historical report files stay collapsed without truncation", () => {
+  const html = render([
+    "outputs/report/r39/assembly/c1.json",
+    "outputs/report/current.json",
+    "outputs/report/r34/materials/S22/source.txt",
+  ]);
+  expect(html).toContain("Report files");
+  expect(html).not.toContain("current.json");
+  expect(html).not.toContain("source.txt");
+  expect(html).not.toContain("Edited 3 files");
+});
+
+test("archive files do not hide ordinary code changes in a mixed run", () => {
+  const html = render([
+    "outputs/report_dialogue/index.json",
+    "workspace/main.py",
+  ]);
+  expect(html).toContain("main.py");
+});

@@ -154,3 +154,11 @@ files and truncated report-only previews into a neutral Report files card; the
 existing View changes panel still exposes its file list. Ordinary file previews
 remain unchanged. Browser/paid-pilot evidence and caveats live in
 ../docs/research-report/ui-acceptance-20261124/RESULT.md.
+
+Report-only change previews include current.json and dialogue index files, regardless
+of truncation; file counts/deltas remain behind View changes. Mixed code/report
+runs keep ordinary previews. Follow-up Writer panels filter by latest message run
+ID; inherited Writers cannot appear as current work. A subtask final-report card
+is suppressed while collapsed when the same path has a final present_files card;
+expanding the task still exposes its evidence. Finished bound-report control steps
+are collapsed without changing ordinary task steps or failure cards.

@@ -7,6 +7,7 @@ export function visiblePipelineNodes(
   view: ReportView | null | undefined,
   isLoading: boolean,
   anchored: ReadonlySet<string>,
+  revisionRunId?: string | null,
 ): ReportWriterNode[] {
   if (
     !view ||
@@ -14,7 +15,11 @@ export function visiblePipelineNodes(
     (isLoading && view.status !== "running" && view.status !== "awaiting_user")
   )
     return [];
-  const nodes = view.writer_pipeline?.nodes ?? [];
+  const nodes = (view.writer_pipeline?.nodes ?? []).filter(
+    (node) =>
+      revisionRunId === undefined ||
+      (revisionRunId !== null && node.run_id === revisionRunId),
+  );
   // A planned queue is not writing activity. Keep the panel after dispatch,
   // including when every Writer has finished or stopped.
   if (!nodes.some((node) => Boolean(node.task_id))) return [];

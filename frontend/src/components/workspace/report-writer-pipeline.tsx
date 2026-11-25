@@ -17,10 +17,12 @@ export function ReportWriterPipeline({
   threadId,
   isLoading,
   anchoredTaskIds,
+  revisionRunId,
 }: {
   threadId: string;
   isLoading: boolean;
   anchoredTaskIds: ReadonlySet<string>;
+  revisionRunId?: string | null;
 }) {
   const { t } = useI18n();
   const labels = t.conversation.writerPipeline;
@@ -30,8 +32,8 @@ export function ReportWriterPipeline({
   });
   const { tasks, tasksRef, setTasks } = useSubtaskContext();
   const nodes = useMemo(
-    () => visiblePipelineNodes(view, isLoading, anchoredTaskIds),
-    [view, isLoading, anchoredTaskIds],
+    () => visiblePipelineNodes(view, isLoading, anchoredTaskIds, revisionRunId),
+    [view, isLoading, anchoredTaskIds, revisionRunId],
   );
   useEffect(() => {
     const next = hydratePipelineTasks(tasksRef.current, nodes, labels.failed);
@@ -41,7 +43,9 @@ export function ReportWriterPipeline({
     }
   }, [nodes, labels.failed, setTasks, tasksRef]);
   if (!view?.writer_pipeline || nodes.length === 0) return null;
-  const all = view.writer_pipeline.nodes;
+  const all = view.writer_pipeline.nodes.filter(
+    (node) => revisionRunId === undefined || node.run_id === revisionRunId,
+  );
   const renderRows = (rows: ReportWriterNode[]) => (
     <div role="list" className="flex flex-col gap-2">
       {rows.map((node) => (

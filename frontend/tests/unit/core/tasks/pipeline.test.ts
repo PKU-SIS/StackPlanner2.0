@@ -86,3 +86,24 @@ test("hydrates once and retains live steps when ledger accepts completion", () =
     withSteps["spact_writer-one"]?.steps,
   );
 });
+
+test("follow-up pipeline excludes inherited Writers and waits for the current run", () => {
+  const inherited = {
+    ...view,
+    run_id: "revision",
+    writer_pipeline: {
+      max_concurrent: 4,
+      nodes: [
+        nodes[0]!,
+        { ...nodes[0]!, node_id: "n3", task_id: "new", run_id: "revision" },
+      ],
+    },
+  };
+  expect(visiblePipelineNodes(inherited, false, new Set(), null)).toEqual([]);
+  expect(
+    visiblePipelineNodes(inherited, false, new Set(), "revision").map(
+      (n) => n.node_id,
+    ),
+  ).toEqual(["n3"]);
+  expect(visiblePipelineNodes(inherited, false, new Set())).toHaveLength(2);
+});
