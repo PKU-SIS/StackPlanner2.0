@@ -492,3 +492,90 @@ def test_async_receipt_generator_close_uses_complete_wire_evidence(has_done):
     report = w.finalize()
     assert (report["http_attempts"][0]["status"] == "complete") is has_done
     assert bool(report["budget"]["inflight"]) is not has_done
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+def test_optional_transport_queue_waits_for_receipt_before_next_reservation(streaming):
+    from threading import Lock
+
+    w = worker(budget="0.004", max_inflight_requests=1)
+    lock = Lock()
+    active = 0
+    maximum = 0
+
+    def handle(req):
+        nonlocal active, maximum
+        with lock:
+            active += 1
+            maximum = max(maximum, active)
+        time.sleep(0.03)
+        with lock:
+            active -= 1
+        return response(stream=streaming)
+
+    with w.installed():
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: model(w, handle, streaming=streaming).invoke("fixture"), range(2)))
+    assert len(results) == 2
+    assert maximum == 1
+    report = w.finalize()
+    assert report["usage"]["billing_complete"]
+    assert report["usage"]["total_tokens"] == 240
+    assert not report["budget"]["inflight"]
+    assert report["stop_reason"] is None
+
+
+def test_optional_async_transport_queue_does_not_block_receipt_processing():
+    w = worker(budget="0.004", max_inflight_requests=1)
+
+    async def handle(req):
+        await asyncio.sleep(0.03)
+        return response()
+
+    async def invoke():
+        m = model(w, handle)
+        return await asyncio.wait_for(asyncio.gather(m.ainvoke("fixture"), m.ainvoke("fixture")), timeout=5)
+
+    with w.installed():
+        assert len(asyncio.run(invoke())) == 2
+    assert w.finalize()["usage"]["billing_complete"]
+    assert w.finalize()["budget"]["inflight"] == []
+
+
+def test_cancelled_async_queue_waiter_does_not_consume_a_later_slot():
+    w = worker(max_inflight_requests=1)
+
+    async def check():
+        await w._acquire_async_http_slot()
+        waiting = asyncio.create_task(w._acquire_async_http_slot())
+        await asyncio.sleep(0.03)
+        waiting.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await waiting
+        w.http_slots.release()
+        await asyncio.wait_for(w._acquire_async_http_slot(), timeout=1)
+        w.http_slots.release()
+
+    asyncio.run(check())
+    assert w.receipts == []
+    assert not w.guard.pending
+
+
+def test_unknown_outcome_with_transport_queue_never_sends_waiting_request():
+    sent = []
+    w = worker(max_inflight_requests=1)
+
+    async def broken(req):
+        sent.append(1)
+        await asyncio.sleep(0.03)
+        raise httpx.ReadTimeout("not persisted")
+
+    async def invoke():
+        m = model(w, broken)
+        return await asyncio.gather(m.ainvoke("fixture"), m.ainvoke("fixture"), return_exceptions=True)
+
+    with w.installed():
+        asyncio.run(invoke())
+    assert len(sent) == 1
+    assert len(w.guard.pending) == 1
+    assert not w.finalize()["usage"]["billing_complete"]

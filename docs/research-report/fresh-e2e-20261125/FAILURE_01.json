@@ -1,0 +1,26 @@
+{
+  "variant": "fresh-e2e-01",
+  "source_head": "07cb3ad",
+  "first_report_delivered": false,
+  "later_turns_submitted": 0,
+  "native_status": "active",
+  "controller_status": "stopped_after_native_delivery_check",
+  "primary_stop_reason": "reservation_denied",
+  "observed_batch_cost_cny": "1.97899280",
+  "billing_complete": false,
+  "global_budget": {
+    "spent_cost_cny": "33.31129768",
+    "reserved_cost_cny": "6.488064",
+    "input_tokens": 39257629,
+    "output_tokens": 1593134,
+    "inflight": [
+      "http-1883efa84c6e4cf58bef90882c3671c5-1",
+      "http-6f416a52175d498a894bc2d92351936d-3",
+      "http-b05c246e0a0f49919d40ade6792240a2-12"
+    ],
+    "abort_requested": true
+  },
+  "new_http_unknowns": [],
+  "queries_changed": false,
+  "replayed": false
+}

@@ -337,3 +337,9 @@ Report citation recognition also accepts line-qualified markers such as `[S204:1
 Canonical text retains locators, while the native export numbers source IDs. This
 recognizes syntax; it does not certify a quoted range or factual support. Historical
 exports are not regenerated or rewritten.
+
+Experiment-only report_pilot_worker supports optional max_inflight_requests.
+It queues at HTTP transport before reserving budget, releasing slots only after
+receipt settlement/unknown handling; default is unchanged. Native agent scheduling,
+prompts and acceptance are unaffected. Async queue cancellation must not leak a
+slot, and unknown outcomes still stop all waiting requests without replay.

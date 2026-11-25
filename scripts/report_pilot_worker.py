@@ -6,6 +6,7 @@ executors may run inside installed(), but every outbound attempt is intercepted.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import multiprocessing
 import os
@@ -15,7 +16,7 @@ import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
-from threading import Lock, RLock
+from threading import BoundedSemaphore, Lock, RLock
 from uuid import uuid4
 
 from unittest.mock import patch
@@ -64,6 +65,7 @@ class OfflinePilotWorker:
         max_model_attempts,
         max_tool_attempts,
         emit=None,
+        max_inflight_requests=None,
     ):
         self.audit, self.guard, self.turn = audit, guard, turn
         self.identity_prefix = uuid4().hex
@@ -78,6 +80,16 @@ class OfflinePilotWorker:
         self.closed = False
         self.active = False
         self.last_completed_turn = None
+        if max_inflight_requests is not None and (
+            type(max_inflight_requests) is not int or max_inflight_requests < 1
+        ):
+            raise ValueError("max_inflight_requests must be positive")
+        self.http_slots = (
+            BoundedSemaphore(max_inflight_requests)
+            if max_inflight_requests is not None
+            else None
+        )
+        self.slot_holders = set()
 
     @classmethod
     def from_preflight(cls, root, packet_directory, *, turn, emit=None):
@@ -114,6 +126,37 @@ class OfflinePilotWorker:
             max_tool_attempts=limits["max_direct_tool_attempts"],
             emit=emit,
         )
+
+    def _acquire_http_slot(self):
+        if self.http_slots is None:
+            return
+        deadline = time.monotonic() + 180
+        while not self.http_slots.acquire(timeout=0.05):
+            if self.guard.abort_event.is_set():
+                raise AuditError("worker stopped while waiting for transport")
+            if time.monotonic() >= deadline:
+                self.stop("transport_queue_timeout")
+                raise AuditError("transport queue timed out")
+
+    async def _acquire_async_http_slot(self):
+        if self.http_slots is None:
+            return
+        deadline = time.monotonic() + 180
+        # Do not block the event loop or leave a background acquire alive after
+        # cancellation; active receipts must be able to release their slots.
+        while not self.http_slots.acquire(blocking=False):
+            if self.guard.abort_event.is_set():
+                raise AuditError("worker stopped while waiting for transport")
+            if time.monotonic() >= deadline:
+                self.stop("transport_queue_timeout")
+                raise AuditError("transport queue timed out")
+            await asyncio.sleep(0.02)
+
+    def _release_http_slot(self, row):
+        with self.lock:
+            if row["identity"] in self.slot_holders:
+                self.slot_holders.remove(row["identity"])
+                self.http_slots.release()
 
     def callback(self, role):
         return PilotCallback(self.audit, turn=self.turn, role=role)
@@ -298,6 +341,7 @@ class OfflinePilotWorker:
                 )
             self.stop("unknown_http_outcome")
             self.emit({"event": "unknown", "identity": row["identity"]})
+            self._release_http_slot(row)
 
     @staticmethod
     def _decoded_receipt(response, body):
@@ -418,6 +462,8 @@ class OfflinePilotWorker:
                 else:
                     self._unknown(row)
                 raise AuditError("HTTP receipt could not be safely settled") from None
+            finally:
+                self._release_http_slot(row)
 
     @contextmanager
     def installed(self):
@@ -525,7 +571,16 @@ class OfflinePilotWorker:
                     worker._unknown(self.row)
 
         def send(client, request, *, stream=False, **kwargs):
-            row = worker._admit(client, request)
+            worker._acquire_http_slot()
+            try:
+                row = worker._admit(client, request)
+            except BaseException:
+                if worker.http_slots is not None:
+                    worker.http_slots.release()
+                raise
+            if worker.http_slots is not None:
+                with worker.lock:
+                    worker.slot_holders.add(row["identity"])
             try:
                 with worker._wire_scope():
                     result = original_send(
@@ -544,7 +599,16 @@ class OfflinePilotWorker:
                 raise
 
         async def asend(client, request, *, stream=False, **kwargs):
-            row = worker._admit(client, request)
+            await worker._acquire_async_http_slot()
+            try:
+                row = worker._admit(client, request)
+            except BaseException:
+                if worker.http_slots is not None:
+                    worker.http_slots.release()
+                raise
+            if worker.http_slots is not None:
+                with worker.lock:
+                    worker.slot_holders.add(row["identity"])
             try:
                 with worker._wire_scope():
                     result = await original_async(
