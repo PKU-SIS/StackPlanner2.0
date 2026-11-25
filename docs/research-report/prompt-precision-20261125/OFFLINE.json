@@ -1,0 +1,38 @@
+{
+  "provider_calls": 0,
+  "credentials_read": false,
+  "source_reports_unchanged": true,
+  "source_accepted_versions_checked": 6,
+  "independent_prefix_import": {
+    "report_id": "r3",
+    "source_outputs": "/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn/.deer-flow/ui-live/20261125-fresh-e2e-02/runtime/users/default/threads/fresh-report-e2e-20261125-02/user-data/outputs",
+    "through_user_turn": 2,
+    "starts_at_user_turn": 3,
+    "versions_by_user_turn": {
+      "1": "r3",
+      "2": "r4"
+    },
+    "source_unchanged": true,
+    "new_model_calls": 0
+  },
+  "restored_versions": [
+    {
+      "version": "t0001",
+      "restored_native_report": "r5",
+      "native_accepted": true
+    },
+    {
+      "version": "t0002",
+      "restored_native_report": "r6",
+      "native_accepted": true
+    }
+  ],
+  "target_node": "n9",
+  "target_body_sha256": "aa79dcd531a8e0c3dea6be73dbb8182c840b2341d4649eb3ca132b65f518df92",
+  "target_marker_unique": true,
+  "new_marker_absent": true,
+  "packet_verified": true,
+  "live_start": "blocked_before_execution_by_automatic_approval",
+  "api_trials_attempted": 0,
+  "offline_workdir": "/tmp/sp2-prompt-precision-offline-zls2bmq9"
+}

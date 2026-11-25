@@ -32,6 +32,9 @@ The program copies/resumes the active accepted version; no GitAgent or Outline
 call is needed. Do not carry an old base_version_id in delegation metadata;
 the host defaults this new edit to the active version.
 Give Writer the actual edit and what must remain; do not guess chapter IDs.
+Carry the user's location, paragraph/item count and preservation instructions
+into the task without broadening them. “Add a paragraph” is not “expand the
+chapter”; “replace with three items” is not “append a checklist”.
 Readable current-message attachments are saved into native materials when the
 copy is prepared. Existing-section edits using those files can also use Writer;
 do not send a Coder just to read an upload.

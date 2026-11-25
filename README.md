@@ -1163,3 +1163,5 @@ run. Original report files and diagnostic details remain available on demand.
 Fresh-report and complex-dialogue validation, including failures, current budget pause, and limitations: [2026-11-25 results](docs/research-report/fresh-e2e-20261125/CONTINUATION_RESULT.md).
 
 Bound report source-list questions can read selected saved citations directly and return their titles, URLs and use in the report, without delegating a file-parsing task.
+
+多轮改稿提示进一步强调按用户指定粒度编辑：加一段保持一段、三条替换为三条、删除不另补总结，范围外文字与引用保持原样。本次只调整条件加载的多轮提示，不增删程序护栏、工具、预算或首轮提示；模型遵循效果仍需真实实验验证。

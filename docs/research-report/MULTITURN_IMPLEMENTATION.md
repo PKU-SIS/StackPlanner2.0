@@ -146,3 +146,22 @@ view=sources、source_ids=[S12,S34] 定向读取已接受快照中的标题与 U
 原版不写入规则保持；它不代表新检索或独立事实核验。来源与判断对应关系必须
 真正出现在可见回答里，而非只声明“已经列出”。只在已绑定多轮加载的路由 Skill
 加入此提示，首轮路径不变。
+
+## 2026-11-25 改稿粒度提示微调
+
+只修改条件加载的 report-dialogue-routing、report-local-edit 与
+report-node-revision 提示：中枢传递原始位置、段落/条目数量及保留要求，
+Writer 以最小完整片段替换；加一段不扩成小节，压成三条要替换原内容，
+删除不另补总结，补引用不扩成资料综述，重构限于指定部分。
+整节点提交时也要求原样复制范围外段落、标题与引用。保存前由 Writer 在本次
+起草中自行比对要求，不新增审查 agent、程序校验、拒绝条件或重试。
+工具、预算、原生验收及默认首轮提示均未修改。
+离线回归只能验证接入与原路径保持，不能证明真实模型已遵循这些自然语言要求。
+
+本次离线回归：`test_sp_report_writer_first.py`、`test_sp_report_turns.py`、
+`test_sp_report_turns_graph.py`、`test_sp_report_turns_executor.py` 共 57 项通过
+（8.17 秒）。涵盖短句/段落/整节 patch、范围外 canonical 保持、历史版本不变、
+失败不发布及开关开启但无基线时首轮请求一致。真实执行器使用 fake model；
+未调用真实 API，不能据此宣称自然语言改稿精度已提升。
+受限沙箱运行卡在 asyncio 事件循环并已停止；同组测试在宿主环境通过。
+借用旧虚拟环境时明确设置新 checkout 的 PYTHONPATH，adapter.__file__ 指向新目录。
