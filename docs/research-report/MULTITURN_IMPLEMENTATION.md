@@ -136,3 +136,13 @@ API前离线准备及只读来源接口补齐见
 版本检查支持 `tree`、`sources`、`material:<id>` 的有界快照行读取；
 中枢直接回答可由既有结束钩子记录response_only，原生交付标记为false。
 此档案不表示程序已经判断其满足了用户改稿意图。
+
+## 来源清单只读查询（2026-11-25）
+
+Central 可用原 sp_replan 的 metadata.report_action=inspect_version、
+view=sources、source_ids=[S12,S34] 定向读取已接受快照中的标题与 URL。
+单次返回最多 32 项，未知和剩余 ID 明确返回；无需读取完整材料目录或委派 Coder
+解析工具卸载文件。未指定 source_ids 的旧接口保持原样。所有权、封存 SHA 及
+原版不写入规则保持；它不代表新检索或独立事实核验。来源与判断对应关系必须
+真正出现在可见回答里，而非只声明“已经列出”。只在已绑定多轮加载的路由 Skill
+加入此提示，首轮路径不变。

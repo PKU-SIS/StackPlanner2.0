@@ -1066,6 +1066,7 @@ export function MessageList({
                       taskId={taskId}
                       threadId={threadId}
                       presentedReportPaths={presentedReportPaths}
+                      compactDescription={foldReportSteps}
                       runId={(message as { run_id?: string }).run_id}
                       isLoading={groupIsLoading}
                     />,

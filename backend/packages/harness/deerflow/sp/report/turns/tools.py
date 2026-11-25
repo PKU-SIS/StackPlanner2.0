@@ -28,10 +28,12 @@ def build_tools(store, message, *, operation="auto"):
         return None
 
     @tool("report_inspect_version")
-    def inspect(version_id: str | None = None, view: str = "requirements", start_line: int = 1, end_line: int | None = None) -> str:
+    def inspect(version_id: str | None = None, view: str = "requirements", start_line: int = 1, end_line: int | None = None, source_ids: list[str] | None = None) -> str:
         """Read accepted snapshots: requirements, manifest, report, draft:<node_id>, tree,
         sections, sources, provenance[:<node_id>], evidence:<node_id>, material:<material_id>.
         Provenance uses saved evidence lines; body/material reads accept line ranges.
+        With view=sources, source_ids selects up to 32 source records, without the
+        full catalog/material list. Missing and unreturned requested IDs are reported.
         """
         if version_id is None:
             return json.dumps(store.inspect(), ensure_ascii=False)
@@ -104,6 +106,17 @@ def build_tools(store, message, *, operation="auto"):
                     ensure_ascii=False,
                 )
             if view == "sources":
+                if source_ids is not None:
+                    requested = list(dict.fromkeys(source_ids))
+                    rows = {row["source_id"]: row for row in ledger.get("sources", [])}
+                    result.update(
+                        sources=[{k: rows[identity].get(k) for k in ("source_id", "url", "title")} for identity in requested[:32] if identity in rows],
+                        unknown_source_ids=[identity for identity in requested[:32] if identity not in rows],
+                        omitted_requested_source_ids=requested[32:],
+                        total_sources=len(rows),
+                        scope="saved source metadata, not fresh research or independent factual verification",
+                    )
+                    return json.dumps(result, ensure_ascii=False)
                 result["sources"] = [{k: row.get(k) for k in ("source_id", "url", "title")} for row in ledger.get("sources", [])]
                 result["materials"] = [{k: row.get(k) for k in ("material_id", "source_id", "sha256", "lines", "title")} for row in ledger.get("materials", [])]
                 return json.dumps(result, ensure_ascii=False)

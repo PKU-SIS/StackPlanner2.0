@@ -488,7 +488,15 @@ def direct_version_action(action, context):
     kind = str(action.metadata["report_action"]).strip().lower()
     if kind == "inspect_version":
         return json.loads(
-            build_tools(store, message)[0].invoke({"version_id": selected, "view": str(action.metadata.get("view") or "provenance"), "start_line": action.metadata.get("start_line", 1), "end_line": action.metadata.get("end_line")})
+            build_tools(store, message)[0].invoke(
+                {
+                    "version_id": selected,
+                    "view": str(action.metadata.get("view") or "provenance"),
+                    "start_line": action.metadata.get("start_line", 1),
+                    "end_line": action.metadata.get("end_line"),
+                    "source_ids": action.metadata.get("source_ids"),
+                }
+            )
         )
     mode = str(action.metadata.get("mode") or "exact_reuse")
     if mode not in {"exact_reuse", "read_only"}:

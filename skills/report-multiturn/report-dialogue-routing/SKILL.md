@@ -52,6 +52,18 @@ unchanged body already read in this conversation need not be read again. Quote
 saved body text, not the resolved requirement alone. Central performs these reads itself; no
 perception/read_file delegation, GitAgent or Writer is needed to copy saved text.
 
+For an inventory of several known citations, read only the needed body window
+(or use citations already visible in this unchanged version), then call sp_replan
+metadata={"report_action":"inspect_version", "view":"sources",
+"source_ids":["S12","S34"]}. This returns titles/URLs for up to 32 requested IDs;
+missing and unreturned IDs are explicit. Use another batch only if needed.
+Do not read the full catalog or delegate Coder to parse an offloaded tool result.
+Put the actual source-to-claim mapping in the visible answer (a compact table is
+appropriate), distinguish report synthesis/advice and unverified details, and
+archive that answer. For read-only work, sp_finish.summary becomes the visible
+final answer: put the actual answer there, and in reuse_version.response when
+used. A short status saying that a list was produced is not providing the list.
+
 For questions about evidence or source support, use sp_replan
 metadata.report_action="inspect_version" with view="provenance" (the default):
 it returns the recently changed section,

@@ -305,3 +305,60 @@ def test_central_reads_catalog_and_short_body_without_delegating(tmp_path, monke
     assert store.inspect(store.index()["requests"]["m2"])["status"] == "read_only"
     assert file_manifest(outputs / "report/r1") == old
     assert not any(getattr(message, "name", None) == "sp_delegate" for message in result["messages"])
+
+
+def test_source_id_lookup_avoids_full_catalog_and_preserves_snapshot(tmp_path):
+    ctx, ledger = _seed(tmp_path)
+    ledger.payload["sources"] = [{"source_id": f"S{i}", "title": f"Source {i}", "url": f"https://source.example/document/{i}"} for i in range(1, 301)]
+    ledger.save()
+    assert not _send_review(ctx, status="ready", outcome="deliver").error
+    assert not _finish(ctx).error
+    followup(ctx, text="List the requested saved source metadata, without research")
+    store, _, head = adapter.session(ctx.state, thread_id="t1")
+    before = file_manifest(tmp_path)
+    action = SPAction.create(
+        ActionType.REPLAN,
+        task="Read selected sources",
+        reason="readonly source lookup",
+        metadata={
+            "report_action": "inspect_version",
+            "view": "sources",
+            "source_ids": ["S299", "S2", "S299", "S999"],
+        },
+    )
+    result = ReplanHandler().handle(action, ctx)
+    assert not result.error
+    payload = result.tool_observation
+    assert [s["source_id"] for s in payload["sources"]] == ["S299", "S2"]
+    assert payload["sources"][0]["url"] == "https://source.example/document/299"
+    assert payload["unknown_source_ids"] == ["S999"]
+    assert payload["total_sources"] == 300
+    assert len(json.dumps(payload)) < 2000
+    assert "materials" not in payload
+    assert store.index()["head"] == head["turn_id"]
+    assert file_manifest(tmp_path) == before
+
+
+def test_source_id_lookup_reports_unreturned_ids_instead_of_failing_the_call(tmp_path):
+    ctx, ledger = _seed(tmp_path)
+    ledger.payload["sources"] = [{"source_id": f"S{i}", "url": f"https://source.example/{i}"} for i in range(1, 41)]
+    ledger.save()
+    assert not _send_review(ctx, status="ready", outcome="deliver").error
+    assert not _finish(ctx).error
+    followup(ctx, text="Read saved source metadata")
+    result = ReplanHandler().handle(
+        SPAction.create(
+            ActionType.REPLAN,
+            task="Read sources",
+            reason="readonly source lookup",
+            metadata={
+                "report_action": "inspect_version",
+                "view": "sources",
+                "source_ids": [f"S{i}" for i in range(1, 41)],
+            },
+        ),
+        ctx,
+    )
+    assert not result.error
+    assert len(result.tool_observation["sources"]) == 32
+    assert result.tool_observation["omitted_requested_source_ids"] == [f"S{i}" for i in range(33, 41)]

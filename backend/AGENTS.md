@@ -353,3 +353,10 @@ Pilot admission retains the original immutable 50 CNY review and selects a
 separate 100 CNY review after the user's explicit increase on 2026-11-25.
 Review packets remain offline; a budget review never authorizes execution.
 All carried fees and unknown reservations count against the cumulative ceiling.
+
+Bound report inspect_version view=sources accepts source_ids for a small saved
+source metadata projection (up to 32 per read). Unknown/remaining IDs are returned
+as data, not a whole-call failure. It keeps snapshot ownership/hash checks and
+never writes old reports. Central should use it for source lists instead of
+delegating Coder to parse large provenance results. Default/first-turn Skills
+and model routing are unchanged.

@@ -162,3 +162,7 @@ ID; inherited Writers cannot appear as current work. A subtask final-report card
 is suppressed while collapsed when the same path has a final present_files card;
 expanding the task still exposes its evidence. Finished bound-report control steps
 are collapsed without changing ordinary task steps or failure cards.
+
+Collapsed task descriptions in explicitly bound report turns use two-line labels;
+expanding retains the full instructions and failed-task status remains visible.
+Ordinary task descriptions keep their existing layout.

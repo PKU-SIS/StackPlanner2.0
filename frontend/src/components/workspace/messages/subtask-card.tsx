@@ -45,6 +45,7 @@ export function SubtaskCard({
   isLoading,
   descriptionOverride,
   presentedReportPaths,
+  compactDescription = false,
 }: {
   className?: string;
   taskId: string;
@@ -53,6 +54,7 @@ export function SubtaskCard({
   isLoading: boolean;
   descriptionOverride?: string;
   presentedReportPaths?: ReadonlySet<string>;
+  compactDescription?: boolean;
 }) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(true);
@@ -139,7 +141,12 @@ export function SubtaskCard({
               <ChainOfThoughtStep
                 className="min-w-0 flex-1 font-normal"
                 label={
-                  <div className="max-w-full [overflow-wrap:anywhere] whitespace-normal">
+                  <div
+                    className={cn(
+                      "max-w-full [overflow-wrap:anywhere] whitespace-normal",
+                      compactDescription && collapsed && "line-clamp-2",
+                    )}
+                  >
                     {task.status === "in_progress" ? (
                       <Shimmer
                         as="span"
