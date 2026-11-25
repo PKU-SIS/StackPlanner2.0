@@ -1,0 +1,33 @@
+{
+  "variant": "fresh-e2e-02",
+  "source_head": "0e8a7d4",
+  "completed_turns": [
+    1,
+    2
+  ],
+  "failed_turn": 3,
+  "later_turns_submitted": false,
+  "accepted_head_after_failure": "t0002",
+  "original_native_sha_unchanged": {
+    "t0001": true,
+    "t0002": true
+  },
+  "primary_cause": "received Fetch HTTP 404 escalated by experiment worker to unknown_http_outcome; global abort then produced provider-unavailable fallback instead of research synthesis",
+  "secondary_rejection": "missing_citations on provider-unavailable fallback, not a citation-bearing research summary",
+  "native_acceptance_weakened": false,
+  "cost_observed_cny": "2.75292480",
+  "global_budget": {
+    "spent_cost_cny": "36.06422248",
+    "reserved_cost_cny": "6.493064",
+    "input_tokens": 42819621,
+    "output_tokens": 1732027,
+    "inflight": [
+      "http-1883efa84c6e4cf58bef90882c3671c5-1",
+      "http-6f416a52175d498a894bc2d92351936d-3",
+      "http-b05c246e0a0f49919d40ade6792240a2-12",
+      "http-c8c21233a8a1493892c8995ae59761ca-110"
+    ],
+    "abort_requested": true
+  },
+  "billing_complete": false
+}

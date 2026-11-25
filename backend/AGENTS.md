@@ -343,3 +343,8 @@ It queues at HTTP transport before reserving budget, releasing slots only after
 receipt settlement/unknown handling; default is unchanged. Native agent scheduling,
 prompts and acceptance are unaffected. Async queue cancellation must not leak a
 slot, and unknown outcomes still stop all waiting requests without replay.
+
+The experiment worker treats received Search/Fetch HTTP 4xx as bounded tool
+errors: native handlers receive the response, maximum tool fees remain reserved,
+and billing stays incomplete. It does not globally abort unrelated models.
+Unknown transports/model receipts and true budget overruns still stop as before.

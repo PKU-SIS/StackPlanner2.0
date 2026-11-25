@@ -579,3 +579,31 @@ def test_unknown_outcome_with_transport_queue_never_sends_waiting_request():
     assert len(sent) == 1
     assert len(w.guard.pending) == 1
     assert not w.finalize()["usage"]["billing_complete"]
+
+
+@pytest.mark.parametrize("status", [400, 404, 429])
+def test_received_tool_client_error_keeps_fee_hold_and_allows_native_recovery(status):
+    w = worker(max_inflight_requests=1)
+    with w.installed():
+        client = httpx.Client(transport=httpx.MockTransport(lambda req: httpx.Response(status, json={"error": {"code": "PAGE_UNAVAILABLE"}})))
+        result = client.post("https://api.deepseek.com/v1/tools/fetch", json={"url": "https://example.com/missing"})
+        assert result.status_code == status
+        assert model(w, lambda req: response()).invoke("fixture").content == "fixture"
+    report = w.finalize()
+    assert report["stop_reason"] is None
+    assert not report["budget"]["abort_requested"]
+    assert report["http_attempts"][0]["status"] == "bounded_tool_error"
+    assert len(report["budget"]["inflight"]) == 1
+    assert report["budget"]["reserved_cost_cny"] == "0.005"
+    assert not report["usage"]["billing_complete"]
+    assert report["usage"]["estimated_cost_cny_upper"] is None
+    assert report["usage"]["total_tokens"] == 120
+
+
+def test_model_client_error_still_stops_with_unknown_exposure():
+    w = worker(max_inflight_requests=1)
+    with w.installed():
+        with pytest.raises(Exception):
+            model(w, lambda req: httpx.Response(404, json={"error": "model missing"})).invoke("fixture")
+    assert w.finalize()["budget"]["abort_requested"]
+    assert w.finalize()["budget"]["inflight"]

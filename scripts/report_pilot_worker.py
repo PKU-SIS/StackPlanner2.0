@@ -370,6 +370,30 @@ class OfflinePilotWorker:
             try:
                 row["http_status"] = response.status_code
                 if response.status_code != 200:
+                    if (
+                        row["kind"] in {"search", "fetch"}
+                        and 400 <= response.status_code < 500
+                    ):
+                        # The tool has received a definite client error. Let its
+                        # native handler report that error instead of poisoning
+                        # unrelated model calls. Keep the maximum fee reserved:
+                        # a received failure is not a confirmed billing refund.
+                        row["status"] = "bounded_tool_error"
+                        self.audit.tool_attempt(
+                            row["identity"],
+                            turn=self.turn,
+                            tool=row["kind"],
+                            status=response.status_code,
+                            has_result=False,
+                        )
+                        self.emit(
+                            {
+                                "event": "bounded_tool_error",
+                                "identity": row["identity"],
+                                "http_status": response.status_code,
+                            }
+                        )
+                        return
                     raise AuditError("HTTP error charge not confirmed")
                 if encoded:
                     body = self._decoded_receipt(response, body)
@@ -726,7 +750,9 @@ class OfflinePilotWorker:
         with self.lock:
             model_rows = [r for r in self.receipts if r["kind"] == "model"]
             unknown = [
-                r["identity"] for r in self.receipts if r["status"] != "complete"
+                r["identity"]
+                for r in self.receipts
+                if r["status"] not in {"complete", "bounded_tool_error"}
             ]
             sources = [r["source_id"] for r in model_rows]
             mismatch = len(sources) != len(set(sources))
@@ -757,12 +783,16 @@ class OfflinePilotWorker:
                 )
             except AuditError:
                 self.stop("usage_reconciliation_failed")
+            usage = self.audit.snapshot()
+            if any(r["status"] == "bounded_tool_error" for r in self.receipts):
+                usage["billing_complete"] = False
+                usage["estimated_cost_cny_upper"] = None
             return {
                 "api_experiments_authorized": False,
                 "live_network_enabled": False,
                 "native_delivery_verified": False,
-                "usage": self.audit.snapshot(),
-                "global_billing_complete": self.audit.snapshot()["billing_complete"]
+                "usage": usage,
+                "global_billing_complete": usage["billing_complete"]
                 and not self.guard.pending,
                 "budget": self.guard.snapshot(),
                 "http_attempts": list(self.receipts),
