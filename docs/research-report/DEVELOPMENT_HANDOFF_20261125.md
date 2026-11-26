@@ -9,9 +9,9 @@
 - 开发目录：`/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn`。
 - 分支：`feature/report-multiturn`；上游：`origin/sp2DeepResearch`；本次提示/交接提交的父提交：`7f08988`，当时领先上游缓存 55 个提交；接手时以实际 `git log` 与远程状态为准。
 - 本次交接提交包含最新提示调整：`README.md`、`docs/research-report/MULTITURN_IMPLEMENTATION.md`、三份 `skills/report-multiturn/{report-dialogue-routing,report-local-edit,report-node-revision}/SKILL.md`。新目录 `prompt-precision-20261125/` 是测试准备材料，本交接文件一并纳入提交。
-- 从远程 `feature/report-multiturn` 接手，并确认包含上述提示/交接提交。如在同一台服务器接手，先检查实际工作区状态；多人同时开发应使用独立工作区并划分文件，避免共同覆盖。
+- 2026-11-26 交接改为从 GitHub 的 `feature/report-multiturn` 获取；当前提示实现提交为 `4f02cf9`，本文件及快速接手 prompt 会随后续交接提交一并推送。最新 HEAD 以远程查询为准。clone/独立分支命令见 `JUNIOR_HANDOFF_PROMPT_20261126.md`；多人同时开发应使用独立工作区并划分文件。
 - 旧目录 `/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report` 保持只读；其 `zx_sp2research` / `f843873` 与原四处 tracked 修改不能动。不要 stash/reset/clean、切分支或复制整个旧目录与 `.env`。
-- 本轮没有推送、合并、部署或重启服务。
+- 用户已于 2026-11-26 授权推送开发分支；不合并主线、不部署、不重启服务。
 
 ## 必读与实现入口
 
