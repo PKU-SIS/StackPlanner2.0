@@ -4,14 +4,14 @@
 
 可以接手功能开发与回归。基础版本隔离、Writer-first 局部改稿、条件 Outline/Researcher 调度已有实现和真实试验记录；当前不是“所有复杂需求已稳定通过”的发布状态。不要从零重做，也不要通过新增拒绝门槛来改善表面成绩。
 
-## 工作区与修改状态
+## 代码获取与开发位置
 
-- 开发目录：`/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn`。
-- 分支：`feature/report-multiturn`；上游：`origin/sp2DeepResearch`；本次提示/交接提交的父提交：`7f08988`，当时领先上游缓存 55 个提交；接手时以实际 `git log` 与远程状态为准。
-- 本次交接提交包含最新提示调整：`README.md`、`docs/research-report/MULTITURN_IMPLEMENTATION.md`、三份 `skills/report-multiturn/{report-dialogue-routing,report-local-edit,report-node-revision}/SKILL.md`。新目录 `prompt-precision-20261125/` 是测试准备材料，本交接文件一并纳入提交。
-- 2026-11-26 交接改为从 GitHub 的 `feature/report-multiturn` 获取；当前提示实现提交为 `4f02cf9`，本文件及快速接手 prompt 会随后续交接提交一并推送。最新 HEAD 以远程查询为准。clone/独立分支命令见 `JUNIOR_HANDOFF_PROMPT_20261126.md`；多人同时开发应使用独立工作区并划分文件。
-- 旧目录 `/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report` 保持只读；其 `zx_sp2research` / `f843873` 与原四处 tracked 修改不能动。不要 stash/reset/clean、切分支或复制整个旧目录与 `.env`。
-- 用户已于 2026-11-26 授权推送开发分支；不合并主线、不部署、不重启服务。
+- 代码来源：<https://github.com/PKU-SIS/StackPlanner2.0/tree/feature/report-multiturn>。
+- 获取 `origin/feature/report-multiturn` 最新 HEAD，并在自己的 checkout/worktree 创建工作分支开发。不要在作者现有服务源码目录直接改代码。
+- 已推送交接起点为 `44dea49`，包含提示实现 `4f02cf9`；最新 HEAD 以实际远程分支为准，不固定在旧提交。clone/分支命令见 `JUNIOR_HANDOFF_PROMPT_20261126.md`。
+- 当前开发分支跟踪 `origin/feature/report-multiturn`；报告主线仍是 `sp2DeepResearch`，两者不能混淆。
+- 提示、说明、测试准备材料已入 Git；历史运行快照与凭据不随 clone 自动取得，需要时单独获取经过校验的只读实验基线。
+- 仅授权开发分支推送，不合并主线、不部署、不重启服务。
 
 ## 必读与实现入口
 
@@ -50,14 +50,14 @@
 
 ## 测试与费用边界
 
-在新 checkout 执行，借用旧虚拟环境只用它的解释器与依赖：
+先按仓库安装说明在自己的 checkout 建立 Python 环境，再在该 checkout 执行：
 
 ```bash
-cd /data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn
+cd /path/to/your/StackPlanner2.0_multiturn
 export PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1
 export LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false
 export PYTHONPATH="$PWD/backend/packages/harness:$PWD/backend:$PWD/scripts"
-REPORT_PYTHON=/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report/backend/.venv/bin/python
+REPORT_PYTHON="$PWD/backend/.venv/bin/python"
 "$REPORT_PYTHON" -c 'import deerflow.sp.report.turns.adapter as a; print(a.__file__)'
 "$REPORT_PYTHON" -m pytest -p no:cacheprovider -q \
   backend/tests/test_sp_report_writer_first.py \
@@ -71,3 +71,12 @@ REPORT_PYTHON=/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report/backend/.venv/bi
 既有用户批准累计 100 元额度，但不等于任意出站操作获准。最后记录的累计已知费用保守上估为 45.47842112 元，另保留未知费用 6.493064 元；非供应商账单。开始新实验前重读最新 usage 和数值日志；多个独立实验 worker 不能各用同一旧余额快照并发花费。不要清除预留或重放未知请求。
 
 不打印/提交密钥，不复制完整旧 `.env`；交接本文件不包含密码。付费请求、推送、合并与部署的授权分别处理。当前不得自动发布。
+
+## 作者服务器目录（仅供查档）
+
+以下不是接手后的代码来源或开发目录，仅供负责人定位 Git 未包含的历史实验产物：
+
+- 服务器 `123.59.6.244`，SSH 用户 `sp-yzb`，端口 `22`，已配置时别名 `SPA800YZB`。
+- 原独立开发目录 `/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn`。
+- 旧运行目录 `/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report`，`zx_sp2research` / `f843873`，原四处 tracked 修改必须保留；只读，不 stash/reset/clean、切分支或覆盖文件。
+- 若取得历史报告基线，只读取并复制必要产物到自己的独立实验目录；不要复制完整源码目录或 `.env`，不改变原运行服务。

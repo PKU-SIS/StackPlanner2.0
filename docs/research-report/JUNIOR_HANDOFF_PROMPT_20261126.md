@@ -6,14 +6,12 @@
 
 你接手 StackPlanner 2.0 报告系统的“成稿后多轮对话与局部改稿”。在现有实现上继续开发，不重做报告系统。
 
-## 1. 先确认代码位置
+## 1. 从 GitHub 获取代码，在自己的 checkout 开发
 
-- 仓库：<https://github.com/PKU-SIS/StackPlanner2.0.git>
-- 服务器：`123.59.6.244`，SSH 用户 `sp-yzb`，端口 `22`；本机配置过别名时可用 `ssh SPA800YZB`。
-- 本次开发目录：`/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report_multiturn`；接手请从下面的 GitHub 开发分支建立自己的 checkout。
-- 开发分支：`feature/report-multiturn`；本次交接核对的最新提交：`4f02cf9`。
-- 获取代码用 `feature/report-multiturn`，不要使用默认 `main` 或仅拉取报告主线 `sp2DeepResearch`。本文件随交接提交一并推送；最新 HEAD 以远程分支为准。
-- 旧目录 `/data/sp/yzb/StackPlanner2/StackPlanner2.0_Report` 只能只读参考，不在那里开发，不 stash/reset/clean、不切分支、不覆盖原改动。
+- **代码来源以 GitHub 为准**：<https://github.com/PKU-SIS/StackPlanner2.0/tree/feature/report-multiturn>。
+- **接手分支**：`feature/report-multiturn`；不要使用默认 `main` 或仅拉取报告主线 `sp2DeepResearch`。
+- 已推送的交接起点为 `44dea49`，其中包含提示实现提交 `4f02cf9`；接手时拉取该分支最新 HEAD，不固定在旧提交开发。
+- 在你自己的电脑或开发服务器建立独立 checkout，并创建自己的工作分支。后续修改、依赖安装、模块导入和测试都使用自己的 checkout，不依赖作者的服务器源码目录。
 
 先从 GitHub 获取开发分支，再创建自己的工作分支：
 
@@ -38,7 +36,7 @@ git status --short --branch
 - 原版和范围外内容应保留，只有真实原生交付成功才发布新版本。
 
 已有从零生成→多轮改稿/新检索/章节增删→只读问答的分阶段真实测试，保留了中间失败，不是一次冻结代码全部成功。
-最新 `4f02cf9` **只微调了多轮 prompt**，强调按用户要求控制修改范围；57 项离线回归通过。调整后的四轮真实 API 测试尚未运行，不能声称精度已经提升。
+实现提交 `4f02cf9` **只微调了多轮 prompt**，强调按用户要求控制修改范围；57 项离线回归通过。调整后的四轮真实 API 测试尚未运行，不能声称精度已经提升。
 
 ## 3. 你先做的第一项任务
 
@@ -85,7 +83,7 @@ git status --short --branch
 主要代码：`backend/packages/harness/deerflow/sp/report/turns/`，尤其 `local_edit.py`；多轮提示：`skills/report-multiturn/`。
 测试优先看 `backend/tests/test_sp_report_writer_first.py`、`test_sp_report_turns*.py`；已有费用观察在 `scripts/report_pilot_*.py`。
 
-借用旧虚拟环境时，必须显式设置新工作区的 `PYTHONPATH`，并检查 `deerflow.sp.report.turns.adapter.__file__`。具体 57 项回归命令见完整交接文档；不要在新目录运行却导入旧代码。
+先按仓库安装说明在自己的 checkout 准备环境，设置指向该 checkout 的 `PYTHONPATH`，并检查 `deerflow.sp.report.turns.adapter.__file__`。具体 57 项回归命令见完整交接文档；不要导入作者服务器或其他旧 checkout 的代码。
 
 ## 6. API 与交付边界
 
@@ -94,3 +92,7 @@ git status --short --branch
 上一轮 API 启动在执行前被自动审批拒绝：要求明确确认将该测试报告相关正文/材料发送至 DeepSeek 官方 API。本批尚无调用与费用；接手不视为解决了该授权问题。先完成离线工作，不绕过拒绝，不在聊天里索取或粘贴密钥。
 
 第一阶段完成后，请提交：实际 diff、小范围提交、离线测试结果、四轮逐项评估、用量与失败记录、仍存在的问题。不要只再写一份大计划就结束，也不要把“有最终报告文件”当成改稿正确。
+
+## 7. 仅在需要历史实验产物时参考
+
+作者服务器上的源码目录不是开发入口。已提交的实现、说明与评测摘要直接从 GitHub 获取；只有未入 Git 的历史报告快照、运行日志等基线数据需要另行联系负责人取得独立只读副本。取得后按程序校验、导入你自己的实验目录，不修改原始产物，不复制整个旧目录或 `.env`。服务器位置与旧目录保护说明仅在完整交接文档中供查档参考。
